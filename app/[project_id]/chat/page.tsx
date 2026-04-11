@@ -273,6 +273,8 @@ export default function ChatPage() {
   const [usingGlobalDefaults, setUsingGlobalDefaults] = useState<boolean>(true);
   const [thinkingMode, setThinkingMode] = useState<boolean>(false);
   const [isUpdatingModel, setIsUpdatingModel] = useState<boolean>(false);
+  const [claudeSessionAction, setClaudeSessionAction] = useState<'compact' | 'clear' | null>(null);
+  const [claudeSessionNotice, setClaudeSessionNotice] = useState<string | null>(null);
   const [currentRoute, setCurrentRoute] = useState<string>('/');
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const editorRef = useRef<HTMLTextAreaElement>(null);
@@ -1678,6 +1680,47 @@ const persistProjectPreferences = useCallback(
     });
   };
 
+  const runClaudeSessionAction = useCallback(async (action: 'compact' | 'clear') => {
+    if (preferredCli !== 'claude') {
+      return;
+    }
+
+    if (action === 'clear') {
+      const confirmed = window.confirm('Clear the current Claude session?');
+      if (!confirmed) {
+        return;
+      }
+    }
+
+    setClaudeSessionAction(action);
+    setClaudeSessionNotice(null);
+
+    try {
+      const response = await fetch(`${API_BASE}/api/chat/${projectId}/${action}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(
+          action === 'compact'
+            ? { instructions: 'Preserve implementation decisions and current task state.' }
+            : {},
+        ),
+      });
+
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        const message = typeof result?.error === 'string' ? result.error : `${response.status} ${response.statusText}`;
+        throw new Error(message);
+      }
+
+      setClaudeSessionNotice(action === 'compact' ? 'Claude context compacted.' : 'Claude session cleared.');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      setClaudeSessionNotice(message);
+    } finally {
+      setClaudeSessionAction(null);
+    }
+  }, [preferredCli, projectId]);
+
   async function runAct(messageOverride?: string, externalImages?: any[]) {
     let finalMessage = messageOverride || prompt;
     const imagesToUse = externalImages || uploadedImages;
@@ -2439,6 +2482,32 @@ const persistProjectPreferences = useCallback(
                 </div>
                 
                 <div className="flex items-center gap-2">
+                  {preferredCli === 'claude' && (
+                    <div className="flex items-center gap-2">
+                      {claudeSessionNotice && (
+                        <span className="max-w-40 sm:max-w-56 truncate text-xs text-gray-500" title={claudeSessionNotice}>
+                          {claudeSessionNotice}
+                        </span>
+                      )}
+                      <button
+                        onClick={() => runClaudeSessionAction('compact')}
+                        disabled={Boolean(claudeSessionAction) || isRunning}
+                        className="h-9 px-3 bg-gray-100 text-gray-700 hover:text-gray-900 hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-sm font-medium transition-colors"
+                        title="Compact Claude context"
+                      >
+                        {claudeSessionAction === 'compact' ? 'Compacting...' : 'Compact'}
+                      </button>
+                      <button
+                        onClick={() => runClaudeSessionAction('clear')}
+                        disabled={Boolean(claudeSessionAction) || isRunning}
+                        className="h-9 px-3 bg-gray-100 text-gray-700 hover:text-gray-900 hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-sm font-medium transition-colors"
+                        title="Clear Claude session"
+                      >
+                        {claudeSessionAction === 'clear' ? 'Clearing...' : 'Clear'}
+                      </button>
+                    </div>
+                  )}
+
                   {/* Settings Button */}
                   <button 
                     onClick={() => setShowGlobalSettings(true)}

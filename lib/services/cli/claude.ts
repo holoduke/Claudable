@@ -11,6 +11,7 @@ import { serializeMessage, createRealtimeMessage } from '@/lib/serializers/chat'
 import { updateProject, getProjectById } from '../project';
 import { createMessage } from '../message';
 import { CLAUDE_DEFAULT_MODEL, normalizeClaudeModelId, getClaudeModelDisplayName } from '@/lib/constants/claudeModels';
+import { isClaudeContextLimitError } from '@/lib/services/cli/claude-session-commands';
 import path from 'path';
 import fs from 'fs/promises';
 import { randomUUID } from 'crypto';
@@ -1106,6 +1107,10 @@ export async function executeClaude(
       // Permission error
       else if (errorMessage.includes('permission') || errorMessage.includes('EACCES')) {
         errorMessage = `No file access permission. Please check project directory permissions.`;
+      }
+      // Context limit exceeded
+      else if (isClaudeContextLimitError(errorMessage)) {
+        errorMessage = `Context limit reached. Compact the session and retry.`;
       }
       // Token limit exceeded
       else if (errorMessage.includes('max_tokens')) {
