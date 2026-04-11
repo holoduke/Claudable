@@ -1,0 +1,16 @@
+.git
+.github
+.next
+dist
+node_modules
+npm-debug.log*
+Dockerfile
+docker-compose.yml
+.dockerignore
+.env
+.env.*
+data
+prisma/data
+coverage
+*.tsbuildinfo
+assets/gif

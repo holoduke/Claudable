@@ -153,6 +153,34 @@ Your application will be available at http://localhost:3000
 
 **Note**: Ports are automatically detected. If the default port is in use, the next available port will be assigned.
 
+## Docker
+
+Run the web app in Docker with the local SQLite database and generated projects persisted under `./data`:
+
+```bash
+docker compose up --build
+```
+
+Then open http://localhost:3000.
+
+Set a stable encryption key before the first run:
+
+```bash
+printf "ENCRYPTION_KEY=%s\n" "$(openssl rand -hex 32)" >> .env
+docker compose up --build
+```
+
+Optional Docker environment values:
+
+```bash
+DOCKER_WEB_PORT=3000
+CLAUDABLE_PUBLIC_URL=http://localhost:3000
+```
+
+The container runs the production Next.js server and syncs the Prisma SQLite schema on startup. The `./data:/app/data` volume keeps `cc.db` and generated project files across restarts. Keep the same `ENCRYPTION_KEY` for the lifetime of that volume, otherwise encrypted service tokens cannot be decrypted after restart.
+
+CLI agent auth is not baked into the image. Claude, Codex, Cursor, Qwen, GLM, and OpenCode still need their CLI binaries and login/API-key setup available inside the container before agent actions can run there.
+
 ## Troubleshooting
 - **Database migration conflicts**: If you upgraded from a previous Claudable version and run into database errors, reset the Prisma database so it matches the latest schema:
   ```bash

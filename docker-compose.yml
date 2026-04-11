@@ -1,0 +1,20 @@
+services:
+  claudable:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "${DOCKER_WEB_PORT:-3000}:3000"
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      WEB_PORT: 3000
+      HOSTNAME: 0.0.0.0
+      DATABASE_URL: file:/app/data/cc.db
+      PROJECTS_DIR: /app/data/projects
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:?Set ENCRYPTION_KEY in .env or your shell before running docker compose up}
+      NEXT_PUBLIC_APP_URL: ${CLAUDABLE_PUBLIC_URL:-http://localhost:3000}
+      PREVIEW_PORT_START: 3100
+      PREVIEW_PORT_END: 3999
+    volumes:
+      - ./data:/app/data
