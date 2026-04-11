@@ -3,12 +3,13 @@ import { CODEX_MODEL_DEFINITIONS } from '@/lib/constants/codexModels';
 import { CURSOR_MODEL_DEFINITIONS } from '@/lib/constants/cursorModels';
 import { QWEN_MODEL_DEFINITIONS } from '@/lib/constants/qwenModels';
 import { GLM_MODEL_DEFINITIONS } from '@/lib/constants/glmModels';
+import { OPENCODE_MODEL_DEFINITIONS } from '@/lib/constants/opencodeModels';
 
 /**
  * Frontend CLI Type Definitions (claude-only variant)
  */
 
-export type CLIType = 'claude' | 'cursor' | 'codex' | 'gemini' | 'qwen' | 'glm';
+export type CLIType = 'claude' | 'cursor' | 'codex' | 'gemini' | 'qwen' | 'glm' | 'opencode';
 
 export interface CLIModel {
   id: string;
@@ -146,6 +147,26 @@ export const CLI_OPTIONS: CLIOption[] = [
     installCommand: 'zai devpack install claude',
     features: ['Claude-compatible agent runtime', 'GLM 4.6 reasoning'],
     models: GLM_MODEL_DEFINITIONS.map(({ id, name, description, supportsImages }) => ({
+      id,
+      name,
+      description,
+      supportsImages,
+    })),
+  },
+  {
+    id: 'opencode',
+    name: 'OpenCode',
+    description: 'OpenCode CLI with provider/model routing',
+    icon: '/opencode.svg',
+    available: true,
+    configured: true,
+    enabled: true,
+    color: 'from-zinc-800 to-neutral-600',
+    brandColor: '#18181B',
+    downloadUrl: 'https://opencode.ai/docs/cli/',
+    installCommand: 'npm install -g opencode-ai',
+    features: ['Autonomous coding agent', 'Provider/model routing', 'JSON event output'],
+    models: OPENCODE_MODEL_DEFINITIONS.map(({ id, name, description, supportsImages }) => ({
       id,
       name,
       description,

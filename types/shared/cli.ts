@@ -2,7 +2,7 @@
  * Shared CLI Types
  */
 
-export type CLIType = 'claude' | 'cursor';
+export type CLIType = 'claude' | 'cursor' | 'codex' | 'gemini' | 'qwen' | 'glm' | 'opencode';
 
 export type CLIStatus = 'available' | 'unavailable' | 'checking';
 

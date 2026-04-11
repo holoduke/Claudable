@@ -21,6 +21,8 @@ import {
   ACTIVE_CLI_NAME_MAP,
   DEFAULT_ACTIVE_CLI,
   buildActiveModelOptions,
+  buildCustomModelOptionForCli,
+  isValidCustomModelForCli,
   normalizeModelForCli,
   sanitizeActiveCli,
   type ActiveCliId,
@@ -270,6 +272,7 @@ export default function ChatPage() {
   });
   const [preferredCli, setPreferredCli] = useState<ActiveCliId>(DEFAULT_ACTIVE_CLI);
   const [selectedModel, setSelectedModel] = useState<string>(getDefaultModelForCli(DEFAULT_ACTIVE_CLI));
+  const customModelByCliRef = useRef<Partial<Record<ActiveCliId, string>>>({});
   const [usingGlobalDefaults, setUsingGlobalDefaults] = useState<boolean>(true);
   const [thinkingMode, setThinkingMode] = useState<boolean>(false);
   const [isUpdatingModel, setIsUpdatingModel] = useState<boolean>(false);
@@ -310,6 +313,17 @@ export default function ChatPage() {
       sessionStorage.setItem('selectedModel', sanitized);
     }
   }, [preferredCli]);
+
+  useEffect(() => {
+    if (preferredCli !== 'opencode') {
+      return;
+    }
+    if (isValidCustomModelForCli(preferredCli, selectedModel)) {
+      customModelByCliRef.current[preferredCli] = selectedModel;
+    } else {
+      delete customModelByCliRef.current[preferredCli];
+    }
+  }, [preferredCli, selectedModel]);
 
   useEffect(() => {
     previewUrlRef.current = previewUrl;
@@ -540,7 +554,9 @@ const persistProjectPreferences = useCallback(
       setUsingGlobalDefaults(false);
 
       const candidateModels = modelOptions.filter(option => option.cli === cliId);
+      const customOption = buildCustomModelOptionForCli(cliId, customModelByCliRef.current[sanitizeCli(cliId)]);
       const fallbackOption =
+        customOption ||
         candidateModels.find(option => option.id === selectedModel && option.available) ||
         candidateModels.find(option => option.available) ||
         candidateModels[0];
@@ -575,14 +591,16 @@ const persistProjectPreferences = useCallback(
   useEffect(() => {
     if (!modelOptions.length) return;
     const hasSelected = modelOptions.some(option => option.cli === preferredCli && option.id === selectedModel);
-    if (!hasSelected) {
-      const fallbackOption = modelOptions.find(option => option.cli === preferredCli && option.available)
-        || modelOptions.find(option => option.cli === preferredCli)
-        || modelOptions.find(option => option.available)
-        || modelOptions[0];
-      if (fallbackOption) {
-        void handleModelChange(fallbackOption);
-      }
+    if (hasSelected || isValidCustomModelForCli(preferredCli, selectedModel)) {
+      return;
+    }
+
+    const fallbackOption = modelOptions.find(option => option.cli === preferredCli && option.available)
+      || modelOptions.find(option => option.cli === preferredCli)
+      || modelOptions.find(option => option.available)
+      || modelOptions[0];
+    if (fallbackOption) {
+      void handleModelChange(fallbackOption);
     }
   }, [modelOptions, preferredCli, selectedModel, handleModelChange]);
 

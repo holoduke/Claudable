@@ -15,6 +15,7 @@ import { initializeNextJsProject as initializeCodexProject, applyChanges as appl
 import { initializeNextJsProject as initializeCursorProject, applyChanges as applyCursorChanges } from '@/lib/services/cli/cursor';
 import { initializeNextJsProject as initializeQwenProject, applyChanges as applyQwenChanges } from '@/lib/services/cli/qwen';
 import { initializeNextJsProject as initializeGLMProject, applyChanges as applyGLMChanges } from '@/lib/services/cli/glm';
+import { initializeNextJsProject as initializeOpenCodeProject, applyChanges as applyOpenCodeChanges, getActiveOpenCodeSessionId } from '@/lib/services/cli/opencode';
 import { getDefaultModelForCli, normalizeModelId } from '@/lib/constants/cliModels';
 import { streamManager } from '@/lib/services/stream';
 import type { ChatActRequest } from '@/types/backend';
@@ -407,6 +408,8 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
           ? initializeQwenProject
           : cliPreference === 'glm'
           ? initializeGLMProject
+          : cliPreference === 'opencode'
+          ? initializeOpenCodeProject
           : initializeClaudeProject;
 
       executor(
@@ -428,6 +431,8 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
           ? applyQwenChanges
           : cliPreference === 'glm'
           ? applyGLMChanges
+          : cliPreference === 'opencode'
+          ? applyOpenCodeChanges
           : applyClaudeChanges;
 
       const sessionId =
@@ -435,6 +440,8 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
           ? project.activeClaudeSessionId || undefined
           : cliPreference === 'cursor'
           ? project.activeCursorSessionId || undefined
+          : cliPreference === 'opencode'
+          ? getActiveOpenCodeSessionId(project.settings)
           : undefined;
 
       executor(

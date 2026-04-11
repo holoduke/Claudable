@@ -92,6 +92,18 @@ const CLI_OPTIONS: CLIOption[] = [
     enabled: true,
     models: getModelDefinitionsForCli('glm').map(({ id, name }) => ({ id, name })),
   },
+  {
+    id: 'opencode',
+    name: 'OpenCode',
+    icon: '/opencode.svg',
+    description: 'OpenCode CLI with provider/model routing',
+    color: 'from-zinc-800 to-neutral-600',
+    brandColor: '#18181B',
+    downloadUrl: 'https://opencode.ai/docs/cli/',
+    installCommand: 'npm install -g opencode-ai',
+    enabled: true,
+    models: getModelDefinitionsForCli('opencode').map(({ id, name }) => ({ id, name })),
+  },
 ];
 
 // Global settings are provided by context
@@ -272,7 +284,7 @@ export default function GlobalSettings({ isOpen, onClose, initialTab = 'general'
         ...(prev?.cli_settings ?? {}),
         [cliId]: {
           ...(prev?.cli_settings?.[cliId] ?? {}),
-          model: normalizeModelId(cliId, modelId)
+          model: cliId === 'opencode' ? modelId : normalizeModelId(cliId, modelId)
         }
       }
     }));
@@ -544,6 +556,9 @@ export default function GlobalSettings({ isOpen, onClose, initialTab = 'general'
                             {cli.id === 'glm' && (
                               <Image src="/glm.svg" alt="GLM" width={32} height={32} className="w-8 h-8" />
                             )}
+                            {cli.id === 'opencode' && (
+                              <Image src="/opencode.svg" alt="OpenCode" width={32} height={32} className="w-8 h-8" />
+                            )}
                             {cli.id === 'gemini' && (
                               <Image src="/gemini.png" alt="Gemini" width={32} height={32} className="w-8 h-8" />
                             )}
@@ -578,6 +593,24 @@ export default function GlobalSettings({ isOpen, onClose, initialTab = 'general'
                                 </option>
                               ))}
                             </select>
+
+                            {cli.id === 'opencode' && (
+                              <div className="space-y-1.5">
+                                <label className="text-xs font-medium text-gray-600 ">
+                                  Custom model
+                                </label>
+                                <input
+                                  type="text"
+                                  value={settings.model || ''}
+                                  onChange={(e) => setDefaultModel(cli.id, e.target.value)}
+                                  placeholder="provider/model"
+                                  className="w-full px-3 py-1.5 rounded-lg border border-gray-200 bg-white text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-200"
+                                />
+                                <p className="text-[11px] text-gray-500 leading-snug">
+                                  Use any OpenCode provider/model configured locally, for example <code className="font-mono">openai/gpt-5.4</code>.
+                                </p>
+                              </div>
+                            )}
 
                             {cli.id === 'glm' && (
                               <div className="space-y-1.5">
@@ -855,6 +888,9 @@ export default function GlobalSettings({ isOpen, onClose, initialTab = 'general'
                   {selectedCLI.id === 'codex' && (
                     <Image src="/oai.png" alt="Codex" width={32} height={32} className="w-8 h-8" />
                   )}
+                  {selectedCLI.id === 'opencode' && (
+                    <Image src="/opencode.svg" alt="OpenCode" width={32} height={32} className="w-8 h-8" />
+                  )}
                   <div>
                     <h3 className="text-lg font-semibold text-gray-900 ">
                       Install {selectedCLI.name}
@@ -920,6 +956,7 @@ export default function GlobalSettings({ isOpen, onClose, initialTab = 'general'
                   {selectedCLI.id === 'glm' && 'Authenticate (Z.ai DevPack login)'}
                   {selectedCLI.id === 'qwen' && 'Authenticate (Qwen OAuth or API Key)'}
                   {selectedCLI.id === 'codex' && 'Start Codex and sign in'}
+                  {selectedCLI.id === 'opencode' && 'Start OpenCode and sign in'}
                   {selectedCLI.id === 'claude' && 'Start Claude and sign in'}
                   {selectedCLI.id === 'cursor' && 'Start Cursor CLI and sign in'}
                 </div>
@@ -928,6 +965,7 @@ export default function GlobalSettings({ isOpen, onClose, initialTab = 'general'
                     {selectedCLI.id === 'claude' ? 'claude' :
                      selectedCLI.id === 'cursor' ? 'cursor-agent' :
                      selectedCLI.id === 'codex' ? 'codex' :
+                     selectedCLI.id === 'opencode' ? 'opencode' :
                      selectedCLI.id === 'qwen' ? 'qwen' :
                      selectedCLI.id === 'glm' ? 'zai' :
                      selectedCLI.id === 'gemini' ? 'gemini' : ''}
@@ -940,6 +978,7 @@ export default function GlobalSettings({ isOpen, onClose, initialTab = 'general'
                       const authCmd = selectedCLI.id === 'claude' ? 'claude' :
                                       selectedCLI.id === 'cursor' ? 'cursor-agent' :
                                       selectedCLI.id === 'codex' ? 'codex' :
+                                      selectedCLI.id === 'opencode' ? 'opencode' :
                                       selectedCLI.id === 'qwen' ? 'qwen' :
                                       selectedCLI.id === 'glm' ? 'zai' :
                                       selectedCLI.id === 'gemini' ? 'gemini' : '';
@@ -969,6 +1008,7 @@ export default function GlobalSettings({ isOpen, onClose, initialTab = 'general'
                     {selectedCLI.id === 'claude' ? 'claude --version' :
                      selectedCLI.id === 'cursor' ? 'cursor-agent --version' :
                      selectedCLI.id === 'codex' ? 'codex --version' :
+                     selectedCLI.id === 'opencode' ? 'opencode --version' :
                      selectedCLI.id === 'qwen' ? 'qwen --version' :
                      selectedCLI.id === 'glm' ? 'zai --version' :
                      selectedCLI.id === 'gemini' ? 'gemini --version' : ''}
@@ -981,6 +1021,7 @@ export default function GlobalSettings({ isOpen, onClose, initialTab = 'general'
                       const versionCmd = selectedCLI.id === 'claude' ? 'claude --version' :
                                         selectedCLI.id === 'cursor' ? 'cursor-agent --version' :
                                         selectedCLI.id === 'codex' ? 'codex --version' :
+                                        selectedCLI.id === 'opencode' ? 'opencode --version' :
                                         selectedCLI.id === 'qwen' ? 'qwen --version' :
                                         selectedCLI.id === 'glm' ? 'zai --version' :
                                         selectedCLI.id === 'gemini' ? 'gemini --version' : '';

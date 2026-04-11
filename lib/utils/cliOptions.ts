@@ -1,7 +1,7 @@
 import { CLI_OPTIONS, type CLIOption } from '@/types/cli';
 import { getModelDefinitionsForCli, normalizeModelId } from '@/lib/constants/cliModels';
 
-export const ACTIVE_CLI_IDS = ['claude', 'codex', 'cursor', 'qwen', 'glm'] as const;
+export const ACTIVE_CLI_IDS = ['claude', 'codex', 'cursor', 'qwen', 'glm', 'opencode'] as const;
 
 export type ActiveCliId = (typeof ACTIVE_CLI_IDS)[number];
 
@@ -67,6 +67,42 @@ export const normalizeModelForCli = (
 ): string => {
   const sanitized = sanitizeActiveCli(cli, fallback);
   return normalizeModelId(sanitized, model);
+};
+
+export const isValidCustomModelForCli = (
+  cli: string | null | undefined,
+  model?: string | null,
+  fallback: ActiveCliId = DEFAULT_ACTIVE_CLI
+): boolean => {
+  if (!model) {
+    return false;
+  }
+  const sanitizedCli = sanitizeActiveCli(cli, fallback);
+  if (sanitizedCli !== 'opencode') {
+    return false;
+  }
+  const normalized = normalizeModelId(sanitizedCli, model);
+  const isKnownModel = ACTIVE_CLI_MODEL_OPTIONS[sanitizedCli]?.some(option => option.id === normalized);
+  return normalized === model.trim().toLowerCase() && !isKnownModel;
+};
+
+export const buildCustomModelOptionForCli = (
+  cli: string | null | undefined,
+  model?: string | null,
+  fallback: ActiveCliId = DEFAULT_ACTIVE_CLI
+): ActiveModelOption | null => {
+  if (!isValidCustomModelForCli(cli, model, fallback)) {
+    return null;
+  }
+  const sanitizedCli = sanitizeActiveCli(cli, fallback);
+  const normalized = normalizeModelId(sanitizedCli, model);
+  return {
+    id: normalized,
+    name: normalized,
+    cli: sanitizedCli,
+    cliName: ACTIVE_CLI_NAME_MAP[sanitizedCli],
+    available: true,
+  };
 };
 
 export interface ModelAvailabilityEntry {

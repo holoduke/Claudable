@@ -98,6 +98,22 @@ const CLI_OPTIONS: CLIOption[] = [
     })),
     features: ['Claude-compatible runtime', 'GLM 4.6 reasoning', 'Text-only mode'],
   },
+  {
+    id: 'opencode',
+    name: 'OpenCode',
+    icon: 'OC',
+    description: 'OpenCode CLI with provider/model routing',
+    color: 'from-zinc-800 to-neutral-600',
+    downloadUrl: 'https://opencode.ai/docs/cli/',
+    installCommand: 'npm install -g opencode-ai',
+    models: getModelDefinitionsForCli('opencode').map(({ id, name, description, supportsImages }) => ({
+      id,
+      name,
+      description,
+      supportsImages,
+    })),
+    features: ['Autonomous workflow', 'Provider/model IDs', 'JSON event output'],
+  },
 ];
 
 function generateUUID() {
@@ -221,6 +237,11 @@ export default function CreateProjectModal({ open, onClose, onCreated, onOpenGlo
 
   const selectedCLIOption = enabledCLIs.find(cli => cli.id === selectedCLI);
   const selectedModelOption = selectedCLIOption?.models.find(model => model.id === selectedModel);
+  const isOpenCodeSelected = selectedCLI === 'opencode';
+  const selectedModelLabel = selectedModelOption?.name ?? selectedModel;
+  const selectedModelDescription = selectedModelOption?.description ?? (
+    isOpenCodeSelected ? 'OpenCode provider/model ID' : ''
+  );
 
   // WebSocket connection for project initialization
   const connectToProjectWebSocket = (projectId: string) => {
@@ -394,6 +415,7 @@ export default function CreateProjectModal({ open, onClose, onCreated, onOpenGlo
       const cliSettings = globalSettings.cli_settings?.[finalCLI];
       finalModel = sanitizeModel(finalCLI, cliSettings?.model || selectedModel || DEFAULT_MODEL_ID);
     }
+    finalModel = sanitizeModel(finalCLI, finalModel || DEFAULT_MODEL_ID);
     
     if (!finalCLI || !finalModel) {
       console.error('Missing CLI or model selection:', { finalCLI, finalModel, useDefaultSettings, globalSettings });
@@ -827,54 +849,75 @@ export default function CreateProjectModal({ open, onClose, onCreated, onOpenGlo
                     Model
                   </label>
                   <div className="relative">
-                    <button
-                      onClick={() => setShowModelDropdown(!showModelDropdown)}
-                      className="w-full p-3 bg-white border border-gray-200 rounded-lg text-left flex items-center justify-between hover:border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    >
+                    {isOpenCodeSelected ? (
                       <div>
-                        <div className="flex items-center gap-2">
-                          <div className="font-medium text-gray-900 ">{selectedModelOption?.name}</div>
-                          {selectedModelOption?.supportsImages && (
-                            <span className="text-xs bg-green-100 text-green-600 px-2 py-1 rounded-full">
-                              📷
-                            </span>
-                          )}
-                        </div>
-                        <div className="text-xs text-gray-500 ">{selectedModelOption?.description}</div>
+                        <input
+                          type="text"
+                          value={selectedModel}
+                          onChange={(e) => {
+                            setUseDefaultSettings(false);
+                            setSelectedModel(e.target.value);
+                          }}
+                          onBlur={(e) => setSelectedModel(sanitizeModel(selectedCLI, e.target.value))}
+                          placeholder="provider/model"
+                          className="w-full p-3 bg-white border border-gray-200 rounded-lg text-left hover:border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+                        <p className="mt-1 text-xs text-gray-500 ">
+                          Use any OpenCode provider/model configured locally.
+                        </p>
                       </div>
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className={`transition-transform ${showModelDropdown ? 'rotate-180' : ''}`}>
-                        <path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                      </svg>
-                    </button>
-
-                    <AnimatePresence>
-                      {showModelDropdown && selectedCLIOption && (
-                        <MotionDiv
-                          initial={{ opacity: 0, y: -10 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          exit={{ opacity: 0, y: -10 }}
-                          className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-10 max-h-60 overflow-y-auto"
+                    ) : (
+                      <>
+                        <button
+                          onClick={() => setShowModelDropdown(!showModelDropdown)}
+                          className="w-full p-3 bg-white border border-gray-200 rounded-lg text-left flex items-center justify-between hover:border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
                         >
-                          {selectedCLIOption.models.map((model) => (
-                            <button
-                              key={model.id}
-                              onClick={() => handleModelChange(model.id)}
-                              className="w-full p-3 text-left hover:bg-gray-50 border-b border-gray-100 last:border-b-0"
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <div className="font-medium text-gray-900 ">{selectedModelLabel}</div>
+                              {selectedModelOption?.supportsImages && (
+                                <span className="text-xs bg-green-100 text-green-600 px-2 py-1 rounded-full">
+                                  📷
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-xs text-gray-500 ">{selectedModelDescription}</div>
+                          </div>
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className={`transition-transform ${showModelDropdown ? 'rotate-180' : ''}`}>
+                            <path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                          </svg>
+                        </button>
+
+                        <AnimatePresence>
+                          {showModelDropdown && selectedCLIOption && (
+                            <MotionDiv
+                              initial={{ opacity: 0, y: -10 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              exit={{ opacity: 0, y: -10 }}
+                              className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-10 max-h-60 overflow-y-auto"
                             >
-                              <div className="flex items-center gap-2 mb-1">
-                                <div className="font-medium text-gray-900 ">{model.name}</div>
-                                {model.supportsImages && (
-                                  <span className="text-xs bg-green-100 text-green-600 px-2 py-1 rounded-full">
-                                    📷
-                                  </span>
-                                )}
-                              </div>
-                              <div className="text-xs text-gray-500 ">{model.description}</div>
-                            </button>
-                          ))}
-                        </MotionDiv>
-                      )}
-                    </AnimatePresence>
+                              {selectedCLIOption.models.map((model) => (
+                                <button
+                                  key={model.id}
+                                  onClick={() => handleModelChange(model.id)}
+                                  className="w-full p-3 text-left hover:bg-gray-50 border-b border-gray-100 last:border-b-0"
+                                >
+                                  <div className="flex items-center gap-2 mb-1">
+                                    <div className="font-medium text-gray-900 ">{model.name}</div>
+                                    {model.supportsImages && (
+                                      <span className="text-xs bg-green-100 text-green-600 px-2 py-1 rounded-full">
+                                        📷
+                                      </span>
+                                    )}
+                                  </div>
+                                  <div className="text-xs text-gray-500 ">{model.description}</div>
+                                </button>
+                              ))}
+                            </MotionDiv>
+                          )}
+                        </AnimatePresence>
+                      </>
+                    )}
                   </div>
                 </div>
               </div>

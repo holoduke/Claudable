@@ -72,10 +72,12 @@ export default function ChatInput({
   const [isUploading, setIsUploading] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [customModelValue, setCustomModelValue] = useState(selectedModel);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const submissionLockRef = useRef(false);
   const supportsImageUpload = preferredCli !== 'cursor' && preferredCli !== 'qwen' && preferredCli !== 'glm';
+  const isOpenCodeCli = preferredCli === 'opencode';
 
   // Log CLI compatibility details
   console.log('🔧 CLI Compatibility Check:', {
@@ -104,10 +106,32 @@ export default function ChatInput({
   }, [modelOptionsForCli, selectedModel]);
 
   useEffect(() => {
+    if (isOpenCodeCli) {
+      setCustomModelValue(selectedModel);
+    }
+  }, [isOpenCodeCli, selectedModel]);
+
+  useEffect(() => {
     if (!disabled && !cliChangeDisabled && !modelChangeDisabled) {
       textareaRef.current?.focus();
     }
   }, [disabled, cliChangeDisabled, modelChangeDisabled]);
+
+  const commitCustomOpenCodeModel = useCallback((value: string) => {
+    const trimmed = value.trim().toLowerCase();
+    if (!trimmed || !/^[a-z0-9][a-z0-9._-]*\/[a-z0-9][a-z0-9._:-]*$/.test(trimmed)) {
+      return;
+    }
+
+    onModelChange?.({
+      id: trimmed,
+      name: trimmed,
+      cli: 'opencode',
+      cliName: 'OpenCode',
+      available: true,
+    });
+    requestAnimationFrame(() => textareaRef.current?.focus());
+  }, [onModelChange]);
 
   const handleSubmit = (e?: React.FormEvent) => {
     if (e) {
@@ -494,28 +518,46 @@ export default function ChatInput({
             </div>
             <div className="flex flex-col text-[11px] text-gray-500 ">
               <span>Model</span>
-              <select
-                value={selectedModelValue}
-                onChange={(e) => {
-                  const option = modelOptionsForCli.find(opt => opt.id === e.target.value);
-                  if (option) {
-                    onModelChange?.(option);
-                    requestAnimationFrame(() => textareaRef.current?.focus());
-                  }
-                }}
-                disabled={modelChangeDisabled || !onModelChange || modelOptionsForCli.length === 0}
-                className="mt-1 w-40 rounded-md border border-gray-300 bg-white text-gray-700 text-xs py-1 px-2 focus:outline-none focus:ring-2 focus:ring-gray-300 disabled:opacity-60"
-              >
-                {modelOptionsForCli.length === 0 && <option value="">No models available</option>}
-                {modelOptionsForCli.length > 0 && selectedModelValue === '' && (
-                  <option value="" disabled>Select model</option>
-                )}
-                {modelOptionsForCli.map(option => (
-                  <option key={option.id} value={option.id} disabled={!option.available}>
-                    {option.name}{!option.available ? ' (Unavailable)' : ''}
-                  </option>
-                ))}
-              </select>
+              {isOpenCodeCli ? (
+                <input
+                  type="text"
+                  value={customModelValue}
+                  onChange={(e) => setCustomModelValue(e.target.value)}
+                  onBlur={() => commitCustomOpenCodeModel(customModelValue)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      commitCustomOpenCodeModel(customModelValue);
+                    }
+                  }}
+                  disabled={modelChangeDisabled || !onModelChange}
+                  placeholder="provider/model"
+                  className="mt-1 w-40 rounded-md border border-gray-300 bg-white text-gray-700 text-xs py-1 px-2 focus:outline-none focus:ring-2 focus:ring-gray-300 disabled:opacity-60"
+                />
+              ) : (
+                <select
+                  value={selectedModelValue}
+                  onChange={(e) => {
+                    const option = modelOptionsForCli.find(opt => opt.id === e.target.value);
+                    if (option) {
+                      onModelChange?.(option);
+                      requestAnimationFrame(() => textareaRef.current?.focus());
+                    }
+                  }}
+                  disabled={modelChangeDisabled || !onModelChange || modelOptionsForCli.length === 0}
+                  className="mt-1 w-40 rounded-md border border-gray-300 bg-white text-gray-700 text-xs py-1 px-2 focus:outline-none focus:ring-2 focus:ring-gray-300 disabled:opacity-60"
+                >
+                  {modelOptionsForCli.length === 0 && <option value="">No models available</option>}
+                  {modelOptionsForCli.length > 0 && selectedModelValue === '' && (
+                    <option value="" disabled>Select model</option>
+                  )}
+                  {modelOptionsForCli.map(option => (
+                    <option key={option.id} value={option.id} disabled={!option.available}>
+                      {option.name}{!option.available ? ' (Unavailable)' : ''}
+                    </option>
+                  ))}
+                </select>
+              )}
             </div>
           </div>
         </div>
