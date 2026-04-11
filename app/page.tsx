@@ -49,6 +49,7 @@ export default function HomePage() {
   const [isDeleting, setIsDeleting] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const [prompt, setPrompt] = useState('');
+  const [importRepoUrl, setImportRepoUrl] = useState('');
   const DEFAULT_ASSISTANT: ActiveCliId = DEFAULT_ACTIVE_CLI;
   const DEFAULT_MODEL = getDefaultModelForCli(DEFAULT_ASSISTANT);
   const sanitizeAssistant = useCallback(
@@ -591,6 +592,54 @@ export default function HomePage() {
     } catch (error) {
       console.error('Failed to create project:', error);
       showToast('Failed to create project', 'error');
+    } finally {
+      setIsCreatingProject(false);
+    }
+  };
+
+  const handleImportRepository = async () => {
+    const repoUrl = importRepoUrl.trim();
+    if (!repoUrl || isCreatingProject) return;
+
+    setIsCreatingProject(true);
+    const projectId = `project-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+
+    try {
+      const response = await fetchAPI(`${API_BASE}/api/projects/import/github`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          project_id: projectId,
+          repo_url: repoUrl,
+          preferredCli: selectedAssistant,
+          selectedModel,
+        }),
+      });
+
+      const payload = await response.json().catch(() => null);
+      if (!response.ok) {
+        const message = payload?.error ?? payload?.message ?? 'Failed to import repository';
+        showToast(message, 'error');
+        return;
+      }
+
+      const projectData = payload?.data ?? payload;
+      const createdProjectId: string | undefined = projectData?.id ?? projectId;
+      if (!createdProjectId) {
+        showToast('Failed to import repository (invalid response)', 'error');
+        return;
+      }
+
+      setImportRepoUrl('');
+      showToast('Repository imported', 'success');
+
+      const params = new URLSearchParams();
+      if (selectedAssistant) params.set('cli', selectedAssistant);
+      if (selectedModel) params.set('model', selectedModel);
+      router.push(`/${createdProjectId}/chat${params.toString() ? '?' + params.toString() : ''}`);
+    } catch (error) {
+      console.error('Failed to import repository:', error);
+      showToast('Failed to import repository', 'error');
     } finally {
       setIsCreatingProject(false);
     }
@@ -1140,6 +1189,31 @@ export default function HomePage() {
                 </div>
               </div>
             </form>
+
+            <div className="flex flex-col gap-3 rounded-[20px] border border-gray-200 bg-white p-4 shadow-sm">
+              <div>
+                <p className="text-sm font-semibold text-gray-900">Import an existing GitHub repo</p>
+                <p className="text-sm text-gray-500">Continue work from a repository you already have.</p>
+              </div>
+              <div className="flex flex-col gap-2 md:flex-row">
+                <input
+                  type="url"
+                  value={importRepoUrl}
+                  onChange={(event) => setImportRepoUrl(event.target.value)}
+                  placeholder="https://github.com/owner/repo"
+                  disabled={isCreatingProject}
+                  className="min-w-0 flex-1 rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-900/10 disabled:cursor-not-allowed disabled:opacity-50"
+                />
+                <button
+                  type="button"
+                  onClick={handleImportRepository}
+                  disabled={!importRepoUrl.trim() || isCreatingProject}
+                  className="rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white transition-opacity disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Import repo
+                </button>
+              </div>
+            </div>
             
             {/* Example Cards */}
             <div className="flex flex-wrap gap-2 justify-center mt-8">

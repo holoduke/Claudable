@@ -1,12 +1,19 @@
 import fs from 'fs';
 import path from 'path';
-import { spawnSync } from 'child_process';
+import { spawn, spawnSync } from 'child_process';
 
 class GitError extends Error {
   constructor(message: string, readonly output?: string) {
     super(message);
     this.name = 'GitError';
   }
+}
+
+export function redactSensitiveGitText(text: string): string {
+  return text.replace(
+    /https:\/\/([^:\s/@]+):([^@\s]+)@github\.com/gi,
+    'https://$1:[REDACTED]@github.com',
+  );
 }
 
 const DEFAULT_GITIGNORE_ENTRIES = [
@@ -82,7 +89,10 @@ function runGit(args: string[], cwd: string): string {
   });
 
   if (result.error) {
-    throw new GitError(`Git command failed: ${result.error.message}`, result.stderr || result.stdout || undefined);
+    throw new GitError(
+      `Git command failed: ${redactSensitiveGitText(result.error.message)}`,
+      redactSensitiveGitText(result.stderr || result.stdout || '') || undefined,
+    );
   }
 
   if (result.status !== 0) {
@@ -92,10 +102,92 @@ function runGit(args: string[], cwd: string): string {
         : typeof result.stdout === 'string'
         ? result.stdout
         : undefined);
-    throw new GitError(`Git command failed: git ${args.join(' ')}`, output);
+    throw new GitError(
+      `Git command failed: git ${redactSensitiveGitText(args.join(' '))}`,
+      output ? redactSensitiveGitText(output) : undefined,
+    );
   }
 
   return result.stdout.trim();
+}
+
+function runGitAsync(args: string[], cwd: string, timeoutMs = 120_000): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const child = spawn('git', args, {
+      cwd,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    const stdout: string[] = [];
+    const stderr: string[] = [];
+    let settled = false;
+
+    const timeout = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      child.kill('SIGTERM');
+      reject(new GitError(`Git command timed out: git ${redactSensitiveGitText(args.join(' '))}`));
+    }, timeoutMs);
+
+    child.stdout?.on('data', (chunk) => stdout.push(String(chunk)));
+    child.stderr?.on('data', (chunk) => stderr.push(String(chunk)));
+
+    child.on('error', (error) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      reject(
+        new GitError(
+          `Git command failed: ${redactSensitiveGitText(error.message)}`,
+          redactSensitiveGitText(stderr.join('') || stdout.join('')) || undefined,
+        ),
+      );
+    });
+
+    child.on('close', (code) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      if (code === 0) {
+        resolve(stdout.join('').trim());
+        return;
+      }
+      reject(
+        new GitError(
+          `Git command failed: git ${redactSensitiveGitText(args.join(' '))}`,
+          redactSensitiveGitText(stderr.join('') || stdout.join('')) || undefined,
+        ),
+      );
+    });
+  });
+}
+
+export interface CloneRepositoryInput {
+  remoteUrl: string;
+  targetPath: string;
+  branch?: string | null;
+}
+
+export async function cloneRepository(input: CloneRepositoryInput) {
+  const args = ['clone'];
+  const branch = input.branch?.trim();
+  if (branch) {
+    args.push('--branch', branch, '--single-branch');
+  }
+  args.push(input.remoteUrl, input.targetPath);
+
+  const parent = path.dirname(input.targetPath);
+  if (!fs.existsSync(parent)) {
+    fs.mkdirSync(parent, { recursive: true });
+  }
+  await runGitAsync(args, parent);
+}
+
+export function getCurrentBranch(repoPath: string): string | null {
+  try {
+    return runGit(['branch', '--show-current'], repoPath) || null;
+  } catch {
+    return null;
+  }
 }
 
 function untrackIgnoredPaths(repoPath: string) {
