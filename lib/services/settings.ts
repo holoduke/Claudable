@@ -33,6 +33,9 @@ const DEFAULT_SETTINGS: GlobalSettings = {
     opencode: {
       model: getDefaultModelForCli('opencode'),
     },
+    droid: {
+      model: getDefaultModelForCli('droid'),
+    },
   },
 };
 

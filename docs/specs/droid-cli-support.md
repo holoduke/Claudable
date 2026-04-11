@@ -76,15 +76,21 @@ Start with models documented in Factory's CLI reference:
 ```text
 claude-opus-4-6
 claude-opus-4-6-fast
+claude-opus-4-5-20251101
 claude-sonnet-4-6
+claude-sonnet-4-5-20250929
+claude-haiku-4-5-20251001
 gpt-5.4
 gpt-5.3-codex
+gpt-5.2-codex
 gpt-5.2
 gemini-3.1-pro-preview
+gemini-3-flash-preview
 glm-4.7
 glm-5
 kimi-k2.5
 minimax-m2.5
+custom:<alias>
 ```
 
 Use `claude-sonnet-4-6` as default.
@@ -136,15 +142,22 @@ Defer:
 Minimum tests:
 
 - status route includes `droid`
-- missing binary gives clear install message
 - env injection does not log API key
 - `act` route maps `droid` to executor
 - JSON parser handles partial or malformed events
 - process close code maps to success/failure
+
+Implemented test coverage:
+
+- status route includes `droid`
+- `act` route maps `droid` to executor
+- known model and `custom:<alias>` normalization
+- `droid exec` argument builder uses `--cwd`, `--output-format stream-json`, `--auto medium`, and `--model`
+- `FACTORY_API_KEY` injection stays out of command arguments
+- JSON parser handles valid and malformed events
 
 # Implementation Estimate
 
 Medium-high.
 
 The CLI contract is better documented than many agent CLIs. The main risk is output event parsing.
-

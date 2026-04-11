@@ -2,7 +2,7 @@
  * AI CLI-related types
  */
 
-export type CLIType = 'claude' | 'cursor' | 'codex' | 'gemini' | 'qwen' | 'glm' | 'opencode';
+export type CLIType = 'claude' | 'cursor' | 'codex' | 'gemini' | 'qwen' | 'glm' | 'opencode' | 'droid';
 
 export type SessionType = 'chat' | 'code_gen' | 'error_fix';
 

@@ -4,12 +4,13 @@ import { CURSOR_MODEL_DEFINITIONS } from '@/lib/constants/cursorModels';
 import { QWEN_MODEL_DEFINITIONS } from '@/lib/constants/qwenModels';
 import { GLM_MODEL_DEFINITIONS } from '@/lib/constants/glmModels';
 import { OPENCODE_MODEL_DEFINITIONS } from '@/lib/constants/opencodeModels';
+import { DROID_MODEL_DEFINITIONS } from '@/lib/constants/droidModels';
 
 /**
  * Frontend CLI Type Definitions (claude-only variant)
  */
 
-export type CLIType = 'claude' | 'cursor' | 'codex' | 'gemini' | 'qwen' | 'glm' | 'opencode';
+export type CLIType = 'claude' | 'cursor' | 'codex' | 'gemini' | 'qwen' | 'glm' | 'opencode' | 'droid';
 
 export interface CLIModel {
   id: string;
@@ -167,6 +168,25 @@ export const CLI_OPTIONS: CLIOption[] = [
     installCommand: 'npm install -g opencode-ai',
     features: ['Autonomous coding agent', 'Provider/model routing', 'JSON event output'],
     models: OPENCODE_MODEL_DEFINITIONS.map(({ id, name, description, supportsImages }) => ({
+      id,
+      name,
+      description,
+      supportsImages,
+    })),
+  },
+  {
+    id: 'droid',
+    name: 'Factory Droid',
+    description: 'Factory Droid CLI with multi-model agent routing',
+    available: true,
+    configured: true,
+    enabled: true,
+    color: 'from-cyan-500 to-emerald-600',
+    brandColor: '#0EA5A4',
+    downloadUrl: 'https://docs.factory.ai/cli/droid-exec/overview',
+    installCommand: 'curl -fsSL https://app.factory.ai/cli | sh',
+    features: ['Autonomous coding agent', 'Factory model router', 'Stream JSON output'],
+    models: DROID_MODEL_DEFINITIONS.map(({ id, name, description, supportsImages }) => ({
       id,
       name,
       description,

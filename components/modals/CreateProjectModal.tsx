@@ -114,6 +114,22 @@ const CLI_OPTIONS: CLIOption[] = [
     })),
     features: ['Autonomous workflow', 'Provider/model IDs', 'JSON event output'],
   },
+  {
+    id: 'droid',
+    name: 'Factory Droid',
+    icon: 'FD',
+    description: 'Factory Droid CLI with multi-model agent routing',
+    color: 'from-cyan-500 to-emerald-600',
+    downloadUrl: 'https://docs.factory.ai/cli/droid-exec/overview',
+    installCommand: 'curl -fsSL https://app.factory.ai/cli | sh',
+    models: getModelDefinitionsForCli('droid').map(({ id, name, description, supportsImages }) => ({
+      id,
+      name,
+      description,
+      supportsImages,
+    })),
+    features: ['Autonomous workflow', 'Factory model router', 'Stream JSON output'],
+  },
 ];
 
 function generateUUID() {
@@ -237,10 +253,10 @@ export default function CreateProjectModal({ open, onClose, onCreated, onOpenGlo
 
   const selectedCLIOption = enabledCLIs.find(cli => cli.id === selectedCLI);
   const selectedModelOption = selectedCLIOption?.models.find(model => model.id === selectedModel);
-  const isOpenCodeSelected = selectedCLI === 'opencode';
+  const isCustomModelInputSelected = selectedCLI === 'opencode' || selectedCLI === 'droid';
   const selectedModelLabel = selectedModelOption?.name ?? selectedModel;
   const selectedModelDescription = selectedModelOption?.description ?? (
-    isOpenCodeSelected ? 'OpenCode provider/model ID' : ''
+    selectedCLI === 'opencode' ? 'OpenCode provider/model ID' : selectedCLI === 'droid' ? 'Factory custom model alias' : ''
   );
 
   // WebSocket connection for project initialization
@@ -849,7 +865,7 @@ export default function CreateProjectModal({ open, onClose, onCreated, onOpenGlo
                     Model
                   </label>
                   <div className="relative">
-                    {isOpenCodeSelected ? (
+                    {isCustomModelInputSelected ? (
                       <div>
                         <input
                           type="text"
@@ -859,11 +875,13 @@ export default function CreateProjectModal({ open, onClose, onCreated, onOpenGlo
                             setSelectedModel(e.target.value);
                           }}
                           onBlur={(e) => setSelectedModel(sanitizeModel(selectedCLI, e.target.value))}
-                          placeholder="provider/model"
+                          placeholder={selectedCLI === 'droid' ? 'custom:team-router' : 'provider/model'}
                           className="w-full p-3 bg-white border border-gray-200 rounded-lg text-left hover:border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
                         />
                         <p className="mt-1 text-xs text-gray-500 ">
-                          Use any OpenCode provider/model configured locally.
+                          {selectedCLI === 'droid'
+                            ? 'Use a Factory BYOK alias such as custom:team-router.'
+                            : 'Use any OpenCode provider/model configured locally.'}
                         </p>
                       </div>
                     ) : (

@@ -16,6 +16,7 @@ import { initializeNextJsProject as initializeCursorProject, applyChanges as app
 import { initializeNextJsProject as initializeQwenProject, applyChanges as applyQwenChanges } from '@/lib/services/cli/qwen';
 import { initializeNextJsProject as initializeGLMProject, applyChanges as applyGLMChanges } from '@/lib/services/cli/glm';
 import { initializeNextJsProject as initializeOpenCodeProject, applyChanges as applyOpenCodeChanges, getActiveOpenCodeSessionId } from '@/lib/services/cli/opencode';
+import { initializeNextJsProject as initializeDroidProject, applyChanges as applyDroidChanges } from '@/lib/services/cli/droid';
 import { getDefaultModelForCli, normalizeModelId } from '@/lib/constants/cliModels';
 import { streamManager } from '@/lib/services/stream';
 import type { ChatActRequest } from '@/types/backend';
@@ -410,6 +411,8 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
           ? initializeGLMProject
           : cliPreference === 'opencode'
           ? initializeOpenCodeProject
+          : cliPreference === 'droid'
+          ? initializeDroidProject
           : initializeClaudeProject;
 
       executor(
@@ -433,6 +436,8 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
           ? applyGLMChanges
           : cliPreference === 'opencode'
           ? applyOpenCodeChanges
+          : cliPreference === 'droid'
+          ? applyDroidChanges
           : applyClaudeChanges;
 
       const sessionId =

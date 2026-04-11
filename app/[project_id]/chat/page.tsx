@@ -315,9 +315,6 @@ export default function ChatPage() {
   }, [preferredCli]);
 
   useEffect(() => {
-    if (preferredCli !== 'opencode') {
-      return;
-    }
     if (isValidCustomModelForCli(preferredCli, selectedModel)) {
       customModelByCliRef.current[preferredCli] = selectedModel;
     } else {

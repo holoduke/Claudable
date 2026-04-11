@@ -104,6 +104,18 @@ const CLI_OPTIONS: CLIOption[] = [
     enabled: true,
     models: getModelDefinitionsForCli('opencode').map(({ id, name }) => ({ id, name })),
   },
+  {
+    id: 'droid',
+    name: 'Factory Droid',
+    icon: '',
+    description: 'Factory Droid CLI with multi-model agent routing',
+    color: 'from-cyan-500 to-emerald-600',
+    brandColor: '#0EA5A4',
+    downloadUrl: 'https://docs.factory.ai/cli/droid-exec/overview',
+    installCommand: 'curl -fsSL https://app.factory.ai/cli | sh',
+    enabled: true,
+    models: getModelDefinitionsForCli('droid').map(({ id, name }) => ({ id, name })),
+  },
 ];
 
 // Global settings are provided by context
@@ -559,6 +571,11 @@ export default function GlobalSettings({ isOpen, onClose, initialTab = 'general'
                             {cli.id === 'opencode' && (
                               <Image src="/opencode.svg" alt="OpenCode" width={32} height={32} className="w-8 h-8" />
                             )}
+                            {cli.id === 'droid' && (
+                              <div className="w-8 h-8 rounded-lg flex items-center justify-center text-xs font-semibold text-white" style={{ backgroundColor: cli.brandColor }}>
+                                FD
+                              </div>
+                            )}
                             {cli.id === 'gemini' && (
                               <Image src="/gemini.png" alt="Gemini" width={32} height={32} className="w-8 h-8" />
                             )}
@@ -594,7 +611,7 @@ export default function GlobalSettings({ isOpen, onClose, initialTab = 'general'
                               ))}
                             </select>
 
-                            {cli.id === 'opencode' && (
+                            {(cli.id === 'opencode' || cli.id === 'droid') && (
                               <div className="space-y-1.5">
                                 <label className="text-xs font-medium text-gray-600 ">
                                   Custom model
@@ -603,11 +620,19 @@ export default function GlobalSettings({ isOpen, onClose, initialTab = 'general'
                                   type="text"
                                   value={settings.model || ''}
                                   onChange={(e) => setDefaultModel(cli.id, e.target.value)}
-                                  placeholder="provider/model"
+                                  placeholder={cli.id === 'droid' ? 'custom:team-router' : 'provider/model'}
                                   className="w-full px-3 py-1.5 rounded-lg border border-gray-200 bg-white text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-200"
                                 />
                                 <p className="text-[11px] text-gray-500 leading-snug">
-                                  Use any OpenCode provider/model configured locally, for example <code className="font-mono">openai/gpt-5.4</code>.
+                                  {cli.id === 'droid' ? (
+                                    <>
+                                      Use Factory BYOK aliases, for example <code className="font-mono">custom:team-router</code>.
+                                    </>
+                                  ) : (
+                                    <>
+                                      Use any OpenCode provider/model configured locally, for example <code className="font-mono">openai/gpt-5.4</code>.
+                                    </>
+                                  )}
                                 </p>
                               </div>
                             )}
@@ -671,6 +696,37 @@ export default function GlobalSettings({ isOpen, onClose, initialTab = 'general'
                                 <p className="text-[11px] text-gray-500 leading-snug">
                                   Injected as <code className="font-mono">CURSOR_API_KEY</code> and passed to <code className="font-mono">cursor-agent</code>.
                                   Leave blank to rely on the logged-in Cursor CLI session.
+                                </p>
+                              </div>
+                            )}
+                            {cli.id === 'droid' && (
+                              <div className="space-y-1.5">
+                                <label className="text-xs font-medium text-gray-600 ">
+                                  API Key (optional)
+                                </label>
+                                <div className="flex items-center gap-2">
+                                  <input
+                                    type={apiKeyVisibility[cli.id] ? 'text' : 'password'}
+                                    value={settings.apiKey ?? ''}
+                                    onChange={(e) => setCliApiKey(cli.id, e.target.value)}
+                                    placeholder="Enter Factory API key"
+                                    className="flex-1 px-3 py-1.5 rounded-lg border border-gray-200 bg-white text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-200"
+                                  />
+                                  <button
+                                    type="button"
+                                    onClick={(event) => {
+                                      event.preventDefault();
+                                      event.stopPropagation();
+                                      toggleApiKeyVisibility(cli.id);
+                                    }}
+                                    className="px-3 py-1.5 text-xs font-medium text-gray-600 hover:text-gray-900 border border-gray-200 rounded-lg bg-white transition-colors"
+                                  >
+                                    {apiKeyVisibility[cli.id] ? 'Hide' : 'Show'}
+                                  </button>
+                                </div>
+                                <p className="text-[11px] text-gray-500 leading-snug">
+                                  Stored locally and injected as <code className="font-mono">FACTORY_API_KEY</code>.
+                                  Leave blank to rely on the logged-in Droid CLI session.
                                 </p>
                               </div>
                             )}
@@ -891,6 +947,11 @@ export default function GlobalSettings({ isOpen, onClose, initialTab = 'general'
                   {selectedCLI.id === 'opencode' && (
                     <Image src="/opencode.svg" alt="OpenCode" width={32} height={32} className="w-8 h-8" />
                   )}
+                  {selectedCLI.id === 'droid' && (
+                    <div className="w-8 h-8 rounded-lg flex items-center justify-center text-xs font-semibold text-white" style={{ backgroundColor: selectedCLI.brandColor }}>
+                      FD
+                    </div>
+                  )}
                   <div>
                     <h3 className="text-lg font-semibold text-gray-900 ">
                       Install {selectedCLI.name}
@@ -957,6 +1018,7 @@ export default function GlobalSettings({ isOpen, onClose, initialTab = 'general'
                   {selectedCLI.id === 'qwen' && 'Authenticate (Qwen OAuth or API Key)'}
                   {selectedCLI.id === 'codex' && 'Start Codex and sign in'}
                   {selectedCLI.id === 'opencode' && 'Start OpenCode and sign in'}
+                  {selectedCLI.id === 'droid' && 'Start Droid and sign in'}
                   {selectedCLI.id === 'claude' && 'Start Claude and sign in'}
                   {selectedCLI.id === 'cursor' && 'Start Cursor CLI and sign in'}
                 </div>
@@ -966,6 +1028,7 @@ export default function GlobalSettings({ isOpen, onClose, initialTab = 'general'
                      selectedCLI.id === 'cursor' ? 'cursor-agent' :
                      selectedCLI.id === 'codex' ? 'codex' :
                      selectedCLI.id === 'opencode' ? 'opencode' :
+                     selectedCLI.id === 'droid' ? 'droid' :
                      selectedCLI.id === 'qwen' ? 'qwen' :
                      selectedCLI.id === 'glm' ? 'zai' :
                      selectedCLI.id === 'gemini' ? 'gemini' : ''}
@@ -979,6 +1042,7 @@ export default function GlobalSettings({ isOpen, onClose, initialTab = 'general'
                                       selectedCLI.id === 'cursor' ? 'cursor-agent' :
                                       selectedCLI.id === 'codex' ? 'codex' :
                                       selectedCLI.id === 'opencode' ? 'opencode' :
+                                      selectedCLI.id === 'droid' ? 'droid' :
                                       selectedCLI.id === 'qwen' ? 'qwen' :
                                       selectedCLI.id === 'glm' ? 'zai' :
                                       selectedCLI.id === 'gemini' ? 'gemini' : '';
@@ -1009,6 +1073,7 @@ export default function GlobalSettings({ isOpen, onClose, initialTab = 'general'
                      selectedCLI.id === 'cursor' ? 'cursor-agent --version' :
                      selectedCLI.id === 'codex' ? 'codex --version' :
                      selectedCLI.id === 'opencode' ? 'opencode --version' :
+                     selectedCLI.id === 'droid' ? 'droid --version' :
                      selectedCLI.id === 'qwen' ? 'qwen --version' :
                      selectedCLI.id === 'glm' ? 'zai --version' :
                      selectedCLI.id === 'gemini' ? 'gemini --version' : ''}
@@ -1022,6 +1087,7 @@ export default function GlobalSettings({ isOpen, onClose, initialTab = 'general'
                                         selectedCLI.id === 'cursor' ? 'cursor-agent --version' :
                                         selectedCLI.id === 'codex' ? 'codex --version' :
                                         selectedCLI.id === 'opencode' ? 'opencode --version' :
+                                        selectedCLI.id === 'droid' ? 'droid --version' :
                                         selectedCLI.id === 'qwen' ? 'qwen --version' :
                                         selectedCLI.id === 'glm' ? 'zai --version' :
                                         selectedCLI.id === 'gemini' ? 'gemini --version' : '';

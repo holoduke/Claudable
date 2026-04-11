@@ -12,6 +12,7 @@ import { QWEN_MODEL_DEFINITIONS } from '@/lib/constants/qwenModels';
 import { GLM_MODEL_DEFINITIONS } from '@/lib/constants/glmModels';
 import { CURSOR_MODEL_DEFINITIONS } from '@/lib/constants/cursorModels';
 import { OPENCODE_MODEL_DEFINITIONS } from '@/lib/constants/opencodeModels';
+import { DROID_MODEL_DEFINITIONS } from '@/lib/constants/droidModels';
 
 const execAsync = promisify(exec);
 
@@ -123,6 +124,27 @@ async function checkOpenCodeCLI(): Promise<{
   }
 }
 
+async function checkDroidCLI(): Promise<{
+  installed: boolean;
+  version?: string;
+  error?: string;
+}> {
+  const executable = process.platform === 'win32' ? 'droid.cmd' : 'droid';
+  try {
+    const { stdout } = await execAsync(`${executable} --version`);
+    const version = stdout.trim();
+    return {
+      installed: true,
+      version: version || 'installed',
+    };
+  } catch (error) {
+    return {
+      installed: false,
+      error: error instanceof Error ? error.message : 'Failed to check Factory Droid CLI',
+    };
+  }
+}
+
 /**
  * GET /api/settings/cli-status
  * Check CLI installation status
@@ -155,6 +177,10 @@ export async function GET() {
         checking: false,
       },
       opencode: {
+        installed: false,
+        checking: false,
+      },
+      droid: {
         installed: false,
         checking: false,
       },
@@ -212,6 +238,15 @@ export async function GET() {
       checking: false,
       error: opencodeStatus.error,
       models: OPENCODE_MODEL_DEFINITIONS.map((model) => model.id),
+    };
+
+    const droidStatus = await checkDroidCLI();
+    status.droid = {
+      installed: droidStatus.installed,
+      version: droidStatus.version,
+      checking: false,
+      error: droidStatus.error,
+      models: DROID_MODEL_DEFINITIONS.map((model) => model.id),
     };
 
     return NextResponse.json(status);

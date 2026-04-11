@@ -4,9 +4,10 @@ import { CURSOR_DEFAULT_MODEL, CURSOR_MODEL_DEFINITIONS, getCursorModelDisplayNa
 import { QWEN_DEFAULT_MODEL, QWEN_MODEL_DEFINITIONS, getQwenModelDisplayName, normalizeQwenModelId } from './qwenModels';
 import { GLM_DEFAULT_MODEL, GLM_MODEL_DEFINITIONS, getGLMModelDisplayName, normalizeGLMModelId } from './glmModels';
 import { OPENCODE_DEFAULT_MODEL, OPENCODE_MODEL_DEFINITIONS, getOpenCodeModelDisplayName, normalizeOpenCodeModelId } from './opencodeModels';
+import { DROID_DEFAULT_MODEL, DROID_MODEL_DEFINITIONS, getDroidModelDisplayName, normalizeDroidModelId } from './droidModels';
 import type { CLAUDE_MODEL_DEFINITIONS as _Guard } from './claudeModels'; // Ensure module side effects preserved
 
-type CLIKey = 'claude' | 'codex' | 'cursor' | 'gemini' | 'qwen' | 'glm' | 'opencode';
+type CLIKey = 'claude' | 'codex' | 'cursor' | 'gemini' | 'qwen' | 'glm' | 'opencode' | 'droid';
 
 type ModelDefinition = {
   id: string;
@@ -23,6 +24,7 @@ const DEFAULT_MODELS: Record<CLIKey, string> = {
   qwen: QWEN_DEFAULT_MODEL,
   glm: GLM_DEFAULT_MODEL,
   opencode: OPENCODE_DEFAULT_MODEL,
+  droid: DROID_DEFAULT_MODEL,
 };
 
 const MODEL_DEFINITIONS: Record<CLIKey, ModelDefinition[]> = {
@@ -36,6 +38,7 @@ const MODEL_DEFINITIONS: Record<CLIKey, ModelDefinition[]> = {
   qwen: QWEN_MODEL_DEFINITIONS,
   glm: GLM_MODEL_DEFINITIONS,
   opencode: OPENCODE_MODEL_DEFINITIONS,
+  droid: DROID_MODEL_DEFINITIONS,
 };
 
 export function getDefaultModelForCli(cli: string | null | undefined): string {
@@ -61,6 +64,8 @@ export function normalizeModelId(cli: string | null | undefined, model?: string 
       return normalizeGLMModelId(model);
     case 'opencode':
       return normalizeOpenCodeModelId(model);
+    case 'droid':
+      return normalizeDroidModelId(model);
     case 'claude':
     default:
       return normalizeClaudeModelId(model);
@@ -83,6 +88,8 @@ export function getModelDisplayName(cli: string | null | undefined, modelId?: st
       return getGLMModelDisplayName(modelId);
     case 'opencode':
       return getOpenCodeModelDisplayName(modelId);
+    case 'droid':
+      return getDroidModelDisplayName(modelId);
     case 'claude':
     default:
       return getClaudeModelDisplayName(normalizeClaudeModelId(modelId));

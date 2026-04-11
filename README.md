@@ -66,6 +66,7 @@ Claudable supports multiple AI coding agents, giving you the flexibility to choo
 - **Cursor CLI** - Powerful multi-model AI agent
 - **Qwen Code** - Alibaba's open-source coding CLI
 - **Z.AI GLM-4.6** - Zhipu AI's coding agent
+- **Factory Droid** - Factory's multi-model coding agent
 
 ### Claude Code (Recommended)
 **[Claude Code](https://docs.anthropic.com/en/docs/claude-code/setup)** - Anthropic's advanced AI coding agent with Claude Opus 4.6
@@ -118,6 +119,17 @@ Claudable supports multiple AI coding agents, giving you the flexibility to choo
 - **Pricing**: Starting from $3/month (GLM Coding Lite) to $30/month (GLM Coding Max), with 50% off first month
 - **Installation**: See [Quick Start Guide](https://docs.z.ai/devpack/quick-start)
 
+### Factory Droid
+**[Factory Droid](https://docs.factory.ai/cli/droid-exec/overview)** - Factory's multi-model coding agent with non-interactive execution
+- **Features**: Multi-model routing, `droid exec`, stream JSON output, local workspace execution
+- **Context**: Model dependent
+- **Authentication**: Run `droid` and sign in, or set `FACTORY_API_KEY`
+- **Installation**:
+  ```bash
+  curl -fsSL https://app.factory.ai/cli | sh
+  droid --version
+  ```
+
 ## Technology Stack
 
 **Database & Deployment:**
@@ -130,7 +142,7 @@ Claudable supports multiple AI coding agents, giving you the flexibility to choo
 
 Before you begin, ensure you have the following installed:
 - Node.js 18+
-- Claude Code or Cursor CLI (already logged in)
+- At least one supported CLI agent, already logged in or configured with its API key
 - Git
 
 ## Quick Start
@@ -179,7 +191,7 @@ CLAUDABLE_PUBLIC_URL=http://localhost:3000
 
 The container runs the production Next.js server and syncs the Prisma SQLite schema on startup. The `./data:/app/data` volume keeps `cc.db` and generated project files across restarts. Keep the same `ENCRYPTION_KEY` for the lifetime of that volume, otherwise encrypted service tokens cannot be decrypted after restart.
 
-CLI agent auth is not baked into the image. Claude, Codex, Cursor, Qwen, GLM, and OpenCode still need their CLI binaries and login/API-key setup available inside the container before agent actions can run there.
+CLI agent auth is not baked into the image. Claude, Codex, Cursor, Qwen, GLM, OpenCode, and Droid still need their CLI binaries and login/API-key setup available inside the container before agent actions can run there.
 
 ## Troubleshooting
 - **Database migration conflicts**: If you upgraded from a previous Claudable version and run into database errors, reset the Prisma database so it matches the latest schema:

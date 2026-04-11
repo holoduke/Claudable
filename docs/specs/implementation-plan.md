@@ -135,6 +135,8 @@ Acceptance:
 
 # Priority 5: Droid CLI Support
 
+Status: implemented in this pass.
+
 Spec:
 
 ```text
@@ -157,6 +159,14 @@ Implementation steps:
 6. Add optional `FACTORY_API_KEY` support.
 7. Parse stream JSON and persist messages.
 8. Document setup and auth.
+
+Implementation notes:
+
+- default model is `claude-sonnet-4-6`
+- custom Factory BYOK aliases use `custom:<alias>`
+- API key is injected as `FACTORY_API_KEY` from global settings
+- command arguments never include the API key
+- durable Droid session management remains deferred
 
 Acceptance:
 
@@ -186,4 +196,3 @@ Apply to every feature:
 - publish realtime status events for long-running work
 - keep CLI-specific behavior in `lib/services/cli/*`
 - avoid changing unrelated UI and dependency versions in the same patch
-

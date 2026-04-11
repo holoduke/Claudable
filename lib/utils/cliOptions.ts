@@ -1,7 +1,7 @@
 import { CLI_OPTIONS, type CLIOption } from '@/types/cli';
 import { getModelDefinitionsForCli, normalizeModelId } from '@/lib/constants/cliModels';
 
-export const ACTIVE_CLI_IDS = ['claude', 'codex', 'cursor', 'qwen', 'glm', 'opencode'] as const;
+export const ACTIVE_CLI_IDS = ['claude', 'codex', 'cursor', 'qwen', 'glm', 'opencode', 'droid'] as const;
 
 export type ActiveCliId = (typeof ACTIVE_CLI_IDS)[number];
 
@@ -78,7 +78,7 @@ export const isValidCustomModelForCli = (
     return false;
   }
   const sanitizedCli = sanitizeActiveCli(cli, fallback);
-  if (sanitizedCli !== 'opencode') {
+  if (sanitizedCli !== 'opencode' && sanitizedCli !== 'droid') {
     return false;
   }
   const normalized = normalizeModelId(sanitizedCli, model);
