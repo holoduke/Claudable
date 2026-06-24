@@ -14,8 +14,10 @@ RUN npm install -g @anthropic-ai/claude-code
 WORKDIR /app
 
 # Install deps (cached on lockfile) and generate Prisma client.
+# --ignore-scripts skips the desktop/electron postinstall and the dev-only
+# ensure:env bootstrap (env is provided at runtime via compose env_file).
 COPY package*.json ./
-RUN npm ci
+RUN npm ci --ignore-scripts
 COPY prisma ./prisma
 RUN npx prisma generate
 
