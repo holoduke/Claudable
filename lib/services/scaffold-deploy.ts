@@ -118,8 +118,8 @@ jobs:
           git fetch origin main
           git reset --hard origin/main
 
-          # Build & (re)start the container
-          docker compose build --no-cache
+          # Build & (re)start the container (cached; rebuilds changed layers)
+          docker compose build
           docker compose up -d
 
           # Traefik route (idempotent): host gateway is 10.0.1.1 on this box
