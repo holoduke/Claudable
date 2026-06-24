@@ -31,7 +31,7 @@ jobs:
           git fetch origin main
           git reset --hard origin/main   # .env is gitignored + lives in $DIR/.env, data is a volume
 
-          docker compose build --no-cache
+          docker compose build
           docker compose up -d
 
           ROUTE=/data/coolify/proxy/dynamic/$APP.yml
