@@ -29,5 +29,11 @@ ENV NODE_ENV=production
 ENV PORT=3700
 ENV WEB_PORT=3700
 
+# Claude Code refuses --dangerously-skip-permissions (bypassPermissions) as root,
+# which kills the agent. Run as the non-root `node` user (uid 1000, matches the
+# host volume owner). /app/data is the mounted volume owned by uid 1000.
+RUN chown -R node:node /app
+USER node
+
 # Ensure the SQLite schema exists on the mounted volume, then start.
 CMD ["sh", "-c", "npx prisma db push --skip-generate && npx next start -p ${WEB_PORT}"]
