@@ -728,7 +728,18 @@ class PreviewManager {
       previewBounds.end
     );
 
-    const initialUrl = `http://localhost:${preferredPort}`;
+    // When Claudable runs remotely (e.g. on a server), localhost:<port> is not
+    // reachable from the user's browser. PREVIEW_URL_TEMPLATE (e.g.
+    // "https://preview-{port}.newstory.tf") yields a publicly-routed URL instead.
+    const buildPreviewUrl = (port: number): string => {
+      const tmpl = process.env.PREVIEW_URL_TEMPLATE;
+      if (tmpl && tmpl.includes('{port}')) {
+        return tmpl.replace('{port}', String(port));
+      }
+      return `http://localhost:${port}`;
+    };
+
+    const initialUrl = buildPreviewUrl(preferredPort);
 
     const env: NodeJS.ProcessEnv = {
       ...process.env,
@@ -843,7 +854,7 @@ class PreviewManager {
     }
 
     const effectivePort = previewProcess.port;
-    let resolvedUrl: string = `http://localhost:${effectivePort}`;
+    let resolvedUrl: string = buildPreviewUrl(effectivePort);
     if (typeof overrides.url === 'string' && overrides.url.trim().length > 0) {
       resolvedUrl = overrides.url.trim();
     }
@@ -851,9 +862,17 @@ class PreviewManager {
     env.NEXT_PUBLIC_APP_URL = resolvedUrl;
     previewProcess.url = resolvedUrl;
 
+    // Bind to all interfaces when hosting remotely so the reverse proxy can
+    // reach the dev server (network_mode host -> proxy hits it via the gateway).
+    const bindHost = process.env.PREVIEW_BIND_HOST;
+    const devArgs = ['run', 'dev', '--', '--port', String(effectivePort)];
+    if (bindHost && bindHost.trim().length > 0) {
+      devArgs.push('--hostname', bindHost.trim());
+    }
+
     const child = spawn(
       npmCommand,
-      ['run', 'dev', '--', '--port', String(effectivePort)],
+      devArgs,
       {
         cwd: projectPath,
         env,
