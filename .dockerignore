@@ -1,0 +1,13 @@
+node_modules
+.next
+.git
+data
+dist
+build
+out
+.turbo
+.vercel
+electron/dist
+*.log
+.env
+.env.local

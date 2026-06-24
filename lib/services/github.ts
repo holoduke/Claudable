@@ -4,6 +4,8 @@ import { getPlainServiceToken } from '@/lib/services/tokens';
 import { getProjectById, updateProject } from '@/lib/services/project';
 import { getProjectService, upsertProjectServiceConnection, updateProjectServiceData } from '@/lib/services/project-services';
 import { ensureGitRepository, ensureGitConfig, initializeMainBranch, addOrUpdateRemote, commitAll, pushToRemote } from '@/lib/services/git';
+import { getGitProviderConfig, getEnvGitToken } from '@/lib/services/git-provider';
+import { injectDeployScaffolding } from '@/lib/services/scaffold-deploy';
 import type { GitHubUserInfo, CreateRepoOptions, GitHubRepositoryInfo } from '@/types/shared';
 
 class GitHubError extends Error {
@@ -13,13 +15,36 @@ class GitHubError extends Error {
   }
 }
 
+/** Resolve the API token: env (server automation) first, then DB-stored token. */
+async function resolveGitToken(): Promise<string> {
+  const envToken = getEnvGitToken();
+  if (envToken) {
+    return envToken;
+  }
+  const dbToken = await getPlainServiceToken('github');
+  if (!dbToken) {
+    throw new GitHubError('Git provider token not configured', 401);
+  }
+  return dbToken;
+}
+
+/** Owner that repos are created/looked-up under: configured org, else the user. */
+async function resolveOwner(): Promise<string> {
+  const { org } = getGitProviderConfig();
+  if (org) {
+    return org;
+  }
+  const user = await getGithubUser();
+  return user.login;
+}
+
 async function githubFetch(token: string, endpoint: string, init?: RequestInit) {
-  const baseUrl = 'https://api.github.com';
-  const response = await fetch(`${baseUrl}${endpoint}`, {
+  const { apiBaseUrl, authScheme } = getGitProviderConfig();
+  const response = await fetch(`${apiBaseUrl}${endpoint}`, {
     ...init,
     headers: {
-      Accept: 'application/vnd.github+json',
-      Authorization: `Bearer ${token}`,
+      Accept: 'application/json',
+      Authorization: `${authScheme} ${token}`,
       'User-Agent': 'Claudable-Next',
       ...init?.headers,
     },
@@ -63,42 +88,35 @@ async function githubFetch(token: string, endpoint: string, init?: RequestInit) 
 }
 
 export async function getGithubUser(): Promise<GitHubUserInfo> {
-  const token = await getPlainServiceToken('github');
-  if (!token) {
-    throw new GitHubError('GitHub token not configured', 401);
-  }
+  const token = await resolveGitToken();
 
   const data = (await githubFetch(token, '/user')) as any;
   return {
     login: data.login,
-    name: data.name,
+    // GitHub returns `name`; Gitea uses `full_name`.
+    name: data.name || data.full_name || data.login,
     email: data.email,
   };
 }
 
 export async function checkRepositoryAvailability(repoName: string) {
-  const token = await getPlainServiceToken('github');
-  if (!token) {
-    throw new GitHubError('GitHub token not configured', 401);
-  }
+  const token = await resolveGitToken();
 
-  const user = await getGithubUser();
+  const owner = await resolveOwner();
   try {
-    await githubFetch(token, `/repos/${user.login}/${repoName}`);
-    return { exists: true, username: user.login };
+    await githubFetch(token, `/repos/${owner}/${repoName}`);
+    return { exists: true, username: owner };
   } catch (error) {
     if (error instanceof GitHubError && error.status === 404) {
-      return { exists: false, username: user.login };
+      return { exists: false, username: owner };
     }
     throw error;
   }
 }
 
 export async function createRepository(options: CreateRepoOptions) {
-  const token = await getPlainServiceToken('github');
-  if (!token) {
-    throw new GitHubError('GitHub token not configured', 401);
-  }
+  const token = await resolveGitToken();
+  const { org } = getGitProviderConfig();
 
   const payload = {
     name: options.repoName,
@@ -107,8 +125,12 @@ export async function createRepository(options: CreateRepoOptions) {
     auto_init: false,
   };
 
+  // Create under the org when configured, otherwise under the authenticated user.
+  // Both GitHub and Gitea expose `/orgs/{org}/repos` and `/user/repos`.
+  const endpoint = org ? `/orgs/${org}/repos` : '/user/repos';
+
   try {
-    const repo = await githubFetch(token, '/user/repos', {
+    const repo = await githubFetch(token, endpoint, {
       method: 'POST',
       body: JSON.stringify(payload),
     });
@@ -136,10 +158,7 @@ export async function ensureProjectRepository(projectId: string, repoPath?: stri
 }
 
 export async function getGithubRepositoryDetails(owner: string, repo: string): Promise<GitHubRepositoryInfo> {
-  const token = await getPlainServiceToken('github');
-  if (!token) {
-    throw new GitHubError('GitHub token not configured', 401);
-  }
+  const token = await resolveGitToken();
 
   try {
     const data = (await githubFetch(token, `/repos/${owner}/${repo}`)) as any;
@@ -175,10 +194,7 @@ export async function connectProjectToGitHub(projectId: string, options: CreateR
     throw new Error('Project not found');
   }
 
-  const token = await getPlainServiceToken('github');
-  if (!token) {
-    throw new GitHubError('GitHub token not configured', 401);
-  }
+  await resolveGitToken();
 
   const user = await getGithubUser();
   const repo = await createRepository(options);
@@ -187,7 +203,9 @@ export async function connectProjectToGitHub(projectId: string, options: CreateR
   ensureGitRepository(repoPath);
   const repoUrl = repo.html_url as string;
   const cloneUrl = repo.clone_url as string;
-  const defaultBranch = repo.default_branch as string;
+  const defaultBranch = (repo.default_branch as string) || 'main';
+  // Repos created under an org are owned by the org, not the user.
+  const owner = (repo.owner?.login as string) || (await resolveOwner());
 
   await updateProject(projectId, { repoPath });
 
@@ -197,22 +215,26 @@ export async function connectProjectToGitHub(projectId: string, options: CreateR
   ensureGitConfig(repoPath, userName, userEmail);
   initializeMainBranch(repoPath);
 
+  // Inject self-hosted deploy scaffolding (Dockerfile, compose, Gitea Actions
+  // workflow) so push-to-main auto-deploys at <site>.<deploy-domain>.
+  await injectDeployScaffolding(repoPath, { repoName: options.repoName });
+
   addOrUpdateRemote(repoPath, 'origin', cloneUrl);
-  commitAll(repoPath, 'Initial commit - connected to GitHub');
+  commitAll(repoPath, 'Initial commit - connected to Claudable');
 
   await upsertProjectServiceConnection(projectId, 'github', {
     repo_url: repoUrl,
     repo_name: options.repoName,
     clone_url: cloneUrl,
     default_branch: defaultBranch,
-    owner: user.login,
+    owner,
   });
 
   return {
     repo_url: repoUrl,
     clone_url: cloneUrl,
     default_branch: defaultBranch,
-    owner: user.login,
+    owner,
   };
 }
 
@@ -223,15 +245,12 @@ export async function pushProjectToGitHub(projectId: string) {
       throw new Error('Project not found');
     }
 
-    const token = await getPlainServiceToken('github');
-    if (!token) {
-      throw new GitHubError('GitHub token not configured', 401);
-    }
+    const token = await resolveGitToken();
 
     const service = await getProjectService(projectId, 'github');
     const data = service?.serviceData as Record<string, any> | undefined;
     if (!data?.clone_url || !data?.owner) {
-      throw new GitHubError('GitHub repository not connected', 404);
+      throw new GitHubError('Git repository not connected', 404);
     }
 
     const repoPath = await ensureProjectRepository(projectId, project.repoPath);
@@ -241,13 +260,19 @@ export async function pushProjectToGitHub(projectId: string) {
     const userEmail = user.email || `${user.login}@users.noreply.github.com`;
     ensureGitConfig(repoPath, userName, userEmail);
 
+    // Keep deploy scaffolding present even if the agent edited the project.
+    const repoName = (data.repo_name as string) || path.basename(repoPath);
+    await injectDeployScaffolding(repoPath, { repoName });
+
     const committed = commitAll(repoPath, 'Update from Claudable');
     if (!committed) {
-      console.log('[GitHubService] No changes to commit before push');
+      console.log('[GitService] No changes to commit before push');
       return;
     }
 
-    const authenticatedUrl = String(data.clone_url).replace('https://', `https://${data.owner}:${token}@`);
+    // Basic-auth the push with the token. The username must be the token-owning
+    // user (not the org) for Gitea/GitHub basic auth to succeed.
+    const authenticatedUrl = String(data.clone_url).replace('https://', `https://${encodeURIComponent(user.login)}:${token}@`);
     pushToRemote(repoPath, 'origin', data.default_branch || 'main', authenticatedUrl);
 
     await updateProjectServiceData(projectId, 'github', {
