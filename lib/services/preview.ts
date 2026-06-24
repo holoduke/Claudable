@@ -743,6 +743,10 @@ class PreviewManager {
 
     const env: NodeJS.ProcessEnv = {
       ...process.env,
+      // `next dev` must run in development; the Claudable container sets
+      // NODE_ENV=production, which breaks the dev CSS loader (globals.css
+      // "Module parse failed") and yields 500s in the preview.
+      NODE_ENV: 'development',
       PORT: String(preferredPort),
       WEB_PORT: String(preferredPort),
       NEXT_PUBLIC_APP_URL: initialUrl,
