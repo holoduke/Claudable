@@ -13,9 +13,13 @@ services:
       - PORT=3700
       - WEB_PORT=3700
       - NEXT_PUBLIC_APP_URL=https://claudable.newstory.tf
-      # Per-project preview dev servers (host-bound) — kept clear of the deploy band
+      # Per-project preview dev servers (host-bound) — kept clear of the deploy band.
+      # Small band so each preview subdomain's LE cert stays under rate limits.
       - PREVIEW_PORT_START=3710
-      - PREVIEW_PORT_END=3799
+      - PREVIEW_PORT_END=3719
+      # Public, proxy-routed preview URL (vs unreachable localhost when hosted remotely)
+      - PREVIEW_URL_TEMPLATE=https://preview-{port}.newstory.tf
+      - PREVIEW_BIND_HOST=0.0.0.0
       - DATABASE_URL=file:../data/cc.db
       - PROJECTS_DIR=./data/projects
       # Generated sites get ports 3500-3699 in their compose/workflow
