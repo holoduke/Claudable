@@ -718,19 +718,22 @@ export async function executeClaude(
     const response = query({
       prompt: instruction,
       options: {
+        cwd: absoluteProjectPath, // SDK uses `cwd` (workingDirectory is ignored); without this the agent edits Claudable's own /app
         workingDirectory: absoluteProjectPath, // Work only in project folder (protects Claudable root)
         additionalDirectories: [absoluteProjectPath],
+        // Load filesystem settings so per-project skills in <project>/.claude/skills/
+        // (and container-global ~/.claude/skills/) are discovered by the agent.
+        settingSources: ['project', 'user'],
         model: resolvedModel,
         resume: sessionId, // Resume previous session
         permissionMode: 'bypassPermissions', // Auto-approve commands and edits
-        systemPrompt: `You are an expert web developer building a Next.js application.
-- Use Next.js 15 App Router
-- Use TypeScript
-- Use Tailwind CSS for styling
-- Write clean, production-ready code
-- Follow best practices
+        systemPrompt: `You are an expert web developer building a Nuxt application.
+- Use Nuxt 4 (Vue 3, <script setup lang="ts">, file-based routing in pages/)
+- Use Nuxt UI (@nuxt/ui) components for the UI; the app is wrapped in <UApp>. There is a "nuxt-ui" skill available — use it for component names, props, theming and patterns.
+- Use TypeScript and Tailwind utility classes (Nuxt UI ships Tailwind v4)
+- Write clean, production-ready code; follow Nuxt conventions (composables/, components/, server/api/ for endpoints)
 - The platform automatically installs dependencies and manages the preview dev server. Do not run package managers or dev-server commands yourself; rely on the existing preview.
-- Keep all project files directly in the project root. Never scaffold frameworks into subdirectories (avoid commands like "mkdir new-app" or "create-next-app my-app"; run generators against the current directory instead).
+- Keep all project files directly in the project root. Never scaffold frameworks into subdirectories (avoid commands like "mkdir new-app" or "nuxi init my-app"; build against the current directory instead).
 - Never override ports or start your own development server processes. Rely on the managed preview service which assigns ports from the approved pool.
 - When sharing a preview link, read the actual NEXT_PUBLIC_APP_URL (e.g. from .env/.env.local or project metadata) instead of assuming a default port.
 - Prefer giving the user the live preview link that is actually running rather than written instructions.`,
@@ -1160,15 +1163,15 @@ export async function initializeNextJsProject(
   model: string = CLAUDE_DEFAULT_MODEL,
   requestId?: string
 ): Promise<void> {
-  console.log(`[ClaudeService] Initializing Next.js project: ${projectId}`);
+  console.log(`[ClaudeService] Initializing Nuxt project: ${projectId}`);
 
-  // Next.js project creation command
+  // Nuxt project creation command
   const fullPrompt = `
-Create a new Next.js 15 application with the following requirements:
+Build a Nuxt 4 application with the following requirements:
 ${initialPrompt}
 
-Use App Router, TypeScript, and Tailwind CSS.
-Set up the basic project structure and implement the requested features.
+Use Nuxt 4 (Vue 3 <script setup lang="ts">, file-based routing in pages/) and Nuxt UI (@nuxt/ui) components — consult the "nuxt-ui" skill. The app is wrapped in <UApp>. Use TypeScript and Tailwind utility classes.
+Build on the existing scaffold in the project root and implement the requested features.
 `.trim();
 
   await executeClaude(projectId, projectPath, fullPrompt, model, undefined, requestId);

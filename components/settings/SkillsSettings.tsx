@@ -1,0 +1,314 @@
+/**
+ * Skills Settings — manage per-project Agent Skills and view global (shared) skills.
+ * Skills are auto-loaded by the agent (settingSources: ['project','user']).
+ */
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? '';
+
+interface Skill {
+  name: string;
+  description: string;
+  content: string;
+  raw: string;
+  scope: 'project' | 'global';
+}
+
+interface SkillsSettingsProps {
+  projectId: string;
+}
+
+const EXAMPLE = `When asked to do X, follow these steps:
+1. ...
+2. ...
+
+Reference any conventions or helper files the agent should follow.`;
+
+function SkillCard({
+  skill,
+  onEdit,
+  onDelete,
+}: {
+  skill: Skill;
+  onEdit?: () => void;
+  onDelete?: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const isGlobal = skill.scope === 'global';
+  return (
+    <div className="group rounded-xl border border-gray-200 bg-white hover:border-gray-300 hover:shadow-sm transition-all">
+      <div className="flex items-start gap-3 p-3.5">
+        <div
+          className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-sm ${
+            isGlobal ? 'bg-violet-50 text-violet-600' : 'bg-blue-50 text-blue-600'
+          }`}
+        >
+          ✦
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <span className="truncate font-mono text-sm font-medium text-gray-900">{skill.name}</span>
+            <span
+              className={`rounded-full px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
+                isGlobal ? 'bg-violet-100 text-violet-700' : 'bg-blue-100 text-blue-700'
+              }`}
+            >
+              {isGlobal ? 'Global' : 'Project'}
+            </span>
+          </div>
+          <p className="mt-0.5 line-clamp-2 text-xs text-gray-500">
+            {skill.description || 'No description'}
+          </p>
+          <div className="mt-2 flex items-center gap-3">
+            <button
+              onClick={() => setOpen((v) => !v)}
+              className="text-xs font-medium text-gray-500 hover:text-gray-800"
+            >
+              {open ? 'Hide' : 'View'} instructions
+            </button>
+            {onEdit && (
+              <button onClick={onEdit} className="text-xs font-medium text-blue-600 hover:text-blue-700">
+                Edit
+              </button>
+            )}
+            {onDelete && (
+              <button onClick={onDelete} className="text-xs font-medium text-red-500 hover:text-red-600">
+                Delete
+              </button>
+            )}
+          </div>
+          {open && (
+            <pre className="mt-2 max-h-56 overflow-auto whitespace-pre-wrap rounded-lg bg-gray-50 p-3 text-[11px] leading-relaxed text-gray-700">
+              {skill.content || '(no body)'}
+            </pre>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export function SkillsSettings({ projectId }: SkillsSettingsProps) {
+  const [project, setProject] = useState<Skill[]>([]);
+  const [global, setGlobal] = useState<Skill[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [query, setQuery] = useState('');
+
+  const [editing, setEditing] = useState<string | null>(null);
+  const [name, setName] = useState('');
+  const [description, setDescription] = useState('');
+  const [content, setContent] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  const load = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/projects/${projectId}/skills`);
+      const json = await res.json();
+      const data = json?.data ?? {};
+      setProject(Array.isArray(data.project) ? data.project : []);
+      setGlobal(Array.isArray(data.global) ? data.global : []);
+    } catch (e) {
+      console.error('Failed to load skills:', e);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [projectId]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const resetForm = () => {
+    setEditing(null);
+    setName('');
+    setDescription('');
+    setContent('');
+    setError(null);
+  };
+  const startNew = () => {
+    resetForm();
+    setEditing('__new__');
+  };
+  const startEdit = (s: Skill) => {
+    setEditing(s.name);
+    setName(s.name);
+    setDescription(s.description);
+    setContent(s.content);
+    setError(null);
+  };
+
+  const save = async () => {
+    if (!name.trim()) {
+      setError('Name is required');
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    try {
+      const res = await fetch(`${API_BASE}/api/projects/${projectId}/skills`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, description, content }),
+      });
+      const json = await res.json();
+      if (!res.ok || json?.success === false) {
+        setError(json?.error || 'Failed to save skill');
+        return;
+      }
+      resetForm();
+      await load();
+    } catch {
+      setError('Failed to save skill');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const remove = async (skillName: string) => {
+    try {
+      await fetch(`${API_BASE}/api/projects/${projectId}/skills/${encodeURIComponent(skillName)}`, {
+        method: 'DELETE',
+      });
+      if (editing === skillName) resetForm();
+      await load();
+    } catch (e) {
+      console.error('Failed to delete skill:', e);
+    }
+  };
+
+  const filteredGlobal = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return global;
+    return global.filter(
+      (s) => s.name.toLowerCase().includes(q) || s.description.toLowerCase().includes(q)
+    );
+  }, [global, query]);
+
+  return (
+    <div className="space-y-6 p-6">
+      <div>
+        <h3 className="text-lg font-semibold text-gray-900">Skills</h3>
+        <p className="mt-1 text-sm text-gray-500">
+          Reusable instructions the agent loads automatically. Project skills live in this project; global
+          skills are shared across all projects.
+        </p>
+      </div>
+
+      {/* Project skills */}
+      <section className="space-y-3">
+        <div className="flex items-center justify-between">
+          <h4 className="flex items-center gap-2 text-sm font-semibold text-gray-800">
+            Project skills
+            <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-600">
+              {project.length}
+            </span>
+          </h4>
+          {editing === null && (
+            <button
+              onClick={startNew}
+              className="rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700"
+            >
+              + Add skill
+            </button>
+          )}
+        </div>
+
+        {editing !== null && (
+          <div className="space-y-3 rounded-xl border border-blue-200 bg-blue-50/40 p-4">
+            <div className="text-sm font-medium text-gray-900">
+              {editing === '__new__' ? 'New skill' : `Edit: ${editing}`}
+            </div>
+            <input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              disabled={editing !== '__new__'}
+              placeholder="skill-name (e.g. brand-voice)"
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:bg-gray-100"
+            />
+            <input
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="Description — when should the agent use this?"
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+            />
+            <textarea
+              value={content}
+              onChange={(e) => setContent(e.target.value)}
+              rows={9}
+              placeholder={EXAMPLE}
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 font-mono text-xs"
+            />
+            {error && <p className="text-xs text-red-600">{error}</p>}
+            <div className="flex gap-2">
+              <button
+                onClick={save}
+                disabled={saving}
+                className="rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+              >
+                {saving ? 'Saving…' : 'Save skill'}
+              </button>
+              <button
+                onClick={resetForm}
+                className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
+
+        {project.length === 0 && editing === null ? (
+          <div className="rounded-xl border border-dashed border-gray-300 p-6 text-center text-sm text-gray-400">
+            No project skills yet. Add one to teach the agent project-specific conventions.
+          </div>
+        ) : (
+          <div className="grid gap-3 sm:grid-cols-2">
+            {project.map((s) => (
+              <SkillCard key={s.name} skill={s} onEdit={() => startEdit(s)} onDelete={() => remove(s.name)} />
+            ))}
+          </div>
+        )}
+      </section>
+
+      {/* Global skills */}
+      <section className="space-y-3">
+        <div className="flex items-center justify-between gap-3">
+          <h4 className="flex items-center gap-2 text-sm font-semibold text-gray-800">
+            Available globally
+            <span className="rounded-full bg-violet-100 px-2 py-0.5 text-xs font-medium text-violet-700">
+              {global.length}
+            </span>
+          </h4>
+          {global.length > 0 && (
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search skills…"
+              className="w-44 rounded-lg border border-gray-300 px-3 py-1.5 text-sm focus:w-56 transition-all"
+            />
+          )}
+        </div>
+        <p className="text-xs text-gray-400">
+          Installed for every project (e.g. SEO/GEO pack, Nuxt UI). Read-only here.
+        </p>
+        {isLoading ? (
+          <p className="text-sm text-gray-400">Loading…</p>
+        ) : filteredGlobal.length === 0 ? (
+          <div className="rounded-xl border border-dashed border-gray-300 p-6 text-center text-sm text-gray-400">
+            {global.length === 0 ? 'No global skills installed.' : 'No skills match your search.'}
+          </div>
+        ) : (
+          <div className="grid gap-3 sm:grid-cols-2">
+            {filteredGlobal.map((s) => (
+              <SkillCard key={s.name} skill={s} />
+            ))}
+          </div>
+        )}
+      </section>
+    </div>
+  );
+}
+
+export default SkillsSettings;

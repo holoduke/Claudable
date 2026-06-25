@@ -9,6 +9,7 @@ import { GeneralSettings } from './GeneralSettings';
 import { AIAssistantSettings } from './AIAssistantSettings';
 import { EnvironmentSettings } from './EnvironmentSettings';
 import { ServiceSettings } from './ServiceSettings';
+import { SkillsSettings } from './SkillsSettings';
 import GlobalSettings from './GlobalSettings';
 
 interface ProjectSettingsProps {
@@ -21,7 +22,7 @@ interface ProjectSettingsProps {
   onProjectUpdated?: (update: { name: string; description?: string | null }) => void;
 }
 
-type SettingsTab = 'general' | 'ai-assistant' | 'environment' | 'services';
+type SettingsTab = 'general' | 'ai-assistant' | 'environment' | 'services' | 'skills';
 
 export function ProjectSettings({
   isOpen,
@@ -57,6 +58,12 @@ export function ProjectSettings({
           id: 'services' as SettingsTab,
           label: 'Services',
           icon: <span className="w-4 h-4 inline-flex"><FaPlug /></span>,
+        },
+        {
+          id: 'skills' as SettingsTab,
+          label: 'Skills',
+          icon: <span className="w-4 h-4 inline-flex items-center justify-center text-sm leading-none">✦</span>,
+          hidden: !isProjectScoped,
         },
       ].filter(tab => !('hidden' in tab) || !tab.hidden),
     [isProjectScoped]
@@ -140,14 +147,18 @@ export function ProjectSettings({
           )}
           
           {activeTab === 'services' && (
-            <ServiceSettings 
-              projectId={projectId} 
+            <ServiceSettings
+              projectId={projectId}
               onOpenGlobalSettings={() => {
                 // Open Global Settings with services tab
                 setShowGlobalSettings(true);
                 onClose(); // Close current modal
               }}
             />
+          )}
+
+          {activeTab === 'skills' && (
+            <SkillsSettings projectId={projectId} />
           )}
         </div>
       </div>
