@@ -34,11 +34,14 @@ export async function scaffoldBasicNextApp(
       preview: 'nuxt preview',
       postinstall: 'nuxt prepare',
     },
+    // Caret-pinned to the current majors: new apps get every minor/patch
+    // update (stay modern) but won't silently jump to a breaking new major
+    // (e.g. Nuxt 5 / Nuxt UI 5) on a fresh install. Bump these deliberately.
     dependencies: {
-      nuxt: 'latest',
-      '@nuxt/ui': 'latest',
-      '@nuxt/image': 'latest',
-      '@nuxt/fonts': 'latest',
+      nuxt: '^4.4.8',
+      '@nuxt/ui': '^4.9.0',
+      '@nuxt/image': '^2.0.0',
+      '@nuxt/fonts': '^0.14.0',
     },
     devDependencies: {
       typescript: '^5.7.2',
