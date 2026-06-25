@@ -20,7 +20,7 @@ export async function GET() {
 
 export async function PUT(request: NextRequest) {
   try {
-    const body = await request.json();
+    const body = (await request.json().catch(() => null)) ?? {};
     const candidate = body && typeof body === 'object' ? (body as Record<string, unknown>) : {};
 
     const update: Record<string, unknown> = {};

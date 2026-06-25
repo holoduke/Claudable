@@ -61,7 +61,7 @@ export async function PUT(
 ) {
   try {
     const { project_id } = await params;
-    const body = await request.json();
+    const body = (await request.json().catch(() => null)) ?? {};
 
     const input: UpdateProjectInput = {
       name: body.name,

@@ -24,7 +24,7 @@ export async function GET(_request: NextRequest, { params }: RouteContext) {
 export async function POST(request: NextRequest, { params }: RouteContext) {
   try {
     const { project_id } = await params;
-    const body = await request.json();
+    const body = (await request.json().catch(() => null)) ?? {};
     if (!body || typeof body !== 'object') {
       return NextResponse.json(
         { success: false, error: 'Invalid payload' },

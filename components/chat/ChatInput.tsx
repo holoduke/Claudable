@@ -77,22 +77,6 @@ export default function ChatInput({
   const submissionLockRef = useRef(false);
   const supportsImageUpload = preferredCli !== 'cursor' && preferredCli !== 'qwen' && preferredCli !== 'glm';
 
-  // Log CLI compatibility details
-  console.log('🔧 CLI Compatibility Check:', {
-    preferredCli,
-    supportsImageUpload,
-    projectId: projectId ? 'valid' : 'missing',
-    uploadButtonAvailable: supportsImageUpload && !!projectId
-  });
-
-  // Inform the user about the current state
-  if (supportsImageUpload && projectId) {
-    console.log('✅ Image upload is ready! Click the upload button or drag in a file.');
-  } else if (!supportsImageUpload) {
-    console.log('❌ The current CLI does not support image uploads. Please switch to Claude CLI.');
-  } else {
-    console.log('❌ Please select a project.');
-  }
 
   const modelOptionsForCli = useMemo(
     () => modelOptions.filter(option => option.cli === preferredCli),
@@ -439,22 +423,13 @@ export default function ChatInput({
                   <ImageIcon className="h-4 w-4" />
                 </div>
               ) : (
-                <div
+                <button
+                  type="button"
+                  aria-label="Upload images"
                   className="flex items-center justify-center w-8 h-8 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-full transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                   title="Upload images"
                   onClick={() => {
-                    console.log('📸 Upload button clicked:', {
-                      projectId,
-                      supportsImageUpload,
-                      isUploading,
-                      disabled
-                    });
-                    if (fileInputRef.current) {
-                      console.log('📸 Triggering file input click');
-                      fileInputRef.current.click();
-                    } else {
-                      console.error('📸 fileInputRef is null');
-                    }
+                    fileInputRef.current?.click();
                   }}
                 >
                   <ImageIcon className="h-4 w-4" />
@@ -467,7 +442,7 @@ export default function ChatInput({
                     disabled={isUploading || disabled}
                     className="hidden"
                   />
-                </div>
+                </button>
               )
             )}
           </div>

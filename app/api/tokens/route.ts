@@ -4,7 +4,7 @@ import { createSuccessResponse, handleApiError } from '@/lib/utils/api-response'
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json();
+    const body = (await request.json().catch(() => null)) ?? {};
     const provider = typeof body?.provider === 'string' ? body.provider : '';
     const token = typeof body?.token === 'string' ? body.token : '';
     const name = typeof body?.name === 'string' ? body.name : '';
