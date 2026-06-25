@@ -12,7 +12,7 @@
  *   GIT_HTTP_BASE     Web/clone base used for auth URLs  (e.g. https://git.example.com)
  *   GIT_ORG           Create repos under this org        (else under the user account)
  *   GIT_TOKEN         API token fallback                 (else the DB-stored 'github' token is used)
- *   GIT_DEPLOY_DOMAIN Base domain for live deploys       (e.g. newstory.tf -> <site>.newstory.tf)
+ *   GIT_DEPLOY_DOMAIN Base domain for live deploys       (e.g. example.com -> <site>.example.com)
  */
 
 export type GitProvider = 'github' | 'gitea';
