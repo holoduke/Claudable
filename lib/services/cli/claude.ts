@@ -566,7 +566,8 @@ export async function executeClaude(
   instruction: string,
   model: string = CLAUDE_DEFAULT_MODEL,
   sessionId?: string,
-  requestId?: string
+  requestId?: string,
+  options: { suppressUserError?: boolean } = {}
 ): Promise<void> {
   console.log(`\n========================================`);
   console.log(`[ClaudeService] 🚀 Starting Claude Agent SDK`);
@@ -1133,10 +1134,33 @@ export async function executeClaude(
       }
     }
 
+    // When this attempt will be retried (e.g. a failed session resume), stay
+    // silent so the user doesn't see a spurious error — just rethrow.
+    if (options.suppressUserError) {
+      throw new Error(errorMessage);
+    }
+
     await safeMarkFailed(errorMessage);
     publishStatus('error', errorMessage);
 
-    // Send error via SSE
+    // Persist + stream a visible error message so it shows up in the chat log.
+    try {
+      const errorChatMessage = await createMessage({
+        projectId,
+        role: 'assistant',
+        messageType: 'error',
+        content: errorMessage,
+        cliSource: 'claude',
+      });
+      streamManager.publish(projectId, {
+        type: 'message',
+        data: serializeMessage(errorChatMessage, requestId ? { requestId } : undefined),
+      });
+    } catch (persistError) {
+      console.error('[ClaudeService] Failed to persist error message:', persistError);
+    }
+
+    // Also send the error status via SSE
     streamManager.publish(projectId, {
       type: 'error',
       error: errorMessage,
@@ -1197,7 +1221,11 @@ export async function applyChanges(
 ): Promise<void> {
   console.log(`[ClaudeService] Applying changes to project: ${projectId}`);
   try {
-    await executeClaude(projectId, projectPath, instruction, model, sessionId, requestId);
+    // On a resume, suppress user-facing errors for this attempt so a failed
+    // resume can be retried silently (the retry surfaces errors normally).
+    await executeClaude(projectId, projectPath, instruction, model, sessionId, requestId, {
+      suppressUserError: Boolean(sessionId),
+    });
   } catch (error) {
     // Resuming a corrupt/incompatible session can fail immediately (exit code 1 /
     // error_during_execution). Recover by retrying once with a fresh session.
