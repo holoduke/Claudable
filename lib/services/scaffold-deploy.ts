@@ -62,7 +62,9 @@ CMD ["node", ".output/server/index.mjs"]
 }
 
 function dockerignore(): string {
-  return ['node_modules', '.next', '.nuxt', '.output', '.git', 'dist', 'build', 'out', '.turbo', '.vercel', '*.log'].join('\n') + '\n';
+  // Exclude .env so local/preview values (e.g. a dev PORT) don't get baked into
+  // the image and override the compose-provided runtime config.
+  return ['node_modules', '.next', '.nuxt', '.output', '.git', 'dist', 'build', 'out', '.turbo', '.vercel', '.env', '.env.*', '*.log'].join('\n') + '\n';
 }
 
 function dockerCompose(site: string, port: number): string {

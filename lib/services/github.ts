@@ -44,6 +44,10 @@ async function githubFetch(token: string, endpoint: string, init?: RequestInit) 
     ...init,
     headers: {
       Accept: 'application/json',
+      // Required so Gitea/GitHub parse the JSON request body. Without it, POST
+      // bodies (e.g. repo creation) are ignored and the API returns a 422 for
+      // "missing" fields — which surfaced as a misleading "already exists".
+      'Content-Type': 'application/json',
       Authorization: `${authScheme} ${token}`,
       'User-Agent': 'Claudable-Next',
       ...init?.headers,
