@@ -31,7 +31,10 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
       return NextResponse.json({ success: false, error: 'Token not found' }, { status: 404 });
     }
 
-    return NextResponse.json(record);
+    // Never expose the secret value on the public metadata endpoint — only the
+    // internal `.../token` path (below) returns the plaintext.
+    const { token: _secret, ...safe } = record;
+    return NextResponse.json(safe);
   }
 
   if (segments.length === 3 && segments[0] === 'internal' && segments[2] === 'token') {

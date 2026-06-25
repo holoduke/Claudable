@@ -82,14 +82,18 @@ export async function updateProject(
   id: string,
   input: UpdateProjectInput
 ): Promise<Project> {
-  const existing = await prisma.project.findUnique({
-    where: { id },
-    select: { preferredCli: true },
-  });
-  const targetCli = input.preferredCli ?? existing?.preferredCli ?? 'claude';
-  const normalizedModel = input.selectedModel
-    ? normalizeModelId(targetCli, input.selectedModel)
-    : undefined;
+  // Only look up the existing CLI when we actually need to normalize a model —
+  // most updates (previewUrl, status, …) don't, so this avoids an extra query
+  // on a hot path.
+  let normalizedModel: string | undefined;
+  if (input.selectedModel) {
+    const existing = await prisma.project.findUnique({
+      where: { id },
+      select: { preferredCli: true },
+    });
+    const targetCli = input.preferredCli ?? existing?.preferredCli ?? 'claude';
+    normalizedModel = normalizeModelId(targetCli, input.selectedModel);
+  }
 
   const project = await prisma.project.update({
     where: { id },

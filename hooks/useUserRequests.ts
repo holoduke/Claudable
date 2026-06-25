@@ -124,8 +124,10 @@ export function useUserRequests({ projectId }: UseUserRequestsOptions) {
       return;
     }
 
-    // Determine polling interval based on active request status
-    const pollInterval = hasActiveRequests ? 500 : 5000; // 0.5s vs 5s
+    // Determine polling interval based on active request status. 500ms was far
+    // too aggressive (120 req/min per tab); 2s is responsive enough while
+    // cutting request volume ~4x. SSE carries the live message updates.
+    const pollInterval = hasActiveRequests ? 2000 : 8000; // 2s active vs 8s idle
 
     // Clean up existing polling
     if (intervalRef.current) {

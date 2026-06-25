@@ -8,7 +8,7 @@ interface RouteContext {
 export async function POST(request: NextRequest, { params }: RouteContext) {
   try {
     const { project_id } = await params;
-    const body = await request.json();
+    const body = (await request.json().catch(() => null)) ?? {};
     const projectName = typeof body?.project_name === 'string' ? body.project_name : undefined;
     if (!projectName) {
       return NextResponse.json({ success: false, error: 'project_name is required' }, { status: 400 });

@@ -492,10 +492,18 @@ async function waitForPreviewReady(
   const start = Date.now();
   let attempts = 0;
 
+  // Per-attempt timeout so a hung connection can't block the readiness loop
+  // beyond the overall budget.
+  const fetchWithTimeout = (input: string, init?: RequestInit) => {
+    const controller = new AbortController();
+    const t = setTimeout(() => controller.abort(), Math.min(intervalMs * 2, 5000));
+    return fetch(input, { ...init, signal: controller.signal }).finally(() => clearTimeout(t));
+  };
+
   while (Date.now() - start < timeoutMs) {
     attempts += 1;
     try {
-      const response = await fetch(url, { method: 'HEAD' });
+      const response = await fetchWithTimeout(url, { method: 'HEAD' });
       if (response.ok) {
         log(
           Buffer.from(
@@ -505,7 +513,7 @@ async function waitForPreviewReady(
         return true;
       }
       if (response.status === 405 || response.status === 501) {
-        const getResponse = await fetch(url, { method: 'GET' });
+        const getResponse = await fetchWithTimeout(url, { method: 'GET' });
         if (getResponse.ok) {
           log(
             Buffer.from(

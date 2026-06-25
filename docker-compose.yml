@@ -7,6 +7,13 @@ services:
     container_name: claudable
     network_mode: host
     restart: unless-stopped
+    healthcheck:
+      # node (not curl — the slim image has no curl); exit 0 while the app serves.
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3700/',r=>process.exit(r.statusCode<500?0:1)).on('error',()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 40s
     env_file:
       - .env
     environment:

@@ -3,7 +3,7 @@ import { createSupabaseProject } from '@/lib/services/supabase';
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json();
+    const body = (await request.json().catch(() => null)) ?? {};
     const projectId =
       typeof body?.project_id === 'string'
         ? body.project_id

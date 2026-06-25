@@ -8,7 +8,7 @@ interface RouteContext {
 export async function POST(request: NextRequest, { params }: RouteContext) {
   try {
     const { project_id } = await params;
-    const body = await request.json();
+    const body = (await request.json().catch(() => null)) ?? {};
     const supabaseProjectId =
       typeof body?.project_id === 'string'
         ? body.project_id

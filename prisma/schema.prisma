@@ -104,6 +104,8 @@ model Message {
   @@index([createdAt])
   @@index([cliSource])
   @@index([requestId])
+  // Serves the hot history query: WHERE projectId ORDER BY createdAt.
+  @@index([projectId, createdAt])
   @@map("messages")
 }
 
@@ -255,6 +257,8 @@ model UserRequest {
 
   @@index([projectId])
   @@index([status])
+  // Serves getActiveRequests(): WHERE projectId AND status IN (...) AND createdAt >= cutoff.
+  @@index([projectId, status, createdAt])
   @@map("user_requests")
 }
 

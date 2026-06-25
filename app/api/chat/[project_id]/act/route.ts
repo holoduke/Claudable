@@ -50,16 +50,22 @@ function resolveAssetsPath(projectId: string): string {
 }
 
 function ensureAbsoluteAssetPath(projectId: string, inputPath: string): string {
-  const normalized = path.normalize(inputPath);
-  if (path.isAbsolute(normalized)) {
-    return normalized;
-  }
-  const resolvedFromCwd = path.resolve(process.cwd(), normalized);
-  if (resolvedFromCwd.startsWith(PROJECTS_DIR_ABSOLUTE)) {
-    return resolvedFromCwd;
-  }
   const projectBase = path.join(PROJECTS_DIR_ABSOLUTE, projectId);
-  return path.resolve(projectBase, normalized);
+  const normalized = path.normalize(inputPath);
+  // Absolute paths are kept as-is; relative paths resolve under the project.
+  const candidate = path.isAbsolute(normalized)
+    ? normalized
+    : path.resolve(projectBase, normalized);
+  // Security: the path MUST stay inside the projects directory. Without this an
+  // attacker could pass an absolute path like "/etc/passwd" (or "../../..") and
+  // the app would stat/copy arbitrary files.
+  if (
+    candidate !== PROJECTS_DIR_ABSOLUTE &&
+    !candidate.startsWith(PROJECTS_DIR_ABSOLUTE + path.sep)
+  ) {
+    throw new Error('Asset path is outside the projects directory');
+  }
+  return candidate;
 }
 
 function resolveProjectRoot(projectId: string, repoPath?: string | null): string {
