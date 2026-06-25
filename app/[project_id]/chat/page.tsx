@@ -738,13 +738,16 @@ const persistProjectPreferences = useCallback(
         if (cancelled || !d?.found) return;
         setDeployRun({ state: d.state, runNumber: d.runNumber, url: d.url, title: d.title });
         if (d.state === 'success') {
+          // Only record the live URL — do NOT mark 'ready'. Marking ready here
+          // would show "Published successfully" the moment the popup opens,
+          // before the user has clicked anything. A neutral "Currently live"
+          // block shows the URL instead.
           if (d.liveUrl) setPublishedUrl(d.liveUrl);
-          setDeploymentStatus('ready');
-        } else if (d.state === 'failure' || d.state === 'cancelled') {
-          setDeploymentStatus('error');
         } else if ((d.state === 'running' || d.state === 'queued') && !giteaPollRef.current) {
+          // A deploy is genuinely in progress right now — reflect it.
           startGiteaDeployPolling();
         }
+        // failure/cancelled on open: leave idle so the user can just re-publish.
       })
       .catch(() => {});
     return () => { cancelled = true; };
@@ -3305,6 +3308,26 @@ const persistProjectPreferences = useCallback(
                 </div>
               )}
 
+              {/* Neutral "currently live" state shown when the popup opens for an
+                  already-deployed project (before the user clicks Update). */}
+              {deploymentStatus !== 'deploying' && deploymentStatus !== 'ready' && deploymentStatus !== 'error' && isGitea && publishedUrl && (
+                <div className="p-4 rounded-xl border border-gray-200 bg-gray-50 ">
+                  <p className="text-sm font-medium text-gray-700 mb-2">Currently live at:</p>
+                  <div className="flex items-center gap-2">
+                    <a href={publishedUrl} target="_blank" rel="noopener noreferrer" className="text-sm font-mono text-gray-700 underline break-all flex-1">
+                      {publishedUrl}
+                    </a>
+                    <button
+                      onClick={() => navigator.clipboard?.writeText(publishedUrl)}
+                      className="px-2 py-1 text-xs rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-100 "
+                    >
+                      Copy
+                    </button>
+                  </div>
+                  <p className="text-xs text-gray-400 mt-2">Click Update to deploy your latest changes.</p>
+                </div>
+              )}
+
               {deploymentStatus === 'ready' && publishedUrl && (
                 <div className="p-4 rounded-xl border border-emerald-200 bg-emerald-50 ">
                   <p className="text-sm font-medium text-emerald-700 mb-2">Published successfully</p>
@@ -3452,7 +3475,7 @@ const persistProjectPreferences = useCallback(
                     : 'bg-black hover:bg-gray-900'
                 }`}
               >
-                {publishLoading ? 'Publishing…' : deploymentStatus === 'deploying' ? 'Deploying…' : (!githubConnected || (!isGitea && !vercelConnected)) ? 'Connect Services First' : (deploymentStatus === 'ready' && publishedUrl ? 'Update' : 'Publish')}
+                {publishLoading ? 'Publishing…' : deploymentStatus === 'deploying' ? 'Deploying…' : (!githubConnected || (!isGitea && !vercelConnected)) ? 'Connect Services First' : (publishedUrl ? 'Update' : 'Publish')}
               </button>
             </div>
           </div>
