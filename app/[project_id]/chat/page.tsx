@@ -3271,7 +3271,7 @@ const persistProjectPreferences = useCallback(
                 </div>
                 <div>
                   <h3 className="text-base font-semibold text-gray-900 ">Publish Project</h3>
-                  <p className="text-xs text-gray-600 ">{isGitea ? 'Push to Gitea — auto-deploys via Gitea Actions' : 'Deploy with Vercel, linked to your GitHub repo'}</p>
+                  <p className="text-xs text-gray-600 ">{isGitea ? 'Pushes your code to Git — auto-deploys via CI' : 'Deploy with Vercel, linked to your GitHub repo'}</p>
                 </div>
               </div>
               <button onClick={() => setShowPublishPanel(false)} className="text-gray-400 hover:text-gray-600 ">
@@ -3292,7 +3292,7 @@ const persistProjectPreferences = useCallback(
                   </div>
                   <p className="text-xs text-blue-700/80 ">
                     {isGitea
-                      ? 'Live status from Gitea Actions — clone, build, route, health check.'
+                      ? 'Live status from CI — clone, build, route, health check.'
                       : 'Building and deploying your project. This may take a few minutes.'}
                   </p>
                   {isGitea && publishedUrl && (
@@ -3364,7 +3364,7 @@ const persistProjectPreferences = useCallback(
                 <div className="p-4 rounded-xl border border-amber-200 bg-amber-50 ">
                   <p className="text-sm font-medium text-gray-900 mb-2">Connect the following services:</p>
                   <div className="space-y-1 text-amber-700 text-sm">
-                    {!githubConnected && (<div className="flex items-center gap-2"><span className="w-1.5 h-1.5 rounded-full bg-amber-500"/>{isGitea ? 'Gitea' : 'GitHub'} repository not connected</div>)}
+                    {!githubConnected && (<div className="flex items-center gap-2"><span className="w-1.5 h-1.5 rounded-full bg-amber-500"/>Git repository not connected</div>)}
                     {!isGitea && !vercelConnected && (<div className="flex items-center gap-2"><span className="w-1.5 h-1.5 rounded-full bg-amber-500"/>Vercel project not connected</div>)}
                   </div>
                   <button
