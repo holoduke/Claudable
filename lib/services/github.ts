@@ -300,7 +300,10 @@ export interface DeployRunStatus {
   runNumber?: number;
   /** Link to the CI run page (the user's own Git server). */
   url?: string;
+  /** Commit message of the deployed run. */
   title?: string;
+  /** Short commit SHA of the deployed run. */
+  sha?: string;
   startedAt?: string;
   updatedAt?: string;
   /** The site's live URL once deployed. */
@@ -354,6 +357,7 @@ export async function getDeployRunStatus(projectId: string): Promise<DeployRunSt
     runNumber: typeof run.run_number === 'number' ? run.run_number : undefined,
     url: typeof run.url === 'string' ? run.url : undefined,
     title: typeof run.display_title === 'string' ? run.display_title : undefined,
+    sha: typeof run.head_sha === 'string' ? run.head_sha.slice(0, 7) : undefined,
     startedAt: run.run_started_at,
     updatedAt: run.updated_at,
     liveUrl: deployDomain ? `https://${repo}.${deployDomain}` : undefined,

@@ -31,6 +31,21 @@ import {
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? '';
 
+/** Human relative time, e.g. "just now", "5 minutes ago", "2 hours ago", "3 days ago". */
+function formatTimeAgo(iso?: string): string | null {
+  if (!iso) return null;
+  const then = new Date(iso).getTime();
+  if (Number.isNaN(then)) return null;
+  const sec = Math.max(0, Math.round((Date.now() - then) / 1000));
+  if (sec < 45) return 'just now';
+  const min = Math.round(sec / 60);
+  if (min < 60) return `${min} minute${min === 1 ? '' : 's'} ago`;
+  const hr = Math.round(min / 60);
+  if (hr < 24) return `${hr} hour${hr === 1 ? '' : 's'} ago`;
+  const day = Math.round(hr / 24);
+  return `${day} day${day === 1 ? '' : 's'} ago`;
+}
+
 const assistantBrandColors = ACTIVE_CLI_BRAND_COLORS;
 
 const CLI_LABELS = ACTIVE_CLI_NAME_MAP;
@@ -265,7 +280,7 @@ export default function ChatPage() {
   const [deploymentStatus, setDeploymentStatus] = useState<'idle' | 'deploying' | 'ready' | 'error'>('idle');
   const deployPollRef = useRef<NodeJS.Timeout | null>(null);
   // Real CI deploy run details (Gitea Actions) for the publish UI.
-  const [deployRun, setDeployRun] = useState<{ state: string; runNumber?: number; url?: string; title?: string } | null>(null);
+  const [deployRun, setDeployRun] = useState<{ state: string; runNumber?: number; url?: string; title?: string; sha?: string; updatedAt?: string } | null>(null);
   const giteaPollRef = useRef<NodeJS.Timeout | null>(null);
   const [isStartingPreview, setIsStartingPreview] = useState(false);
   const [previewInitializationMessage, setPreviewInitializationMessage] = useState('Starting development server...');
@@ -705,7 +720,7 @@ const persistProjectPreferences = useCallback(
                 setDeploymentStatus('ready'); stop(); return;
               }
             } else {
-              setDeployRun({ state: d.state, runNumber: d.runNumber, url: d.url, title: d.title });
+              setDeployRun({ state: d.state, runNumber: d.runNumber, url: d.url, title: d.title, sha: d.sha, updatedAt: d.updatedAt });
               if (d.state === 'success') {
                 if (d.liveUrl) setPublishedUrl(d.liveUrl);
                 setDeploymentStatus('ready'); stop(); return;
@@ -736,7 +751,7 @@ const persistProjectPreferences = useCallback(
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => {
         if (cancelled || !d?.found) return;
-        setDeployRun({ state: d.state, runNumber: d.runNumber, url: d.url, title: d.title });
+        setDeployRun({ state: d.state, runNumber: d.runNumber, url: d.url, title: d.title, sha: d.sha, updatedAt: d.updatedAt });
         if (d.state === 'success') {
           // Only record the live URL — do NOT mark 'ready'. Marking ready here
           // would show "Published successfully" the moment the popup opens,
@@ -3324,6 +3339,14 @@ const persistProjectPreferences = useCallback(
                       Copy
                     </button>
                   </div>
+                  {deployRun?.state === 'success' && (deployRun?.title || deployRun?.updatedAt) && (
+                    <p className="text-xs text-gray-500 mt-2">
+                      Last deployed{formatTimeAgo(deployRun.updatedAt) ? ` ${formatTimeAgo(deployRun.updatedAt)}` : ''}
+                      {deployRun.title ? ` · ${deployRun.title}` : ''}
+                      {deployRun.sha ? ` (${deployRun.sha})` : ''}
+                      {deployRun.url ? <> · <a href={deployRun.url} target="_blank" rel="noopener noreferrer" className="underline">log</a></> : null}
+                    </p>
+                  )}
                   <p className="text-xs text-gray-400 mt-2">Click Update to deploy your latest changes.</p>
                 </div>
               )}
