@@ -27,6 +27,7 @@ import { serializeMessage } from '@/lib/serializers/chat';
 import {
   upsertUserRequest,
   markUserRequestAsProcessing,
+  markUserRequestAsFailed,
 } from '@/lib/services/user-requests';
 
 interface RouteContext {
@@ -444,8 +445,19 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
         selectedModel,
         sessionId,
         requestId,
-      ).catch((error) => {
+      ).catch(async (error) => {
         console.error('[API] Failed to execute AI:', error);
+        // If the executor rejected outright, its own finally never marked the
+        // request terminal — do it here so the row can't get stuck in an
+        // active status and permanently lock the project.
+        if (requestId) {
+          await markUserRequestAsFailed(
+            requestId,
+            error instanceof Error ? error.message : 'AI execution failed',
+          ).catch((markError) => {
+            console.error('[API] Failed to mark request failed:', markError);
+          });
+        }
       });
     }
 
