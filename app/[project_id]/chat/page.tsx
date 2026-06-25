@@ -255,6 +255,11 @@ export default function ChatPage() {
   const [publishLoading, setPublishLoading] = useState(false);
   const [githubConnected, setGithubConnected] = useState<boolean | null>(null);
   const [vercelConnected, setVercelConnected] = useState<boolean | null>(null);
+  // Git provider config (server-driven). For the self-hosted Gitea flow, deploys
+  // happen via the Actions runner so Vercel is not required.
+  const [gitProvider, setGitProvider] = useState<string | null>(null);
+  const [gitDeployDomain, setGitDeployDomain] = useState<string | null>(null);
+  const [githubRepoName, setGithubRepoName] = useState<string | null>(null);
   const [publishedUrl, setPublishedUrl] = useState<string | null>(null);
   const [deploymentId, setDeploymentId] = useState<string | null>(null);
   const [deploymentStatus, setDeploymentStatus] = useState<'idle' | 'deploying' | 'ready' | 'error'>('idle');
@@ -605,6 +610,12 @@ const persistProjectPreferences = useCallback(
         // Check actual project connections (not just token existence)
         setGithubConnected(!!githubConnection);
         setVercelConnected(!!vercelConnection);
+        const ghData = githubConnection?.service_data as Record<string, any> | undefined;
+        setGithubRepoName(
+          (ghData?.repo_name as string) ||
+            (typeof ghData?.repo_url === 'string' ? ghData.repo_url.split('/').pop() : null) ||
+            null,
+        );
         
         // Set published URL only if actually deployed
         if (vercelConnection && vercelConnection.service_data) {
@@ -637,6 +648,31 @@ const persistProjectPreferences = useCallback(
       setDeploymentStatus('idle');
     }
   }, [projectId]);
+
+  // Load the server's git provider config once (drives Gitea-vs-GitHub publish UI).
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`${API_BASE}/api/git/provider`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (cancelled || !d) return;
+        if (typeof d.provider === 'string') setGitProvider(d.provider);
+        if (typeof d.deployDomain === 'string') setGitDeployDomain(d.deployDomain);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const isGitea = gitProvider === 'gitea';
+
+  // In the Gitea flow the live URL is derived from the repo + deploy domain.
+  useEffect(() => {
+    if (isGitea && githubConnected && githubRepoName && gitDeployDomain) {
+      setPublishedUrl((prev) => prev || `https://${githubRepoName}.${gitDeployDomain}`);
+    }
+  }, [isGitea, githubConnected, githubRepoName, gitDeployDomain]);
 
   const startDeploymentPolling = useCallback((depId: string) => {
     if (deployPollRef.current) clearInterval(deployPollRef.current);
@@ -3155,7 +3191,7 @@ const persistProjectPreferences = useCallback(
                 </div>
                 <div>
                   <h3 className="text-base font-semibold text-gray-900 ">Publish Project</h3>
-                  <p className="text-xs text-gray-600 ">Deploy with Vercel, linked to your GitHub repo</p>
+                  <p className="text-xs text-gray-600 ">{isGitea ? 'Push to Gitea — auto-deploys via Gitea Actions' : 'Deploy with Vercel, linked to your GitHub repo'}</p>
                 </div>
               </div>
               <button onClick={() => setShowPublishPanel(false)} className="text-gray-400 hover:text-gray-600 ">
@@ -3171,6 +3207,9 @@ const persistProjectPreferences = useCallback(
                     <p className="text-sm font-medium text-blue-700 ">Deployment in progress…</p>
                   </div>
                   <p className="text-xs text-blue-700/80 ">Building and deploying your project. This may take a few minutes.</p>
+                  {isGitea && publishedUrl && (
+                    <p className="text-xs text-blue-700/80 mt-1">Will be live at <a href={publishedUrl} target="_blank" rel="noopener noreferrer" className="font-mono underline">{publishedUrl}</a></p>
+                  )}
                 </div>
               )}
 
@@ -3197,12 +3236,12 @@ const persistProjectPreferences = useCallback(
                 </div>
               )}
 
-              {!githubConnected || !vercelConnected ? (
+              {!githubConnected || (!isGitea && !vercelConnected) ? (
                 <div className="p-4 rounded-xl border border-amber-200 bg-amber-50 ">
                   <p className="text-sm font-medium text-gray-900 mb-2">Connect the following services:</p>
                   <div className="space-y-1 text-amber-700 text-sm">
-                    {!githubConnected && (<div className="flex items-center gap-2"><span className="w-1.5 h-1.5 rounded-full bg-amber-500"/>GitHub repository not connected</div>)}
-                    {!vercelConnected && (<div className="flex items-center gap-2"><span className="w-1.5 h-1.5 rounded-full bg-amber-500"/>Vercel project not connected</div>)}
+                    {!githubConnected && (<div className="flex items-center gap-2"><span className="w-1.5 h-1.5 rounded-full bg-amber-500"/>{isGitea ? 'Gitea' : 'GitHub'} repository not connected</div>)}
+                    {!isGitea && !vercelConnected && (<div className="flex items-center gap-2"><span className="w-1.5 h-1.5 rounded-full bg-amber-500"/>Vercel project not connected</div>)}
                   </div>
                   <button
                     className="mt-3 w-full px-4 py-2 rounded-xl border border-gray-200 text-gray-800 hover:bg-gray-50 "
@@ -3214,8 +3253,34 @@ const persistProjectPreferences = useCallback(
               ) : null}
 
               <button
-                disabled={publishLoading || deploymentStatus === 'deploying' || !githubConnected || !vercelConnected}
+                disabled={publishLoading || deploymentStatus === 'deploying' || !githubConnected || (!isGitea && !vercelConnected)}
                 onClick={async () => {
+                  // Self-hosted Gitea flow: push to the Gitea repo; the Actions
+                  // host-runner builds, deploys and routes the site. No Vercel.
+                  if (isGitea) {
+                    try {
+                      setPublishLoading(true);
+                      setDeploymentStatus('deploying');
+                      const pushRes = await fetch(`${API_BASE}/api/projects/${projectId}/github/push`, { method: 'POST' });
+                      if (!pushRes.ok) {
+                        throw new Error(await pushRes.text());
+                      }
+                      const url = githubRepoName && gitDeployDomain
+                        ? `https://${githubRepoName}.${gitDeployDomain}`
+                        : publishedUrl;
+                      if (url) setPublishedUrl(url);
+                      setPublishLoading(false);
+                      // The runner build+deploy takes ~1-2 min; cross-origin status
+                      // can't be read, so optimistically mark ready after a delay.
+                      setTimeout(() => setDeploymentStatus('ready'), 90000);
+                    } catch (e) {
+                      console.error('🚀 Gitea publish failed:', e);
+                      alert('Publish failed. Make sure the project is connected to Gitea in Settings → Services.');
+                      setDeploymentStatus('idle');
+                      setPublishLoading(false);
+                    }
+                    return;
+                  }
                   try {
                     setPublishLoading(true);
                     setDeploymentStatus('deploying');
