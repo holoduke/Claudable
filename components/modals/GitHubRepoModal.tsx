@@ -199,9 +199,9 @@ export default function GitHubRepoModal({
         if (response.status === 404) {
           errorMessage = 'API endpoint not found. Please ensure the backend service is running and the GitHub integration is properly configured.';
         } else if (response.status === 401) {
-          errorMessage = 'GitHub authentication failed. Please check your GitHub token in Global Settings.';
+          errorMessage = 'Git authentication failed. Please check your Git token in Global Settings.';
         } else if (response.status === 403) {
-          errorMessage = 'GitHub access denied. Please ensure your token has the required permissions to create repositories.';
+          errorMessage = 'Git access denied. Please ensure your token has the required permissions to create repositories.';
         }
 
         alert(`Failed to create repository:\n${errorMessage}`);

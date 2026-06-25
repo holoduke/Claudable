@@ -47,11 +47,11 @@ export function ServiceSettings({ projectId, onOpenGlobalSettings }: ServiceSett
   const [services, setServices] = useState<Service[]>([
     {
       id: 'github',
-      name: 'GitHub',
+      name: 'Git',
       icon: 'github',
       connected: false,
       status: 'disconnected',
-      description: 'Connect to GitHub for version control and collaboration'
+      description: 'Connect a Git repository to push code and deploy'
     },
     {
       id: 'vercel',
@@ -227,7 +227,7 @@ export function ServiceSettings({ projectId, onOpenGlobalSettings }: ServiceSett
         <h3 className="text-lg font-medium text-gray-900 mb-1">
           Service Integrations
         </h3>
-        <p className="text-sm text-gray-600 mb-4">Connect GitHub, Supabase and Vercel with a consistent, polished experience.</p>
+        <p className="text-sm text-gray-600 mb-4">Connect Git, Supabase and Vercel with a consistent, polished experience.</p>
 
         <div className="space-y-4">
           {services.map(service => (
