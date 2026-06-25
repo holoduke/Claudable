@@ -56,6 +56,8 @@ export default defineNuxtConfig({
   devtools: { enabled: true },
   modules: ['@nuxt/ui'],
   css: ['~/assets/css/main.css'],
+  // Allow the managed preview proxy host (Vite dev blocks unknown hosts otherwise)
+  vite: { server: { allowedHosts: true } },
 });
 `
   );
