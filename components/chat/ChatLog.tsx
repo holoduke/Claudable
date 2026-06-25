@@ -995,9 +995,13 @@ interface ChatLogProps {
     add: (message: ChatMessage) => void;
     remove: (messageId: string) => void;
   }) => void;
+  /** Authoritative "agent is running" signal from the server (DB-backed
+   *  /requests/active poll). Drives the busy indicator even if a live status
+   *  event was missed (reconnect / late join). */
+  serverBusy?: boolean;
 }
 
-export default function ChatLog({ projectId, onSessionStatusChange, onProjectStatusUpdate, onSseFallbackActive, startRequest, completeRequest, onAddUserMessage }: ChatLogProps) {
+export default function ChatLog({ projectId, onSessionStatusChange, onProjectStatusUpdate, onSseFallbackActive, startRequest, completeRequest, onAddUserMessage, serverBusy = false }: ChatLogProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [selectedLog, setSelectedLog] = useState<LogEntry | null>(null);
@@ -1007,6 +1011,9 @@ export default function ChatLog({ projectId, onSessionStatusChange, onProjectSta
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [activeSession, setActiveSession] = useState<ActiveSession | null>(null);
   const [isWaitingForResponse, setIsWaitingForResponse] = useState(false);
+  // Short label describing what the agent is currently doing (from real status
+  // / tool-use events), shown next to the busy indicator.
+  const [busyDetail, setBusyDetail] = useState<string | null>(null);
   const [needsHistoryRefresh, setNeedsHistoryRefresh] = useState(false);
   const logsEndRef = useRef<HTMLDivElement>(null);
   const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -1405,14 +1412,18 @@ export default function ChatLog({ projectId, onSessionStatusChange, onProjectSta
         onProjectStatusUpdate?.(statusData.status, statusData.message);
       }
 
-      if (resolvedStatus === 'completed') {
+      if (resolvedStatus === 'completed' || resolvedStatus === 'error') {
         setActiveSession(null);
         onSessionStatusChange?.(false);
         setIsWaitingForResponse(false);
+        setBusyDetail(null);
       }
 
       if (resolvedStatus === 'starting' || resolvedStatus === 'running') {
         setIsWaitingForResponse(true);
+        if (typeof statusData?.message === 'string' && statusData.message.trim()) {
+          setBusyDetail(statusData.message.trim());
+        }
       }
 
       const requestKey = statusData?.requestId ?? requestId;
@@ -3050,15 +3061,23 @@ const ToolResultMessage = ({
           </div>
         ))}
         
-        {/* Loading indicator for waiting response */}
-        {isWaitingForResponse && (
-          <div className="mb-4 w-full">
-            <div className="text-xl text-gray-900 leading-relaxed font-bold">
-              <span className="animate-pulse">...</span>
-            </div>
+        {/* Busy indicator — driven by real status: the live SSE run status OR
+            the authoritative server-side active-request flag (so it still shows
+            after a reconnect/late join, not just when the start event is caught). */}
+        {(isWaitingForResponse || serverBusy) && (
+          <div className="mb-4 w-full flex items-center gap-2 text-gray-600">
+            <span className="flex items-center gap-1" aria-hidden="true">
+              <span className="w-1.5 h-1.5 rounded-full bg-gray-500 animate-bounce" style={{ animationDelay: '0ms' }} />
+              <span className="w-1.5 h-1.5 rounded-full bg-gray-500 animate-bounce" style={{ animationDelay: '150ms' }} />
+              <span className="w-1.5 h-1.5 rounded-full bg-gray-500 animate-bounce" style={{ animationDelay: '300ms' }} />
+            </span>
+            <span className="text-sm font-medium">Claude is working</span>
+            {busyDetail && (
+              <span className="text-sm text-gray-400 truncate max-w-[60%]">· {busyDetail}</span>
+            )}
           </div>
         )}
-        
+
         <div ref={logsEndRef} />
       </div>
 
