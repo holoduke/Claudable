@@ -2324,6 +2324,7 @@ const persistProjectPreferences = useCallback(
               <ChatErrorBoundary>
                 <ChatLog
                   projectId={projectId}
+                  serverBusy={hasActiveRequests}
                   onAddUserMessage={(handlers) => {
                     console.log('🔄 [HandlerSetup] ChatLog provided new handlers, updating references');
                     messageHandlersRef.current = handlers;
