@@ -718,8 +718,12 @@ export async function executeClaude(
     const response = query({
       prompt: instruction,
       options: {
+        cwd: absoluteProjectPath, // SDK uses `cwd` (workingDirectory is ignored); without this the agent edits Claudable's own /app
         workingDirectory: absoluteProjectPath, // Work only in project folder (protects Claudable root)
         additionalDirectories: [absoluteProjectPath],
+        // Load filesystem settings so per-project skills in <project>/.claude/skills/
+        // (and container-global ~/.claude/skills/) are discovered by the agent.
+        settingSources: ['project', 'user'],
         model: resolvedModel,
         resume: sessionId, // Resume previous session
         permissionMode: 'bypassPermissions', // Auto-approve commands and edits
