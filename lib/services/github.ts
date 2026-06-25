@@ -242,7 +242,8 @@ export async function connectProjectToGitHub(projectId: string, options: CreateR
   };
 }
 
-export async function pushProjectToGitHub(projectId: string) {
+/** @returns whether new changes were actually pushed (false = already up to date). */
+export async function pushProjectToGitHub(projectId: string): Promise<boolean> {
   try {
     const project = await getProjectById(projectId);
     if (!project) {
@@ -271,7 +272,7 @@ export async function pushProjectToGitHub(projectId: string) {
     const committed = commitAll(repoPath, 'Update from Claudable');
     if (!committed) {
       console.log('[GitService] No changes to commit before push');
-      return;
+      return false;
     }
 
     // Basic-auth the push with the token. The username must be the token-owning
@@ -282,6 +283,7 @@ export async function pushProjectToGitHub(projectId: string) {
     await updateProjectServiceData(projectId, 'github', {
       last_pushed_at: new Date().toISOString(),
     });
+    return true;
   } catch (error) {
     if (error instanceof GitHubError) {
       throw error;

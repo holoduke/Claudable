@@ -679,27 +679,40 @@ const persistProjectPreferences = useCallback(
 
   // Poll the REAL Gitea Actions deploy run (queued -> running -> success/failure)
   // instead of guessing with a timer. Stops on a terminal state or timeout.
-  const startGiteaDeployPolling = useCallback(() => {
-    if (giteaPollRef.current) clearInterval(giteaPollRef.current);
+  // Poll the REAL Gitea Actions deploy run. `baselineRun` is the latest run
+  // number BEFORE this publish — we only treat a run NEWER than it as "this
+  // deploy", otherwise the first poll reads the previous (already-finished) run
+  // and stops instantly (the "first click does nothing" bug).
+  const startGiteaDeployPolling = useCallback((baselineRun?: number | null) => {
+    if (giteaPollRef.current) { clearInterval(giteaPollRef.current); giteaPollRef.current = null; }
     setDeploymentStatus('deploying');
     const startedAt = Date.now();
+    const stop = () => { if (giteaPollRef.current) { clearInterval(giteaPollRef.current); giteaPollRef.current = null; } };
     const poll = async () => {
       try {
         const r = await fetch(`${API_BASE}/api/projects/${projectId}/deploy/status`, { cache: 'no-store' });
         if (r.ok) {
           const d = await r.json();
           if (d?.found) {
-            setDeployRun({ state: d.state, runNumber: d.runNumber, url: d.url, title: d.title });
-            if (d.state === 'success') {
-              if (d.liveUrl) setPublishedUrl(d.liveUrl);
-              setDeploymentStatus('ready');
-              if (giteaPollRef.current) { clearInterval(giteaPollRef.current); giteaPollRef.current = null; }
-              return;
-            }
-            if (d.state === 'failure' || d.state === 'cancelled') {
-              setDeploymentStatus('error');
-              if (giteaPollRef.current) { clearInterval(giteaPollRef.current); giteaPollRef.current = null; }
-              return;
+            const isNewRun = baselineRun == null
+              || (typeof d.runNumber === 'number' && d.runNumber > baselineRun);
+            if (!isNewRun) {
+              // The new run hasn't registered yet — keep showing "queued".
+              setDeployRun({ state: 'queued' });
+              // If no new run appears within 40s, there was nothing to deploy
+              // (no changes) — the site is already live from the prior run.
+              if (Date.now() - startedAt > 40000) {
+                setDeploymentStatus('ready'); stop(); return;
+              }
+            } else {
+              setDeployRun({ state: d.state, runNumber: d.runNumber, url: d.url, title: d.title });
+              if (d.state === 'success') {
+                if (d.liveUrl) setPublishedUrl(d.liveUrl);
+                setDeploymentStatus('ready'); stop(); return;
+              }
+              if (d.state === 'failure' || d.state === 'cancelled') {
+                setDeploymentStatus('error'); stop(); return;
+              }
             }
           }
         }
@@ -707,9 +720,7 @@ const persistProjectPreferences = useCallback(
         // transient; keep polling
       }
       // Safety timeout (~6 min) so it never spins forever.
-      if (Date.now() - startedAt > 6 * 60 * 1000 && giteaPollRef.current) {
-        clearInterval(giteaPollRef.current); giteaPollRef.current = null;
-      }
+      if (Date.now() - startedAt > 6 * 60 * 1000) stop();
     };
     poll();
     giteaPollRef.current = setInterval(poll, 4000);
@@ -3351,19 +3362,33 @@ const persistProjectPreferences = useCallback(
                     try {
                       setPublishLoading(true);
                       setDeploymentStatus('deploying');
+                      setDeployRun({ state: 'queued' });
+                      // Record the latest run number BEFORE pushing so polling
+                      // only tracks the NEW run this publish creates.
+                      let baselineRun: number | null = null;
+                      try {
+                        const s = await fetch(`${API_BASE}/api/projects/${projectId}/deploy/status`, { cache: 'no-store' }).then(r => r.ok ? r.json() : null);
+                        baselineRun = s?.found && typeof s.runNumber === 'number' ? s.runNumber : null;
+                      } catch {}
                       const pushRes = await fetch(`${API_BASE}/api/projects/${projectId}/github/push`, { method: 'POST' });
                       if (!pushRes.ok) {
                         throw new Error(await pushRes.text());
                       }
+                      const pushBody = await pushRes.json().catch(() => ({}));
                       const url = githubRepoName && gitDeployDomain
                         ? `https://${githubRepoName}.${gitDeployDomain}`
                         : publishedUrl;
                       if (url) setPublishedUrl(url);
                       setPublishLoading(false);
-                      setDeployRun({ state: 'queued' });
-                      // Track the real Gitea Actions run (queued -> running ->
-                      // success/failure) instead of guessing with a timer.
-                      startGiteaDeployPolling();
+                      if (pushBody.pushed === false) {
+                        // Nothing changed since the last deploy — it's already live.
+                        setDeployRun(null);
+                        setDeploymentStatus('ready');
+                      } else {
+                        // Track the real Gitea Actions run (queued -> running ->
+                        // success/failure) instead of guessing with a timer.
+                        startGiteaDeployPolling(baselineRun);
+                      }
                     } catch (e) {
                       console.error('🚀 Gitea publish failed:', e);
                       alert('Publish failed. Make sure the project is connected to Gitea in Settings → Services.');
