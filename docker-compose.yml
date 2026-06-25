@@ -1,5 +1,6 @@
-# Claudable on box1 (network_mode host). Traefik routes claudable.newstory.tf
-# -> http://10.0.1.1:3700. Secrets come from /opt/claudable/.env (never committed).
+# Claudable, self-hosted behind a reverse proxy on the host network.
+# Deployment-specific values (public URL, preview URL template, host gateway,
+# secrets) come from .env (never committed) — see .env.example.
 services:
   claudable:
     build: .
@@ -12,21 +13,21 @@ services:
       - NODE_ENV=production
       - PORT=3700
       - WEB_PORT=3700
-      - NEXT_PUBLIC_APP_URL=https://claudable.newstory.tf
-      # Per-project preview dev servers (host-bound) — kept clear of the deploy band.
-      # Small band so each preview subdomain's LE cert stays under rate limits.
+      # Per-project preview dev servers (host-bound). Keep this band clear of the
+      # generated-site deploy band and small so each preview subdomain's cert
+      # stays under Let's Encrypt rate limits.
       - PREVIEW_PORT_START=3710
       - PREVIEW_PORT_END=3719
-      # Public, proxy-routed preview URL (vs unreachable localhost when hosted remotely)
-      - PREVIEW_URL_TEMPLATE=https://preview-{port}.newstory.tf
       - PREVIEW_BIND_HOST=0.0.0.0
       - DATABASE_URL=file:../data/cc.db
       - PROJECTS_DIR=./data/projects
-      # Generated sites get ports 3500-3699 in their compose/workflow
+      # Deterministic port band for generated sites.
       - DEPLOY_PORT_BASE=3500
       - DEPLOY_PORT_SPAN=200
+      # NEXT_PUBLIC_APP_URL, PREVIEW_URL_TEMPLATE and DEPLOY_HOST_GATEWAY are
+      # deployment-specific and supplied via .env.
     volumes:
-      # Persist SQLite DB + all generated project repos across rebuilds
-      - /opt/claudable/data:/app/data
-      # Global Agent Skills available to every project (settingSources: ['user'])
-      - /opt/claudable/global-skills:/home/node/.claude/skills
+      # Persist SQLite DB + all generated project repos across rebuilds.
+      - ./data:/app/data
+      # Global Agent Skills available to every project (settingSources: ['user']).
+      - ./global-skills:/home/node/.claude/skills

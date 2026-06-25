@@ -26,11 +26,16 @@ export interface ScaffoldOptions {
 const DEPLOY_PORT_BASE = Number(process.env.DEPLOY_PORT_BASE || 3500);
 const DEPLOY_PORT_SPAN = Number(process.env.DEPLOY_PORT_SPAN || 400); // band [3500, 3899]
 
+// The address the reverse proxy uses to reach a host-network container. Set
+// DEPLOY_HOST_GATEWAY to your proxy's view of the host (e.g. the Docker host
+// gateway IP, or host.docker.internal). Kept out of the codebase so no
+// deployment topology is hardcoded.
+const DEPLOY_HOST_GATEWAY = process.env.DEPLOY_HOST_GATEWAY || 'host.docker.internal';
+
 /**
- * Deterministic per-site runtime port in a band that avoids the ports already
- * in use on the box (3000-3009, 3100, 3333/3334/3340/3400, 4000, 8080, ...).
- * Deterministic so re-runs target the same port; collisions within the band
- * are unlikely and surface loudly via the health check.
+ * Deterministic per-site runtime port within a configurable band, chosen to
+ * avoid ports already in use on the host. Deterministic so re-runs target the
+ * same port; collisions within the band surface loudly via the health check.
  */
 export function deployPortFor(repoName: string): number {
   let hash = 0;
@@ -73,7 +78,7 @@ services:
   app:
     build: .
     container_name: ${site}
-    network_mode: host          # bind directly to the host port (Traefik -> 10.0.1.1:PORT)
+    network_mode: host          # bind directly to the host port (proxy -> host gateway:PORT)
     restart: unless-stopped
     environment:
       - NODE_ENV=production
@@ -143,7 +148,7 @@ jobs:
           docker compose build
           docker compose up -d --force-recreate --remove-orphans
 
-          # --- Traefik route (idempotent): host gateway is 10.0.1.1 ----------
+          # --- Reverse-proxy route (idempotent) ------------------------------
           ROUTE=/data/coolify/proxy/dynamic/$APP.yml
           sudo tee "$ROUTE" > /dev/null <<YAML
           http:
@@ -163,7 +168,7 @@ jobs:
               $APP:
                 loadBalancer:
                   servers:
-                    - url: "http://10.0.1.1:$PORT"
+                    - url: "http://${DEPLOY_HOST_GATEWAY}:$PORT"
             middlewares:
               redirect-to-https:
                 redirectScheme:

@@ -8,11 +8,11 @@
  *
  * Env vars (all optional; defaults keep GitHub behaviour):
  *   GIT_PROVIDER      'github' | 'gitea'                (default 'github')
- *   GIT_API_BASE_URL  REST API base                     (e.g. https://git.newstory.tf/api/v1)
- *   GIT_HTTP_BASE     Web/clone base used for auth URLs  (e.g. https://git.newstory.tf)
+ *   GIT_API_BASE_URL  REST API base                     (e.g. https://git.example.com/api/v1)
+ *   GIT_HTTP_BASE     Web/clone base used for auth URLs  (e.g. https://git.example.com)
  *   GIT_ORG           Create repos under this org        (else under the user account)
  *   GIT_TOKEN         API token fallback                 (else the DB-stored 'github' token is used)
- *   GIT_DEPLOY_DOMAIN Base domain for live deploys       (e.g. newstory.tf -> <site>.newstory.tf)
+ *   GIT_DEPLOY_DOMAIN Base domain for live deploys       (e.g. example.com -> <site>.example.com)
  */
 
 export type GitProvider = 'github' | 'gitea';

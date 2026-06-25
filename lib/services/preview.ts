@@ -749,7 +749,7 @@ class PreviewManager {
 
     // When Claudable runs remotely (e.g. on a server), localhost:<port> is not
     // reachable from the user's browser. PREVIEW_URL_TEMPLATE (e.g.
-    // "https://preview-{port}.newstory.tf") yields a publicly-routed URL instead.
+    // "https://preview-{port}.example.com") yields a publicly-routed URL instead.
     const buildPreviewUrl = (port: number): string => {
       const tmpl = process.env.PREVIEW_URL_TEMPLATE;
       if (tmpl && tmpl.includes('{port}')) {
