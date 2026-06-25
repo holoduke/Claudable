@@ -2407,7 +2407,25 @@ const persistProjectPreferences = useCallback(
                         >
                           <FaRedo size={14} />
                         </button>
-                        
+
+                        {/* Open preview in a new tab */}
+                        <button
+                          className="h-9 px-3 flex items-center gap-2 bg-gray-100 text-gray-700 hover:text-gray-900 hover:bg-gray-200 rounded-lg transition-colors text-sm font-medium"
+                          onClick={() => {
+                            if (!previewUrl) return;
+                            const suffix = currentRoute && currentRoute !== '/' ? currentRoute : '';
+                            window.open(`${previewUrl}${suffix}`, '_blank', 'noopener');
+                          }}
+                          title="Open preview in new tab"
+                        >
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                            <polyline points="15 3 21 3 21 9" />
+                            <line x1="10" y1="14" x2="21" y2="3" />
+                          </svg>
+                          Preview
+                        </button>
+
                         {/* Device Mode Toggle */}
                         <div className="h-9 flex items-center gap-1 bg-gray-100 rounded-lg px-1 border border-gray-200 ">
                           <button
