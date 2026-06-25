@@ -5,7 +5,7 @@
  */
 
 import { NextRequest } from 'next/server';
-import { listSkills, saveSkill, SkillError } from '@/lib/services/skills';
+import { listAllSkills, saveSkill, SkillError } from '@/lib/services/skills';
 import { createSuccessResponse, createErrorResponse, handleApiError } from '@/lib/utils/api-response';
 
 interface RouteContext {
@@ -15,7 +15,7 @@ interface RouteContext {
 export async function GET(_request: NextRequest, { params }: RouteContext) {
   try {
     const { project_id } = await params;
-    const skills = await listSkills(project_id);
+    const skills = await listAllSkills(project_id);
     return createSuccessResponse(skills);
   } catch (error) {
     if (error instanceof SkillError) {

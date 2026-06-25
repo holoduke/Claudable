@@ -15,6 +15,7 @@
 
 import fs from 'fs/promises';
 import path from 'path';
+import os from 'os';
 import { getProjectById } from '@/lib/services/project';
 
 const PROJECTS_DIR = process.env.PROJECTS_DIR || './data/projects';
@@ -27,6 +28,7 @@ export interface Skill {
   description: string;
   content: string; // body (without frontmatter)
   raw: string; // full SKILL.md
+  scope: 'project' | 'global'; // project = editable; global = read-only (shared)
 }
 
 export class SkillError extends Error {
@@ -85,32 +87,45 @@ function buildSkillMarkdown(name: string, description: string, content: string):
   return `---\nname: ${name}\ndescription: ${desc}\n---\n\n${content.trim()}\n`;
 }
 
-export async function listSkills(projectId: string): Promise<Skill[]> {
-  const dir = await skillsDir(projectId);
+/** Global skills shared across all projects: ~/.claude/skills (mounted into the container). */
+function globalSkillsDir(): string {
+  return path.join(os.homedir(), '.claude', 'skills');
+}
+
+async function readSkillsDir(dir: string, scope: 'project' | 'global'): Promise<Skill[]> {
   let entries: string[] = [];
   try {
     entries = await fs.readdir(dir);
   } catch {
-    return []; // no skills dir yet
+    return [];
   }
-
   const skills: Skill[] = [];
   for (const entry of entries) {
-    const skillFile = path.join(dir, entry, 'SKILL.md');
     try {
-      const raw = await fs.readFile(skillFile, 'utf8');
+      const raw = await fs.readFile(path.join(dir, entry, 'SKILL.md'), 'utf8');
       const { name, description, body } = parseFrontmatter(raw);
-      skills.push({
-        name: name || entry,
-        description: description || '',
-        content: body,
-        raw,
-      });
+      skills.push({ name: name || entry, description: description || '', content: body, raw, scope });
     } catch {
       // skip dirs without a readable SKILL.md
     }
   }
   return skills.sort((a, b) => a.name.localeCompare(b.name));
+}
+
+/** Project-scoped (editable) skills. */
+export async function listSkills(projectId: string): Promise<Skill[]> {
+  return readSkillsDir(await skillsDir(projectId), 'project');
+}
+
+/** Global (read-only, shared) skills. */
+export async function listGlobalSkills(): Promise<Skill[]> {
+  return readSkillsDir(globalSkillsDir(), 'global');
+}
+
+/** Project + global skills (both shown in the UI). */
+export async function listAllSkills(projectId: string): Promise<{ project: Skill[]; global: Skill[] }> {
+  const [project, global] = await Promise.all([listSkills(projectId), listGlobalSkills()]);
+  return { project, global };
 }
 
 export async function getSkill(projectId: string, name: string): Promise<Skill | null> {
@@ -119,7 +134,7 @@ export async function getSkill(projectId: string, name: string): Promise<Skill |
   try {
     const raw = await fs.readFile(file, 'utf8');
     const parsed = parseFrontmatter(raw);
-    return { name: parsed.name || slug, description: parsed.description || '', content: parsed.body, raw };
+    return { name: parsed.name || slug, description: parsed.description || '', content: parsed.body, raw, scope: 'project' };
   } catch {
     return null;
   }
@@ -142,7 +157,7 @@ export async function saveSkill(
   await fs.writeFile(path.join(dir, 'SKILL.md'), raw.endsWith('\n') ? raw : `${raw}\n`, 'utf8');
 
   const parsed = parseFrontmatter(raw);
-  return { name: parsed.name || slug, description: parsed.description || '', content: parsed.body, raw };
+  return { name: parsed.name || slug, description: parsed.description || '', content: parsed.body, raw, scope: 'project' };
 }
 
 export async function deleteSkill(projectId: string, name: string): Promise<boolean> {
