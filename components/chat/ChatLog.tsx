@@ -1573,6 +1573,13 @@ export default function ChatLog({ projectId, onSessionStatusChange, onProjectSta
     };
   }, [isConnected, isConnecting, onSseFallbackActive]);
 
+  // Keep the SSE handlers in refs so the EventSource effect doesn't re-mount
+  // (and thrash the connection) every time these callbacks are recreated.
+  const sseHandlersRef = useRef({ handleRealtimeEnvelope, onSseFallbackActive, recoverMissingMessages });
+  useEffect(() => {
+    sseHandlersRef.current = { handleRealtimeEnvelope, onSseFallbackActive, recoverMissingMessages };
+  }, [handleRealtimeEnvelope, onSseFallbackActive, recoverMissingMessages]);
+
   useEffect(() => {
     if (!projectId) return;
     if (!enableSseFallback) return;
@@ -1632,9 +1639,9 @@ export default function ChatLog({ projectId, onSessionStatusChange, onProjectSta
         source.onopen = () => {
           console.log('🔄 [Transport] SSE connection established');
           setIsSseConnected(true);
-          onSseFallbackActive?.(true);
+          sseHandlersRef.current.onSseFallbackActive?.(true);
           // Recover any missing messages that might have been lost during SSE disconnection
-          recoverMissingMessages();
+          sseHandlersRef.current.recoverMissingMessages();
         };
 
         source.onmessage = (event) => {
@@ -1643,7 +1650,7 @@ export default function ChatLog({ projectId, onSessionStatusChange, onProjectSta
           }
           try {
             const envelope = JSON.parse(event.data) as RealtimeEvent;
-            handleRealtimeEnvelope(envelope);
+            sseHandlersRef.current.handleRealtimeEnvelope(envelope);
           } catch (error) {
             console.error('🔄 [Realtime] Failed to parse SSE message:', error);
           }
@@ -1680,7 +1687,9 @@ export default function ChatLog({ projectId, onSessionStatusChange, onProjectSta
         clearTimeout(reconnectTimer);
       }
     };
-  }, [projectId, enableSseFallback, handleRealtimeEnvelope, onSseFallbackActive, recoverMissingMessages]);
+    // Intentionally only re-run when the project/fallback flag changes — handlers
+    // are read from a ref so the SSE connection stays stable across re-renders.
+  }, [projectId, enableSseFallback]);
 
   useEffect(() => {
     return () => {
