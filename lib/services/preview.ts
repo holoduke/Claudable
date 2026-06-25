@@ -595,6 +595,10 @@ export interface PreviewInfo {
 class PreviewManager {
   private processes = new Map<string, PreviewProcess>();
   private installing = new Map<string, Promise<void>>();
+  // Serializes concurrent start() calls for the same project so two callers
+  // can't both pass the "not running" check and spawn duplicate dev servers,
+  // which would exhaust the preview port range and orphan processes.
+  private starting = new Map<string, Promise<PreviewInfo>>();
 
   private getLogger(processInfo: PreviewProcess) {
     return (chunk: Buffer | string) => {
@@ -693,6 +697,21 @@ class PreviewManager {
       return this.toInfo(existing);
     }
 
+    // Coalesce concurrent starts: if one is already in flight, await it
+    // instead of spawning a second dev server.
+    const inFlight = this.starting.get(projectId);
+    if (inFlight) {
+      return inFlight;
+    }
+
+    const startPromise = this.startInternal(projectId).finally(() => {
+      this.starting.delete(projectId);
+    });
+    this.starting.set(projectId, startPromise);
+    return startPromise;
+  }
+
+  private async startInternal(projectId: string): Promise<PreviewInfo> {
     const project = await getProjectById(projectId);
     if (!project) {
       throw new Error('Project not found');
@@ -922,12 +941,47 @@ class PreviewManager {
 
     child.on('error', (error) => {
       previewProcess.status = 'error';
+      // Drop the dead entry so a subsequent start() isn't blocked by the
+      // "already running" check at the top of start().
+      if (this.processes.get(projectId) === previewProcess) {
+        this.processes.delete(projectId);
+      }
       log(Buffer.from(`Preview process failed: ${error.message}`));
     });
 
-    await waitForPreviewReady(previewProcess.url, log).catch(() => {
-      // wait function already logged; ignore errors
-    });
+    const ready = await waitForPreviewReady(previewProcess.url, log).catch(
+      () => false
+    );
+
+    // The dev server exited (crash/build failure) while we were waiting.
+    if (
+      previewProcess.status === 'error' ||
+      previewProcess.status === 'stopped'
+    ) {
+      await updateProject(projectId, {
+        previewUrl: null,
+        previewPort: null,
+        status: 'idle',
+      }).catch(() => {});
+      throw new Error(
+        'Preview server exited before it became reachable. Check the build logs.'
+      );
+    }
+
+    // Clear the "starting" state regardless of whether the stdout fast-path
+    // fired — otherwise a server that logs nothing leaves the UI spinning
+    // forever. If the health check never passed we still mark it running
+    // (dev servers can be slow behind a proxy) but log the discrepancy.
+    if (previewProcess.status === 'starting') {
+      previewProcess.status = 'running';
+    }
+    if (!ready) {
+      log(
+        Buffer.from(
+          '[PreviewManager] Health check did not pass within the timeout; marking running optimistically (process is still alive).'
+        )
+      );
+    }
 
     await updateProject(projectId, {
       previewUrl: previewProcess.url,
