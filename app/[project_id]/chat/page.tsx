@@ -271,7 +271,7 @@ export default function ChatPage() {
   const [preferredCli, setPreferredCli] = useState<ActiveCliId>(DEFAULT_ACTIVE_CLI);
   const [selectedModel, setSelectedModel] = useState<string>(getDefaultModelForCli(DEFAULT_ACTIVE_CLI));
   const [usingGlobalDefaults, setUsingGlobalDefaults] = useState<boolean>(true);
-  const [thinkingMode, setThinkingMode] = useState<boolean>(false);
+  const [thinkingMode, setThinkingMode] = useState<'off' | 'auto' | 'forced'>('auto');
   const [isUpdatingModel, setIsUpdatingModel] = useState<boolean>(false);
   const [currentRoute, setCurrentRoute] = useState<string>('/');
   const iframeRef = useRef<HTMLIFrameElement>(null);
@@ -335,6 +335,7 @@ export default function ChatPage() {
         conversationId: conversationId || undefined,
         requestId,
         selectedModel,
+        thinkingMode,
       };
 
       const r = await fetch(`${API_BASE}/api/chat/${projectId}/act`, {
@@ -386,7 +387,7 @@ export default function ChatPage() {
     } finally {
       setIsRunning(false);
     }
-  }, [initialPromptSent, preferredCli, conversationId, projectId, selectedModel, createRequest]);
+  }, [initialPromptSent, preferredCli, conversationId, projectId, selectedModel, thinkingMode, createRequest]);
 
   // Guarded trigger that can be called from multiple places safely
   const triggerInitialPromptIfNeeded = useCallback(() => {
@@ -1835,6 +1836,7 @@ const persistProjectPreferences = useCallback(
         conversationId: conversationId || undefined,
         requestId,
         selectedModel,
+        thinkingMode,
       };
 
       console.log('📸 Sending request to act API:', {
