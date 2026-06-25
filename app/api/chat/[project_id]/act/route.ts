@@ -290,6 +290,13 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
       getDefaultModelForCli(cliPreference);
     const selectedModel = normalizeModelId(cliPreference, selectedModelRaw);
 
+    const thinkingModeRaw =
+      coerceString(body.thinkingMode) ?? coerceString(legacyBody['thinking_mode']);
+    const thinkingMode: 'off' | 'auto' | 'forced' =
+      thinkingModeRaw === 'off' || thinkingModeRaw === 'forced'
+        ? thinkingModeRaw
+        : 'auto';
+
     const conversationId =
       coerceString(body.conversationId) ?? coerceString(legacyBody['conversation_id']);
 
@@ -438,13 +445,16 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
           ? project.activeCursorSessionId || undefined
           : undefined;
 
-      executor(
+      // thinkingMode is only consumed by the Claude executor; other CLIs
+      // ignore the extra argument. Cast to avoid a union-arity type error.
+      (executor as (...args: unknown[]) => Promise<void>)(
         project_id,
         projectPath,
         finalInstruction,
         selectedModel,
         sessionId,
         requestId,
+        cliPreference === 'claude' ? thinkingMode : undefined,
       ).catch(async (error) => {
         console.error('[API] Failed to execute AI:', error);
         // If the executor rejected outright, its own finally never marked the

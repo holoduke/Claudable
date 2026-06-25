@@ -560,6 +560,28 @@ function resolveModelId(model?: string | null): string {
  * @param sessionId - Previous session ID (maintains conversation context)
  * @param requestId - (Optional) User request tracking ID
  */
+/**
+ * How much extended thinking the agent should use.
+ * - 'off'    — no extended thinking (fastest)
+ * - 'auto'   — adaptive; Claude decides when/how much to think (default)
+ * - 'forced' — always allocate a large thinking budget (deepest reasoning)
+ */
+export type ThinkingMode = 'off' | 'auto' | 'forced';
+
+const FORCED_THINKING_BUDGET_TOKENS = 31999;
+
+function buildThinkingConfig(mode: ThinkingMode | undefined) {
+  switch (mode) {
+    case 'off':
+      return { type: 'disabled' as const };
+    case 'forced':
+      return { type: 'enabled' as const, budgetTokens: FORCED_THINKING_BUDGET_TOKENS };
+    case 'auto':
+    default:
+      return { type: 'adaptive' as const };
+  }
+}
+
 export async function executeClaude(
   projectId: string,
   projectPath: string,
@@ -567,7 +589,7 @@ export async function executeClaude(
   model: string = CLAUDE_DEFAULT_MODEL,
   sessionId?: string,
   requestId?: string,
-  options: { suppressUserError?: boolean } = {}
+  options: { suppressUserError?: boolean; thinkingMode?: ThinkingMode } = {}
 ): Promise<void> {
   console.log(`\n========================================`);
   console.log(`[ClaudeService] 🚀 Starting Claude Agent SDK`);
@@ -728,6 +750,9 @@ export async function executeClaude(
         model: resolvedModel,
         resume: sessionId, // Resume previous session
         permissionMode: 'bypassPermissions', // Auto-approve commands and edits
+        // Extended thinking: off / adaptive (auto) / forced budget. The thinking
+        // blocks the model emits are surfaced to the chat below.
+        thinking: buildThinkingConfig(options.thinkingMode),
         systemPrompt: `You are an expert web developer and product designer building a Nuxt application. Your output should look like it was built by a top design studio — polished, modern, and production-ready, never a bare scaffold.
 
 STACK
@@ -1020,6 +1045,20 @@ PLATFORM RULES
 
             const safeBlock = block as any;
 
+            // Surface extended-thinking blocks so the user can see the model's
+            // reasoning. ChatLog renders <thinking>…</thinking> as a collapsible
+            // section, so wrap the reasoning text in those tags.
+            if (safeBlock.type === 'thinking') {
+              const thinkingText =
+                typeof safeBlock.thinking === 'string'
+                  ? safeBlock.thinking.trim()
+                  : '';
+              if (thinkingText) {
+                parts.push(`<thinking>${thinkingText}</thinking>`);
+              }
+              continue;
+            }
+
             if (safeBlock.type === 'text') {
               const text = typeof safeBlock.text === 'string' ? safeBlock.text : '';
               const trimmed = text.trim();
@@ -1238,7 +1277,8 @@ export async function applyChanges(
   instruction: string,
   model: string = CLAUDE_DEFAULT_MODEL,
   sessionId?: string,
-  requestId?: string
+  requestId?: string,
+  thinkingMode?: ThinkingMode
 ): Promise<void> {
   console.log(`[ClaudeService] Applying changes to project: ${projectId}`);
   try {
@@ -1246,13 +1286,16 @@ export async function applyChanges(
     // resume can be retried silently (the retry surfaces errors normally).
     await executeClaude(projectId, projectPath, instruction, model, sessionId, requestId, {
       suppressUserError: Boolean(sessionId),
+      thinkingMode,
     });
   } catch (error) {
     // Resuming a corrupt/incompatible session can fail immediately (exit code 1 /
     // error_during_execution). Recover by retrying once with a fresh session.
     if (sessionId) {
       console.warn('[ClaudeService] Resume failed; retrying with a fresh session:', error instanceof Error ? error.message : error);
-      await executeClaude(projectId, projectPath, instruction, model, undefined, requestId);
+      await executeClaude(projectId, projectPath, instruction, model, undefined, requestId, {
+        thinkingMode,
+      });
     } else {
       throw error;
     }
