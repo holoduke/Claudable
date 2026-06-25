@@ -31,3 +31,7 @@ services:
       - ./data:/app/data
       # Global Agent Skills available to every project (settingSources: ['user']).
       - ./global-skills:/home/node/.claude/skills
+      # Persist Claude Code conversation transcripts so session resume survives
+      # container restarts/redeploys — otherwise the agent loses all context and
+      # "forgets" the conversation after every deploy.
+      - ./claude-sessions:/home/node/.claude/projects
