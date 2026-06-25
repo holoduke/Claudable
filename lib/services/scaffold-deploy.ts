@@ -114,22 +114,36 @@ jobs:
           DIR=/opt/$APP
           REPO="https://oauth2:\${DEPLOY_TOKEN}@${cloneHost}/${org}/$APP.git"
 
-          # First deploy clones; later deploys fast-forward.
-          if [ ! -d "$DIR/.git" ]; then
+          # --- Sync checkout (self-healing) -----------------------------------
+          # Try to fast-forward an existing checkout; if anything is off (wrong
+          # remote, detached state, corruption) fall back to a clean re-clone so
+          # a deploy never gets stuck on a broken /opt dir. Preserve the runtime
+          # .env (secrets) across a re-clone.
+          if [ -d "$DIR/.git" ] && cd "$DIR" \\
+               && git remote set-url origin "$REPO" \\
+               && git fetch --depth=1 origin main \\
+               && git reset --hard origin/main; then
+            echo "Updated existing checkout at $DIR"
+          else
+            echo "::warning::checkout unusable, re-cloning $DIR"
+            [ -f "$DIR/.env" ] && cp "$DIR/.env" "/tmp/$APP.env.bak" || true
+            cd /
+            sudo rm -rf "$DIR"
             sudo mkdir -p "$DIR"
             sudo chown "$(id -u):$(id -g)" "$DIR"
-            git clone "$REPO" "$DIR"
+            git clone --depth=1 "$REPO" "$DIR"
+            cd "$DIR"
+            [ -f "/tmp/$APP.env.bak" ] && cp "/tmp/$APP.env.bak" "$DIR/.env" || true
           fi
-          cd "$DIR"
-          git remote set-url origin "$REPO"
-          git fetch origin main
-          git reset --hard origin/main
 
-          # Build & (re)start the container (cached; rebuilds changed layers)
+          # --- Build & (re)start ----------------------------------------------
+          # --force-recreate guarantees the freshly-built image actually runs
+          # (a plain 'up -d' keeps the old container, so new code never goes
+          # live); --remove-orphans cleans up renamed/removed services.
           docker compose build
-          docker compose up -d
+          docker compose up -d --force-recreate --remove-orphans
 
-          # Traefik route (idempotent): host gateway is 10.0.1.1 on this box
+          # --- Traefik route (idempotent): host gateway is 10.0.1.1 ----------
           ROUTE=/data/coolify/proxy/dynamic/$APP.yml
           sudo tee "$ROUTE" > /dev/null <<YAML
           http:
@@ -157,9 +171,21 @@ jobs:
                   permanent: true
           YAML
 
-          # Health check
-          sleep 10
-          curl -sf "http://localhost:$PORT/" > /dev/null && echo "Deploy OK -> https://$HOSTNAME_FQDN"
+          # --- Health check (loud on failure) --------------------------------
+          ok=0
+          for i in $(seq 1 20); do
+            if curl -fsS "http://localhost:$PORT/" > /dev/null 2>&1; then ok=1; break; fi
+            sleep 3
+          done
+          if [ "$ok" != "1" ]; then
+            echo "::error::health check failed on port $PORT"
+            docker compose ps || true
+            docker compose logs --tail 80 || true
+            exit 1
+          fi
+          # Reclaim space from old image layers so the disk can't fill up.
+          docker image prune -f > /dev/null 2>&1 || true
+          echo "Deployed OK -> https://$HOSTNAME_FQDN (port $PORT)"
 `;
 }
 
@@ -170,6 +196,12 @@ async function writeIfAbsent(filePath: string, contents: string): Promise<void> 
   } catch {
     // not present -> create
   }
+  await fs.mkdir(path.dirname(filePath), { recursive: true });
+  await fs.writeFile(filePath, contents, 'utf8');
+}
+
+/** Always (over)write — for Claudable-managed infra files that must stay current. */
+async function writeManaged(filePath: string, contents: string): Promise<void> {
   await fs.mkdir(path.dirname(filePath), { recursive: true });
   await fs.writeFile(filePath, contents, 'utf8');
 }
@@ -189,10 +221,14 @@ export async function injectDeployScaffolding(repoPath: string, options: Scaffol
   const site = options.repoName.toLowerCase().replace(/[^a-z0-9-]/gu, '-').replace(/-+/gu, '-').replace(/^-|-$/gu, '');
   const port = deployPortFor(site);
 
-  await writeIfAbsent(path.join(repoPath, 'Dockerfile'), dockerfile());
-  await writeIfAbsent(path.join(repoPath, '.dockerignore'), dockerignore());
+  // Dockerfile / .dockerignore / workflow are pure Claudable-managed infra:
+  // overwrite them every publish so reliability fixes propagate to existing
+  // repos. docker-compose.yml is written once (port stays stable; users may
+  // add env_file / extra services).
+  await writeManaged(path.join(repoPath, 'Dockerfile'), dockerfile());
+  await writeManaged(path.join(repoPath, '.dockerignore'), dockerignore());
   await writeIfAbsent(path.join(repoPath, 'docker-compose.yml'), dockerCompose(site, port));
-  await writeIfAbsent(
+  await writeManaged(
     path.join(repoPath, '.gitea', 'workflows', 'deploy.yml'),
     deployWorkflow(site, port, deployDomain, httpBase, org),
   );
