@@ -38,14 +38,19 @@ export async function getMessagesByProjectId(
   limit: number = 50,
   offset: number = 0
 ): Promise<Message[]> {
+  // Paginate from the NEWEST messages: offset counts back from the latest, so
+  // offset=0 returns the most recent `limit` messages. Fetch descending then
+  // reverse to ascending for display. Previously this ordered ascending from the
+  // start, so with a long history the initial (offset=0) load returned the
+  // OLDEST messages and the user's newest ones were never loaded.
   const messages = await prisma.message.findMany({
     where: { projectId },
-    orderBy: { createdAt: 'asc' },
+    orderBy: { createdAt: 'desc' },
     skip: offset,
     take: limit,
   });
 
-  return messages.map(mapPrismaMessage);
+  return messages.reverse().map(mapPrismaMessage);
 }
 
 /**
