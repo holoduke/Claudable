@@ -37,6 +37,8 @@ export async function scaffoldBasicNextApp(
     dependencies: {
       nuxt: 'latest',
       '@nuxt/ui': 'latest',
+      '@nuxt/image': 'latest',
+      '@nuxt/fonts': 'latest',
     },
     devDependencies: {
       typescript: '^5.7.2',
@@ -54,10 +56,39 @@ export async function scaffoldBasicNextApp(
 export default defineNuxtConfig({
   compatibilityDate: '2025-01-01',
   devtools: { enabled: true },
-  modules: ['@nuxt/ui'],
+  // @nuxt/ui: components + theming. @nuxt/image: optimized responsive images.
+  // @nuxt/fonts: automatic, performant web-font loading.
+  modules: ['@nuxt/ui', '@nuxt/image', '@nuxt/fonts'],
   css: ['~/assets/css/main.css'],
+  // SSR is on by default — content ends up in the server-rendered HTML for SEO.
+  app: {
+    head: {
+      htmlAttrs: { lang: 'en' },
+      titleTemplate: '%s · Nuxt App',
+      meta: [
+        { name: 'viewport', content: 'width=device-width, initial-scale=1' },
+        { name: 'description', content: 'Built with Nuxt 4 and Nuxt UI.' },
+      ],
+      link: [{ rel: 'icon', type: 'image/svg+xml', href: '/favicon.svg' }],
+    },
+  },
   // Allow the managed preview proxy host (Vite dev blocks unknown hosts otherwise)
   vite: { server: { allowedHosts: true } },
+});
+`
+  );
+
+  // Theme baseline: a single place to set the brand color + UI defaults so the
+  // whole app stays visually coherent (light/dark handled by Nuxt UI tokens).
+  await writeFileIfMissing(
+    path.join(projectPath, 'app.config.ts'),
+    `export default defineAppConfig({
+  ui: {
+    colors: {
+      primary: 'indigo',
+      neutral: 'slate',
+    },
+  },
 });
 `
   );
@@ -91,16 +122,52 @@ export default defineNuxtConfig({
 
   await writeFileIfMissing(
     path.join(projectPath, 'pages/index.vue'),
-    `<template>
-  <UContainer class="flex min-h-screen flex-col items-center justify-center gap-6 py-24 text-center">
-    <h1 class="text-4xl font-bold sm:text-6xl">Welcome to Nuxt</h1>
-    <p class="text-lg text-(--ui-text-muted)">
-      Start building by editing <code>pages/index.vue</code>.
-    </p>
-    <UButton to="https://ui.nuxt.com" target="_blank" size="lg">
-      Nuxt UI docs
-    </UButton>
-  </UContainer>
+    `<script setup lang="ts">
+useSeoMeta({
+  title: 'Home',
+  description: 'A beautiful starting point built with Nuxt 4 and Nuxt UI.',
+  ogTitle: 'Nuxt App',
+  ogDescription: 'A beautiful starting point built with Nuxt 4 and Nuxt UI.',
+})
+
+const features = [
+  { icon: 'i-lucide-rocket', title: 'Fast by default', description: 'Server-rendered, optimized images and fonts out of the box.' },
+  { icon: 'i-lucide-palette', title: 'Beautiful UI', description: 'Nuxt UI components with light & dark mode and a coherent theme.' },
+  { icon: 'i-lucide-search', title: 'SEO ready', description: 'Per-page metadata and SSR content for great discoverability.' },
+]
+</script>
+
+<template>
+  <div>
+    <UContainer class="flex flex-col items-center gap-6 py-24 text-center sm:py-32">
+      <UBadge variant="subtle" size="lg">Built with Nuxt 4 + Nuxt UI</UBadge>
+      <h1 class="max-w-3xl text-4xl font-bold tracking-tight sm:text-6xl">
+        Start building something beautiful
+      </h1>
+      <p class="max-w-xl text-lg text-(--ui-text-muted)">
+        Edit <code>pages/index.vue</code> to make it yours. This starter ships
+        with theming, responsive images, optimized fonts and SEO defaults.
+      </p>
+      <div class="flex flex-wrap items-center justify-center gap-3">
+        <UButton size="lg" trailing-icon="i-lucide-arrow-right">Get started</UButton>
+        <UButton to="https://ui.nuxt.com" target="_blank" size="lg" variant="ghost">
+          Nuxt UI docs
+        </UButton>
+      </div>
+    </UContainer>
+
+    <UContainer class="pb-24">
+      <div class="grid gap-6 sm:grid-cols-3">
+        <UCard v-for="f in features" :key="f.title">
+          <div class="flex flex-col gap-2">
+            <UIcon :name="f.icon" class="size-6 text-(--ui-primary)" />
+            <h3 class="text-lg font-semibold">{{ f.title }}</h3>
+            <p class="text-(--ui-text-muted)">{{ f.description }}</p>
+          </div>
+        </UCard>
+      </div>
+    </UContainer>
+  </div>
 </template>
 `
   );
