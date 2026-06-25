@@ -564,21 +564,27 @@ function resolveModelId(model?: string | null): string {
  * How much extended thinking the agent should use.
  * - 'off'    — no extended thinking (fastest)
  * - 'auto'   — adaptive; Claude decides when/how much to think (default)
- * - 'forced' — always allocate a large thinking budget (deepest reasoning)
+ * - 'forced' — adaptive with high effort: deep reasoning every turn
+ *
+ * We use adaptive thinking (+ effort) rather than an explicit `budgetTokens`
+ * because a fixed budget must stay below maxOutputTokens (the API rejects
+ * budget >= max_tokens); adaptive has no such constraint and is the SDK's
+ * recommended control on modern models.
  */
 export type ThinkingMode = 'off' | 'auto' | 'forced';
 
-const FORCED_THINKING_BUDGET_TOKENS = 31999;
-
-function buildThinkingConfig(mode: ThinkingMode | undefined) {
+function buildThinkingOptions(mode: ThinkingMode | undefined): {
+  thinking: { type: 'disabled' } | { type: 'adaptive' };
+  effort?: 'low' | 'medium' | 'high' | 'max';
+} {
   switch (mode) {
     case 'off':
-      return { type: 'disabled' as const };
+      return { thinking: { type: 'disabled' } };
     case 'forced':
-      return { type: 'enabled' as const, budgetTokens: FORCED_THINKING_BUDGET_TOKENS };
+      return { thinking: { type: 'adaptive' }, effort: 'high' };
     case 'auto':
     default:
-      return { type: 'adaptive' as const };
+      return { thinking: { type: 'adaptive' } };
   }
 }
 
@@ -750,9 +756,9 @@ export async function executeClaude(
         model: resolvedModel,
         resume: sessionId, // Resume previous session
         permissionMode: 'bypassPermissions', // Auto-approve commands and edits
-        // Extended thinking: off / adaptive (auto) / forced budget. The thinking
-        // blocks the model emits are surfaced to the chat below.
-        thinking: buildThinkingConfig(options.thinkingMode),
+        // Extended thinking: off / adaptive (auto) / adaptive+high (forced).
+        // Thinking blocks the model emits are surfaced to the chat below.
+        ...buildThinkingOptions(options.thinkingMode),
         systemPrompt: `You are an expert web developer and product designer building a Nuxt application. Your output should look like it was built by a top design studio — polished, modern, and production-ready, never a bare scaffold.
 
 STACK
