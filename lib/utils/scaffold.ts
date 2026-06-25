@@ -95,7 +95,7 @@ export default defineNuxtConfig({
     <p class="text-lg text-(--ui-text-muted)">
       Start building by editing <code>pages/index.vue</code>.
     </p>
-    <UButton to="https://ui.nuxt.com" target="_blank" size="lg" icon="i-lucide-arrow-up-right">
+    <UButton to="https://ui.nuxt.com" target="_blank" size="lg">
       Nuxt UI docs
     </UButton>
   </UContainer>
