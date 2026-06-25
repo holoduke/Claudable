@@ -17,6 +17,10 @@ WORKDIR /app
 RUN chown node:node /app
 USER node
 
+# Pre-create ~/.claude as node so a bind-mount at ~/.claude/skills doesn't make
+# Docker create the parent as root (which blocks the agent writing session-env).
+RUN mkdir -p /home/node/.claude
+
 # Install deps (cached on lockfile). --ignore-scripts skips electron/postinstall.
 COPY --chown=node:node package*.json ./
 RUN npm ci --ignore-scripts
