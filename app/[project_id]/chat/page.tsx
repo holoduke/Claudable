@@ -765,14 +765,32 @@ const persistProjectPreferences = useCallback(
 
   const start = useCallback(async () => {
     try {
+      // Fast path: if the dev server is already running, show it immediately
+      // (no loading overlay, no artificial delay).
+      try {
+        const s = await fetch(`${API_BASE}/api/projects/${projectId}/preview/status`);
+        if (s.ok) {
+          const sp = (await s.json())?.data ?? {};
+          if (sp.status === 'running' && typeof sp.url === 'string') {
+            setPreviewUrl(sp.url);
+            setIsStartingPreview(false);
+            return;
+          }
+        }
+      } catch {
+        // fall through to a normal (cold) start
+      }
+
       setIsStartingPreview(true);
       setPreviewInitializationMessage('Starting development server...');
-      
-      // Simulate progress updates
-      setTimeout(() => setPreviewInitializationMessage('Installing dependencies...'), 1000);
-      setTimeout(() => setPreviewInitializationMessage('Building your application...'), 2500);
-      
+
+      // Only relevant on a genuine cold start; cleared as soon as start returns.
+      const t1 = setTimeout(() => setPreviewInitializationMessage('Installing dependencies...'), 3000);
+      const t2 = setTimeout(() => setPreviewInitializationMessage('Building your application...'), 9000);
+
       const r = await fetch(`${API_BASE}/api/projects/${projectId}/preview/start`, { method: 'POST' });
+      clearTimeout(t1);
+      clearTimeout(t2);
       if (!r.ok) {
         console.error('Failed to start preview:', r.statusText);
         setPreviewInitializationMessage('Failed to start preview');
@@ -782,12 +800,10 @@ const persistProjectPreferences = useCallback(
       const payload = await r.json();
       const data = payload?.data ?? payload ?? {};
 
-      setPreviewInitializationMessage('Preview ready!');
-      setTimeout(() => {
-        setPreviewUrl(typeof data.url === 'string' ? data.url : null);
-        setIsStartingPreview(false);
-        setCurrentRoute('/'); // Reset to root route when starting
-      }, 1000);
+      // Reveal the iframe as soon as the URL is available (no artificial wait).
+      setPreviewUrl(typeof data.url === 'string' ? data.url : null);
+      setIsStartingPreview(false);
+      setCurrentRoute('/');
     } catch (error) {
       console.error('Error starting preview:', error);
       setPreviewInitializationMessage('An error occurred');
