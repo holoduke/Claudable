@@ -6,13 +6,26 @@ export interface ActiveRequestSummary {
   activeCount: number;
 }
 
+/**
+ * A request that has been "active" longer than this is treated as dead.
+ * Real agent runs stream continuously and finish well within this window;
+ * anything older is a zombie left by a crash/abort that never hit its
+ * terminal-status finally block. Acts as a backstop to startup reconciliation
+ * for processes that stay up but lose a run.
+ */
+const ACTIVE_REQUEST_STALE_MS = 20 * 60 * 1000; // 20 minutes
+
 export async function getActiveRequests(projectId: string): Promise<ActiveRequestSummary> {
+  const staleCutoff = new Date(Date.now() - ACTIVE_REQUEST_STALE_MS);
+
   const count = await prisma.userRequest.count({
     where: {
       projectId,
       status: {
         in: ['pending', 'processing', 'active', 'running'],
       },
+      // Ignore zombie rows whose owning run has clearly died.
+      createdAt: { gte: staleCutoff },
     },
   });
 
