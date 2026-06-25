@@ -1660,16 +1660,20 @@ export default function ChatLog({ projectId, onSessionStatusChange, onProjectSta
         };
 
         source.onerror = () => {
-          setIsSseConnected(false);
           if (disposed) {
             return;
           }
-          if (reconnectTimer) {
-            clearTimeout(reconnectTimer);
+          // EventSource auto-reconnects while readyState === CONNECTING — don't
+          // fight it (that caused a close/reopen thrash). Only re-create the
+          // connection ourselves if it has fully CLOSED.
+          if (source.readyState === EventSource.CLOSED) {
+            setIsSseConnected(false);
+            console.warn('🔄 [Realtime] SSE connection closed, reconnecting...');
+            if (reconnectTimer) {
+              clearTimeout(reconnectTimer);
+            }
+            reconnectTimer = setTimeout(connectSse, 2000);
           }
-          console.warn('🔄 [Realtime] SSE connection lost, retrying...');
-          source.close();
-          reconnectTimer = setTimeout(connectSse, 2000);
         };
       } catch (error) {
         setIsSseConnected(false);
