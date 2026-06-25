@@ -290,3 +290,70 @@ export async function pushProjectToGitHub(projectId: string) {
     throw new GitHubError(`Failed to push project to GitHub: ${message}`);
   }
 }
+
+export interface DeployRunStatus {
+  found: boolean;
+  /** Normalized run state. */
+  state: 'queued' | 'running' | 'success' | 'failure' | 'cancelled' | 'unknown';
+  runNumber?: number;
+  /** Link to the CI run page (the user's own Git server). */
+  url?: string;
+  title?: string;
+  startedAt?: string;
+  updatedAt?: string;
+  /** The site's live URL once deployed. */
+  liveUrl?: string;
+}
+
+/**
+ * Read the latest CI deploy run for a project's repo (self-hosted Gitea
+ * Actions). This is the real deployment status — not a guess — so the UI can
+ * show queued -> running -> success/failure and link to the run log.
+ */
+export async function getDeployRunStatus(projectId: string): Promise<DeployRunStatus> {
+  const { provider, deployDomain } = getGitProviderConfig();
+  if (provider !== 'gitea') {
+    return { found: false, state: 'unknown' };
+  }
+
+  const service = await getProjectService(projectId, 'github');
+  const data = service?.serviceData as Record<string, any> | undefined;
+  const owner = data?.owner as string | undefined;
+  const repo = data?.repo_name as string | undefined;
+  if (!owner || !repo) {
+    return { found: false, state: 'unknown' };
+  }
+
+  let body: any;
+  try {
+    const token = await resolveGitToken();
+    body = await githubFetch(token, `/repos/${owner}/${repo}/actions/tasks?limit=1`);
+  } catch {
+    return { found: false, state: 'unknown' };
+  }
+
+  const run = (body?.workflow_runs ?? [])[0];
+  if (!run) {
+    return { found: false, state: 'unknown' };
+  }
+
+  const raw = String(run.status ?? '').toLowerCase();
+  const state: DeployRunStatus['state'] =
+    raw === 'success' ? 'success'
+    : raw === 'failure' || raw === 'error' ? 'failure'
+    : raw === 'cancelled' || raw === 'canceled' ? 'cancelled'
+    : raw === 'running' || raw === 'in_progress' ? 'running'
+    : raw === 'waiting' || raw === 'queued' || raw === 'blocked' ? 'queued'
+    : 'unknown';
+
+  return {
+    found: true,
+    state,
+    runNumber: typeof run.run_number === 'number' ? run.run_number : undefined,
+    url: typeof run.url === 'string' ? run.url : undefined,
+    title: typeof run.display_title === 'string' ? run.display_title : undefined,
+    startedAt: run.run_started_at,
+    updatedAt: run.updated_at,
+    liveUrl: deployDomain ? `https://${repo}.${deployDomain}` : undefined,
+  };
+}

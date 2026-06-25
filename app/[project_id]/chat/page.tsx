@@ -264,6 +264,9 @@ export default function ChatPage() {
   const [deploymentId, setDeploymentId] = useState<string | null>(null);
   const [deploymentStatus, setDeploymentStatus] = useState<'idle' | 'deploying' | 'ready' | 'error'>('idle');
   const deployPollRef = useRef<NodeJS.Timeout | null>(null);
+  // Real CI deploy run details (Gitea Actions) for the publish UI.
+  const [deployRun, setDeployRun] = useState<{ state: string; runNumber?: number; url?: string; title?: string } | null>(null);
+  const giteaPollRef = useRef<NodeJS.Timeout | null>(null);
   const [isStartingPreview, setIsStartingPreview] = useState(false);
   const [previewInitializationMessage, setPreviewInitializationMessage] = useState('Starting development server...');
   const [cliStatuses, setCliStatuses] = useState<Record<string, CliStatusSnapshot>>({});
@@ -674,11 +677,73 @@ const persistProjectPreferences = useCallback(
     }
   }, [isGitea, githubConnected, githubRepoName, gitDeployDomain]);
 
+  // Poll the REAL Gitea Actions deploy run (queued -> running -> success/failure)
+  // instead of guessing with a timer. Stops on a terminal state or timeout.
+  const startGiteaDeployPolling = useCallback(() => {
+    if (giteaPollRef.current) clearInterval(giteaPollRef.current);
+    setDeploymentStatus('deploying');
+    const startedAt = Date.now();
+    const poll = async () => {
+      try {
+        const r = await fetch(`${API_BASE}/api/projects/${projectId}/deploy/status`, { cache: 'no-store' });
+        if (r.ok) {
+          const d = await r.json();
+          if (d?.found) {
+            setDeployRun({ state: d.state, runNumber: d.runNumber, url: d.url, title: d.title });
+            if (d.state === 'success') {
+              if (d.liveUrl) setPublishedUrl(d.liveUrl);
+              setDeploymentStatus('ready');
+              if (giteaPollRef.current) { clearInterval(giteaPollRef.current); giteaPollRef.current = null; }
+              return;
+            }
+            if (d.state === 'failure' || d.state === 'cancelled') {
+              setDeploymentStatus('error');
+              if (giteaPollRef.current) { clearInterval(giteaPollRef.current); giteaPollRef.current = null; }
+              return;
+            }
+          }
+        }
+      } catch {
+        // transient; keep polling
+      }
+      // Safety timeout (~6 min) so it never spins forever.
+      if (Date.now() - startedAt > 6 * 60 * 1000 && giteaPollRef.current) {
+        clearInterval(giteaPollRef.current); giteaPollRef.current = null;
+      }
+    };
+    poll();
+    giteaPollRef.current = setInterval(poll, 4000);
+  }, [projectId]);
+
+  // When the Publish modal opens (Gitea flow), reflect the real current/last
+  // deploy run so the user always sees actual status — and resume polling if a
+  // run is still in progress.
+  useEffect(() => {
+    if (!showPublishPanel || !isGitea || !githubConnected) return;
+    let cancelled = false;
+    fetch(`${API_BASE}/api/projects/${projectId}/deploy/status`, { cache: 'no-store' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (cancelled || !d?.found) return;
+        setDeployRun({ state: d.state, runNumber: d.runNumber, url: d.url, title: d.title });
+        if (d.state === 'success') {
+          if (d.liveUrl) setPublishedUrl(d.liveUrl);
+          setDeploymentStatus('ready');
+        } else if (d.state === 'failure' || d.state === 'cancelled') {
+          setDeploymentStatus('error');
+        } else if ((d.state === 'running' || d.state === 'queued') && !giteaPollRef.current) {
+          startGiteaDeployPolling();
+        }
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [showPublishPanel, isGitea, githubConnected, projectId, startGiteaDeployPolling]);
+
   const startDeploymentPolling = useCallback((depId: string) => {
     if (deployPollRef.current) clearInterval(deployPollRef.current);
     setDeploymentStatus('deploying');
     setDeploymentId(depId);
-    
+
     console.log('🔍 Monitoring deployment:', depId);
     
     deployPollRef.current = setInterval(async () => {
@@ -3205,11 +3270,26 @@ const persistProjectPreferences = useCallback(
                 <div className="p-4 rounded-xl border border-blue-200 bg-blue-50 ">
                   <div className="flex items-center gap-2 mb-1">
                     <div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
-                    <p className="text-sm font-medium text-blue-700 ">Deployment in progress…</p>
+                    <p className="text-sm font-medium text-blue-700 ">
+                      {deployRun?.state === 'queued' ? 'Queued — waiting for the runner…'
+                        : deployRun?.state === 'running' ? 'Building & deploying…'
+                        : 'Pushing to the repository…'}
+                    </p>
                   </div>
-                  <p className="text-xs text-blue-700/80 ">Building and deploying your project. This may take a few minutes.</p>
+                  <p className="text-xs text-blue-700/80 ">
+                    {isGitea
+                      ? 'Live status from Gitea Actions — clone, build, route, health check.'
+                      : 'Building and deploying your project. This may take a few minutes.'}
+                  </p>
                   {isGitea && publishedUrl && (
                     <p className="text-xs text-blue-700/80 mt-1">Will be live at <a href={publishedUrl} target="_blank" rel="noopener noreferrer" className="font-mono underline">{publishedUrl}</a></p>
+                  )}
+                  {isGitea && deployRun?.url && (
+                    <p className="text-xs text-blue-700/80 mt-1">
+                      <a href={deployRun.url} target="_blank" rel="noopener noreferrer" className="underline">
+                        View build log{deployRun.runNumber ? ` (run #${deployRun.runNumber})` : ''} →
+                      </a>
+                    </p>
                   )}
                 </div>
               )}
@@ -3233,7 +3313,16 @@ const persistProjectPreferences = useCallback(
 
               {deploymentStatus === 'error' && (
                 <div className="p-4 rounded-xl border border-red-200 bg-red-50 ">
-                  <p className="text-sm font-medium text-red-700 ">Deployment failed. Please try again.</p>
+                  <p className="text-sm font-medium text-red-700 ">
+                    {deployRun?.state === 'cancelled' ? 'Deployment was cancelled.' : 'Deployment failed.'}
+                  </p>
+                  {isGitea && deployRun?.url && (
+                    <p className="text-xs text-red-600 mt-1">
+                      <a href={deployRun.url} target="_blank" rel="noopener noreferrer" className="underline">
+                        View the failed build log{deployRun.runNumber ? ` (run #${deployRun.runNumber})` : ''} →
+                      </a>
+                    </p>
+                  )}
                 </div>
               )}
 
@@ -3271,9 +3360,10 @@ const persistProjectPreferences = useCallback(
                         : publishedUrl;
                       if (url) setPublishedUrl(url);
                       setPublishLoading(false);
-                      // The runner build+deploy takes ~1-2 min; cross-origin status
-                      // can't be read, so optimistically mark ready after a delay.
-                      setTimeout(() => setDeploymentStatus('ready'), 90000);
+                      setDeployRun({ state: 'queued' });
+                      // Track the real Gitea Actions run (queued -> running ->
+                      // success/failure) instead of guessing with a timer.
+                      startGiteaDeployPolling();
                     } catch (e) {
                       console.error('🚀 Gitea publish failed:', e);
                       alert('Publish failed. Make sure the project is connected to Gitea in Settings → Services.');
