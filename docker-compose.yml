@@ -28,3 +28,5 @@ services:
     volumes:
       # Persist SQLite DB + all generated project repos across rebuilds
       - /opt/claudable/data:/app/data
+      # Global Agent Skills available to every project (settingSources: ['user'])
+      - /opt/claudable/global-skills:/home/node/.claude/skills
