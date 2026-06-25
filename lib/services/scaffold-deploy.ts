@@ -45,9 +45,11 @@ function dockerfile(): string {
 FROM node:22-alpine
 WORKDIR /app
 
-# Install dependencies (use lockfile when present)
+# Install dependencies. Prefer the lockfile (reproducible) but fall back to a
+# fresh install when it has drifted — agent-generated projects frequently edit
+# package.json without updating package-lock.json, which makes \`npm ci\` fail.
 COPY package*.json ./
-RUN if [ -f package-lock.json ]; then npm ci; else npm install; fi
+RUN npm ci || npm install --no-audit --no-fund
 
 # Build (nuxt build -> .output/)
 COPY . .
