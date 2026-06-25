@@ -13,6 +13,8 @@ interface WebSocketOptions {
   onConnect?: () => void;
   onDisconnect?: () => void;
   onError?: (error: Error) => void;
+  /** When false, no WebSocket is opened (e.g. SSE-only deployments). */
+  enabled?: boolean;
 }
 
 export function useWebSocket({
@@ -21,7 +23,8 @@ export function useWebSocket({
   onStatus,
   onConnect,
   onDisconnect,
-  onError
+  onError,
+  enabled = true
 }: WebSocketOptions) {
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -330,15 +333,20 @@ export function useWebSocket({
   }, [disconnect, connect]);
 
   useEffect(() => {
+    if (!enabled) {
+      // No WebSocket server available — stay disconnected (SSE handles realtime).
+      shouldReconnectRef.current = false;
+      return;
+    }
     shouldReconnectRef.current = true;
     manualCloseRef.current = false;
     connectionAttemptsRef.current = 0;
     connect();
-    
+
     return () => {
       disconnect();
     };
-  }, [projectId, disconnect, connect]);
+  }, [projectId, disconnect, connect, enabled]);
 
   return {
     isConnected,

@@ -1013,7 +1013,9 @@ export default function ChatLog({ projectId, onSessionStatusChange, onProjectSta
   const hasLoadedInitialDataRef = useRef(false);
   const sseFallbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hasLoggedSseFallbackRef = useRef(false);
-  const [enableSseFallback, setEnableSseFallback] = useState(false);
+  // SSE is the realtime transport (no WebSocket server in this deployment), so
+  // keep it always-on and stable rather than toggling it off WebSocket state.
+  const [enableSseFallback, setEnableSseFallback] = useState(true);
   const [isSseConnected, setIsSseConnected] = useState(false);
   const [failedImageUrls, setFailedImageUrls] = useState<Set<string>>(new Set());
   const [expandedToolMessages, setExpandedToolMessages] = useState<Record<string, ToolExpansionState>>({});
@@ -1509,6 +1511,7 @@ export default function ChatLog({ projectId, onSessionStatusChange, onProjectSta
   // Use the centralized WebSocket hook (with SSE fallback defined below)
   const { isConnected, isConnecting } = useWebSocket({
     projectId,
+    enabled: false, // No WebSocket server in this deployment; SSE handles realtime.
     onMessage: handleRealtimeMessage,
     onStatus: handleRealtimeStatus,
     onConnect: () => {
