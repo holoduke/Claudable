@@ -1196,5 +1196,16 @@ export async function applyChanges(
   requestId?: string
 ): Promise<void> {
   console.log(`[ClaudeService] Applying changes to project: ${projectId}`);
-  await executeClaude(projectId, projectPath, instruction, model, sessionId, requestId);
+  try {
+    await executeClaude(projectId, projectPath, instruction, model, sessionId, requestId);
+  } catch (error) {
+    // Resuming a corrupt/incompatible session can fail immediately (exit code 1 /
+    // error_during_execution). Recover by retrying once with a fresh session.
+    if (sessionId) {
+      console.warn('[ClaudeService] Resume failed; retrying with a fresh session:', error instanceof Error ? error.message : error);
+      await executeClaude(projectId, projectPath, instruction, model, undefined, requestId);
+    } else {
+      throw error;
+    }
+  }
 }
