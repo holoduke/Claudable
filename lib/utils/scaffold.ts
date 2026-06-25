@@ -27,7 +27,6 @@ export async function scaffoldBasicNextApp(
     name: projectId,
     private: true,
     version: '0.1.0',
-    type: 'module',
     scripts: {
       dev: 'node scripts/run-dev.js',
       build: 'nuxt build',
@@ -104,12 +103,8 @@ export default defineNuxtConfig({
 `
   );
 
-  // Local PostCSS config shadows any inherited (parent) Tailwind config so the
-  // project's CSS is processed in isolation.
-  await writeFileIfMissing(
-    path.join(projectPath, 'postcss.config.js'),
-    `module.exports = { plugins: {} };\n`
-  );
+  // NOTE: no postcss.config.js — Nuxt manages PostCSS via nuxt.config and warns
+  // if a file-based config is present; Nuxt UI uses its own Tailwind Vite plugin.
 
   await writeFileIfMissing(
     path.join(projectPath, 'scripts/run-dev.js'),
