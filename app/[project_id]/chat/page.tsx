@@ -899,7 +899,7 @@ const persistProjectPreferences = useCallback(
       // Fast path: if the dev server is already running, show it immediately
       // (no loading overlay, no artificial delay).
       try {
-        const s = await fetch(`${API_BASE}/api/projects/${projectId}/preview/status`);
+        const s = await fetch(`${API_BASE}/api/projects/${projectId}/preview/status`, { cache: 'no-store' });
         if (s.ok) {
           const sp = (await s.json())?.data ?? {};
           if (sp.status === 'running' && typeof sp.url === 'string') {
