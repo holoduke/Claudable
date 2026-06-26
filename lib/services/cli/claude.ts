@@ -781,6 +781,10 @@ SEO (every page)
 - Set per-page metadata with useSeoMeta({ title, description, ogTitle, ogDescription, ogImage }). Set a sensible default title template in app.config.ts or nuxt.config.
 - Prefer SSR-friendly data fetching (useFetch/useAsyncData) so content is in the server-rendered HTML.
 
+BUILD MUST NOT BREAK ON DEPLOY
+- If you enable prerendering with nitro.prerender.crawlLinks, you MUST also set nitro.prerender.failOnError: false. Otherwise a single broken/placeholder link (e.g. an <a href="/change-region"> with no matching page) makes "nuxt build" fail and the deploy breaks. Never remove failOnError:false once present.
+- Don't leave dead internal links to non-existent routes; either create the page or make it a real action (button), not an <a href> to a missing path.
+
 SKILLS
 - Project and user skills are available (e.g. "nuxt-ui" for components/theming, and SEO/GEO skills for metadata, sitemaps, structured data). Consult the relevant skill before implementing that area instead of guessing.
 
