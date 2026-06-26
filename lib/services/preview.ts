@@ -14,6 +14,59 @@ const npmCommand = process.platform === 'win32' ? 'npm.cmd' : 'npm';
 const pnpmCommand = process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm';
 
 /**
+ * Inject a tiny Nuxt client plugin that reports the current route to the
+ * Claudable parent window via postMessage, so the preview URL bar follows
+ * in-app (client-side) navigation. The preview is a cross-origin iframe, so the
+ * parent can't read its location directly — this is the only reliable way.
+ * The plugin is inert outside the preview iframe and is gitignored so it never
+ * ships to the deployed app.
+ */
+async function ensurePreviewRouteReporter(projectPath: string): Promise<void> {
+  try {
+    // Only meaningful for Nuxt projects.
+    const hasNuxtConfig = await fs
+      .access(path.join(projectPath, 'nuxt.config.ts'))
+      .then(() => true)
+      .catch(() => false);
+    if (!hasNuxtConfig) return;
+
+    const rel = 'plugins/claudable-preview.client.ts';
+    const pluginPath = path.join(projectPath, rel);
+    await fs.mkdir(path.dirname(pluginPath), { recursive: true });
+    await fs.writeFile(
+      pluginPath,
+      `// Auto-added by Claudable (preview only). Reports the current route to the
+// Claudable parent window so the preview URL bar can follow in-app navigation.
+// Inert outside the preview iframe; gitignored so it never ships to production.
+export default defineNuxtPlugin(() => {
+  if (typeof window === 'undefined' || window.parent === window) return;
+  const post = (p: string) => {
+    try { window.parent.postMessage({ source: 'claudable-preview', path: p }, '*'); } catch {}
+  };
+  try {
+    const router = useRouter();
+    post(router.currentRoute.value.fullPath);
+    router.afterEach((to) => post(to.fullPath));
+  } catch {}
+});
+`,
+      'utf8',
+    );
+
+    // Keep it out of git / the deployed image.
+    const giPath = path.join(projectPath, '.gitignore');
+    let gi = '';
+    try { gi = await fs.readFile(giPath, 'utf8'); } catch { /* none yet */ }
+    if (!gi.includes(rel)) {
+      const sep = gi.length === 0 || gi.endsWith('\n') ? '' : '\n';
+      await fs.writeFile(giPath, `${gi}${sep}${rel}\n`, 'utf8');
+    }
+  } catch {
+    // Non-fatal: the route bar just won't follow in-app navigation.
+  }
+}
+
+/**
  * Kill the dev server AND its children. The dev server is a tree
  * (run-dev.js -> npm -> sh -> nuxt); killing only the parent left the nuxt
  * child alive holding the port, leaking a server on every restart. The child
@@ -774,6 +827,9 @@ class PreviewManager {
       );
       await scaffoldBasicNextApp(projectPath, projectId);
     }
+
+    // Make the preview report its route to the URL bar (cross-origin iframe).
+    await ensurePreviewRouteReporter(projectPath);
 
     const previewBounds = resolvePreviewBounds();
     const preferredPort = await findAvailablePort(

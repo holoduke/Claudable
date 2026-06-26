@@ -942,6 +942,24 @@ const persistProjectPreferences = useCallback(
     }
   }, [projectId]);
 
+  // The preview iframe is cross-origin, so it can't be read directly. It reports
+  // its current route to us via postMessage (injected claudable-preview plugin);
+  // keep the URL bar in sync with in-app navigation.
+  useEffect(() => {
+    if (!previewUrl) return;
+    let previewOrigin: string;
+    try { previewOrigin = new URL(previewUrl).origin; } catch { return; }
+    const onMessage = (event: MessageEvent) => {
+      if (event.origin !== previewOrigin) return;
+      const data = event.data as { source?: string; path?: string } | null;
+      if (data && data.source === 'claudable-preview' && typeof data.path === 'string') {
+        setCurrentRoute(data.path.startsWith('/') ? data.path : `/${data.path}`);
+      }
+    };
+    window.addEventListener('message', onMessage);
+    return () => window.removeEventListener('message', onMessage);
+  }, [previewUrl]);
+
   // Navigate to specific route in iframe
   const navigateToRoute = (route: string) => {
     if (previewUrl && iframeRef.current) {
