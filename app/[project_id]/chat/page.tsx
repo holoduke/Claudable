@@ -2292,16 +2292,16 @@ const persistProjectPreferences = useCallback(
       loadDeployStatusRef.current?.();
     };
 
-    const handleBeforeUnload = () => {
-      navigator.sendBeacon(`${API_BASE}/api/projects/${projectId}/preview/stop`);
-    };
-
-    window.addEventListener('beforeunload', handleBeforeUnload);
+    // NOTE: We intentionally do NOT stop the preview on `beforeunload`. That
+    // fires on every page refresh, and killing the dev server there forced a
+    // ~15-30s cold recompile on each reload (the fast-path could never reuse the
+    // running server). Leaving it running lets a refresh reattach instantly. The
+    // server is still stopped when the user navigates away from the project (the
+    // effect cleanup below), which bounds how many dev servers stay alive.
     window.addEventListener('services-updated', handleServicesUpdate);
 
     return () => {
       canceled = true;
-      window.removeEventListener('beforeunload', handleBeforeUnload);
       window.removeEventListener('services-updated', handleServicesUpdate);
 
       const currentPreview = previewUrlRef.current;
