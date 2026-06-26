@@ -12,6 +12,32 @@ import { PREVIEW_CONFIG } from '@/lib/config/constants';
 
 const npmCommand = process.platform === 'win32' ? 'npm.cmd' : 'npm';
 const pnpmCommand = process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm';
+
+/**
+ * Kill the dev server AND its children. The dev server is a tree
+ * (run-dev.js -> npm -> sh -> nuxt); killing only the parent left the nuxt
+ * child alive holding the port, leaking a server on every restart. The child
+ * is spawned detached, so a negative PID signals the whole process group.
+ */
+function killProcessTree(child: ChildProcess | null | undefined): void {
+  const pid = child?.pid;
+  if (!pid) return;
+  try {
+    if (process.platform === 'win32') {
+      child!.kill('SIGTERM');
+      return;
+    }
+    try {
+      process.kill(-pid, 'SIGTERM');
+      // Hard-stop the group shortly after if anything lingers.
+      setTimeout(() => { try { process.kill(-pid, 'SIGKILL'); } catch { /* gone */ } }, 4000).unref?.();
+    } catch {
+      child!.kill('SIGTERM');
+    }
+  } catch {
+    /* already exited */
+  }
+}
 const yarnCommand = process.platform === 'win32' ? 'yarn.cmd' : 'yarn';
 const bunCommand = process.platform === 'win32' ? 'bun.exe' : 'bun';
 
@@ -909,6 +935,10 @@ class PreviewManager {
         env,
         shell: process.platform === 'win32',
         stdio: ['ignore', 'pipe', 'pipe'],
+        // Own process group so we can kill the WHOLE tree (npm -> sh -> nuxt).
+        // Killing just the parent left the nuxt child holding the port, leaking
+        // a dev server on every restart.
+        detached: process.platform !== 'win32',
       }
     );
 
@@ -1020,7 +1050,7 @@ class PreviewManager {
     }
 
     try {
-      processInfo.process?.kill('SIGTERM');
+      killProcessTree(processInfo.process);
     } catch (error) {
       console.error('[PreviewManager] Failed to stop preview process:', error);
     }
