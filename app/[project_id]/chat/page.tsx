@@ -973,6 +973,17 @@ const persistProjectPreferences = useCallback(
     return () => window.removeEventListener('message', onMessage);
   }, [previewUrl]);
 
+  // Keep-warm heartbeat: while a preview is open, ping its status every few
+  // minutes so the server-side idle sweep doesn't evict an actively-viewed
+  // preview (the status read refreshes its lastAccessedAt).
+  useEffect(() => {
+    if (!previewUrl) return;
+    const id = setInterval(() => {
+      fetch(`${API_BASE}/api/projects/${projectId}/preview/status`, { cache: 'no-store' }).catch(() => {});
+    }, 5 * 60 * 1000);
+    return () => clearInterval(id);
+  }, [previewUrl, projectId]);
+
   // Navigate to specific route in iframe
   const navigateToRoute = (route: string) => {
     if (previewUrl && iframeRef.current) {

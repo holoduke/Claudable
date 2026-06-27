@@ -181,7 +181,20 @@ interface PreviewProcess {
   status: PreviewStatus;
   logs: string[];
   startedAt: Date;
+  lastAccessedAt: Date;
 }
+
+// Idle previews are evicted so the small port pool (e.g. 3710-3719) can't be
+// permanently exhausted by dev servers from closed/crashed tabs. An open chat
+// page heartbeats /preview/status, which keeps its preview warm.
+const PREVIEW_IDLE_TIMEOUT_MS = Math.max(
+  60_000,
+  Number.parseInt(process.env.PREVIEW_IDLE_TIMEOUT_MS || '', 10) || 20 * 60_000,
+);
+const PREVIEW_SWEEP_INTERVAL_MS = Math.max(
+  10_000,
+  Number.parseInt(process.env.PREVIEW_SWEEP_INTERVAL_MS || '', 10) || 5 * 60_000,
+);
 
 interface EnvOverrides {
   port?: number;
@@ -690,6 +703,41 @@ class PreviewManager {
   // can't both pass the "not running" check and spawn duplicate dev servers,
   // which would exhaust the preview port range and orphan processes.
   private starting = new Map<string, Promise<PreviewInfo>>();
+  private sweepTimer: NodeJS.Timeout | null = null;
+
+  constructor() {
+    // Periodically reclaim ports held by previews nobody is watching anymore.
+    this.sweepTimer = setInterval(() => this.evictIdle(), PREVIEW_SWEEP_INTERVAL_MS);
+    this.sweepTimer.unref?.();
+  }
+
+  /** Stop previews that haven't been accessed within the idle window. */
+  private evictIdle(): void {
+    const now = Date.now();
+    for (const [projectId, p] of this.processes) {
+      if (p.status === 'starting') continue;
+      if (now - p.lastAccessedAt.getTime() > PREVIEW_IDLE_TIMEOUT_MS) {
+        const idleMin = Math.round((now - p.lastAccessedAt.getTime()) / 60_000);
+        console.log(`[PreviewManager] Evicting idle preview ${projectId} (idle ${idleMin}m, port ${p.port})`);
+        this.stop(projectId).catch(() => {});
+      }
+    }
+  }
+
+  /** The least-recently-accessed running preview (for eviction when the pool is full). */
+  private leastRecentlyUsed(): string | null {
+    let oldest: string | null = null;
+    let oldestTime = Infinity;
+    for (const [projectId, p] of this.processes) {
+      if (p.status === 'starting') continue;
+      const t = p.lastAccessedAt.getTime();
+      if (t < oldestTime) {
+        oldestTime = t;
+        oldest = projectId;
+      }
+    }
+    return oldest;
+  }
 
   private getLogger(processInfo: PreviewProcess) {
     return (chunk: Buffer | string) => {
@@ -785,6 +833,7 @@ class PreviewManager {
   public async start(projectId: string): Promise<PreviewInfo> {
     const existing = this.processes.get(projectId);
     if (existing && existing.status !== 'error') {
+      existing.lastAccessedAt = new Date();
       return this.toInfo(existing);
     }
 
@@ -836,10 +885,18 @@ class PreviewManager {
     await ensurePreviewRouteReporter(projectPath);
 
     const previewBounds = resolvePreviewBounds();
-    const preferredPort = await findAvailablePort(
-      previewBounds.start,
-      previewBounds.end
-    );
+    let preferredPort: number;
+    try {
+      preferredPort = await findAvailablePort(previewBounds.start, previewBounds.end);
+    } catch (poolFull) {
+      // Pool exhausted — evict the least-recently-used preview to free a port,
+      // then try once more.
+      const victim = this.leastRecentlyUsed();
+      if (!victim || victim === projectId) throw poolFull;
+      console.log(`[PreviewManager] Port pool full; evicting LRU preview ${victim} to make room for ${projectId}`);
+      await this.stop(victim).catch(() => {});
+      preferredPort = await findAvailablePort(previewBounds.start, previewBounds.end);
+    }
 
     // When Claudable runs remotely (e.g. on a server), localhost:<port> is not
     // reachable from the user's browser. PREVIEW_URL_TEMPLATE (e.g.
@@ -872,6 +929,7 @@ class PreviewManager {
       status: 'starting',
       logs: [],
       startedAt: new Date(),
+      lastAccessedAt: new Date(),
     };
 
     const log = this.getLogger(previewProcess);
@@ -1140,6 +1198,9 @@ class PreviewManager {
         logs: [],
       };
     }
+    // A status read means someone's looking at this preview — keep it warm so the
+    // idle sweep doesn't evict an actively-viewed preview.
+    processInfo.lastAccessedAt = new Date();
     return this.toInfo(processInfo);
   }
 
