@@ -9,6 +9,7 @@ import type { ClaudeSession, ClaudeResponse } from '@/types/backend';
 import { streamManager } from '../stream';
 import { serializeMessage, createRealtimeMessage } from '@/lib/serializers/chat';
 import { updateProject, getProjectById } from '../project';
+import { syncProjectSkills, hasDisabledSkills } from '../skills';
 import { createMessage } from '../message';
 import { CLAUDE_DEFAULT_MODEL, normalizeClaudeModelId, getClaudeModelDisplayName } from '@/lib/constants/claudeModels';
 import path from 'path';
@@ -741,6 +742,20 @@ export async function executeClaude(
     // Send ready notification via SSE
     publishStatus('ready', 'Project verified. Starting AI...');
 
+    // Skill loading. By default (no per-project customization) keep the original
+    // behavior: auto-load project skills (<project>/.claude/skills) AND global
+    // skills (~/.claude/skills) via settingSources ['project','user']. As soon as
+    // the user disables any skill, switch to a staged model: stage just the
+    // enabled skills into <project>/.claude/skills and load only the 'project'
+    // source, so a disabled skill (project or global) is simply not present.
+    // This keeps untouched projects byte-for-byte unchanged.
+    const skillSettingSources: ('project' | 'user' | 'local')[] = (await hasDisabledSkills(projectId))
+      ? ['project']
+      : ['project', 'user'];
+    if (skillSettingSources.length === 1) {
+      await syncProjectSkills(projectId);
+    }
+
     // Start Claude Agent SDK query
     console.log(`[ClaudeService] 🤖 Querying Claude Agent SDK...`);
     console.log(`[ClaudeService] 📁 Working Directory: ${absoluteProjectPath}`);
@@ -750,9 +765,10 @@ export async function executeClaude(
         cwd: absoluteProjectPath, // SDK uses `cwd` (workingDirectory is ignored); without this the agent edits Claudable's own /app
         workingDirectory: absoluteProjectPath, // Work only in project folder (protects Claudable root)
         additionalDirectories: [absoluteProjectPath],
-        // Load filesystem settings so per-project skills in <project>/.claude/skills/
-        // (and container-global ~/.claude/skills/) are discovered by the agent.
-        settingSources: ['project', 'user'],
+        // See skillSettingSources above: ['project','user'] by default (auto-load
+        // all skills), or ['project'] once any skill is disabled (load only the
+        // staged enabled set, making per-project disabling a hard guarantee).
+        settingSources: skillSettingSources,
         model: resolvedModel,
         resume: sessionId, // Resume previous session
         permissionMode: 'bypassPermissions', // Auto-approve commands and edits

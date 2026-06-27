@@ -26,7 +26,9 @@ import {
   Palette,
   Play,
   Plug,
+  Puzzle,
   RefreshCw,
+  Search,
   Rocket,
   RotateCcw,
   Settings,
@@ -82,3 +84,5 @@ export const FaFileImport = wrap(FileInput);
 export const FaTimes = wrap(X);
 export const FaCheckCircle = wrap(CheckCircle2);
 export const FaMagic = wrap(Sparkles);
+export const FaPuzzlePiece = wrap(Puzzle);
+export const FaSearch = wrap(Search);
