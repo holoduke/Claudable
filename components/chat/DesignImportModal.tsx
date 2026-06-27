@@ -233,7 +233,7 @@ export default function DesignImportModal({
                   onClick={handleClose}
                   className="h-9 px-4 text-gray-600 hover:text-gray-900 text-sm font-medium"
                 >
-                  Keep staged (I'll prompt later)
+                  Keep staged for later
                 </button>
                 <button
                   onClick={() => {
