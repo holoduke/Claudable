@@ -40,8 +40,12 @@ async function ensurePreviewRouteReporter(projectPath: string): Promise<void> {
 // Inert outside the preview iframe; gitignored so it never ships to production.
 export default defineNuxtPlugin(() => {
   if (typeof window === 'undefined' || window.parent === window) return;
+  // Target the embedding (Claudable) origin rather than '*', so route paths
+  // aren't broadcast to an arbitrary parent if this preview is framed elsewhere.
+  let target = '*';
+  try { if (document.referrer) target = new URL(document.referrer).origin; } catch {}
   const post = (p: string) => {
-    try { window.parent.postMessage({ source: 'claudable-preview', path: p }, '*'); } catch {}
+    try { window.parent.postMessage({ source: 'claudable-preview', path: p }, target); } catch {}
   };
   try {
     const router = useRouter();

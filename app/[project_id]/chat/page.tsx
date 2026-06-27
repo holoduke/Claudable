@@ -283,6 +283,10 @@ export default function ChatPage() {
   const [deploymentId, setDeploymentId] = useState<string | null>(null);
   const [deploymentStatus, setDeploymentStatus] = useState<'idle' | 'deploying' | 'ready' | 'error'>('idle');
   const deployPollRef = useRef<NodeJS.Timeout | null>(null);
+  // Set when an auto-start fails, to stop the effect from re-firing start() every
+  // ~2s (a tight retry loop that floods /preview/start). Cleared on success or
+  // when the user explicitly clicks the Play button.
+  const previewStartFailedRef = useRef(false);
   // Real CI deploy run details (Gitea Actions) for the publish UI.
   const [deployRun, setDeployRun] = useState<{ state: string; runNumber?: number; url?: string; title?: string; sha?: string; updatedAt?: string } | null>(null);
   const giteaPollRef = useRef<NodeJS.Timeout | null>(null);
@@ -909,6 +913,7 @@ const persistProjectPreferences = useCallback(
           if (sp.status === 'running' && typeof sp.url === 'string') {
             setPreviewUrl(sp.url);
             setIsStartingPreview(false);
+            previewStartFailedRef.current = false;
             return;
           }
         }
@@ -929,6 +934,8 @@ const persistProjectPreferences = useCallback(
       if (!r.ok) {
         console.error('Failed to start preview:', r.statusText);
         setPreviewInitializationMessage('Failed to start preview');
+        // Don't let the auto-start effect immediately retry in a tight loop.
+        previewStartFailedRef.current = true;
         setTimeout(() => setIsStartingPreview(false), 2000);
         return;
       }
@@ -938,10 +945,12 @@ const persistProjectPreferences = useCallback(
       // Reveal the iframe as soon as the URL is available (no artificial wait).
       setPreviewUrl(typeof data.url === 'string' ? data.url : null);
       setIsStartingPreview(false);
+      previewStartFailedRef.current = false;
       setCurrentRoute('/');
     } catch (error) {
       console.error('Error starting preview:', error);
       setPreviewInitializationMessage('An error occurred');
+      previewStartFailedRef.current = true;
       setTimeout(() => setIsStartingPreview(false), 2000);
     }
   }, [projectId]);
@@ -2239,7 +2248,7 @@ const persistProjectPreferences = useCallback(
   const previousActiveState = useRef(false);
   
   useEffect(() => {
-    if (!hasActiveRequests && !previewUrl && !isStartingPreview) {
+    if (!hasActiveRequests && !previewUrl && !isStartingPreview && !previewStartFailedRef.current) {
       if (!previousActiveState.current) {
         console.log('🔄 Preview not running; auto-starting');
       } else {
@@ -2248,6 +2257,12 @@ const persistProjectPreferences = useCallback(
       start();
     }
 
+    // While the agent is running (it may be fixing whatever made the last start
+    // fail), clear the failure latch so auto-start retries once the run finishes
+    // (that idle transition re-runs this effect).
+    if (hasActiveRequests) {
+      previewStartFailedRef.current = false;
+    }
     previousActiveState.current = hasActiveRequests;
   }, [hasActiveRequests, previewUrl, isStartingPreview, start]);
 
@@ -2307,6 +2322,11 @@ const persistProjectPreferences = useCallback(
     return () => {
       canceled = true;
       window.removeEventListener('services-updated', handleServicesUpdate);
+
+      // Stop deploy/publish pollers so they don't keep hitting the API after the
+      // chat page unmounts (e.g. navigating back to the dashboard).
+      if (deployPollRef.current) { clearInterval(deployPollRef.current); deployPollRef.current = null; }
+      if (giteaPollRef.current) { clearInterval(giteaPollRef.current); giteaPollRef.current = null; }
 
       const currentPreview = previewUrlRef.current;
       if (currentPreview) {
@@ -2682,163 +2702,6 @@ const persistProjectPreferences = useCallback(
                         <span className="ml-2 inline-block w-2 h-2 rounded-full bg-emerald-400"></span>
                       )}
                     </button>
-                    {false && showPublishPanel && (
-                      <div className="absolute right-0 mt-2 w-80 bg-white rounded-xl shadow-xl border border-gray-200 z-50 p-5">
-                        <h3 className="text-lg font-semibold text-gray-900 mb-4">Publish Project</h3>
-                        
-                        {/* Deployment Status Display */}
-                        {deploymentStatus === 'deploying' && (
-                          <div className="mb-4 p-4 bg-blue-50 rounded-lg border border-blue-200 ">
-                            <div className="flex items-center gap-2 mb-2">
-                              <div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
-                              <p className="text-sm font-medium text-blue-700 ">Deployment in progress...</p>
-                            </div>
-                            <p className="text-xs text-blue-600 ">Building and deploying your project. This may take a few minutes.</p>
-                          </div>
-                        )}
-                        
-                        {deploymentStatus === 'ready' && publishedUrl && (
-                          <div className="mb-4 p-4 bg-green-50 rounded-lg border border-green-200 ">
-                            <p className="text-sm font-medium text-green-700 mb-2">Currently published at:</p>
-                            <a 
-                              href={publishedUrl ?? undefined} 
-                              target="_blank" 
-                              rel="noopener noreferrer" 
-                              className="text-sm text-green-600 font-mono hover:underline break-all"
-                            >
-                              {publishedUrl}
-                            </a>
-                          </div>
-                        )}
-                        
-                        {deploymentStatus === 'error' && (
-                          <div className="mb-4 p-4 bg-red-50 rounded-lg border border-red-200 ">
-                            <p className="text-sm font-medium text-red-700 mb-2">Deployment failed</p>
-                            <p className="text-xs text-red-600 ">There was an error during deployment. Please try again.</p>
-                          </div>
-                        )}
-                        
-                        <div className="space-y-4">
-                          {!githubConnected || !vercelConnected ? (
-                            <div className="p-4 bg-amber-50 rounded-lg border border-amber-200 ">
-                              <p className="text-sm font-medium text-gray-900 mb-3">To publish, connect the following services:</p>
-                              <div className="space-y-2">
-                                {!githubConnected && (
-                                  <div className="flex items-center gap-2 text-amber-700 ">
-                                    <svg className="w-4 h-4 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                                      <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-                                    </svg>
-                                    <span className="text-sm">GitHub repository not connected</span>
-                                  </div>
-                                )}
-                                {!vercelConnected && (
-                                  <div className="flex items-center gap-2 text-amber-700 ">
-                                    <svg className="w-4 h-4 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                                      <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-                                    </svg>
-                                    <span className="text-sm">Vercel project not connected</span>
-                                  </div>
-                                )}
-                              </div>
-                              <p className="mt-3 text-sm text-gray-600 ">
-                                Go to 
-                                <button
-                                  onClick={() => {
-                                    setShowPublishPanel(false);
-                                    setShowGlobalSettings(true);
-                                  }}
-                                  className="text-indigo-600 hover:text-indigo-500 underline font-medium mx-1"
-                                >
-                                  Settings → Service Integrations
-                                </button>
-                                to connect.
-                              </p>
-                            </div>
-                          ) : null}
-                          
-                          <button
-                            disabled={publishLoading || deploymentStatus === 'deploying' || !githubConnected || !vercelConnected}
-                            onClick={async () => {
-                              console.log('🚀 Publish started');
-                              
-                              setPublishLoading(true);
-                              try {
-                                // Push to GitHub
-                                console.log('🚀 Pushing to GitHub...');
-                                const pushRes = await fetch(`${API_BASE}/api/projects/${projectId}/github/push`, { method: 'POST' });
-                                if (!pushRes.ok) {
-                                  const errorText = await pushRes.text();
-                                  console.error('🚀 GitHub push failed:', errorText);
-                                  throw new Error(errorText);
-                                }
-                                
-                                // Deploy to Vercel
-                                console.log('🚀 Deploying to Vercel...');
-                                const deployUrl = `${API_BASE}/api/projects/${projectId}/vercel/deploy`;
-                                
-                                const vercelRes = await fetch(deployUrl, {
-                                  method: 'POST'
-                                });
-                                if (!vercelRes.ok) {
-                                  const responseText = await vercelRes.text();
-                                  console.error('🚀 Vercel deploy failed:', responseText);
-                                }
-                                if (vercelRes.ok) {
-                                  const data = await vercelRes.json();
-                                  console.log('🚀 Deployment started, polling for status...');
-                                  
-                                  // Set deploying status BEFORE ending publishLoading to prevent gap
-                                  setDeploymentStatus('deploying');
-                                  
-                                  if (data.deployment_id) {
-                                    startDeploymentPolling(data.deployment_id);
-                                  }
-                                  
-                                  // Only set URL if deployment is already ready
-                                  if (data.status === 'READY' && data.deployment_url) {
-                                    const url = data.deployment_url.startsWith('http') ? data.deployment_url : `https://${data.deployment_url}`;
-                                    setPublishedUrl(url);
-                                    setDeploymentStatus('ready');
-                                  }
-                                } else {
-                                  const errorText = await vercelRes.text();
-                                  console.error('🚀 Vercel deploy failed:', vercelRes.status, errorText);
-                                  // if Vercel not connected, just close
-                                  setDeploymentStatus('idle');
-                                  setPublishLoading(false); // Stop loading even on Vercel deployment failure
-                                }
-                                // Keep panel open to show deployment progress
-                              } catch (e) {
-                                console.error('🚀 Publish failed:', e);
-                                alert('Publish failed. Check Settings and tokens.');
-                                setDeploymentStatus('idle');
-                                setPublishLoading(false); // Stop loading on error
-                                // Close panel after error
-                                setTimeout(() => {
-                                  setShowPublishPanel(false);
-                                }, 1000);
-                              } finally {
-                                loadDeployStatus();
-                              }
-                            }}
-                            className={`w-full px-4 py-3 rounded-lg font-medium text-white transition-colors ${
-                              publishLoading || deploymentStatus === 'deploying' || !githubConnected || !vercelConnected 
-                                ? 'bg-gray-400 cursor-not-allowed' 
-                                : 'bg-indigo-600 hover:bg-indigo-700 '
-                            }`}
-                          >
-                            {publishLoading 
-                              ? 'Publishing...' 
-                              : deploymentStatus === 'deploying'
-                              ? 'Deploying...'
-                              : !githubConnected || !vercelConnected 
-                              ? 'Connect Services First' 
-                              : deploymentStatus === 'ready' && publishedUrl ? 'Update' : 'Publish'
-                            }
-                          </button>
-                        </div>
-                      </div>
-                    )}
                   </div>
                   )}
                 </div>
@@ -3069,7 +2932,7 @@ const persistProjectPreferences = useCallback(
                         ) : (
                           <>
                             <div
-                              onClick={!isRunning && !isStartingPreview ? start : undefined}
+                              onClick={!isRunning && !isStartingPreview ? () => { previewStartFailedRef.current = false; start(); } : undefined}
                               className={`w-40 h-40 mx-auto mb-6 relative ${!isRunning && !isStartingPreview ? 'cursor-pointer group' : ''}`}
                             >
                               {/* Claudable Symbol with rotating animation when starting */}
