@@ -6,6 +6,7 @@ import {
   Atom,
   Bot,
   Braces,
+  CheckCircle2,
   ChevronDown,
   ChevronRight,
   ChevronUp,
@@ -14,6 +15,7 @@ import {
   Database,
   File,
   FileCode,
+  FileInput,
   FileText,
   Folder,
   FolderOpen,
@@ -30,9 +32,11 @@ import {
   Settings,
   Ship,
   Smartphone,
+  Sparkles,
   Square,
   Triangle,
   Workflow,
+  X,
 } from 'lucide-react';
 
 type IconComponent = ComponentType<LucideProps>;
@@ -74,3 +78,7 @@ export const FaArrowRight = wrap(ArrowRight);
 export const FaRedo = wrap(RotateCcw);
 export const FaRobot = wrap(Bot);
 export const FaPlug = wrap(Plug);
+export const FaFileImport = wrap(FileInput);
+export const FaTimes = wrap(X);
+export const FaCheckCircle = wrap(CheckCircle2);
+export const FaMagic = wrap(Sparkles);
