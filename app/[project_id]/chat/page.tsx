@@ -12,6 +12,7 @@ import { ProjectSettings } from '@/components/settings/ProjectSettings';
 import ChatInput from '@/components/chat/ChatInput';
 import DesignImportModal from '@/components/chat/DesignImportModal';
 import SkillsModal from '@/components/chat/SkillsModal';
+import { formatTimeAgo, getFileLanguage, escapeHtml } from '@/lib/utils/format';
 import { ChatErrorBoundary } from '@/components/ErrorBoundary';
 import { useUserRequests } from '@/hooks/useUserRequests';
 import { useGlobalSettings } from '@/contexts/GlobalSettingsContext';
@@ -34,20 +35,6 @@ import {
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? '';
 
 /** Human relative time, e.g. "just now", "5 minutes ago", "2 hours ago", "3 days ago". */
-function formatTimeAgo(iso?: string): string | null {
-  if (!iso) return null;
-  const then = new Date(iso).getTime();
-  if (Number.isNaN(then)) return null;
-  const sec = Math.max(0, Math.round((Date.now() - then) / 1000));
-  if (sec < 45) return 'just now';
-  const min = Math.round(sec / 60);
-  if (min < 60) return `${min} minute${min === 1 ? '' : 's'} ago`;
-  const hr = Math.round(min / 60);
-  if (hr < 24) return `${hr} hour${hr === 1 ? '' : 's'} ago`;
-  const day = Math.round(hr / 24);
-  return `${day} day${day === 1 ? '' : 's'} ago`;
-}
-
 const assistantBrandColors = ACTIVE_CLI_BRAND_COLORS;
 
 const CLI_LABELS = ACTIVE_CLI_NAME_MAP;
@@ -1397,83 +1384,7 @@ const persistProjectPreferences = useCallback(
   }, [editedContent]);
 
   // Get file extension for syntax highlighting
-  function getFileLanguage(path: string): string {
-    const ext = path.split('.').pop()?.toLowerCase();
-    switch (ext) {
-      case 'tsx':
-      case 'ts':
-        return 'typescript';
-      case 'jsx':
-      case 'js':
-      case 'mjs':
-        return 'javascript';
-      case 'css':
-        return 'css';
-      case 'scss':
-      case 'sass':
-        return 'scss';
-      case 'html':
-      case 'htm':
-        return 'html';
-      case 'json':
-        return 'json';
-      case 'md':
-      case 'markdown':
-        return 'markdown';
-      case 'py':
-        return 'python';
-      case 'sh':
-      case 'bash':
-        return 'bash';
-      case 'yaml':
-      case 'yml':
-        return 'yaml';
-      case 'xml':
-        return 'xml';
-      case 'sql':
-        return 'sql';
-      case 'php':
-        return 'php';
-      case 'java':
-        return 'java';
-      case 'c':
-        return 'c';
-      case 'cpp':
-      case 'cc':
-      case 'cxx':
-        return 'cpp';
-      case 'rs':
-        return 'rust';
-      case 'go':
-        return 'go';
-      case 'rb':
-        return 'ruby';
-      case 'vue':
-        return 'vue';
-      case 'svelte':
-        return 'svelte';
-      case 'dockerfile':
-        return 'dockerfile';
-      case 'toml':
-        return 'toml';
-      case 'ini':
-        return 'ini';
-      case 'conf':
-      case 'config':
-        return 'nginx';
-      default:
-        return 'plaintext';
-    }
-  }
-
-  function escapeHtml(value: string): string {
-    return value
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#39;');
-  }
+  // getFileLanguage / escapeHtml now live in @/lib/utils/format (tested).
 
   // Get file icon based on type
   function getFileIcon(entry: Entry): React.ReactElement {
