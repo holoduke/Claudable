@@ -5,11 +5,29 @@
  */
 
 import { NextRequest } from 'next/server';
-import { getSkill, deleteSkill, SkillError } from '@/lib/services/skills';
+import { getSkill, deleteSkill, setSkillEnabled, SkillError } from '@/lib/services/skills';
 import { createSuccessResponse, createErrorResponse, handleApiError } from '@/lib/utils/api-response';
 
 interface RouteContext {
   params: Promise<{ project_id: string; name: string }>;
+}
+
+// PATCH /api/projects/[project_id]/skills/[name] - enable/disable a skill for this project
+export async function PATCH(request: NextRequest, { params }: RouteContext) {
+  try {
+    const { project_id, name } = await params;
+    const body = await request.json().catch(() => ({}));
+    if (typeof body?.enabled !== 'boolean') {
+      return createErrorResponse('enabled (boolean) is required', undefined, 400);
+    }
+    const skills = await setSkillEnabled(project_id, name, body.enabled);
+    return createSuccessResponse({ id: name, enabled: body.enabled, skills });
+  } catch (error) {
+    if (error instanceof SkillError) {
+      return createErrorResponse(error.message, undefined, error.status);
+    }
+    return handleApiError(error, 'API', 'Failed to update skill');
+  }
 }
 
 export async function GET(_request: NextRequest, { params }: RouteContext) {
