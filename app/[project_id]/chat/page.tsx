@@ -265,6 +265,7 @@ export default function ChatPage() {
   const CHAT_WIDTH_MIN = 20;
   const CHAT_WIDTH_MAX = 70;
   const [chatWidthPct, setChatWidthPct] = useState(30);
+  const [isResizing, setIsResizing] = useState(false);
   const splitContainerRef = useRef<HTMLDivElement>(null);
   const chatWidthRef = useRef(30);
 
@@ -278,6 +279,10 @@ export default function ChatPage() {
 
   const startChatResize = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
+    // A full-window overlay (rendered while isResizing) sits above the preview
+    // iframe so the cross-origin iframe can't swallow mousemove/mouseup — without
+    // it, dragging over the preview freezes and releasing never registers.
+    setIsResizing(true);
     const onMove = (ev: MouseEvent) => {
       const rect = splitContainerRef.current?.getBoundingClientRect();
       if (!rect || rect.width === 0) return;
@@ -289,14 +294,11 @@ export default function ChatPage() {
     const onUp = () => {
       document.removeEventListener('mousemove', onMove);
       document.removeEventListener('mouseup', onUp);
-      document.body.style.userSelect = '';
-      document.body.style.cursor = '';
+      setIsResizing(false);
       localStorage.setItem(CHAT_WIDTH_KEY, String(Math.round(chatWidthRef.current)));
     };
     document.addEventListener('mousemove', onMove);
     document.addEventListener('mouseup', onUp);
-    document.body.style.userSelect = 'none';
-    document.body.style.cursor = 'col-resize';
   }, []);
   const [publishLoading, setPublishLoading] = useState(false);
   const [githubConnected, setGithubConnected] = useState<boolean | null>(null);
@@ -2386,6 +2388,11 @@ const persistProjectPreferences = useCallback(
         }
         
       `}</style>
+
+      {/* While resizing, this overlay sits above the preview iframe so it can't
+          capture the mouse — keeps the drag smooth in both directions and lets
+          mouseup register anywhere on screen. */}
+      {isResizing && <div className="fixed inset-0 z-[100] cursor-col-resize select-none" />}
 
       <div className="h-screen bg-white flex relative overflow-hidden">
         <div className="h-full w-full flex" ref={splitContainerRef}>
