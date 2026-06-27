@@ -177,19 +177,40 @@ async function writeDisabledSet(projectId: string, set: Set<string>): Promise<vo
   );
 }
 
+// Per-project serialization: the disabled-set is read-modify-written and the
+// staging dir is reshuffled, so concurrent toggles (or a toggle racing an
+// agent-run sync) must not interleave or they corrupt each other.
+const projectSkillLocks = new Map<string, Promise<unknown>>();
+function withProjectSkillLock<T>(projectId: string, fn: () => Promise<T>): Promise<T> {
+  const prev = projectSkillLocks.get(projectId) ?? Promise.resolve();
+  const run = prev.then(fn, fn);
+  projectSkillLocks.set(projectId, run.then(() => undefined, () => undefined));
+  return run;
+}
+
+/** A skill id must be a single safe path segment (it indexes a dir on disk). */
+function assertSafeSkillId(skillId: string): string {
+  const id = String(skillId).trim();
+  if (!id || id.includes('/') || id.includes('\\') || id.includes('..') || id.startsWith('.')) {
+    throw new SkillError('Invalid skill id');
+  }
+  return id;
+}
+
 /** Toggle a skill on/off for a project (by its on-disk id), then re-stage. */
 export async function setSkillEnabled(
   projectId: string,
   skillId: string,
   enabled: boolean,
 ): Promise<Skill[]> {
-  const id = String(skillId).trim();
-  if (!id) throw new SkillError('skill id is required');
-  const set = await getDisabledSet(projectId);
-  if (enabled) set.delete(id);
-  else set.add(id);
-  await writeDisabledSet(projectId, set);
-  await syncProjectSkills(projectId);
+  const id = assertSafeSkillId(skillId);
+  await withProjectSkillLock(projectId, async () => {
+    const set = await getDisabledSet(projectId);
+    if (enabled) set.delete(id);
+    else set.add(id);
+    await writeDisabledSet(projectId, set);
+    await syncProjectSkillsUnlocked(projectId);
+  });
   const { project, global } = await listAllSkills(projectId);
   return [...project, ...global];
 }
@@ -249,6 +270,10 @@ async function ensureIgnored(projectBase: string, entry: string): Promise<void> 
  * blocks a run.
  */
 export async function syncProjectSkills(projectId: string): Promise<void> {
+  await withProjectSkillLock(projectId, () => syncProjectSkillsUnlocked(projectId));
+}
+
+async function syncProjectSkillsUnlocked(projectId: string): Promise<void> {
   try {
     const base = await projectBaseDir(projectId);
     const root = await skillsDir(projectId);

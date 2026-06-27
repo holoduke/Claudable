@@ -46,9 +46,27 @@ function shouldKeep(name: string): boolean {
   if (name.includes('..')) return false;
   const lower = name.toLowerCase();
   if (lower.endsWith('.dc.html')) return true;
-  if (name.startsWith('fonts/')) return true;
-  if (name.startsWith('assets/')) return true;
+  // Match fonts/ and assets/ at the root OR under a single wrapper directory
+  // (many zip tools nest everything inside a top-level folder).
+  if (/(^|\/)fonts\//.test(name)) return true;
+  if (/(^|\/)assets\//.test(name)) return true;
   return false;
+}
+
+/**
+ * If every kept entry sits under one common top-level directory (a wrapper added
+ * by the zip tool, e.g. `MyDesign/…`), return that prefix so it can be stripped.
+ * Returns '' for a flat export (files already at the root).
+ */
+function commonRootPrefix(names: string[]): string {
+  if (names.length === 0) return '';
+  const firstSegs = new Set(
+    names.map((n) => (n.includes('/') ? n.slice(0, n.indexOf('/')) : '')),
+  );
+  if (firstSegs.size !== 1) return ''; // some files at root, or multiple roots
+  const seg = [...firstSegs][0];
+  if (!seg || seg === 'fonts' || seg === 'assets') return ''; // meaningful top-level dir
+  return `${seg}/`;
 }
 
 function screenName(entryName: string): string {
@@ -90,6 +108,9 @@ export async function extractDesignImport(
     );
   }
 
+  // Strip a single wrapper directory if the whole archive is nested in one.
+  const prefix = commonRootPrefix(Object.keys(files));
+
   // Fresh import: clear any previous staging so removed screens don't linger.
   await fs.rm(destRoot, { recursive: true, force: true });
   await fs.mkdir(destRoot, { recursive: true });
@@ -102,8 +123,10 @@ export async function extractDesignImport(
   let designSystemPresent = false;
 
   for (const [name, data] of Object.entries(files)) {
+    const relName = prefix && name.startsWith(prefix) ? name.slice(prefix.length) : name;
+    if (!relName) continue;
     // Path-traversal containment: never write outside design-reference/.
-    const outPath = path.resolve(destRoot, name);
+    const outPath = path.resolve(destRoot, relName);
     if (outPath !== destRoot && !outPath.startsWith(destRoot + path.sep)) {
       continue;
     }
@@ -112,14 +135,14 @@ export async function extractDesignImport(
     fileCount++;
     totalBytes += data.length;
 
-    const lower = name.toLowerCase();
+    const lower = relName.toLowerCase();
     if (lower.endsWith('.dc.html')) {
-      const s = screenName(name);
+      const s = screenName(relName);
       screens.push(s);
       if (/design\s*system/i.test(s)) designSystemPresent = true;
-    } else if (name.startsWith('fonts/')) {
+    } else if (/(^|\/)fonts\//.test(relName)) {
       fontCount++;
-    } else if (name.startsWith('assets/')) {
+    } else if (/(^|\/)assets\//.test(relName)) {
       assetCount++;
     }
   }
