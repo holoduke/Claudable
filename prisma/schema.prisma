@@ -272,7 +272,7 @@ model ServiceToken {
   // Service info
   provider String // github, vercel, supabase
   name     String // User-defined name
-  token    String // Access token (plain text - local only)
+  token    String // Access token, encrypted at rest via lib/crypto (iv:ciphertext)
 
   // Timestamps
   createdAt DateTime @default(now()) @map("created_at")
