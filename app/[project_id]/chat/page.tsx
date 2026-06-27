@@ -258,6 +258,46 @@ export default function ChatPage() {
   const [showPublishPanel, setShowPublishPanel] = useState(false);
   const [showDesignImport, setShowDesignImport] = useState(false);
   const [showSkills, setShowSkills] = useState(false);
+
+  // Resizable chat/preview split. Width of the left chat panel as a % of the
+  // window; drag the divider to resize, persisted to localStorage.
+  const CHAT_WIDTH_KEY = 'claudable:chatWidthPct';
+  const CHAT_WIDTH_MIN = 20;
+  const CHAT_WIDTH_MAX = 70;
+  const [chatWidthPct, setChatWidthPct] = useState(30);
+  const splitContainerRef = useRef<HTMLDivElement>(null);
+  const chatWidthRef = useRef(30);
+
+  useEffect(() => {
+    const saved = Number(localStorage.getItem(CHAT_WIDTH_KEY));
+    if (saved >= CHAT_WIDTH_MIN && saved <= CHAT_WIDTH_MAX) {
+      setChatWidthPct(saved);
+      chatWidthRef.current = saved;
+    }
+  }, []);
+
+  const startChatResize = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    const onMove = (ev: MouseEvent) => {
+      const rect = splitContainerRef.current?.getBoundingClientRect();
+      if (!rect || rect.width === 0) return;
+      const pct = ((ev.clientX - rect.left) / rect.width) * 100;
+      const clamped = Math.min(CHAT_WIDTH_MAX, Math.max(CHAT_WIDTH_MIN, pct));
+      chatWidthRef.current = clamped;
+      setChatWidthPct(clamped);
+    };
+    const onUp = () => {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      document.body.style.userSelect = '';
+      document.body.style.cursor = '';
+      localStorage.setItem(CHAT_WIDTH_KEY, String(Math.round(chatWidthRef.current)));
+    };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+    document.body.style.userSelect = 'none';
+    document.body.style.cursor = 'col-resize';
+  }, []);
   const [publishLoading, setPublishLoading] = useState(false);
   const [githubConnected, setGithubConnected] = useState<boolean | null>(null);
   const [vercelConnected, setVercelConnected] = useState<boolean | null>(null);
@@ -2348,11 +2388,11 @@ const persistProjectPreferences = useCallback(
       `}</style>
 
       <div className="h-screen bg-white flex relative overflow-hidden">
-        <div className="h-full w-full flex">
+        <div className="h-full w-full flex" ref={splitContainerRef}>
           {/* Left: Chat window */}
           <div
-            style={{ width: '30%' }}
-            className="h-full border-r border-gray-200 flex flex-col"
+            style={{ width: `${chatWidthPct}%` }}
+            className="h-full flex flex-col min-w-0"
           >
             {/* Chat header */}
             <div className="bg-white border-b border-gray-200 p-4 h-[73px] flex items-center">
@@ -2443,8 +2483,20 @@ const persistProjectPreferences = useCallback(
             </div>
           </div>
 
+          {/* Draggable divider to resize the chat / preview split */}
+          <div
+            onMouseDown={startChatResize}
+            role="separator"
+            aria-orientation="vertical"
+            title="Drag to resize"
+            className="relative h-full w-px shrink-0 cursor-col-resize bg-gray-200 hover:bg-blue-400 transition-colors"
+          >
+            {/* wider invisible hit area for easier grabbing */}
+            <div className="absolute inset-y-0 -left-1.5 -right-1.5" />
+          </div>
+
           {/* Right: Preview/Code area */}
-          <div className="h-full flex flex-col bg-black" style={{ width: '70%' }}>
+          <div className="h-full flex flex-col bg-black min-w-0" style={{ width: `${100 - chatWidthPct}%` }}>
             {/* Content area */}
             <div className="flex-1 min-h-0 flex flex-col">
               {/* Controls Bar */}
