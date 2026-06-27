@@ -18,10 +18,15 @@ export async function GET(
     const { project_id } = await params;
     const preview = previewManager.getStatus(project_id);
 
-    return NextResponse.json({
+    const res = NextResponse.json({
       success: true,
       data: preview,
     });
+    // Status is live and changes constantly; never let the browser cache it
+    // (a stale 'starting'/'stopped' makes the UI cold-start an already-running
+    // preview).
+    res.headers.set('Cache-Control', 'no-store');
+    return res;
   } catch (error) {
     console.error('[API] Failed to fetch preview status:', error);
     return NextResponse.json(

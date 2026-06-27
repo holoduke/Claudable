@@ -9,6 +9,8 @@ import type { ClaudeSession, ClaudeResponse } from '@/types/backend';
 import { streamManager } from '../stream';
 import { serializeMessage, createRealtimeMessage } from '@/lib/serializers/chat';
 import { updateProject, getProjectById } from '../project';
+import { syncProjectSkills, hasDisabledSkills } from '../skills';
+import { CLAUDE_SYSTEM_PROMPT } from './prompts/claude-system-prompt';
 import { createMessage } from '../message';
 import { CLAUDE_DEFAULT_MODEL, normalizeClaudeModelId, getClaudeModelDisplayName } from '@/lib/constants/claudeModels';
 import path from 'path';
@@ -20,261 +22,7 @@ import {
   markUserRequestAsFailed,
 } from '@/lib/services/user-requests';
 
-type ToolAction = 'Edited' | 'Created' | 'Read' | 'Deleted' | 'Generated' | 'Searched' | 'Executed';
-
-const TOOL_NAME_ACTION_MAP: Record<string, ToolAction> = {
-  read: 'Read',
-  read_file: 'Read',
-  'read-file': 'Read',
-  write: 'Created',
-  write_file: 'Created',
-  'write-file': 'Created',
-  create_file: 'Created',
-  edit: 'Edited',
-  edit_file: 'Edited',
-  'edit-file': 'Edited',
-  update_file: 'Edited',
-  apply_patch: 'Edited',
-  patch_file: 'Edited',
-  remove_file: 'Deleted',
-  delete_file: 'Deleted',
-  delete: 'Deleted',
-  remove: 'Deleted',
-  list_files: 'Searched',
-  list: 'Searched',
-  ls: 'Searched',
-  glob: 'Searched',
-  glob_files: 'Searched',
-  search_files: 'Searched',
-  grep: 'Searched',
-  bash: 'Executed',
-  run: 'Executed',
-  run_bash: 'Executed',
-  shell: 'Executed',
-  todo_write: 'Generated',
-  todo: 'Generated',
-  plan_write: 'Generated',
-};
-
-const normalizeAction = (value: unknown): ToolAction | undefined => {
-  if (typeof value !== 'string') return undefined;
-  const candidate = value.trim().toLowerCase();
-  if (!candidate) return undefined;
-  if (candidate.includes('edit') || candidate.includes('modify') || candidate.includes('update') || candidate.includes('patch')) {
-    return 'Edited';
-  }
-  if (candidate.includes('write') || candidate.includes('create') || candidate.includes('add') || candidate.includes('append')) {
-    return 'Created';
-  }
-  if (candidate.includes('read') || candidate.includes('open') || candidate.includes('view')) {
-    return 'Read';
-  }
-  if (candidate.includes('delete') || candidate.includes('remove')) {
-    return 'Deleted';
-  }
-  if (
-    candidate.includes('search') ||
-    candidate.includes('find') ||
-    candidate.includes('list') ||
-    candidate.includes('glob') ||
-    candidate.includes('ls') ||
-    candidate.includes('grep')
-  ) {
-    return 'Searched';
-  }
-  if (candidate.includes('generate') || candidate.includes('todo') || candidate.includes('plan')) {
-    return 'Generated';
-  }
-  if (
-    candidate.includes('execute') ||
-    candidate.includes('exec') ||
-    candidate.includes('run') ||
-    candidate.includes('bash') ||
-    candidate.includes('shell') ||
-    candidate.includes('command')
-  ) {
-    return 'Executed';
-  }
-  return undefined;
-};
-
-const inferActionFromToolName = (toolName: unknown): ToolAction | undefined => {
-  if (typeof toolName !== 'string') return undefined;
-  const normalized = toolName.trim().toLowerCase();
-  if (!normalized) return undefined;
-  if (TOOL_NAME_ACTION_MAP[normalized]) {
-    return TOOL_NAME_ACTION_MAP[normalized];
-  }
-  const suffix = normalized.split(':').pop() ?? normalized;
-  if (suffix && TOOL_NAME_ACTION_MAP[suffix]) {
-    return TOOL_NAME_ACTION_MAP[suffix];
-  }
-  return normalizeAction(normalized);
-};
-
-const pickFirstString = (value: unknown): string | undefined => {
-  if (typeof value === 'string') {
-    const trimmed = value.trim();
-    return trimmed.length > 0 ? trimmed : undefined;
-  }
-  if (typeof value === 'number' || typeof value === 'boolean') {
-    return String(value);
-  }
-  if (Array.isArray(value)) {
-    for (const entry of value) {
-      const candidate = pickFirstString(entry);
-      if (candidate) return candidate;
-    }
-    return undefined;
-  }
-  if (value && typeof value === 'object') {
-    const obj = value as Record<string, unknown>;
-    const nestedKeys = ['path', 'filepath', 'filePath', 'file_path', 'target', 'value'];
-    for (const key of nestedKeys) {
-      if (key in obj) {
-        const candidate = pickFirstString(obj[key]);
-        if (candidate) return candidate;
-      }
-    }
-  }
-  return undefined;
-};
-
-const extractPathFromInput = (input: unknown, action?: ToolAction): string | undefined => {
-  if (!input || typeof input !== 'object') return undefined;
-  const record = input as Record<string, unknown>;
-  const candidateKeys = [
-    'filePath',
-    'file_path',
-    'filepath',
-    'path',
-    'targetPath',
-    'target_path',
-    'target',
-    'targets',
-    'fullPath',
-    'full_path',
-    'destination',
-    'destinationPath',
-    'outputPath',
-    'output_path',
-    'glob',
-    'pattern',
-    'directory',
-    'dir',
-    'filename',
-    'name',
-  ];
-
-  for (const key of candidateKeys) {
-    if (key in record) {
-      const result = pickFirstString(record[key]);
-      if (result) {
-        return result;
-      }
-    }
-  }
-
-  if (Array.isArray(record.targets)) {
-    for (const target of record.targets as unknown[]) {
-      const candidate = pickFirstString(target);
-      if (candidate) {
-        return candidate;
-      }
-    }
-  }
-
-  if (!action || action === 'Executed') {
-    const commandKeys = ['command', 'cmd', 'shellCommand', 'shell_command'];
-    for (const key of commandKeys) {
-      if (key in record) {
-        const candidate = pickFirstString(record[key]);
-        if (candidate) {
-          return candidate;
-        }
-      }
-    }
-  }
-
-  return undefined;
-};
-
-const buildToolMetadata = (block: Record<string, unknown>): Record<string, unknown> => {
-  const metadata: Record<string, unknown> = {};
-  const toolName = pickFirstString(block.name) ?? (typeof block.name === 'string' ? block.name : undefined);
-  const toolInput = block.input;
-  const inputRecord = toolInput && typeof toolInput === 'object' ? (toolInput as Record<string, unknown>) : undefined;
-
-  if (toolName) {
-    metadata.toolName = toolName;
-  }
-
-  if (toolInput !== undefined) {
-    metadata.toolInput = toolInput;
-  }
-
-  let action =
-    normalizeAction(block.action) ??
-    normalizeAction(block.operation) ??
-    (inputRecord ? normalizeAction(inputRecord.action) ?? normalizeAction(inputRecord.operation) : undefined) ??
-    inferActionFromToolName(toolName);
-
-  const directPath =
-    pickFirstString(block.filePath) ??
-    pickFirstString(block.file_path) ??
-    pickFirstString(block.targetPath) ??
-    pickFirstString(block.target_path) ??
-    pickFirstString(block.path);
-
-  let filePath = directPath ?? extractPathFromInput(toolInput, action);
-
-  if (!filePath && inputRecord) {
-    filePath =
-      extractPathFromInput(inputRecord, action) ??
-      pickFirstString(inputRecord.filePath) ??
-      pickFirstString(inputRecord.file_path);
-  }
-
-  if (!filePath && inputRecord) {
-    const command =
-      pickFirstString(inputRecord.command) ??
-      pickFirstString(inputRecord.cmd) ??
-      pickFirstString(inputRecord.shellCommand) ??
-      pickFirstString(inputRecord.shell_command);
-    if (command) {
-      metadata.command = command;
-      filePath = command;
-      if (!action) {
-        action = 'Executed';
-      }
-    }
-  }
-
-  if (filePath) {
-    metadata.filePath = filePath;
-  }
-
-  if (action) {
-    metadata.action = action;
-  }
-
-  const summary =
-    pickFirstString(block.summary) ??
-    pickFirstString(block.description) ??
-    pickFirstString(block.result) ??
-    pickFirstString(block.resultSummary) ??
-    pickFirstString(block.result_summary) ??
-    (inputRecord ? pickFirstString(inputRecord.summary) ?? pickFirstString(inputRecord.description) : undefined) ??
-    pickFirstString(block.diff) ??
-    pickFirstString(block.diffInfo) ??
-    pickFirstString(block.diff_info);
-
-  if (summary) {
-    metadata.summary = summary;
-  }
-
-  return metadata;
-};
+import { type ToolAction, pickFirstString, buildToolMetadata, inferActionFromToolName } from './tool-metadata';
 
 interface ToolPlaceholderDetails {
   raw: string;
@@ -560,13 +308,42 @@ function resolveModelId(model?: string | null): string {
  * @param sessionId - Previous session ID (maintains conversation context)
  * @param requestId - (Optional) User request tracking ID
  */
+/**
+ * How much extended thinking the agent should use.
+ * - 'off'    — no extended thinking (fastest)
+ * - 'auto'   — adaptive; Claude decides when/how much to think (default)
+ * - 'forced' — adaptive with high effort: deep reasoning every turn
+ *
+ * We use adaptive thinking (+ effort) rather than an explicit `budgetTokens`
+ * because a fixed budget must stay below maxOutputTokens (the API rejects
+ * budget >= max_tokens); adaptive has no such constraint and is the SDK's
+ * recommended control on modern models.
+ */
+export type ThinkingMode = 'off' | 'auto' | 'forced';
+
+function buildThinkingOptions(mode: ThinkingMode | undefined): {
+  thinking: { type: 'disabled' } | { type: 'adaptive' };
+  effort?: 'low' | 'medium' | 'high' | 'max';
+} {
+  switch (mode) {
+    case 'off':
+      return { thinking: { type: 'disabled' } };
+    case 'forced':
+      return { thinking: { type: 'adaptive' }, effort: 'high' };
+    case 'auto':
+    default:
+      return { thinking: { type: 'adaptive' } };
+  }
+}
+
 export async function executeClaude(
   projectId: string,
   projectPath: string,
   instruction: string,
   model: string = CLAUDE_DEFAULT_MODEL,
   sessionId?: string,
-  requestId?: string
+  requestId?: string,
+  options: { suppressUserError?: boolean; thinkingMode?: ThinkingMode } = {}
 ): Promise<void> {
   console.log(`\n========================================`);
   console.log(`[ClaudeService] 🚀 Starting Claude Agent SDK`);
@@ -712,28 +489,40 @@ export async function executeClaude(
     // Send ready notification via SSE
     publishStatus('ready', 'Project verified. Starting AI...');
 
+    // Skill loading. By default (no per-project customization) keep the original
+    // behavior: auto-load project skills (<project>/.claude/skills) AND global
+    // skills (~/.claude/skills) via settingSources ['project','user']. As soon as
+    // the user disables any skill, switch to a staged model: stage just the
+    // enabled skills into <project>/.claude/skills and load only the 'project'
+    // source, so a disabled skill (project or global) is simply not present.
+    // This keeps untouched projects byte-for-byte unchanged.
+    const skillSettingSources: ('project' | 'user' | 'local')[] = (await hasDisabledSkills(projectId))
+      ? ['project']
+      : ['project', 'user'];
+    if (skillSettingSources.length === 1) {
+      await syncProjectSkills(projectId);
+    }
+
     // Start Claude Agent SDK query
     console.log(`[ClaudeService] 🤖 Querying Claude Agent SDK...`);
     console.log(`[ClaudeService] 📁 Working Directory: ${absoluteProjectPath}`);
     const response = query({
       prompt: instruction,
       options: {
+        cwd: absoluteProjectPath, // SDK uses `cwd` (workingDirectory is ignored); without this the agent edits Claudable's own /app
         workingDirectory: absoluteProjectPath, // Work only in project folder (protects Claudable root)
         additionalDirectories: [absoluteProjectPath],
+        // See skillSettingSources above: ['project','user'] by default (auto-load
+        // all skills), or ['project'] once any skill is disabled (load only the
+        // staged enabled set, making per-project disabling a hard guarantee).
+        settingSources: skillSettingSources,
         model: resolvedModel,
         resume: sessionId, // Resume previous session
         permissionMode: 'bypassPermissions', // Auto-approve commands and edits
-        systemPrompt: `You are an expert web developer building a Next.js application.
-- Use Next.js 15 App Router
-- Use TypeScript
-- Use Tailwind CSS for styling
-- Write clean, production-ready code
-- Follow best practices
-- The platform automatically installs dependencies and manages the preview dev server. Do not run package managers or dev-server commands yourself; rely on the existing preview.
-- Keep all project files directly in the project root. Never scaffold frameworks into subdirectories (avoid commands like "mkdir new-app" or "create-next-app my-app"; run generators against the current directory instead).
-- Never override ports or start your own development server processes. Rely on the managed preview service which assigns ports from the approved pool.
-- When sharing a preview link, read the actual NEXT_PUBLIC_APP_URL (e.g. from .env/.env.local or project metadata) instead of assuming a default port.
-- Prefer giving the user the live preview link that is actually running rather than written instructions.`,
+        // Extended thinking: off / adaptive (auto) / adaptive+high (forced).
+        // Thinking blocks the model emits are surfaced to the chat below.
+        ...buildThinkingOptions(options.thinkingMode),
+        systemPrompt: CLAUDE_SYSTEM_PROMPT,
         maxOutputTokens,
         // Capture SDK stderr so we can surface real errors instead of just exit code
         stderr: (data: string) => {
@@ -995,6 +784,20 @@ export async function executeClaude(
 
             const safeBlock = block as any;
 
+            // Surface extended-thinking blocks so the user can see the model's
+            // reasoning. ChatLog renders <thinking>…</thinking> as a collapsible
+            // section, so wrap the reasoning text in those tags.
+            if (safeBlock.type === 'thinking') {
+              const thinkingText =
+                typeof safeBlock.thinking === 'string'
+                  ? safeBlock.thinking.trim()
+                  : '';
+              if (thinkingText) {
+                parts.push(`<thinking>${thinkingText}</thinking>`);
+              }
+              continue;
+            }
+
             if (safeBlock.type === 'text') {
               const text = typeof safeBlock.text === 'string' ? safeBlock.text : '';
               const trimmed = text.trim();
@@ -1130,10 +933,33 @@ export async function executeClaude(
       }
     }
 
+    // When this attempt will be retried (e.g. a failed session resume), stay
+    // silent so the user doesn't see a spurious error — just rethrow.
+    if (options.suppressUserError) {
+      throw new Error(errorMessage);
+    }
+
     await safeMarkFailed(errorMessage);
     publishStatus('error', errorMessage);
 
-    // Send error via SSE
+    // Persist + stream a visible error message so it shows up in the chat log.
+    try {
+      const errorChatMessage = await createMessage({
+        projectId,
+        role: 'assistant',
+        messageType: 'error',
+        content: errorMessage,
+        cliSource: 'claude',
+      });
+      streamManager.publish(projectId, {
+        type: 'message',
+        data: serializeMessage(errorChatMessage, requestId ? { requestId } : undefined),
+      });
+    } catch (persistError) {
+      console.error('[ClaudeService] Failed to persist error message:', persistError);
+    }
+
+    // Also send the error status via SSE
     streamManager.publish(projectId, {
       type: 'error',
       error: errorMessage,
@@ -1160,15 +986,15 @@ export async function initializeNextJsProject(
   model: string = CLAUDE_DEFAULT_MODEL,
   requestId?: string
 ): Promise<void> {
-  console.log(`[ClaudeService] Initializing Next.js project: ${projectId}`);
+  console.log(`[ClaudeService] Initializing Nuxt project: ${projectId}`);
 
-  // Next.js project creation command
+  // Nuxt project creation command
   const fullPrompt = `
-Create a new Next.js 15 application with the following requirements:
+Build a Nuxt 4 application with the following requirements:
 ${initialPrompt}
 
-Use App Router, TypeScript, and Tailwind CSS.
-Set up the basic project structure and implement the requested features.
+Use Nuxt 4 (Vue 3 <script setup lang="ts">, file-based routing in pages/) and Nuxt UI (@nuxt/ui) components — consult the "nuxt-ui" skill. The app is wrapped in <UApp>. Use TypeScript and Tailwind utility classes.
+Build on the existing scaffold in the project root and implement the requested features.
 `.trim();
 
   await executeClaude(projectId, projectPath, fullPrompt, model, undefined, requestId);
@@ -1190,8 +1016,27 @@ export async function applyChanges(
   instruction: string,
   model: string = CLAUDE_DEFAULT_MODEL,
   sessionId?: string,
-  requestId?: string
+  requestId?: string,
+  thinkingMode?: ThinkingMode
 ): Promise<void> {
   console.log(`[ClaudeService] Applying changes to project: ${projectId}`);
-  await executeClaude(projectId, projectPath, instruction, model, sessionId, requestId);
+  try {
+    // On a resume, suppress user-facing errors for this attempt so a failed
+    // resume can be retried silently (the retry surfaces errors normally).
+    await executeClaude(projectId, projectPath, instruction, model, sessionId, requestId, {
+      suppressUserError: Boolean(sessionId),
+      thinkingMode,
+    });
+  } catch (error) {
+    // Resuming a corrupt/incompatible session can fail immediately (exit code 1 /
+    // error_during_execution). Recover by retrying once with a fresh session.
+    if (sessionId) {
+      console.warn('[ClaudeService] Resume failed; retrying with a fresh session:', error instanceof Error ? error.message : error);
+      await executeClaude(projectId, projectPath, instruction, model, undefined, requestId, {
+        thinkingMode,
+      });
+    } else {
+      throw error;
+    }
+  }
 }

@@ -27,6 +27,7 @@ import { serializeMessage } from '@/lib/serializers/chat';
 import {
   upsertUserRequest,
   markUserRequestAsProcessing,
+  markUserRequestAsFailed,
 } from '@/lib/services/user-requests';
 
 interface RouteContext {
@@ -49,16 +50,22 @@ function resolveAssetsPath(projectId: string): string {
 }
 
 function ensureAbsoluteAssetPath(projectId: string, inputPath: string): string {
-  const normalized = path.normalize(inputPath);
-  if (path.isAbsolute(normalized)) {
-    return normalized;
-  }
-  const resolvedFromCwd = path.resolve(process.cwd(), normalized);
-  if (resolvedFromCwd.startsWith(PROJECTS_DIR_ABSOLUTE)) {
-    return resolvedFromCwd;
-  }
   const projectBase = path.join(PROJECTS_DIR_ABSOLUTE, projectId);
-  return path.resolve(projectBase, normalized);
+  const normalized = path.normalize(inputPath);
+  // Absolute paths are kept as-is; relative paths resolve under the project.
+  const candidate = path.isAbsolute(normalized)
+    ? normalized
+    : path.resolve(projectBase, normalized);
+  // Security: the path MUST stay inside the projects directory. Without this an
+  // attacker could pass an absolute path like "/etc/passwd" (or "../../..") and
+  // the app would stat/copy arbitrary files.
+  if (
+    candidate !== PROJECTS_DIR_ABSOLUTE &&
+    !candidate.startsWith(PROJECTS_DIR_ABSOLUTE + path.sep)
+  ) {
+    throw new Error('Asset path is outside the projects directory');
+  }
+  return candidate;
 }
 
 function resolveProjectRoot(projectId: string, repoPath?: string | null): string {
@@ -289,6 +296,13 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
       getDefaultModelForCli(cliPreference);
     const selectedModel = normalizeModelId(cliPreference, selectedModelRaw);
 
+    const thinkingModeRaw =
+      coerceString(body.thinkingMode) ?? coerceString(legacyBody['thinking_mode']);
+    const thinkingMode: 'off' | 'auto' | 'forced' =
+      thinkingModeRaw === 'off' || thinkingModeRaw === 'forced'
+        ? thinkingModeRaw
+        : 'auto';
+
     const conversationId =
       coerceString(body.conversationId) ?? coerceString(legacyBody['conversation_id']);
 
@@ -437,15 +451,29 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
           ? project.activeCursorSessionId || undefined
           : undefined;
 
-      executor(
+      // thinkingMode is only consumed by the Claude executor; other CLIs
+      // ignore the extra argument. Cast to avoid a union-arity type error.
+      (executor as (...args: unknown[]) => Promise<void>)(
         project_id,
         projectPath,
         finalInstruction,
         selectedModel,
         sessionId,
         requestId,
-      ).catch((error) => {
+        cliPreference === 'claude' ? thinkingMode : undefined,
+      ).catch(async (error) => {
         console.error('[API] Failed to execute AI:', error);
+        // If the executor rejected outright, its own finally never marked the
+        // request terminal — do it here so the row can't get stuck in an
+        // active status and permanently lock the project.
+        if (requestId) {
+          await markUserRequestAsFailed(
+            requestId,
+            error instanceof Error ? error.message : 'AI execution failed',
+          ).catch((markError) => {
+            console.error('[API] Failed to mark request failed:', markError);
+          });
+        }
       });
     }
 

@@ -8,7 +8,7 @@ interface RouteContext {
 export async function PUT(request: NextRequest, { params }: RouteContext) {
   try {
     const { project_id, key } = await params;
-    const body = await request.json();
+    const body = (await request.json().catch(() => null)) ?? {};
     if (typeof body?.value !== 'string') {
       return NextResponse.json(
         { success: false, error: 'value must be a string' },

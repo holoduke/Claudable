@@ -10,6 +10,8 @@
     "dev:desktop": "node scripts/run-desktop.js",
     "dev:electron": "npm run dev:desktop",
     "ensure:env": "node scripts/setup-env.js",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "build": "next build",
     "build:desktop": "npm run build && electron-builder",
     "package:mac": "npm run build && electron-builder --mac",
@@ -31,6 +33,7 @@
     "@anthropic-ai/claude-agent-sdk": "^0.2.68",
     "@prisma/client": "^6.1.0",
     "dotenv": "^16.4.5",
+    "fflate": "^0.8.3",
     "framer-motion": "^11.11.17",
     "highlight.js": "^11.10.0",
     "lucide-react": "^0.460.0",
@@ -56,7 +59,8 @@
     "prettier": "^3.4.2",
     "prisma": "^6.1.0",
     "tailwindcss": "^3.4.17",
-    "typescript": "^5.7.2"
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.9"
   },
   "engines": {
     "node": ">=20.0.0",

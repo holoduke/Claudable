@@ -20,10 +20,14 @@ export async function POST(request: Request, { params }: RouteContext) {
       return NextResponse.json({ success: false, error: 'Project not found' }, { status: 404 });
     }
 
-    const body = await request.json();
+    const body = await request.json().catch(() => null);
     const b64 = typeof body?.b64_png === 'string' ? body.b64_png : null;
     if (!b64) {
       return NextResponse.json({ success: false, error: 'b64_png is required' }, { status: 400 });
+    }
+    // Cap the payload (~6MB base64 ≈ 4.5MB binary) to avoid memory/disk abuse.
+    if (b64.length > 6 * 1024 * 1024) {
+      return NextResponse.json({ success: false, error: 'Logo too large (max ~4.5MB)' }, { status: 413 });
     }
 
     const buffer = Buffer.from(b64, 'base64');

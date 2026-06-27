@@ -1,7 +1,33 @@
 import { prisma } from '@/lib/db/client';
+import { encrypt, decrypt } from '@/lib/crypto';
 
 const SUPPORTED_PROVIDERS = ['github', 'supabase', 'vercel'] as const;
 export type ServiceProvider = (typeof SUPPORTED_PROVIDERS)[number];
+
+// Stored token format produced by lib/crypto: "<32-hex IV>:<hex ciphertext>".
+const ENCRYPTED_RE = /^[0-9a-f]{32}:[0-9a-f]+$/i;
+
+/**
+ * Decrypt a stored token. Tokens are encrypted at rest, but rows written before
+ * encryption was added are plaintext — detect those, return them as-is, and
+ * re-encrypt them in the background so they don't stay plaintext in cc.db.
+ */
+function readStoredToken(record: { id: string; token: string }): string {
+  const stored = record.token;
+  if (!stored) return stored;
+  if (ENCRYPTED_RE.test(stored)) {
+    try {
+      return decrypt(stored);
+    } catch {
+      return stored; // corrupt/legacy — surface as-is rather than throwing
+    }
+  }
+  // Legacy plaintext: migrate to encrypted (fire-and-forget) and return as-is.
+  prisma.serviceToken
+    .update({ where: { id: record.id }, data: { token: encrypt(stored) } })
+    .catch(() => {});
+  return stored;
+}
 
 interface ServiceTokenRecord {
   id: string;
@@ -30,7 +56,7 @@ function toResponse(model: {
     id: model.id,
     provider: model.provider as ServiceProvider,
     name: model.name,
-    token: model.token,
+    token: readStoredToken({ id: model.id, token: model.token }),
     created_at: model.createdAt.toISOString(),
     last_used: model.lastUsed ? model.lastUsed.toISOString() : null,
   };
@@ -55,7 +81,7 @@ export async function createServiceToken(
     data: {
       provider,
       name: name.trim() || `${provider.charAt(0).toUpperCase()}${provider.slice(1)} Token`,
-      token: token.trim(),
+      token: encrypt(token.trim()),
     },
   });
 
@@ -95,7 +121,7 @@ export async function getPlainServiceToken(provider: string): Promise<string | n
     return null;
   }
 
-  return record.token;
+  return readStoredToken(record);
 }
 
 export async function touchServiceToken(provider: string): Promise<void> {

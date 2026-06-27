@@ -37,8 +37,8 @@ interface ChatInputProps {
   projectId?: string;
   preferredCli?: string;
   selectedModel?: string;
-  thinkingMode?: boolean;
-  onThinkingModeChange?: (enabled: boolean) => void;
+  thinkingMode?: 'off' | 'auto' | 'forced';
+  onThinkingModeChange?: (mode: 'off' | 'auto' | 'forced') => void;
   modelOptions?: ModelPickerOption[];
   onModelChange?: (option: ModelPickerOption) => void;
   modelChangeDisabled?: boolean;
@@ -57,7 +57,7 @@ export default function ChatInput({
   projectId,
   preferredCli = 'claude',
   selectedModel = '',
-  thinkingMode = false,
+  thinkingMode = 'auto',
   onThinkingModeChange,
   modelOptions = [],
   onModelChange,
@@ -77,22 +77,6 @@ export default function ChatInput({
   const submissionLockRef = useRef(false);
   const supportsImageUpload = preferredCli !== 'cursor' && preferredCli !== 'qwen' && preferredCli !== 'glm';
 
-  // Log CLI compatibility details
-  console.log('🔧 CLI Compatibility Check:', {
-    preferredCli,
-    supportsImageUpload,
-    projectId: projectId ? 'valid' : 'missing',
-    uploadButtonAvailable: supportsImageUpload && !!projectId
-  });
-
-  // Inform the user about the current state
-  if (supportsImageUpload && projectId) {
-    console.log('✅ Image upload is ready! Click the upload button or drag in a file.');
-  } else if (!supportsImageUpload) {
-    console.log('❌ The current CLI does not support image uploads. Please switch to Claude CLI.');
-  } else {
-    console.log('❌ Please select a project.');
-  }
 
   const modelOptionsForCli = useMemo(
     () => modelOptions.filter(option => option.cli === preferredCli),
@@ -439,22 +423,13 @@ export default function ChatInput({
                   <ImageIcon className="h-4 w-4" />
                 </div>
               ) : (
-                <div
+                <button
+                  type="button"
+                  aria-label="Upload images"
                   className="flex items-center justify-center w-8 h-8 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-full transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                   title="Upload images"
                   onClick={() => {
-                    console.log('📸 Upload button clicked:', {
-                      projectId,
-                      supportsImageUpload,
-                      isUploading,
-                      disabled
-                    });
-                    if (fileInputRef.current) {
-                      console.log('📸 Triggering file input click');
-                      fileInputRef.current.click();
-                    } else {
-                      console.error('📸 fileInputRef is null');
-                    }
+                    fileInputRef.current?.click();
                   }}
                 >
                   <ImageIcon className="h-4 w-4" />
@@ -467,7 +442,7 @@ export default function ChatInput({
                     disabled={isUploading || disabled}
                     className="hidden"
                   />
-                </div>
+                </button>
               )
             )}
           </div>
@@ -517,6 +492,25 @@ export default function ChatInput({
                 ))}
               </select>
             </div>
+            {preferredCli === 'claude' && (
+              <div className="flex flex-col text-[11px] text-gray-500 ">
+                <span>Thinking</span>
+                <select
+                  value={thinkingMode}
+                  onChange={(e) => {
+                    onThinkingModeChange?.(e.target.value as 'off' | 'auto' | 'forced');
+                    requestAnimationFrame(() => textareaRef.current?.focus());
+                  }}
+                  disabled={!onThinkingModeChange}
+                  title="Extended thinking: Auto lets Claude decide, Deep forces maximum reasoning, Off is fastest."
+                  className="mt-1 w-28 rounded-md border border-gray-300 bg-white text-gray-700 text-xs py-1 px-2 focus:outline-none focus:ring-2 focus:ring-gray-300 disabled:opacity-60"
+                >
+                  <option value="auto">Auto</option>
+                  <option value="forced">Deep</option>
+                  <option value="off">Off</option>
+                </select>
+              </div>
+            )}
           </div>
         </div>
 

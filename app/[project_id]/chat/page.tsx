@@ -4,12 +4,15 @@ import { AnimatePresence } from 'framer-motion';
 import { MotionDiv, MotionH3, MotionP, MotionButton } from '@/lib/motion';
 import { useRouter, useSearchParams, useParams } from 'next/navigation';
 import dynamic from 'next/dynamic';
-import { FaCode, FaDesktop, FaMobileAlt, FaPlay, FaStop, FaSync, FaCog, FaRocket, FaFolder, FaFolderOpen, FaFile, FaFileCode, FaCss3Alt, FaHtml5, FaJs, FaReact, FaPython, FaDocker, FaGitAlt, FaMarkdown, FaDatabase, FaPhp, FaJava, FaRust, FaVuejs, FaLock, FaHome, FaChevronUp, FaChevronRight, FaChevronDown, FaArrowLeft, FaArrowRight, FaRedo } from 'react-icons/fa';
+import { FaCode, FaDesktop, FaMobileAlt, FaPlay, FaStop, FaSync, FaCog, FaRocket, FaFolder, FaFolderOpen, FaFile, FaFileCode, FaCss3Alt, FaHtml5, FaJs, FaReact, FaPython, FaDocker, FaGitAlt, FaMarkdown, FaDatabase, FaPhp, FaJava, FaRust, FaVuejs, FaLock, FaHome, FaChevronUp, FaChevronRight, FaChevronDown, FaArrowLeft, FaArrowRight, FaRedo, FaFileImport, FaPuzzlePiece } from 'react-icons/fa';
 import { SiTypescript, SiGo, SiRuby, SiSvelte, SiJson, SiYaml, SiCplusplus } from 'react-icons/si';
 import { VscJson } from 'react-icons/vsc';
 import ChatLog from '@/components/chat/ChatLog';
 import { ProjectSettings } from '@/components/settings/ProjectSettings';
 import ChatInput from '@/components/chat/ChatInput';
+import DesignImportModal from '@/components/chat/DesignImportModal';
+import SkillsModal from '@/components/chat/SkillsModal';
+import { formatTimeAgo, getFileLanguage, escapeHtml } from '@/lib/utils/format';
 import { ChatErrorBoundary } from '@/components/ErrorBoundary';
 import { useUserRequests } from '@/hooks/useUserRequests';
 import { useGlobalSettings } from '@/contexts/GlobalSettingsContext';
@@ -31,6 +34,7 @@ import {
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? '';
 
+/** Human relative time, e.g. "just now", "5 minutes ago", "2 hours ago", "3 days ago". */
 const assistantBrandColors = ACTIVE_CLI_BRAND_COLORS;
 
 const CLI_LABELS = ACTIVE_CLI_NAME_MAP;
@@ -252,13 +256,69 @@ export default function ChatPage() {
   const [initialPromptSent, setInitialPromptSent] = useState(false);
   const initialPromptSentRef = useRef(false);
   const [showPublishPanel, setShowPublishPanel] = useState(false);
+  const [showDesignImport, setShowDesignImport] = useState(false);
+  const [showSkills, setShowSkills] = useState(false);
+
+  // Resizable chat/preview split. Width of the left chat panel as a % of the
+  // window; drag the divider to resize, persisted to localStorage.
+  const CHAT_WIDTH_KEY = 'claudable:chatWidthPct';
+  const CHAT_WIDTH_MIN = 20;
+  const CHAT_WIDTH_MAX = 70;
+  const [chatWidthPct, setChatWidthPct] = useState(30);
+  const [isResizing, setIsResizing] = useState(false);
+  const splitContainerRef = useRef<HTMLDivElement>(null);
+  const chatWidthRef = useRef(30);
+
+  useEffect(() => {
+    const saved = Number(localStorage.getItem(CHAT_WIDTH_KEY));
+    if (saved >= CHAT_WIDTH_MIN && saved <= CHAT_WIDTH_MAX) {
+      setChatWidthPct(saved);
+      chatWidthRef.current = saved;
+    }
+  }, []);
+
+  const startChatResize = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    // A full-window overlay (rendered while isResizing) sits above the preview
+    // iframe so the cross-origin iframe can't swallow mousemove/mouseup — without
+    // it, dragging over the preview freezes and releasing never registers.
+    setIsResizing(true);
+    const onMove = (ev: MouseEvent) => {
+      const rect = splitContainerRef.current?.getBoundingClientRect();
+      if (!rect || rect.width === 0) return;
+      const pct = ((ev.clientX - rect.left) / rect.width) * 100;
+      const clamped = Math.min(CHAT_WIDTH_MAX, Math.max(CHAT_WIDTH_MIN, pct));
+      chatWidthRef.current = clamped;
+      setChatWidthPct(clamped);
+    };
+    const onUp = () => {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      setIsResizing(false);
+      localStorage.setItem(CHAT_WIDTH_KEY, String(Math.round(chatWidthRef.current)));
+    };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  }, []);
   const [publishLoading, setPublishLoading] = useState(false);
   const [githubConnected, setGithubConnected] = useState<boolean | null>(null);
   const [vercelConnected, setVercelConnected] = useState<boolean | null>(null);
+  // Git provider config (server-driven). For the self-hosted Gitea flow, deploys
+  // happen via the Actions runner so Vercel is not required.
+  const [gitProvider, setGitProvider] = useState<string | null>(null);
+  const [gitDeployDomain, setGitDeployDomain] = useState<string | null>(null);
+  const [githubRepoName, setGithubRepoName] = useState<string | null>(null);
   const [publishedUrl, setPublishedUrl] = useState<string | null>(null);
   const [deploymentId, setDeploymentId] = useState<string | null>(null);
   const [deploymentStatus, setDeploymentStatus] = useState<'idle' | 'deploying' | 'ready' | 'error'>('idle');
   const deployPollRef = useRef<NodeJS.Timeout | null>(null);
+  // Set when an auto-start fails, to stop the effect from re-firing start() every
+  // ~2s (a tight retry loop that floods /preview/start). Cleared on success or
+  // when the user explicitly clicks the Play button.
+  const previewStartFailedRef = useRef(false);
+  // Real CI deploy run details (Gitea Actions) for the publish UI.
+  const [deployRun, setDeployRun] = useState<{ state: string; runNumber?: number; url?: string; title?: string; sha?: string; updatedAt?: string } | null>(null);
+  const giteaPollRef = useRef<NodeJS.Timeout | null>(null);
   const [isStartingPreview, setIsStartingPreview] = useState(false);
   const [previewInitializationMessage, setPreviewInitializationMessage] = useState('Starting development server...');
   const [cliStatuses, setCliStatuses] = useState<Record<string, CliStatusSnapshot>>({});
@@ -271,7 +331,7 @@ export default function ChatPage() {
   const [preferredCli, setPreferredCli] = useState<ActiveCliId>(DEFAULT_ACTIVE_CLI);
   const [selectedModel, setSelectedModel] = useState<string>(getDefaultModelForCli(DEFAULT_ACTIVE_CLI));
   const [usingGlobalDefaults, setUsingGlobalDefaults] = useState<boolean>(true);
-  const [thinkingMode, setThinkingMode] = useState<boolean>(false);
+  const [thinkingMode, setThinkingMode] = useState<'off' | 'auto' | 'forced'>('auto');
   const [isUpdatingModel, setIsUpdatingModel] = useState<boolean>(false);
   const [currentRoute, setCurrentRoute] = useState<string>('/');
   const iframeRef = useRef<HTMLIFrameElement>(null);
@@ -335,6 +395,7 @@ export default function ChatPage() {
         conversationId: conversationId || undefined,
         requestId,
         selectedModel,
+        thinkingMode,
       };
 
       const r = await fetch(`${API_BASE}/api/chat/${projectId}/act`, {
@@ -386,7 +447,7 @@ export default function ChatPage() {
     } finally {
       setIsRunning(false);
     }
-  }, [initialPromptSent, preferredCli, conversationId, projectId, selectedModel, createRequest]);
+  }, [initialPromptSent, preferredCli, conversationId, projectId, selectedModel, thinkingMode, createRequest]);
 
   // Guarded trigger that can be called from multiple places safely
   const triggerInitialPromptIfNeeded = useCallback(() => {
@@ -604,6 +665,12 @@ const persistProjectPreferences = useCallback(
         // Check actual project connections (not just token existence)
         setGithubConnected(!!githubConnection);
         setVercelConnected(!!vercelConnection);
+        const ghData = githubConnection?.service_data as Record<string, any> | undefined;
+        setGithubRepoName(
+          (ghData?.repo_name as string) ||
+            (typeof ghData?.repo_url === 'string' ? ghData.repo_url.split('/').pop() : null) ||
+            null,
+        );
         
         // Set published URL only if actually deployed
         if (vercelConnection && vercelConnection.service_data) {
@@ -637,11 +704,112 @@ const persistProjectPreferences = useCallback(
     }
   }, [projectId]);
 
+  // Load the server's git provider config once (drives Gitea-vs-GitHub publish UI).
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`${API_BASE}/api/git/provider`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (cancelled || !d) return;
+        if (typeof d.provider === 'string') setGitProvider(d.provider);
+        if (typeof d.deployDomain === 'string') setGitDeployDomain(d.deployDomain);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const isGitea = gitProvider === 'gitea';
+
+  // In the Gitea flow the live URL is derived from the repo + deploy domain.
+  useEffect(() => {
+    if (isGitea && githubConnected && githubRepoName && gitDeployDomain) {
+      setPublishedUrl((prev) => prev || `https://${githubRepoName}.${gitDeployDomain}`);
+    }
+  }, [isGitea, githubConnected, githubRepoName, gitDeployDomain]);
+
+  // Poll the REAL Gitea Actions deploy run (queued -> running -> success/failure)
+  // instead of guessing with a timer. Stops on a terminal state or timeout.
+  // Poll the REAL Gitea Actions deploy run. `baselineRun` is the latest run
+  // number BEFORE this publish — we only treat a run NEWER than it as "this
+  // deploy", otherwise the first poll reads the previous (already-finished) run
+  // and stops instantly (the "first click does nothing" bug).
+  const startGiteaDeployPolling = useCallback((baselineRun?: number | null) => {
+    if (giteaPollRef.current) { clearInterval(giteaPollRef.current); giteaPollRef.current = null; }
+    setDeploymentStatus('deploying');
+    const startedAt = Date.now();
+    const stop = () => { if (giteaPollRef.current) { clearInterval(giteaPollRef.current); giteaPollRef.current = null; } };
+    const poll = async () => {
+      try {
+        const r = await fetch(`${API_BASE}/api/projects/${projectId}/deploy/status`, { cache: 'no-store' });
+        if (r.ok) {
+          const d = await r.json();
+          if (d?.found) {
+            const isNewRun = baselineRun == null
+              || (typeof d.runNumber === 'number' && d.runNumber > baselineRun);
+            if (!isNewRun) {
+              // The new run hasn't registered yet — keep showing "queued".
+              setDeployRun({ state: 'queued' });
+              // If no new run appears within 40s, there was nothing to deploy
+              // (no changes) — the site is already live from the prior run.
+              if (Date.now() - startedAt > 40000) {
+                setDeploymentStatus('ready'); stop(); return;
+              }
+            } else {
+              setDeployRun({ state: d.state, runNumber: d.runNumber, url: d.url, title: d.title, sha: d.sha, updatedAt: d.updatedAt });
+              if (d.state === 'success') {
+                if (d.liveUrl) setPublishedUrl(d.liveUrl);
+                setDeploymentStatus('ready'); stop(); return;
+              }
+              if (d.state === 'failure' || d.state === 'cancelled') {
+                setDeploymentStatus('error'); stop(); return;
+              }
+            }
+          }
+        }
+      } catch {
+        // transient; keep polling
+      }
+      // Safety timeout (~6 min) so it never spins forever.
+      if (Date.now() - startedAt > 6 * 60 * 1000) stop();
+    };
+    poll();
+    giteaPollRef.current = setInterval(poll, 4000);
+  }, [projectId]);
+
+  // When the Publish modal opens (Gitea flow), reflect the real current/last
+  // deploy run so the user always sees actual status — and resume polling if a
+  // run is still in progress.
+  useEffect(() => {
+    if (!showPublishPanel || !isGitea || !githubConnected) return;
+    let cancelled = false;
+    fetch(`${API_BASE}/api/projects/${projectId}/deploy/status`, { cache: 'no-store' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (cancelled || !d?.found) return;
+        setDeployRun({ state: d.state, runNumber: d.runNumber, url: d.url, title: d.title, sha: d.sha, updatedAt: d.updatedAt });
+        if (d.state === 'success') {
+          // Only record the live URL — do NOT mark 'ready'. Marking ready here
+          // would show "Published successfully" the moment the popup opens,
+          // before the user has clicked anything. A neutral "Currently live"
+          // block shows the URL instead.
+          if (d.liveUrl) setPublishedUrl(d.liveUrl);
+        } else if ((d.state === 'running' || d.state === 'queued') && !giteaPollRef.current) {
+          // A deploy is genuinely in progress right now — reflect it.
+          startGiteaDeployPolling();
+        }
+        // failure/cancelled on open: leave idle so the user can just re-publish.
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [showPublishPanel, isGitea, githubConnected, projectId, startGiteaDeployPolling]);
+
   const startDeploymentPolling = useCallback((depId: string) => {
     if (deployPollRef.current) clearInterval(deployPollRef.current);
     setDeploymentStatus('deploying');
     setDeploymentId(depId);
-    
+
     console.log('🔍 Monitoring deployment:', depId);
     
     deployPollRef.current = setInterval(async () => {
@@ -765,35 +933,85 @@ const persistProjectPreferences = useCallback(
 
   const start = useCallback(async () => {
     try {
+      // Fast path: if the dev server is already running, show it immediately
+      // (no loading overlay, no artificial delay).
+      try {
+        const s = await fetch(`${API_BASE}/api/projects/${projectId}/preview/status`, { cache: 'no-store' });
+        if (s.ok) {
+          const sp = (await s.json())?.data ?? {};
+          if (sp.status === 'running' && typeof sp.url === 'string') {
+            setPreviewUrl(sp.url);
+            setIsStartingPreview(false);
+            previewStartFailedRef.current = false;
+            return;
+          }
+        }
+      } catch {
+        // fall through to a normal (cold) start
+      }
+
       setIsStartingPreview(true);
       setPreviewInitializationMessage('Starting development server...');
-      
-      // Simulate progress updates
-      setTimeout(() => setPreviewInitializationMessage('Installing dependencies...'), 1000);
-      setTimeout(() => setPreviewInitializationMessage('Building your application...'), 2500);
-      
+
+      // Only relevant on a genuine cold start; cleared as soon as start returns.
+      const t1 = setTimeout(() => setPreviewInitializationMessage('Installing dependencies...'), 3000);
+      const t2 = setTimeout(() => setPreviewInitializationMessage('Building your application...'), 9000);
+
       const r = await fetch(`${API_BASE}/api/projects/${projectId}/preview/start`, { method: 'POST' });
+      clearTimeout(t1);
+      clearTimeout(t2);
       if (!r.ok) {
         console.error('Failed to start preview:', r.statusText);
         setPreviewInitializationMessage('Failed to start preview');
+        // Don't let the auto-start effect immediately retry in a tight loop.
+        previewStartFailedRef.current = true;
         setTimeout(() => setIsStartingPreview(false), 2000);
         return;
       }
       const payload = await r.json();
       const data = payload?.data ?? payload ?? {};
 
-      setPreviewInitializationMessage('Preview ready!');
-      setTimeout(() => {
-        setPreviewUrl(typeof data.url === 'string' ? data.url : null);
-        setIsStartingPreview(false);
-        setCurrentRoute('/'); // Reset to root route when starting
-      }, 1000);
+      // Reveal the iframe as soon as the URL is available (no artificial wait).
+      setPreviewUrl(typeof data.url === 'string' ? data.url : null);
+      setIsStartingPreview(false);
+      previewStartFailedRef.current = false;
+      setCurrentRoute('/');
     } catch (error) {
       console.error('Error starting preview:', error);
       setPreviewInitializationMessage('An error occurred');
+      previewStartFailedRef.current = true;
       setTimeout(() => setIsStartingPreview(false), 2000);
     }
   }, [projectId]);
+
+  // The preview iframe is cross-origin, so it can't be read directly. It reports
+  // its current route to us via postMessage (injected claudable-preview plugin);
+  // keep the URL bar in sync with in-app navigation.
+  useEffect(() => {
+    if (!previewUrl) return;
+    let previewOrigin: string;
+    try { previewOrigin = new URL(previewUrl).origin; } catch { return; }
+    const onMessage = (event: MessageEvent) => {
+      if (event.origin !== previewOrigin) return;
+      const data = event.data as { source?: string; path?: string } | null;
+      if (data && data.source === 'claudable-preview' && typeof data.path === 'string') {
+        setCurrentRoute(data.path.startsWith('/') ? data.path : `/${data.path}`);
+      }
+    };
+    window.addEventListener('message', onMessage);
+    return () => window.removeEventListener('message', onMessage);
+  }, [previewUrl]);
+
+  // Keep-warm heartbeat: while a preview is open, ping its status every few
+  // minutes so the server-side idle sweep doesn't evict an actively-viewed
+  // preview (the status read refreshes its lastAccessedAt).
+  useEffect(() => {
+    if (!previewUrl) return;
+    const id = setInterval(() => {
+      fetch(`${API_BASE}/api/projects/${projectId}/preview/status`, { cache: 'no-store' }).catch(() => {});
+    }, 5 * 60 * 1000);
+    return () => clearInterval(id);
+  }, [previewUrl, projectId]);
 
   // Navigate to specific route in iframe
   const navigateToRoute = (route: string) => {
@@ -1208,83 +1426,7 @@ const persistProjectPreferences = useCallback(
   }, [editedContent]);
 
   // Get file extension for syntax highlighting
-  function getFileLanguage(path: string): string {
-    const ext = path.split('.').pop()?.toLowerCase();
-    switch (ext) {
-      case 'tsx':
-      case 'ts':
-        return 'typescript';
-      case 'jsx':
-      case 'js':
-      case 'mjs':
-        return 'javascript';
-      case 'css':
-        return 'css';
-      case 'scss':
-      case 'sass':
-        return 'scss';
-      case 'html':
-      case 'htm':
-        return 'html';
-      case 'json':
-        return 'json';
-      case 'md':
-      case 'markdown':
-        return 'markdown';
-      case 'py':
-        return 'python';
-      case 'sh':
-      case 'bash':
-        return 'bash';
-      case 'yaml':
-      case 'yml':
-        return 'yaml';
-      case 'xml':
-        return 'xml';
-      case 'sql':
-        return 'sql';
-      case 'php':
-        return 'php';
-      case 'java':
-        return 'java';
-      case 'c':
-        return 'c';
-      case 'cpp':
-      case 'cc':
-      case 'cxx':
-        return 'cpp';
-      case 'rs':
-        return 'rust';
-      case 'go':
-        return 'go';
-      case 'rb':
-        return 'ruby';
-      case 'vue':
-        return 'vue';
-      case 'svelte':
-        return 'svelte';
-      case 'dockerfile':
-        return 'dockerfile';
-      case 'toml':
-        return 'toml';
-      case 'ini':
-        return 'ini';
-      case 'conf':
-      case 'config':
-        return 'nginx';
-      default:
-        return 'plaintext';
-    }
-  }
-
-  function escapeHtml(value: string): string {
-    return value
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#39;');
-  }
+  // getFileLanguage / escapeHtml now live in @/lib/utils/format (tested).
 
   // Get file icon based on type
   function getFileIcon(entry: Entry): React.ReactElement {
@@ -1819,6 +1961,7 @@ const persistProjectPreferences = useCallback(
         conversationId: conversationId || undefined,
         requestId,
         selectedModel,
+        thinkingMode,
       };
 
       console.log('📸 Sending request to act API:', {
@@ -2069,7 +2212,7 @@ const persistProjectPreferences = useCallback(
   const previousActiveState = useRef(false);
   
   useEffect(() => {
-    if (!hasActiveRequests && !previewUrl && !isStartingPreview) {
+    if (!hasActiveRequests && !previewUrl && !isStartingPreview && !previewStartFailedRef.current) {
       if (!previousActiveState.current) {
         console.log('🔄 Preview not running; auto-starting');
       } else {
@@ -2078,6 +2221,12 @@ const persistProjectPreferences = useCallback(
       start();
     }
 
+    // While the agent is running (it may be fixing whatever made the last start
+    // fail), clear the failure latch so auto-start retries once the run finishes
+    // (that idle transition re-runs this effect).
+    if (hasActiveRequests) {
+      previewStartFailedRef.current = false;
+    }
     previousActiveState.current = hasActiveRequests;
   }, [hasActiveRequests, previewUrl, isStartingPreview, start]);
 
@@ -2126,17 +2275,22 @@ const persistProjectPreferences = useCallback(
       loadDeployStatusRef.current?.();
     };
 
-    const handleBeforeUnload = () => {
-      navigator.sendBeacon(`${API_BASE}/api/projects/${projectId}/preview/stop`);
-    };
-
-    window.addEventListener('beforeunload', handleBeforeUnload);
+    // NOTE: We intentionally do NOT stop the preview on `beforeunload`. That
+    // fires on every page refresh, and killing the dev server there forced a
+    // ~15-30s cold recompile on each reload (the fast-path could never reuse the
+    // running server). Leaving it running lets a refresh reattach instantly. The
+    // server is still stopped when the user navigates away from the project (the
+    // effect cleanup below), which bounds how many dev servers stay alive.
     window.addEventListener('services-updated', handleServicesUpdate);
 
     return () => {
       canceled = true;
-      window.removeEventListener('beforeunload', handleBeforeUnload);
       window.removeEventListener('services-updated', handleServicesUpdate);
+
+      // Stop deploy/publish pollers so they don't keep hitting the API after the
+      // chat page unmounts (e.g. navigating back to the dashboard).
+      if (deployPollRef.current) { clearInterval(deployPollRef.current); deployPollRef.current = null; }
+      if (giteaPollRef.current) { clearInterval(giteaPollRef.current); giteaPollRef.current = null; }
 
       const currentPreview = previewUrlRef.current;
       if (currentPreview) {
@@ -2235,12 +2389,17 @@ const persistProjectPreferences = useCallback(
         
       `}</style>
 
+      {/* While resizing, this overlay sits above the preview iframe so it can't
+          capture the mouse — keeps the drag smooth in both directions and lets
+          mouseup register anywhere on screen. */}
+      {isResizing && <div className="fixed inset-0 z-[100] cursor-col-resize select-none" />}
+
       <div className="h-screen bg-white flex relative overflow-hidden">
-        <div className="h-full w-full flex">
+        <div className="h-full w-full flex" ref={splitContainerRef}>
           {/* Left: Chat window */}
           <div
-            style={{ width: '30%' }}
-            className="h-full border-r border-gray-200 flex flex-col"
+            style={{ width: `${chatWidthPct}%` }}
+            className="h-full flex flex-col min-w-0"
           >
             {/* Chat header */}
             <div className="bg-white border-b border-gray-200 p-4 h-[73px] flex items-center">
@@ -2270,6 +2429,7 @@ const persistProjectPreferences = useCallback(
               <ChatErrorBoundary>
                 <ChatLog
                   projectId={projectId}
+                  serverBusy={hasActiveRequests}
                   onAddUserMessage={(handlers) => {
                     console.log('🔄 [HandlerSetup] ChatLog provided new handlers, updating references');
                     messageHandlersRef.current = handlers;
@@ -2330,8 +2490,20 @@ const persistProjectPreferences = useCallback(
             </div>
           </div>
 
+          {/* Draggable divider to resize the chat / preview split */}
+          <div
+            onMouseDown={startChatResize}
+            role="separator"
+            aria-orientation="vertical"
+            title="Drag to resize"
+            className="relative h-full w-px shrink-0 cursor-col-resize bg-gray-200 hover:bg-blue-400 transition-colors"
+          >
+            {/* wider invisible hit area for easier grabbing */}
+            <div className="absolute inset-y-0 -left-1.5 -right-1.5" />
+          </div>
+
           {/* Right: Preview/Code area */}
-          <div className="h-full flex flex-col bg-black" style={{ width: '70%' }}>
+          <div className="h-full flex flex-col bg-black min-w-0" style={{ width: `${100 - chatWidthPct}%` }}>
             {/* Content area */}
             <div className="flex-1 min-h-0 flex flex-col">
               {/* Controls Bar */}
@@ -2407,7 +2579,25 @@ const persistProjectPreferences = useCallback(
                         >
                           <FaRedo size={14} />
                         </button>
-                        
+
+                        {/* Open preview in a new tab */}
+                        <button
+                          className="h-9 px-3 flex items-center gap-2 bg-gray-100 text-gray-700 hover:text-gray-900 hover:bg-gray-200 rounded-lg transition-colors text-sm font-medium"
+                          onClick={() => {
+                            if (!previewUrl) return;
+                            const suffix = currentRoute && currentRoute !== '/' ? currentRoute : '';
+                            window.open(`${previewUrl}${suffix}`, '_blank', 'noopener');
+                          }}
+                          title="Open preview in new tab"
+                        >
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                            <polyline points="15 3 21 3 21 9" />
+                            <line x1="10" y1="14" x2="21" y2="3" />
+                          </svg>
+                          Preview
+                        </button>
+
                         {/* Device Mode Toggle */}
                         <div className="h-9 flex items-center gap-1 bg-gray-100 rounded-lg px-1 border border-gray-200 ">
                           <button
@@ -2447,7 +2637,25 @@ const persistProjectPreferences = useCallback(
                   >
                     <FaCog size={16} />
                   </button>
-                  
+
+                  {/* Skills */}
+                  <button
+                    onClick={() => setShowSkills(true)}
+                    className="h-9 w-9 flex items-center justify-center bg-gray-100 text-gray-600 hover:text-gray-900 hover:bg-gray-200 rounded-lg transition-colors"
+                    title="Manage skills"
+                  >
+                    <FaPuzzlePiece size={15} />
+                  </button>
+
+                  {/* Import from Claude Design */}
+                  <button
+                    onClick={() => setShowDesignImport(true)}
+                    className="h-9 w-9 flex items-center justify-center bg-gray-100 text-gray-600 hover:text-gray-900 hover:bg-gray-200 rounded-lg transition-colors"
+                    title="Import from Claude Design"
+                  >
+                    <FaFileImport size={15} />
+                  </button>
+
                   {/* Stop Button */}
                   {showPreview && previewUrl && (
                     <button 
@@ -2475,163 +2683,6 @@ const persistProjectPreferences = useCallback(
                         <span className="ml-2 inline-block w-2 h-2 rounded-full bg-emerald-400"></span>
                       )}
                     </button>
-                    {false && showPublishPanel && (
-                      <div className="absolute right-0 mt-2 w-80 bg-white rounded-xl shadow-xl border border-gray-200 z-50 p-5">
-                        <h3 className="text-lg font-semibold text-gray-900 mb-4">Publish Project</h3>
-                        
-                        {/* Deployment Status Display */}
-                        {deploymentStatus === 'deploying' && (
-                          <div className="mb-4 p-4 bg-blue-50 rounded-lg border border-blue-200 ">
-                            <div className="flex items-center gap-2 mb-2">
-                              <div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
-                              <p className="text-sm font-medium text-blue-700 ">Deployment in progress...</p>
-                            </div>
-                            <p className="text-xs text-blue-600 ">Building and deploying your project. This may take a few minutes.</p>
-                          </div>
-                        )}
-                        
-                        {deploymentStatus === 'ready' && publishedUrl && (
-                          <div className="mb-4 p-4 bg-green-50 rounded-lg border border-green-200 ">
-                            <p className="text-sm font-medium text-green-700 mb-2">Currently published at:</p>
-                            <a 
-                              href={publishedUrl ?? undefined} 
-                              target="_blank" 
-                              rel="noopener noreferrer" 
-                              className="text-sm text-green-600 font-mono hover:underline break-all"
-                            >
-                              {publishedUrl}
-                            </a>
-                          </div>
-                        )}
-                        
-                        {deploymentStatus === 'error' && (
-                          <div className="mb-4 p-4 bg-red-50 rounded-lg border border-red-200 ">
-                            <p className="text-sm font-medium text-red-700 mb-2">Deployment failed</p>
-                            <p className="text-xs text-red-600 ">There was an error during deployment. Please try again.</p>
-                          </div>
-                        )}
-                        
-                        <div className="space-y-4">
-                          {!githubConnected || !vercelConnected ? (
-                            <div className="p-4 bg-amber-50 rounded-lg border border-amber-200 ">
-                              <p className="text-sm font-medium text-gray-900 mb-3">To publish, connect the following services:</p>
-                              <div className="space-y-2">
-                                {!githubConnected && (
-                                  <div className="flex items-center gap-2 text-amber-700 ">
-                                    <svg className="w-4 h-4 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                                      <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-                                    </svg>
-                                    <span className="text-sm">GitHub repository not connected</span>
-                                  </div>
-                                )}
-                                {!vercelConnected && (
-                                  <div className="flex items-center gap-2 text-amber-700 ">
-                                    <svg className="w-4 h-4 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                                      <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-                                    </svg>
-                                    <span className="text-sm">Vercel project not connected</span>
-                                  </div>
-                                )}
-                              </div>
-                              <p className="mt-3 text-sm text-gray-600 ">
-                                Go to 
-                                <button
-                                  onClick={() => {
-                                    setShowPublishPanel(false);
-                                    setShowGlobalSettings(true);
-                                  }}
-                                  className="text-indigo-600 hover:text-indigo-500 underline font-medium mx-1"
-                                >
-                                  Settings → Service Integrations
-                                </button>
-                                to connect.
-                              </p>
-                            </div>
-                          ) : null}
-                          
-                          <button
-                            disabled={publishLoading || deploymentStatus === 'deploying' || !githubConnected || !vercelConnected}
-                            onClick={async () => {
-                              console.log('🚀 Publish started');
-                              
-                              setPublishLoading(true);
-                              try {
-                                // Push to GitHub
-                                console.log('🚀 Pushing to GitHub...');
-                                const pushRes = await fetch(`${API_BASE}/api/projects/${projectId}/github/push`, { method: 'POST' });
-                                if (!pushRes.ok) {
-                                  const errorText = await pushRes.text();
-                                  console.error('🚀 GitHub push failed:', errorText);
-                                  throw new Error(errorText);
-                                }
-                                
-                                // Deploy to Vercel
-                                console.log('🚀 Deploying to Vercel...');
-                                const deployUrl = `${API_BASE}/api/projects/${projectId}/vercel/deploy`;
-                                
-                                const vercelRes = await fetch(deployUrl, {
-                                  method: 'POST'
-                                });
-                                if (!vercelRes.ok) {
-                                  const responseText = await vercelRes.text();
-                                  console.error('🚀 Vercel deploy failed:', responseText);
-                                }
-                                if (vercelRes.ok) {
-                                  const data = await vercelRes.json();
-                                  console.log('🚀 Deployment started, polling for status...');
-                                  
-                                  // Set deploying status BEFORE ending publishLoading to prevent gap
-                                  setDeploymentStatus('deploying');
-                                  
-                                  if (data.deployment_id) {
-                                    startDeploymentPolling(data.deployment_id);
-                                  }
-                                  
-                                  // Only set URL if deployment is already ready
-                                  if (data.status === 'READY' && data.deployment_url) {
-                                    const url = data.deployment_url.startsWith('http') ? data.deployment_url : `https://${data.deployment_url}`;
-                                    setPublishedUrl(url);
-                                    setDeploymentStatus('ready');
-                                  }
-                                } else {
-                                  const errorText = await vercelRes.text();
-                                  console.error('🚀 Vercel deploy failed:', vercelRes.status, errorText);
-                                  // if Vercel not connected, just close
-                                  setDeploymentStatus('idle');
-                                  setPublishLoading(false); // Stop loading even on Vercel deployment failure
-                                }
-                                // Keep panel open to show deployment progress
-                              } catch (e) {
-                                console.error('🚀 Publish failed:', e);
-                                alert('Publish failed. Check Settings and tokens.');
-                                setDeploymentStatus('idle');
-                                setPublishLoading(false); // Stop loading on error
-                                // Close panel after error
-                                setTimeout(() => {
-                                  setShowPublishPanel(false);
-                                }, 1000);
-                              } finally {
-                                loadDeployStatus();
-                              }
-                            }}
-                            className={`w-full px-4 py-3 rounded-lg font-medium text-white transition-colors ${
-                              publishLoading || deploymentStatus === 'deploying' || !githubConnected || !vercelConnected 
-                                ? 'bg-gray-400 cursor-not-allowed' 
-                                : 'bg-indigo-600 hover:bg-indigo-700 '
-                            }`}
-                          >
-                            {publishLoading 
-                              ? 'Publishing...' 
-                              : deploymentStatus === 'deploying'
-                              ? 'Deploying...'
-                              : !githubConnected || !vercelConnected 
-                              ? 'Connect Services First' 
-                              : deploymentStatus === 'ready' && publishedUrl ? 'Update' : 'Publish'
-                            }
-                          </button>
-                        </div>
-                      </div>
-                    )}
                   </div>
                   )}
                 </div>
@@ -2862,7 +2913,7 @@ const persistProjectPreferences = useCallback(
                         ) : (
                           <>
                             <div
-                              onClick={!isRunning && !isStartingPreview ? start : undefined}
+                              onClick={!isRunning && !isStartingPreview ? () => { previewStartFailedRef.current = false; start(); } : undefined}
                               className={`w-40 h-40 mx-auto mb-6 relative ${!isRunning && !isStartingPreview ? 'cursor-pointer group' : ''}`}
                             >
                               {/* Claudable Symbol with rotating animation when starting */}
@@ -3108,6 +3159,19 @@ const persistProjectPreferences = useCallback(
       
 
       {/* Publish Modal */}
+      <DesignImportModal
+        projectId={projectId}
+        isOpen={showDesignImport}
+        onClose={() => setShowDesignImport(false)}
+        onApply={(prompt) => { runAct(prompt); }}
+      />
+
+      <SkillsModal
+        projectId={projectId}
+        isOpen={showSkills}
+        onClose={() => setShowSkills(false)}
+      />
+
       {showPublishPanel && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/50" onClick={() => setShowPublishPanel(false)} />
@@ -3119,7 +3183,7 @@ const persistProjectPreferences = useCallback(
                 </div>
                 <div>
                   <h3 className="text-base font-semibold text-gray-900 ">Publish Project</h3>
-                  <p className="text-xs text-gray-600 ">Deploy with Vercel, linked to your GitHub repo</p>
+                  <p className="text-xs text-gray-600 ">{isGitea ? 'Pushes your code to Git — auto-deploys via CI' : 'Deploy with Vercel, linked to your GitHub repo'}</p>
                 </div>
               </div>
               <button onClick={() => setShowPublishPanel(false)} className="text-gray-400 hover:text-gray-600 ">
@@ -3132,9 +3196,55 @@ const persistProjectPreferences = useCallback(
                 <div className="p-4 rounded-xl border border-blue-200 bg-blue-50 ">
                   <div className="flex items-center gap-2 mb-1">
                     <div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
-                    <p className="text-sm font-medium text-blue-700 ">Deployment in progress…</p>
+                    <p className="text-sm font-medium text-blue-700 ">
+                      {deployRun?.state === 'queued' ? 'Queued — waiting for the runner…'
+                        : deployRun?.state === 'running' ? 'Building & deploying…'
+                        : 'Pushing to the repository…'}
+                    </p>
                   </div>
-                  <p className="text-xs text-blue-700/80 ">Building and deploying your project. This may take a few minutes.</p>
+                  <p className="text-xs text-blue-700/80 ">
+                    {isGitea
+                      ? 'Live status from CI — clone, build, route, health check.'
+                      : 'Building and deploying your project. This may take a few minutes.'}
+                  </p>
+                  {isGitea && publishedUrl && (
+                    <p className="text-xs text-blue-700/80 mt-1">Will be live at <a href={publishedUrl} target="_blank" rel="noopener noreferrer" className="font-mono underline">{publishedUrl}</a></p>
+                  )}
+                  {isGitea && deployRun?.url && (
+                    <p className="text-xs text-blue-700/80 mt-1">
+                      <a href={deployRun.url} target="_blank" rel="noopener noreferrer" className="underline">
+                        View build log{deployRun.runNumber ? ` (run #${deployRun.runNumber})` : ''} →
+                      </a>
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {/* Neutral "currently live" state shown when the popup opens for an
+                  already-deployed project (before the user clicks Update). */}
+              {deploymentStatus !== 'deploying' && deploymentStatus !== 'ready' && deploymentStatus !== 'error' && isGitea && publishedUrl && (
+                <div className="p-4 rounded-xl border border-gray-200 bg-gray-50 ">
+                  <p className="text-sm font-medium text-gray-700 mb-2">Currently live at:</p>
+                  <div className="flex items-center gap-2">
+                    <a href={publishedUrl} target="_blank" rel="noopener noreferrer" className="text-sm font-mono text-gray-700 underline break-all flex-1">
+                      {publishedUrl}
+                    </a>
+                    <button
+                      onClick={() => navigator.clipboard?.writeText(publishedUrl)}
+                      className="px-2 py-1 text-xs rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-100 "
+                    >
+                      Copy
+                    </button>
+                  </div>
+                  {deployRun?.state === 'success' && (deployRun?.title || deployRun?.updatedAt) && (
+                    <p className="text-xs text-gray-500 mt-2">
+                      Last deployed{formatTimeAgo(deployRun.updatedAt) ? ` ${formatTimeAgo(deployRun.updatedAt)}` : ''}
+                      {deployRun.title ? ` · ${deployRun.title}` : ''}
+                      {deployRun.sha ? ` (${deployRun.sha})` : ''}
+                      {deployRun.url ? <> · <a href={deployRun.url} target="_blank" rel="noopener noreferrer" className="underline">log</a></> : null}
+                    </p>
+                  )}
+                  <p className="text-xs text-gray-400 mt-2">Click Update to deploy your latest changes.</p>
                 </div>
               )}
 
@@ -3157,16 +3267,25 @@ const persistProjectPreferences = useCallback(
 
               {deploymentStatus === 'error' && (
                 <div className="p-4 rounded-xl border border-red-200 bg-red-50 ">
-                  <p className="text-sm font-medium text-red-700 ">Deployment failed. Please try again.</p>
+                  <p className="text-sm font-medium text-red-700 ">
+                    {deployRun?.state === 'cancelled' ? 'Deployment was cancelled.' : 'Deployment failed.'}
+                  </p>
+                  {isGitea && deployRun?.url && (
+                    <p className="text-xs text-red-600 mt-1">
+                      <a href={deployRun.url} target="_blank" rel="noopener noreferrer" className="underline">
+                        View the failed build log{deployRun.runNumber ? ` (run #${deployRun.runNumber})` : ''} →
+                      </a>
+                    </p>
+                  )}
                 </div>
               )}
 
-              {!githubConnected || !vercelConnected ? (
+              {!githubConnected || (!isGitea && !vercelConnected) ? (
                 <div className="p-4 rounded-xl border border-amber-200 bg-amber-50 ">
                   <p className="text-sm font-medium text-gray-900 mb-2">Connect the following services:</p>
                   <div className="space-y-1 text-amber-700 text-sm">
-                    {!githubConnected && (<div className="flex items-center gap-2"><span className="w-1.5 h-1.5 rounded-full bg-amber-500"/>GitHub repository not connected</div>)}
-                    {!vercelConnected && (<div className="flex items-center gap-2"><span className="w-1.5 h-1.5 rounded-full bg-amber-500"/>Vercel project not connected</div>)}
+                    {!githubConnected && (<div className="flex items-center gap-2"><span className="w-1.5 h-1.5 rounded-full bg-amber-500"/>Git repository not connected</div>)}
+                    {!isGitea && !vercelConnected && (<div className="flex items-center gap-2"><span className="w-1.5 h-1.5 rounded-full bg-amber-500"/>Vercel project not connected</div>)}
                   </div>
                   <button
                     className="mt-3 w-full px-4 py-2 rounded-xl border border-gray-200 text-gray-800 hover:bg-gray-50 "
@@ -3178,8 +3297,49 @@ const persistProjectPreferences = useCallback(
               ) : null}
 
               <button
-                disabled={publishLoading || deploymentStatus === 'deploying' || !githubConnected || !vercelConnected}
+                disabled={publishLoading || deploymentStatus === 'deploying' || !githubConnected || (!isGitea && !vercelConnected)}
                 onClick={async () => {
+                  // Self-hosted Gitea flow: push to the Gitea repo; the Actions
+                  // host-runner builds, deploys and routes the site. No Vercel.
+                  if (isGitea) {
+                    try {
+                      setPublishLoading(true);
+                      setDeploymentStatus('deploying');
+                      setDeployRun({ state: 'queued' });
+                      // Record the latest run number BEFORE pushing so polling
+                      // only tracks the NEW run this publish creates.
+                      let baselineRun: number | null = null;
+                      try {
+                        const s = await fetch(`${API_BASE}/api/projects/${projectId}/deploy/status`, { cache: 'no-store' }).then(r => r.ok ? r.json() : null);
+                        baselineRun = s?.found && typeof s.runNumber === 'number' ? s.runNumber : null;
+                      } catch {}
+                      const pushRes = await fetch(`${API_BASE}/api/projects/${projectId}/github/push`, { method: 'POST' });
+                      if (!pushRes.ok) {
+                        throw new Error(await pushRes.text());
+                      }
+                      const pushBody = await pushRes.json().catch(() => ({}));
+                      const url = githubRepoName && gitDeployDomain
+                        ? `https://${githubRepoName}.${gitDeployDomain}`
+                        : publishedUrl;
+                      if (url) setPublishedUrl(url);
+                      setPublishLoading(false);
+                      if (pushBody.pushed === false) {
+                        // Nothing changed since the last deploy — it's already live.
+                        setDeployRun(null);
+                        setDeploymentStatus('ready');
+                      } else {
+                        // Track the real Gitea Actions run (queued -> running ->
+                        // success/failure) instead of guessing with a timer.
+                        startGiteaDeployPolling(baselineRun);
+                      }
+                    } catch (e) {
+                      console.error('🚀 Gitea publish failed:', e);
+                      alert('Publish failed. Make sure the project is connected to Gitea in Settings → Services.');
+                      setDeploymentStatus('idle');
+                      setPublishLoading(false);
+                    }
+                    return;
+                  }
                   try {
                     setPublishLoading(true);
                     setDeploymentStatus('deploying');
@@ -3230,12 +3390,12 @@ const persistProjectPreferences = useCallback(
                   }
                 }}
                 className={`w-full px-4 py-3 rounded-xl font-medium text-white transition ${
-                  publishLoading || deploymentStatus === 'deploying' || !githubConnected || !vercelConnected
+                  publishLoading || deploymentStatus === 'deploying' || !githubConnected || (!isGitea && !vercelConnected)
                     ? 'bg-gray-400 cursor-not-allowed'
                     : 'bg-black hover:bg-gray-900'
                 }`}
               >
-                {publishLoading ? 'Publishing…' : deploymentStatus === 'deploying' ? 'Deploying…' : (!githubConnected || !vercelConnected) ? 'Connect Services First' : (deploymentStatus === 'ready' && publishedUrl ? 'Update' : 'Publish')}
+                {publishLoading ? 'Publishing…' : deploymentStatus === 'deploying' ? 'Deploying…' : (!githubConnected || (!isGitea && !vercelConnected)) ? 'Connect Services First' : (publishedUrl ? 'Update' : 'Publish')}
               </button>
             </div>
           </div>

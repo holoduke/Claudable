@@ -10,7 +10,7 @@ import type { ChatMessage, RealtimeEvent, RealtimeStatus } from '@/types';
 import { toChatMessage, normalizeChatContent } from '@/lib/serializers/client/chat';
 import { toRelativePath } from '@/lib/utils/path';
 
-type ToolAction = 'Edited' | 'Created' | 'Read' | 'Deleted' | 'Generated' | 'Searched' | 'Executed';
+import { type ToolAction, normalizeAction, inferActionFromToolName, pickFirstString, extractPathFromInput } from '@/lib/services/cli/tool-metadata';
 
 type ToolExpansionState = {
   expanded: boolean;
@@ -18,183 +18,6 @@ type ToolExpansionState = {
   toolCallId?: string | null;
 };
 
-const TOOL_NAME_ACTION_MAP: Record<string, ToolAction> = {
-  read: 'Read',
-  read_file: 'Read',
-  'read-file': 'Read',
-  write: 'Created',
-  write_file: 'Created',
-  'write-file': 'Created',
-  create_file: 'Created',
-  edit: 'Edited',
-  edit_file: 'Edited',
-  'edit-file': 'Edited',
-  update_file: 'Edited',
-  apply_patch: 'Edited',
-  patch_file: 'Edited',
-  remove_file: 'Deleted',
-  delete_file: 'Deleted',
-  delete: 'Deleted',
-  remove: 'Deleted',
-  list_files: 'Searched',
-  list: 'Searched',
-  ls: 'Searched',
-  glob: 'Searched',
-  glob_files: 'Searched',
-  search_files: 'Searched',
-  grep: 'Searched',
-  bash: 'Executed',
-  run: 'Executed',
-  run_bash: 'Executed',
-  shell: 'Executed',
-  todo_write: 'Generated',
-  todo: 'Generated',
-  plan_write: 'Generated',
-};
-
-const normalizeAction = (value: unknown): ToolAction | undefined => {
-  if (typeof value !== 'string') return undefined;
-  const candidate = value.trim().toLowerCase();
-  if (!candidate) return undefined;
-  if (candidate.includes('edit') || candidate.includes('modify') || candidate.includes('update') || candidate.includes('patch')) {
-    return 'Edited';
-  }
-  if (candidate.includes('write') || candidate.includes('create') || candidate.includes('add') || candidate.includes('append')) {
-    return 'Created';
-  }
-  if (candidate.includes('read') || candidate.includes('open') || candidate.includes('view')) {
-    return 'Read';
-  }
-  if (candidate.includes('delete') || candidate.includes('remove')) {
-    return 'Deleted';
-  }
-  if (
-    candidate.includes('search') ||
-    candidate.includes('find') ||
-    candidate.includes('list') ||
-    candidate.includes('glob') ||
-    candidate.includes('ls') ||
-    candidate.includes('grep')
-  ) {
-    return 'Searched';
-  }
-  if (candidate.includes('generate') || candidate.includes('todo') || candidate.includes('plan')) {
-    return 'Generated';
-  }
-  if (
-    candidate.includes('execute') ||
-    candidate.includes('exec') ||
-    candidate.includes('run') ||
-    candidate.includes('bash') ||
-    candidate.includes('shell') ||
-    candidate.includes('command')
-  ) {
-    return 'Executed';
-  }
-  return undefined;
-};
-
-const inferActionFromToolName = (toolName: unknown): ToolAction | undefined => {
-  if (typeof toolName !== 'string') return undefined;
-  const normalized = toolName.trim().toLowerCase();
-  if (!normalized) return undefined;
-  if (TOOL_NAME_ACTION_MAP[normalized]) {
-    return TOOL_NAME_ACTION_MAP[normalized];
-  }
-  const suffix = normalized.split(':').pop() ?? normalized;
-  if (suffix && TOOL_NAME_ACTION_MAP[suffix]) {
-    return TOOL_NAME_ACTION_MAP[suffix];
-  }
-  return normalizeAction(normalized);
-};
-
-const pickFirstString = (value: unknown): string | undefined => {
-  if (typeof value === 'string') {
-    const trimmed = value.trim();
-    return trimmed.length > 0 ? trimmed : undefined;
-  }
-  if (typeof value === 'number' || typeof value === 'boolean') {
-    return String(value);
-  }
-  if (Array.isArray(value)) {
-    for (const entry of value) {
-      const candidate = pickFirstString(entry);
-      if (candidate) return candidate;
-    }
-    return undefined;
-  }
-  if (value && typeof value === 'object') {
-    const obj = value as Record<string, unknown>;
-    const nestedKeys = ['path', 'filepath', 'filePath', 'file_path', 'target', 'value'];
-    for (const key of nestedKeys) {
-      if (key in obj) {
-        const candidate = pickFirstString(obj[key]);
-        if (candidate) return candidate;
-      }
-    }
-  }
-  return undefined;
-};
-
-const extractPathFromInput = (input: unknown, action?: ToolAction): string | undefined => {
-  if (!input || typeof input !== 'object') return undefined;
-  const record = input as Record<string, unknown>;
-  const candidateKeys = [
-    'filePath',
-    'file_path',
-    'filepath',
-    'path',
-    'targetPath',
-    'target_path',
-    'target',
-    'targets',
-    'fullPath',
-    'full_path',
-    'destination',
-    'destinationPath',
-    'outputPath',
-    'output_path',
-    'glob',
-    'pattern',
-    'directory',
-    'dir',
-    'filename',
-    'name',
-  ];
-
-  for (const key of candidateKeys) {
-    if (key in record) {
-      const candidate = record[key];
-      const result = pickFirstString(candidate);
-      if (result) {
-        return result;
-      }
-    }
-  }
-
-  if (Array.isArray(record.targets)) {
-    for (const target of record.targets as unknown[]) {
-      const candidate = pickFirstString(target);
-      if (candidate) {
-        return candidate;
-      }
-    }
-  }
-
-  if (!action || action === 'Executed') {
-    const commandKeys = ['command', 'cmd', 'shellCommand', 'shell_command'];
-    for (const key of commandKeys) {
-      if (key in record) {
-        const candidate = pickFirstString(record[key]);
-        if (candidate) {
-          return candidate;
-        }
-      }
-    }
-  }
-
-  return undefined;
-};
 
 const extractToolCallId = (
   metadata?: Record<string, unknown> | null
@@ -995,9 +818,13 @@ interface ChatLogProps {
     add: (message: ChatMessage) => void;
     remove: (messageId: string) => void;
   }) => void;
+  /** Authoritative "agent is running" signal from the server (DB-backed
+   *  /requests/active poll). Drives the busy indicator even if a live status
+   *  event was missed (reconnect / late join). */
+  serverBusy?: boolean;
 }
 
-export default function ChatLog({ projectId, onSessionStatusChange, onProjectStatusUpdate, onSseFallbackActive, startRequest, completeRequest, onAddUserMessage }: ChatLogProps) {
+export default function ChatLog({ projectId, onSessionStatusChange, onProjectStatusUpdate, onSseFallbackActive, startRequest, completeRequest, onAddUserMessage, serverBusy = false }: ChatLogProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [selectedLog, setSelectedLog] = useState<LogEntry | null>(null);
@@ -1007,13 +834,18 @@ export default function ChatLog({ projectId, onSessionStatusChange, onProjectSta
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [activeSession, setActiveSession] = useState<ActiveSession | null>(null);
   const [isWaitingForResponse, setIsWaitingForResponse] = useState(false);
+  // Short label describing what the agent is currently doing (from real status
+  // / tool-use events), shown next to the busy indicator.
+  const [busyDetail, setBusyDetail] = useState<string | null>(null);
   const [needsHistoryRefresh, setNeedsHistoryRefresh] = useState(false);
   const logsEndRef = useRef<HTMLDivElement>(null);
   const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const hasLoadedInitialDataRef = useRef(false);
   const sseFallbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hasLoggedSseFallbackRef = useRef(false);
-  const [enableSseFallback, setEnableSseFallback] = useState(false);
+  // SSE is the realtime transport (no WebSocket server in this deployment), so
+  // keep it always-on and stable rather than toggling it off WebSocket state.
+  const [enableSseFallback, setEnableSseFallback] = useState(true);
   const [isSseConnected, setIsSseConnected] = useState(false);
   const [failedImageUrls, setFailedImageUrls] = useState<Set<string>>(new Set());
   const [expandedToolMessages, setExpandedToolMessages] = useState<Record<string, ToolExpansionState>>({});
@@ -1403,14 +1235,18 @@ export default function ChatLog({ projectId, onSessionStatusChange, onProjectSta
         onProjectStatusUpdate?.(statusData.status, statusData.message);
       }
 
-      if (resolvedStatus === 'completed') {
+      if (resolvedStatus === 'completed' || resolvedStatus === 'error') {
         setActiveSession(null);
         onSessionStatusChange?.(false);
         setIsWaitingForResponse(false);
+        setBusyDetail(null);
       }
 
       if (resolvedStatus === 'starting' || resolvedStatus === 'running') {
         setIsWaitingForResponse(true);
+        if (typeof statusData?.message === 'string' && statusData.message.trim()) {
+          setBusyDetail(statusData.message.trim());
+        }
       }
 
       const requestKey = statusData?.requestId ?? requestId;
@@ -1509,6 +1345,7 @@ export default function ChatLog({ projectId, onSessionStatusChange, onProjectSta
   // Use the centralized WebSocket hook (with SSE fallback defined below)
   const { isConnected, isConnecting } = useWebSocket({
     projectId,
+    enabled: false, // No WebSocket server in this deployment; SSE handles realtime.
     onMessage: handleRealtimeMessage,
     onStatus: handleRealtimeStatus,
     onConnect: () => {
@@ -1573,6 +1410,13 @@ export default function ChatLog({ projectId, onSessionStatusChange, onProjectSta
     };
   }, [isConnected, isConnecting, onSseFallbackActive]);
 
+  // Keep the SSE handlers in refs so the EventSource effect doesn't re-mount
+  // (and thrash the connection) every time these callbacks are recreated.
+  const sseHandlersRef = useRef({ handleRealtimeEnvelope, onSseFallbackActive, recoverMissingMessages });
+  useEffect(() => {
+    sseHandlersRef.current = { handleRealtimeEnvelope, onSseFallbackActive, recoverMissingMessages };
+  }, [handleRealtimeEnvelope, onSseFallbackActive, recoverMissingMessages]);
+
   useEffect(() => {
     if (!projectId) return;
     if (!enableSseFallback) return;
@@ -1632,9 +1476,9 @@ export default function ChatLog({ projectId, onSessionStatusChange, onProjectSta
         source.onopen = () => {
           console.log('🔄 [Transport] SSE connection established');
           setIsSseConnected(true);
-          onSseFallbackActive?.(true);
+          sseHandlersRef.current.onSseFallbackActive?.(true);
           // Recover any missing messages that might have been lost during SSE disconnection
-          recoverMissingMessages();
+          sseHandlersRef.current.recoverMissingMessages();
         };
 
         source.onmessage = (event) => {
@@ -1643,23 +1487,27 @@ export default function ChatLog({ projectId, onSessionStatusChange, onProjectSta
           }
           try {
             const envelope = JSON.parse(event.data) as RealtimeEvent;
-            handleRealtimeEnvelope(envelope);
+            sseHandlersRef.current.handleRealtimeEnvelope(envelope);
           } catch (error) {
             console.error('🔄 [Realtime] Failed to parse SSE message:', error);
           }
         };
 
         source.onerror = () => {
-          setIsSseConnected(false);
           if (disposed) {
             return;
           }
-          if (reconnectTimer) {
-            clearTimeout(reconnectTimer);
+          // EventSource auto-reconnects while readyState === CONNECTING — don't
+          // fight it (that caused a close/reopen thrash). Only re-create the
+          // connection ourselves if it has fully CLOSED.
+          if (source.readyState === EventSource.CLOSED) {
+            setIsSseConnected(false);
+            console.warn('🔄 [Realtime] SSE connection closed, reconnecting...');
+            if (reconnectTimer) {
+              clearTimeout(reconnectTimer);
+            }
+            reconnectTimer = setTimeout(connectSse, 2000);
           }
-          console.warn('🔄 [Realtime] SSE connection lost, retrying...');
-          source.close();
-          reconnectTimer = setTimeout(connectSse, 2000);
         };
       } catch (error) {
         setIsSseConnected(false);
@@ -1680,7 +1528,9 @@ export default function ChatLog({ projectId, onSessionStatusChange, onProjectSta
         clearTimeout(reconnectTimer);
       }
     };
-  }, [projectId, enableSseFallback, handleRealtimeEnvelope, onSseFallbackActive, recoverMissingMessages]);
+    // Intentionally only re-run when the project/fallback flag changes — handlers
+    // are read from a ref so the SSE connection stays stable across re-renders.
+  }, [projectId, enableSseFallback]);
 
   useEffect(() => {
     return () => {
@@ -3034,15 +2884,23 @@ const ToolResultMessage = ({
           </div>
         ))}
         
-        {/* Loading indicator for waiting response */}
-        {isWaitingForResponse && (
-          <div className="mb-4 w-full">
-            <div className="text-xl text-gray-900 leading-relaxed font-bold">
-              <span className="animate-pulse">...</span>
-            </div>
+        {/* Busy indicator — driven by real status: the live SSE run status OR
+            the authoritative server-side active-request flag (so it still shows
+            after a reconnect/late join, not just when the start event is caught). */}
+        {(isWaitingForResponse || serverBusy) && (
+          <div className="mb-4 w-full flex items-center gap-2 text-gray-600">
+            <span className="flex items-center gap-1" aria-hidden="true">
+              <span className="w-1.5 h-1.5 rounded-full bg-gray-500 animate-bounce" style={{ animationDelay: '0ms' }} />
+              <span className="w-1.5 h-1.5 rounded-full bg-gray-500 animate-bounce" style={{ animationDelay: '150ms' }} />
+              <span className="w-1.5 h-1.5 rounded-full bg-gray-500 animate-bounce" style={{ animationDelay: '300ms' }} />
+            </span>
+            <span className="text-sm font-medium">Claude is working</span>
+            {busyDetail && (
+              <span className="text-sm text-gray-400 truncate max-w-[60%]">· {busyDetail}</span>
+            )}
           </div>
         )}
-        
+
         <div ref={logsEndRef} />
       </div>
 

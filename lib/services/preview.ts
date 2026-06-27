@@ -12,6 +12,89 @@ import { PREVIEW_CONFIG } from '@/lib/config/constants';
 
 const npmCommand = process.platform === 'win32' ? 'npm.cmd' : 'npm';
 const pnpmCommand = process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm';
+
+/**
+ * Inject a tiny Nuxt client plugin that reports the current route to the
+ * Claudable parent window via postMessage, so the preview URL bar follows
+ * in-app (client-side) navigation. The preview is a cross-origin iframe, so the
+ * parent can't read its location directly — this is the only reliable way.
+ * The plugin is inert outside the preview iframe and is gitignored so it never
+ * ships to the deployed app.
+ */
+async function ensurePreviewRouteReporter(projectPath: string): Promise<void> {
+  try {
+    // Only meaningful for Nuxt projects.
+    const hasNuxtConfig = await fs
+      .access(path.join(projectPath, 'nuxt.config.ts'))
+      .then(() => true)
+      .catch(() => false);
+    if (!hasNuxtConfig) return;
+
+    const rel = 'plugins/claudable-preview.client.ts';
+    const pluginPath = path.join(projectPath, rel);
+    await fs.mkdir(path.dirname(pluginPath), { recursive: true });
+    await fs.writeFile(
+      pluginPath,
+      `// Auto-added by Claudable (preview only). Reports the current route to the
+// Claudable parent window so the preview URL bar can follow in-app navigation.
+// Inert outside the preview iframe; gitignored so it never ships to production.
+export default defineNuxtPlugin(() => {
+  if (typeof window === 'undefined' || window.parent === window) return;
+  // Target the embedding (Claudable) origin rather than '*', so route paths
+  // aren't broadcast to an arbitrary parent if this preview is framed elsewhere.
+  let target = '*';
+  try { if (document.referrer) target = new URL(document.referrer).origin; } catch {}
+  const post = (p: string) => {
+    try { window.parent.postMessage({ source: 'claudable-preview', path: p }, target); } catch {}
+  };
+  try {
+    const router = useRouter();
+    post(router.currentRoute.value.fullPath);
+    router.afterEach((to) => post(to.fullPath));
+  } catch {}
+});
+`,
+      'utf8',
+    );
+
+    // Keep it out of git / the deployed image.
+    const giPath = path.join(projectPath, '.gitignore');
+    let gi = '';
+    try { gi = await fs.readFile(giPath, 'utf8'); } catch { /* none yet */ }
+    if (!gi.includes(rel)) {
+      const sep = gi.length === 0 || gi.endsWith('\n') ? '' : '\n';
+      await fs.writeFile(giPath, `${gi}${sep}${rel}\n`, 'utf8');
+    }
+  } catch {
+    // Non-fatal: the route bar just won't follow in-app navigation.
+  }
+}
+
+/**
+ * Kill the dev server AND its children. The dev server is a tree
+ * (run-dev.js -> npm -> sh -> nuxt); killing only the parent left the nuxt
+ * child alive holding the port, leaking a server on every restart. The child
+ * is spawned detached, so a negative PID signals the whole process group.
+ */
+function killProcessTree(child: ChildProcess | null | undefined): void {
+  const pid = child?.pid;
+  if (!pid) return;
+  try {
+    if (process.platform === 'win32') {
+      child!.kill('SIGTERM');
+      return;
+    }
+    try {
+      process.kill(-pid, 'SIGTERM');
+      // Hard-stop the group shortly after if anything lingers.
+      setTimeout(() => { try { process.kill(-pid, 'SIGKILL'); } catch { /* gone */ } }, 4000).unref?.();
+    } catch {
+      child!.kill('SIGTERM');
+    }
+  } catch {
+    /* already exited */
+  }
+}
 const yarnCommand = process.platform === 'win32' ? 'yarn.cmd' : 'yarn';
 const bunCommand = process.platform === 'win32' ? 'bun.exe' : 'bun';
 
@@ -98,7 +181,20 @@ interface PreviewProcess {
   status: PreviewStatus;
   logs: string[];
   startedAt: Date;
+  lastAccessedAt: Date;
 }
+
+// Idle previews are evicted so the small port pool (e.g. 3710-3719) can't be
+// permanently exhausted by dev servers from closed/crashed tabs. An open chat
+// page heartbeats /preview/status, which keeps its preview warm.
+const PREVIEW_IDLE_TIMEOUT_MS = Math.max(
+  60_000,
+  Number.parseInt(process.env.PREVIEW_IDLE_TIMEOUT_MS || '', 10) || 20 * 60_000,
+);
+const PREVIEW_SWEEP_INTERVAL_MS = Math.max(
+  10_000,
+  Number.parseInt(process.env.PREVIEW_SWEEP_INTERVAL_MS || '', 10) || 5 * 60_000,
+);
 
 interface EnvOverrides {
   port?: number;
@@ -492,10 +588,18 @@ async function waitForPreviewReady(
   const start = Date.now();
   let attempts = 0;
 
+  // Per-attempt timeout so a hung connection can't block the readiness loop
+  // beyond the overall budget.
+  const fetchWithTimeout = (input: string, init?: RequestInit) => {
+    const controller = new AbortController();
+    const t = setTimeout(() => controller.abort(), Math.min(intervalMs * 2, 5000));
+    return fetch(input, { ...init, signal: controller.signal }).finally(() => clearTimeout(t));
+  };
+
   while (Date.now() - start < timeoutMs) {
     attempts += 1;
     try {
-      const response = await fetch(url, { method: 'HEAD' });
+      const response = await fetchWithTimeout(url, { method: 'HEAD' });
       if (response.ok) {
         log(
           Buffer.from(
@@ -505,7 +609,7 @@ async function waitForPreviewReady(
         return true;
       }
       if (response.status === 405 || response.status === 501) {
-        const getResponse = await fetch(url, { method: 'GET' });
+        const getResponse = await fetchWithTimeout(url, { method: 'GET' });
         if (getResponse.ok) {
           log(
             Buffer.from(
@@ -595,6 +699,45 @@ export interface PreviewInfo {
 class PreviewManager {
   private processes = new Map<string, PreviewProcess>();
   private installing = new Map<string, Promise<void>>();
+  // Serializes concurrent start() calls for the same project so two callers
+  // can't both pass the "not running" check and spawn duplicate dev servers,
+  // which would exhaust the preview port range and orphan processes.
+  private starting = new Map<string, Promise<PreviewInfo>>();
+  private sweepTimer: NodeJS.Timeout | null = null;
+
+  constructor() {
+    // Periodically reclaim ports held by previews nobody is watching anymore.
+    this.sweepTimer = setInterval(() => this.evictIdle(), PREVIEW_SWEEP_INTERVAL_MS);
+    this.sweepTimer.unref?.();
+  }
+
+  /** Stop previews that haven't been accessed within the idle window. */
+  private evictIdle(): void {
+    const now = Date.now();
+    for (const [projectId, p] of this.processes) {
+      if (p.status === 'starting') continue;
+      if (now - p.lastAccessedAt.getTime() > PREVIEW_IDLE_TIMEOUT_MS) {
+        const idleMin = Math.round((now - p.lastAccessedAt.getTime()) / 60_000);
+        console.log(`[PreviewManager] Evicting idle preview ${projectId} (idle ${idleMin}m, port ${p.port})`);
+        this.stop(projectId).catch(() => {});
+      }
+    }
+  }
+
+  /** The least-recently-accessed running preview (for eviction when the pool is full). */
+  private leastRecentlyUsed(): string | null {
+    let oldest: string | null = null;
+    let oldestTime = Infinity;
+    for (const [projectId, p] of this.processes) {
+      if (p.status === 'starting') continue;
+      const t = p.lastAccessedAt.getTime();
+      if (t < oldestTime) {
+        oldestTime = t;
+        oldest = projectId;
+      }
+    }
+    return oldest;
+  }
 
   private getLogger(processInfo: PreviewProcess) {
     return (chunk: Buffer | string) => {
@@ -690,9 +833,25 @@ class PreviewManager {
   public async start(projectId: string): Promise<PreviewInfo> {
     const existing = this.processes.get(projectId);
     if (existing && existing.status !== 'error') {
+      existing.lastAccessedAt = new Date();
       return this.toInfo(existing);
     }
 
+    // Coalesce concurrent starts: if one is already in flight, await it
+    // instead of spawning a second dev server.
+    const inFlight = this.starting.get(projectId);
+    if (inFlight) {
+      return inFlight;
+    }
+
+    const startPromise = this.startInternal(projectId).finally(() => {
+      this.starting.delete(projectId);
+    });
+    this.starting.set(projectId, startPromise);
+    return startPromise;
+  }
+
+  private async startInternal(projectId: string): Promise<PreviewInfo> {
     const project = await getProjectById(projectId);
     if (!project) {
       throw new Error('Project not found');
@@ -722,16 +881,42 @@ class PreviewManager {
       await scaffoldBasicNextApp(projectPath, projectId);
     }
 
-    const previewBounds = resolvePreviewBounds();
-    const preferredPort = await findAvailablePort(
-      previewBounds.start,
-      previewBounds.end
-    );
+    // Make the preview report its route to the URL bar (cross-origin iframe).
+    await ensurePreviewRouteReporter(projectPath);
 
-    const initialUrl = `http://localhost:${preferredPort}`;
+    const previewBounds = resolvePreviewBounds();
+    let preferredPort: number;
+    try {
+      preferredPort = await findAvailablePort(previewBounds.start, previewBounds.end);
+    } catch (poolFull) {
+      // Pool exhausted — evict the least-recently-used preview to free a port,
+      // then try once more.
+      const victim = this.leastRecentlyUsed();
+      if (!victim || victim === projectId) throw poolFull;
+      console.log(`[PreviewManager] Port pool full; evicting LRU preview ${victim} to make room for ${projectId}`);
+      await this.stop(victim).catch(() => {});
+      preferredPort = await findAvailablePort(previewBounds.start, previewBounds.end);
+    }
+
+    // When Claudable runs remotely (e.g. on a server), localhost:<port> is not
+    // reachable from the user's browser. PREVIEW_URL_TEMPLATE (e.g.
+    // "https://preview-{port}.example.com") yields a publicly-routed URL instead.
+    const buildPreviewUrl = (port: number): string => {
+      const tmpl = process.env.PREVIEW_URL_TEMPLATE;
+      if (tmpl && tmpl.includes('{port}')) {
+        return tmpl.replace('{port}', String(port));
+      }
+      return `http://localhost:${port}`;
+    };
+
+    const initialUrl = buildPreviewUrl(preferredPort);
 
     const env: NodeJS.ProcessEnv = {
       ...process.env,
+      // `next dev` must run in development; the Claudable container sets
+      // NODE_ENV=production, which breaks the dev CSS loader (globals.css
+      // "Module parse failed") and yields 500s in the preview.
+      NODE_ENV: 'development',
       PORT: String(preferredPort),
       WEB_PORT: String(preferredPort),
       NEXT_PUBLIC_APP_URL: initialUrl,
@@ -744,6 +929,7 @@ class PreviewManager {
       status: 'starting',
       logs: [],
       startedAt: new Date(),
+      lastAccessedAt: new Date(),
     };
 
     const log = this.getLogger(previewProcess);
@@ -843,7 +1029,7 @@ class PreviewManager {
     }
 
     const effectivePort = previewProcess.port;
-    let resolvedUrl: string = `http://localhost:${effectivePort}`;
+    let resolvedUrl: string = buildPreviewUrl(effectivePort);
     if (typeof overrides.url === 'string' && overrides.url.trim().length > 0) {
       resolvedUrl = overrides.url.trim();
     }
@@ -851,14 +1037,26 @@ class PreviewManager {
     env.NEXT_PUBLIC_APP_URL = resolvedUrl;
     previewProcess.url = resolvedUrl;
 
+    // Bind to all interfaces when hosting remotely so the reverse proxy can
+    // reach the dev server (network_mode host -> proxy hits it via the gateway).
+    const bindHost = process.env.PREVIEW_BIND_HOST;
+    const devArgs = ['run', 'dev', '--', '--port', String(effectivePort)];
+    if (bindHost && bindHost.trim().length > 0) {
+      devArgs.push('--hostname', bindHost.trim());
+    }
+
     const child = spawn(
       npmCommand,
-      ['run', 'dev', '--', '--port', String(effectivePort)],
+      devArgs,
       {
         cwd: projectPath,
         env,
         shell: process.platform === 'win32',
         stdio: ['ignore', 'pipe', 'pipe'],
+        // Own process group so we can kill the WHOLE tree (npm -> sh -> nuxt).
+        // Killing just the parent left the nuxt child holding the port, leaking
+        // a dev server on every restart.
+        detached: process.platform !== 'win32',
       }
     );
 
@@ -899,12 +1097,47 @@ class PreviewManager {
 
     child.on('error', (error) => {
       previewProcess.status = 'error';
+      // Drop the dead entry so a subsequent start() isn't blocked by the
+      // "already running" check at the top of start().
+      if (this.processes.get(projectId) === previewProcess) {
+        this.processes.delete(projectId);
+      }
       log(Buffer.from(`Preview process failed: ${error.message}`));
     });
 
-    await waitForPreviewReady(previewProcess.url, log).catch(() => {
-      // wait function already logged; ignore errors
-    });
+    const ready = await waitForPreviewReady(previewProcess.url, log).catch(
+      () => false
+    );
+
+    // The dev server exited (crash/build failure) while we were waiting.
+    if (
+      previewProcess.status === 'error' ||
+      previewProcess.status === 'stopped'
+    ) {
+      await updateProject(projectId, {
+        previewUrl: null,
+        previewPort: null,
+        status: 'idle',
+      }).catch(() => {});
+      throw new Error(
+        'Preview server exited before it became reachable. Check the build logs.'
+      );
+    }
+
+    // Clear the "starting" state regardless of whether the stdout fast-path
+    // fired — otherwise a server that logs nothing leaves the UI spinning
+    // forever. If the health check never passed we still mark it running
+    // (dev servers can be slow behind a proxy) but log the discrepancy.
+    if (previewProcess.status === 'starting') {
+      previewProcess.status = 'running';
+    }
+    if (!ready) {
+      log(
+        Buffer.from(
+          '[PreviewManager] Health check did not pass within the timeout; marking running optimistically (process is still alive).'
+        )
+      );
+    }
 
     await updateProject(projectId, {
       previewUrl: previewProcess.url,
@@ -935,7 +1168,7 @@ class PreviewManager {
     }
 
     try {
-      processInfo.process?.kill('SIGTERM');
+      killProcessTree(processInfo.process);
     } catch (error) {
       console.error('[PreviewManager] Failed to stop preview process:', error);
     }
@@ -965,6 +1198,9 @@ class PreviewManager {
         logs: [],
       };
     }
+    // A status read means someone's looking at this preview — keep it warm so the
+    // idle sweep doesn't evict an actively-viewed preview.
+    processInfo.lastAccessedAt = new Date();
     return this.toInfo(processInfo);
   }
 

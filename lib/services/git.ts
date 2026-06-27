@@ -167,11 +167,15 @@ export function pushToRemote(
   remoteUrl?: string,
 ) {
   const remote = remoteUrl || remoteName;
+  // Push the current HEAD to the target branch regardless of the local branch
+  // name (a freshly `git init`-ed repo is on `master`, but we deploy from
+  // `main`). `HEAD:main` maps whatever is checked out to the remote branch.
+  const refspec = `HEAD:${branch}`;
   try {
-    runGit(['push', '-u', remote, branch], repoPath);
+    runGit(['push', '-u', remote, refspec], repoPath);
   } catch (error) {
     if (error instanceof GitError) {
-      runGit(['push', '-u', '--force', remote, branch], repoPath);
+      runGit(['push', '-u', '--force', remote, refspec], repoPath);
     } else {
       throw error;
     }

@@ -1,0 +1,44 @@
+# Claudable, self-hosted behind a reverse proxy on the host network.
+# Deployment-specific values (public URL, preview URL template, host gateway,
+# secrets) come from .env (never committed) — see .env.example.
+services:
+  claudable:
+    build: .
+    container_name: claudable
+    network_mode: host
+    restart: unless-stopped
+    healthcheck:
+      # node (not curl — the slim image has no curl); exit 0 while the app serves.
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3700/',r=>process.exit(r.statusCode<500?0:1)).on('error',()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 40s
+    env_file:
+      - .env
+    environment:
+      - NODE_ENV=production
+      - PORT=3700
+      - WEB_PORT=3700
+      # Per-project preview dev servers (host-bound). Keep this band clear of the
+      # generated-site deploy band and small so each preview subdomain's cert
+      # stays under Let's Encrypt rate limits.
+      - PREVIEW_PORT_START=3710
+      - PREVIEW_PORT_END=3719
+      - PREVIEW_BIND_HOST=0.0.0.0
+      - DATABASE_URL=file:../data/cc.db
+      - PROJECTS_DIR=./data/projects
+      # Deterministic port band for generated sites.
+      - DEPLOY_PORT_BASE=3500
+      - DEPLOY_PORT_SPAN=200
+      # NEXT_PUBLIC_APP_URL, PREVIEW_URL_TEMPLATE and DEPLOY_HOST_GATEWAY are
+      # deployment-specific and supplied via .env.
+    volumes:
+      # Persist SQLite DB + all generated project repos across rebuilds.
+      - ./data:/app/data
+      # Global Agent Skills available to every project (settingSources: ['user']).
+      - ./global-skills:/home/node/.claude/skills
+      # Persist Claude Code conversation transcripts so session resume survives
+      # container restarts/redeploys — otherwise the agent loses all context and
+      # "forgets" the conversation after every deploy.
+      - ./claude-sessions:/home/node/.claude/projects

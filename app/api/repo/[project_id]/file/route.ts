@@ -50,7 +50,7 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
 export async function PUT(request: NextRequest, { params }: RouteContext) {
   try {
     const { project_id } = await params;
-    const body = await request.json();
+    const body = (await request.json().catch(() => null)) ?? {};
     const path = body?.path;
     const content = body?.content;
 
