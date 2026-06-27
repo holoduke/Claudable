@@ -47,7 +47,7 @@ function SkillCard({
         </div>
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
-            <span className="truncate font-mono text-sm font-medium text-gray-900">{skill.name}</span>
+            <span className="font-mono text-sm font-medium text-gray-900 break-words">{skill.name}</span>
             <span
               className={`rounded-full px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
                 isGlobal ? 'bg-violet-100 text-violet-700' : 'bg-blue-100 text-blue-700'
@@ -264,7 +264,7 @@ export function SkillsSettings({ projectId }: SkillsSettingsProps) {
             No project skills yet. Add one to teach the agent project-specific conventions.
           </div>
         ) : (
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className="grid gap-3 grid-cols-1">
             {project.map((s) => (
               <SkillCard key={s.name} skill={s} onEdit={() => startEdit(s)} onDelete={() => remove(s.name)} />
             ))}
@@ -300,7 +300,7 @@ export function SkillsSettings({ projectId }: SkillsSettingsProps) {
             {global.length === 0 ? 'No global skills installed.' : 'No skills match your search.'}
           </div>
         ) : (
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className="grid gap-3 grid-cols-1">
             {filteredGlobal.map((s) => (
               <SkillCard key={s.name} skill={s} />
             ))}
