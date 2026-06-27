@@ -36,26 +36,11 @@ export interface Skill {
 const STATE_FILE = '.skills-state.json'; // <project>/.claude/.skills-state.json
 const DISABLED_SUBDIR = '.disabled'; // parked (disabled) project skills
 
-export class SkillError extends Error {
-  constructor(message: string, readonly status = 400) {
-    super(message);
-    this.name = 'SkillError';
-  }
-}
-
-/** kebab-case slug; rejects path traversal / unsafe names. */
-export function normalizeSkillName(name: string): string {
-  const slug = String(name)
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9-]+/g, '-')
-    .replace(/-+/g, '-')
-    .replace(/^-|-$/g, '');
-  if (!slug) {
-    throw new SkillError('Invalid skill name');
-  }
-  return slug;
-}
+// Pure id logic lives in skills-id.ts (no prisma) so it stays unit-testable.
+// Imported for internal use and re-exported so existing
+// `@/lib/services/skills` imports keep working.
+import { SkillError, normalizeSkillName, assertSafeSkillId } from './skills-id';
+export { SkillError, normalizeSkillName, assertSafeSkillId };
 
 async function projectBaseDir(projectId: string): Promise<string> {
   const project = await getProjectById(projectId);
@@ -186,15 +171,6 @@ function withProjectSkillLock<T>(projectId: string, fn: () => Promise<T>): Promi
   const run = prev.then(fn, fn);
   projectSkillLocks.set(projectId, run.then(() => undefined, () => undefined));
   return run;
-}
-
-/** A skill id must be a single safe path segment (it indexes a dir on disk). */
-function assertSafeSkillId(skillId: string): string {
-  const id = String(skillId).trim();
-  if (!id || id.includes('/') || id.includes('\\') || id.includes('..') || id.startsWith('.')) {
-    throw new SkillError('Invalid skill id');
-  }
-  return id;
 }
 
 /** Toggle a skill on/off for a project (by its on-disk id), then re-stage. */

@@ -41,7 +41,7 @@ export interface DesignImportManifest {
  * Only `*.dc.html`, `fonts/**` and `assets/**` are useful for porting a design.
  * Everything else is design-process noise (often hundreds of MB).
  */
-function shouldKeep(name: string): boolean {
+export function shouldKeep(name: string): boolean {
   if (!name || name.endsWith('/')) return false;
   if (name.includes('..')) return false;
   const lower = name.toLowerCase();
@@ -58,7 +58,7 @@ function shouldKeep(name: string): boolean {
  * by the zip tool, e.g. `MyDesign/…`), return that prefix so it can be stripped.
  * Returns '' for a flat export (files already at the root).
  */
-function commonRootPrefix(names: string[]): string {
+export function commonRootPrefix(names: string[]): string {
   if (names.length === 0) return '';
   const firstSegs = new Set(
     names.map((n) => (n.includes('/') ? n.slice(0, n.indexOf('/')) : '')),
@@ -69,7 +69,7 @@ function commonRootPrefix(names: string[]): string {
   return `${seg}/`;
 }
 
-function screenName(entryName: string): string {
+export function screenName(entryName: string): string {
   return path.basename(entryName).replace(/\.dc\.html$/i, '');
 }
 
