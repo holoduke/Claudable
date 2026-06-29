@@ -17,6 +17,7 @@
 import fs from 'fs/promises';
 import path from 'path';
 import { unzipSync } from 'fflate';
+import { shouldKeep, commonRootPrefix, screenName } from '@/lib/utils/design-keep';
 
 const DEST_DIRNAME = 'design-reference';
 
@@ -35,42 +36,6 @@ export interface DesignImportManifest {
   totalBytes: number;
   /** Archive entries skipped as noise (screenshots/uploads/etc.). */
   skippedNoise: number;
-}
-
-/**
- * Only `*.dc.html`, `fonts/**` and `assets/**` are useful for porting a design.
- * Everything else is design-process noise (often hundreds of MB).
- */
-export function shouldKeep(name: string): boolean {
-  if (!name || name.endsWith('/')) return false;
-  if (name.includes('..')) return false;
-  const lower = name.toLowerCase();
-  if (lower.endsWith('.dc.html')) return true;
-  // Match fonts/ and assets/ at the root OR under a single wrapper directory
-  // (many zip tools nest everything inside a top-level folder).
-  if (/(^|\/)fonts\//.test(name)) return true;
-  if (/(^|\/)assets\//.test(name)) return true;
-  return false;
-}
-
-/**
- * If every kept entry sits under one common top-level directory (a wrapper added
- * by the zip tool, e.g. `MyDesign/…`), return that prefix so it can be stripped.
- * Returns '' for a flat export (files already at the root).
- */
-export function commonRootPrefix(names: string[]): string {
-  if (names.length === 0) return '';
-  const firstSegs = new Set(
-    names.map((n) => (n.includes('/') ? n.slice(0, n.indexOf('/')) : '')),
-  );
-  if (firstSegs.size !== 1) return ''; // some files at root, or multiple roots
-  const seg = [...firstSegs][0];
-  if (!seg || seg === 'fonts' || seg === 'assets') return ''; // meaningful top-level dir
-  return `${seg}/`;
-}
-
-export function screenName(entryName: string): string {
-  return path.basename(entryName).replace(/\.dc\.html$/i, '');
 }
 
 /**

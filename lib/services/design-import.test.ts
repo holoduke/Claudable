@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { shouldKeep, commonRootPrefix, screenName } from '@/lib/services/design-import';
+import { shouldKeep, commonRootPrefix, screenName } from '@/lib/utils/design-keep';
 
 describe('shouldKeep', () => {
   it('keeps .dc.html screens at any depth', () => {

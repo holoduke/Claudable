@@ -1,7 +1,9 @@
 'use client';
 
 import { useCallback, useRef, useState } from 'react';
+import { unzipSync, zipSync } from 'fflate';
 import { FaFileImport, FaTimes, FaCheckCircle, FaMagic } from 'react-icons/fa';
+import { shouldKeep } from '@/lib/utils/design-keep';
 
 interface DesignImportManifest {
   dir: string;
@@ -22,7 +24,7 @@ interface DesignImportModalProps {
   onApply: (prompt: string) => void;
 }
 
-type Phase = 'idle' | 'uploading' | 'done' | 'error';
+type Phase = 'idle' | 'preparing' | 'uploading' | 'done' | 'error';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? '';
 
@@ -57,21 +59,46 @@ export default function DesignImportModal({
   }, [reset, onClose]);
 
   const upload = useCallback(
-    (file: File) => {
+    async (file: File) => {
       if (!file.name.toLowerCase().endsWith('.zip')) {
         setPhase('error');
         setError('Please choose a .zip export from Claude Design.');
         return;
       }
       setFileName(file.name);
-      setPhase('uploading');
-      setProgress(0);
       setError(null);
+      setProgress(0);
+      setPhase('preparing');
 
+      // Pre-filter the zip in the browser: keep only the design files (screens,
+      // fonts, assets) and re-zip them, so we upload a few MB instead of the full
+      // export (often hundreds of MB of screenshots/raw uploads that otherwise
+      // time out the proxy). The server filters again as a safety net.
+      let payloadZip: Uint8Array;
+      try {
+        await new Promise((r) => setTimeout(r, 30)); // let the 'preparing' state paint
+        const raw = new Uint8Array(await file.arrayBuffer());
+        const kept = unzipSync(raw, { filter: (f) => shouldKeep(f.name) });
+        const hasScreens = Object.keys(kept).some((n) => n.toLowerCase().endsWith('.dc.html'));
+        if (!hasScreens) {
+          setPhase('error');
+          setError("This doesn't look like a Claude Design export — no .dc.html screens found.");
+          return;
+        }
+        payloadZip = zipSync(kept);
+      } catch {
+        setPhase('error');
+        setError('Could not read the zip file.');
+        return;
+      }
+
+      setPhase('uploading');
+      // zipSync returns a fresh, offset-0 array, so its buffer is exactly the data.
+      const blob = new Blob([payloadZip.buffer as ArrayBuffer], { type: 'application/zip' });
       const form = new FormData();
-      form.append('file', file);
+      form.append('file', blob, 'design.zip');
 
-      // XHR gives upload progress, which matters for large design exports.
+      // XHR gives upload progress (now of just the filtered payload).
       const xhr = new XMLHttpRequest();
       xhr.open('POST', `${API_BASE}/api/projects/${projectId}/design-import`);
       xhr.upload.onprogress = (e) => {
@@ -169,6 +196,14 @@ export default function DesignImportModal({
           )}
 
           {/* Uploading */}
+          {phase === 'preparing' && (
+            <div className="py-8 text-center">
+              <div className="mx-auto mb-3 h-6 w-6 animate-spin rounded-full border-2 border-gray-300 border-t-blue-500" />
+              <p className="text-sm text-gray-700 truncate">Preparing {fileName}…</p>
+              <p className="text-xs text-gray-400 mt-1">Extracting just the design files (skipping screenshots &amp; raw uploads)</p>
+            </div>
+          )}
+
           {phase === 'uploading' && (
             <div className="py-6">
               <p className="text-sm text-gray-700 mb-3 truncate">Uploading {fileName}…</p>
