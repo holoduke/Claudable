@@ -791,6 +791,10 @@ export default function HomePage() {
                         <div className="flex gap-1">
                           <button
                             type="submit"
+                            // Prevent the click from blurring the input first — the
+                            // input's onBlur closes the editor, which would otherwise
+                            // unmount the form before this submit fires (rename lost).
+                            onMouseDown={(e) => e.preventDefault()}
                             className="px-2 py-1 text-xs bg-orange-500 text-white rounded hover:bg-orange-600 transition-colors"
                           >
                             Save
