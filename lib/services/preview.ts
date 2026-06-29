@@ -7,8 +7,8 @@ import path from 'path';
 import fs from 'fs/promises';
 import { findAvailablePort } from '@/lib/utils/ports';
 import { getProjectById, updateProject, updateProjectStatus } from './project';
-import { scaffoldBasicNextApp } from '@/lib/utils/scaffold';
-import { scaffoldIsClean } from '@/lib/config/stacks';
+import { scaffoldForStack } from '@/lib/utils/scaffold-dispatch';
+import { stackKind } from '@/lib/config/stacks';
 import { PREVIEW_CONFIG } from '@/lib/config/constants';
 
 const npmCommand = process.platform === 'win32' ? 'npm.cmd' : 'npm';
@@ -780,9 +780,8 @@ class PreviewManager {
       await fs.access(path.join(projectPath, 'package.json'));
     } catch {
       const proj = await getProjectById(projectId).catch(() => null);
-      const clean = scaffoldIsClean(proj?.templateType);
-      record(`Bootstrapping ${clean ? 'clean' : 'starter'} Nuxt app for project ${projectId}`);
-      await scaffoldBasicNextApp(projectPath, projectId, { clean });
+      record(`Bootstrapping ${stackKind(proj?.templateType)} app for project ${projectId}`);
+      await scaffoldForStack(projectPath, projectId, proj?.templateType);
     }
 
     const hadNodeModules = await directoryExists(path.join(projectPath, 'node_modules'));
@@ -879,11 +878,10 @@ class PreviewManager {
       await fs.access(path.join(projectPath, 'package.json'));
     } catch {
       const proj = await getProjectById(projectId).catch(() => null);
-      const clean = scaffoldIsClean(proj?.templateType);
       console.log(
-        `[PreviewManager] Bootstrapping ${clean ? 'clean' : 'starter'} Nuxt app for project ${projectId}`
+        `[PreviewManager] Bootstrapping ${stackKind(proj?.templateType)} app for project ${projectId}`
       );
-      await scaffoldBasicNextApp(projectPath, projectId, { clean });
+      await scaffoldForStack(projectPath, projectId, proj?.templateType);
     }
 
     // Make the preview report its route to the URL bar (cross-origin iframe).

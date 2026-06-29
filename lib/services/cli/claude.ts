@@ -11,6 +11,9 @@ import { serializeMessage, createRealtimeMessage } from '@/lib/serializers/chat'
 import { updateProject, getProjectById } from '../project';
 import { syncProjectSkills, hasDisabledSkills } from '../skills';
 import { CLAUDE_SYSTEM_PROMPT } from './prompts/claude-system-prompt';
+import { NEXT_SYSTEM_PROMPT } from './prompts/next-system-prompt';
+import { ANGULAR_SYSTEM_PROMPT } from './prompts/angular-system-prompt';
+import { stackKind } from '@/lib/config/stacks';
 import { createMessage } from '../message';
 import { CLAUDE_DEFAULT_MODEL, normalizeClaudeModelId, getClaudeModelDisplayName } from '@/lib/constants/claudeModels';
 import path from 'path';
@@ -36,6 +39,18 @@ const AGENT_ENV_ALLOW = new Set([
   'HTTP_PROXY', 'HTTPS_PROXY', 'NO_PROXY', 'http_proxy', 'https_proxy', 'no_proxy',
   'npm_config_registry', 'COREPACK_ENABLE_DOWNLOAD_PROMPT',
 ]);
+
+/** The system prompt for a project's tech stack (Nuxt | Next.js | Angular). */
+function selectSystemPrompt(templateType: string | null | undefined): string {
+  switch (stackKind(templateType)) {
+    case 'next':
+      return NEXT_SYSTEM_PROMPT;
+    case 'angular':
+      return ANGULAR_SYSTEM_PROMPT;
+    default:
+      return CLAUDE_SYSTEM_PROMPT;
+  }
+}
 
 function buildAgentEnv(): Record<string, string> {
   const env: Record<string, string> = {};
@@ -567,6 +582,10 @@ export async function executeClaude(
       ? path.resolve(projectPath)
       : path.resolve(process.cwd(), projectPath);
 
+    // Pick the system prompt for the project's tech stack (Nuxt | Next.js | Angular).
+    const stackProject = await getProjectById(projectId).catch(() => null);
+    const systemPromptForStack = selectSystemPrompt(stackProject?.templateType);
+
     // Security: Verify project path is within allowed directory
     const allowedBasePath = path.resolve(process.cwd(), process.env.PROJECTS_DIR || './data/projects');
     const relativeToBase = path.relative(allowedBasePath, absoluteProjectPath);
@@ -638,7 +657,7 @@ export async function executeClaude(
         // Extended thinking: off / adaptive (auto) / adaptive+high (forced).
         // Thinking blocks the model emits are surfaced to the chat below.
         ...buildThinkingOptions(options.thinkingMode),
-        systemPrompt: CLAUDE_SYSTEM_PROMPT,
+        systemPrompt: systemPromptForStack,
         maxOutputTokens,
         // Capture SDK stderr so we can surface real errors instead of just exit code
         stderr: (data: string) => {
