@@ -53,8 +53,12 @@ WORKDIR /app
 # Install dependencies. Prefer the lockfile (reproducible) but fall back to a
 # fresh install when it has drifted — agent-generated projects frequently edit
 # package.json without updating package-lock.json, which makes \`npm ci\` fail.
+# Build toolchain is added temporarily so native addons (e.g. better-sqlite3)
+# compile, then removed so it doesn't bloat the runtime image.
 COPY package*.json ./
-RUN npm ci || npm install --no-audit --no-fund
+RUN apk add --no-cache --virtual .build-deps python3 make g++ \\
+ && (npm ci || npm install --no-audit --no-fund) \\
+ && apk del .build-deps
 
 # Build (nuxt build -> .output/)
 COPY . .
@@ -87,9 +91,14 @@ services:
       - NITRO_PORT=${port}
       - NITRO_HOST=0.0.0.0
       - HOSTNAME=0.0.0.0
-    # Uncomment to load secrets from /opt/${site}/.env on the server:
-    # env_file:
-    #   - .env
+    volumes:
+      # Persist app data (e.g. SQLite at ./.data) across rebuilds/redeploys.
+      # Harmless for stateless apps (just an empty dir).
+      - ./data:/app/.data
+    # Runtime secrets from /opt/${site}/.env on the server (the deploy workflow
+    # ensures the file exists; empty is fine).
+    env_file:
+      - .env
 `;
 }
 
@@ -142,6 +151,11 @@ jobs:
           fi
 
           # --- Build & (re)start ----------------------------------------------
+          # Ensure the runtime .env and the persistent data dir exist so the
+          # compose env_file / volume mounts don't fail on a first deploy.
+          touch "$DIR/.env"
+          mkdir -p "$DIR/data"
+
           # --force-recreate guarantees the freshly-built image actually runs
           # (a plain 'up -d' keeps the old container, so new code never goes
           # live); --remove-orphans cleans up renamed/removed services.
