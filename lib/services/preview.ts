@@ -8,6 +8,7 @@ import fs from 'fs/promises';
 import { findAvailablePort } from '@/lib/utils/ports';
 import { getProjectById, updateProject, updateProjectStatus } from './project';
 import { scaffoldBasicNextApp } from '@/lib/utils/scaffold';
+import { scaffoldIsClean } from '@/lib/config/stacks';
 import { PREVIEW_CONFIG } from '@/lib/config/constants';
 
 const npmCommand = process.platform === 'win32' ? 'npm.cmd' : 'npm';
@@ -778,8 +779,10 @@ class PreviewManager {
     try {
       await fs.access(path.join(projectPath, 'package.json'));
     } catch {
-      record(`Bootstrapping minimal Next.js app for project ${projectId}`);
-      await scaffoldBasicNextApp(projectPath, projectId);
+      const proj = await getProjectById(projectId).catch(() => null);
+      const clean = scaffoldIsClean(proj?.templateType);
+      record(`Bootstrapping ${clean ? 'clean' : 'starter'} Nuxt app for project ${projectId}`);
+      await scaffoldBasicNextApp(projectPath, projectId, { clean });
     }
 
     const hadNodeModules = await directoryExists(path.join(projectPath, 'node_modules'));
@@ -875,10 +878,12 @@ class PreviewManager {
     try {
       await fs.access(path.join(projectPath, 'package.json'));
     } catch {
+      const proj = await getProjectById(projectId).catch(() => null);
+      const clean = scaffoldIsClean(proj?.templateType);
       console.log(
-        `[PreviewManager] Bootstrapping minimal Next.js app for project ${projectId}`
+        `[PreviewManager] Bootstrapping ${clean ? 'clean' : 'starter'} Nuxt app for project ${projectId}`
       );
-      await scaffoldBasicNextApp(projectPath, projectId);
+      await scaffoldBasicNextApp(projectPath, projectId, { clean });
     }
 
     // Make the preview report its route to the URL bar (cross-origin iframe).

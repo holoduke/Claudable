@@ -23,7 +23,8 @@ async function writeFileIfMissing(filePath: string, contents: string) {
  */
 export async function scaffoldBasicNextApp(
   projectPath: string,
-  projectId: string
+  projectId: string,
+  opts: { clean?: boolean } = {}
 ) {
   await fs.mkdir(projectPath, { recursive: true });
 
@@ -116,11 +117,21 @@ export default defineNuxtConfig({
 `
   );
 
-  // Nuxt UI requires the app wrapped in <UApp>. NuxtLayout applies the default
-  // layout (header + footer) around every page.
+  // Nuxt UI requires the app wrapped in <UApp>. The full starter uses NuxtLayout
+  // (header + footer); a clean start is a blank canvas the agent builds on.
   await writeFileIfMissing(
     path.join(projectPath, 'app.vue'),
-    `<template>
+    opts.clean
+      ? `<template>
+  <UApp>
+    <UContainer class="flex min-h-screen flex-col items-center justify-center gap-4 py-24 text-center">
+      <h1 class="text-3xl font-bold tracking-tight">Start building</h1>
+      <p class="text-(--ui-text-muted)">Describe what you want and the agent will build it here.</p>
+    </UContainer>
+  </UApp>
+</template>
+`
+      : `<template>
   <UApp>
     <NuxtLayout>
       <NuxtPage />
@@ -129,6 +140,10 @@ export default defineNuxtConfig({
 </template>
 `
   );
+
+  // Clean start stops at the essentials (+ run-dev below) so the agent builds
+  // fresh. The full Nuxt starter also writes a multi-page marketing skeleton.
+  if (!opts.clean) {
 
   // Central nav definition shared by the header and footer (auto-imported).
   await writeFileIfMissing(
@@ -517,6 +532,8 @@ useSeoMeta({ title: \`\${props.error.statusCode} — Error\` })
 </template>
 `
   );
+
+  } // end full-starter marketing skeleton (skipped on clean start)
 
   // NOTE: no postcss.config.js — Nuxt manages PostCSS via nuxt.config and warns
   // if a file-based config is present; Nuxt UI uses its own Tailwind Vite plugin.

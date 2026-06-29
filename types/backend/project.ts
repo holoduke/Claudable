@@ -37,6 +37,8 @@ export interface CreateProjectInput {
   preferredCli?: string;
   selectedModel?: string;
   description?: string;
+  /** Tech stack id (see lib/config/stacks). Stored as the project's templateType. */
+  templateType?: string;
 }
 
 export interface UpdateProjectInput {
