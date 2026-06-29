@@ -14,6 +14,7 @@ import { CLAUDE_SYSTEM_PROMPT } from './prompts/claude-system-prompt';
 import { createMessage } from '../message';
 import { CLAUDE_DEFAULT_MODEL, normalizeClaudeModelId, getClaudeModelDisplayName } from '@/lib/constants/claudeModels';
 import path from 'path';
+import os from 'os';
 
 /**
  * The environment handed to the agent subprocess. The SDK REPLACES the child
@@ -45,6 +46,81 @@ function buildAgentEnv(): Record<string, string> {
     }
   }
   return env;
+}
+
+/**
+ * Lightweight cross-project guard (NOT a full OS sandbox — see the deliberate
+ * choice to keep this simple). A PreToolUse hook (which fires even under
+ * bypassPermissions) denies tool calls that reach OUTSIDE the current project:
+ * sibling projects under the projects root, Claudable's own source/secrets under
+ * the app root, and a few sensitive system paths. The agent keeps full power
+ * (tools, skills, file access, shell) within its own project + the temp dir.
+ *
+ * Heuristic by design: it catches the realistic "read/modify another project"
+ * cases, not deliberate obfuscation (e.g. base64-encoded paths). Pairs with the
+ * env scrub (buildAgentEnv) which already hides app secrets from `printenv`.
+ */
+function pathIsInside(childAbs: string, parentAbs: string): boolean {
+  if (!parentAbs) return false;
+  const rel = path.relative(parentAbs, childAbs);
+  return rel === '' || (rel !== '..' && !rel.startsWith('..' + path.sep) && !path.isAbsolute(rel));
+}
+
+function buildProjectGuardHook(projectAbsPath: string) {
+  const projectsRoot = path.dirname(projectAbsPath); // e.g. /app/data/projects
+  const appRoot = process.cwd();                     // Claudable app root (/app)
+  const tmpDir = os.tmpdir();
+  const FILE_TOOLS = new Set(['Read', 'Write', 'Edit', 'MultiEdit', 'NotebookEdit', 'Glob', 'Grep']);
+
+  const pathAllowed = (p: string): boolean => {
+    const abs = path.isAbsolute(p) ? path.resolve(p) : path.resolve(projectAbsPath, p);
+    return pathIsInside(abs, projectAbsPath) || pathIsInside(abs, tmpDir);
+  };
+
+  // Returns the offending token if a bash command reaches outside the project.
+  const bashEscape = (command: string): string | null => {
+    const tokens = command.match(/(?:\/[\w.+-]+){2,}/g) || []; // absolute path-ish tokens
+    for (const tok of tokens) {
+      const abs = path.resolve(tok);
+      if (pathIsInside(abs, projectAbsPath)) continue; // own project — fine
+      if (pathIsInside(abs, projectsRoot)) return tok;  // a sibling project
+      if (pathIsInside(abs, appRoot)) return tok;       // Claudable source/secrets
+      if (/^\/(etc|root|opt|boot|sys|proc\/\d)/.test(abs)) return tok; // sensitive system paths
+    }
+    // Relative cross-project reference like ../<other> or data/projects/<other>.
+    const rel = command.match(/data\/projects\/([\w.-]+)/);
+    if (rel && rel[1] !== path.basename(projectAbsPath)) return rel[0];
+    return null;
+  };
+
+  return async (input: any) => {
+    const name = input?.tool_name as string;
+    const ti = (input?.tool_input ?? {}) as Record<string, unknown>;
+    const deny = (reason: string) => ({
+      hookSpecificOutput: {
+        hookEventName: 'PreToolUse',
+        permissionDecision: 'deny',
+        permissionDecisionReason: reason,
+      },
+    });
+
+    if (name === 'Bash' && typeof ti.command === 'string') {
+      const bad = bashEscape(ti.command);
+      if (bad) return deny(`Access outside this project is not allowed (path: ${bad}). Work only within the current project.`);
+      return { continue: true };
+    }
+
+    if (FILE_TOOLS.has(name)) {
+      for (const key of ['file_path', 'path', 'notebook_path']) {
+        const v = ti[key];
+        if (typeof v === 'string' && !pathAllowed(v)) {
+          return deny(`"${v}" is outside the current project. The agent may only access this project's files.`);
+        }
+      }
+    }
+
+    return { continue: true };
+  };
 }
 import fs from 'fs/promises';
 import { randomUUID } from 'crypto';
@@ -547,6 +623,11 @@ export async function executeClaude(
         // Replace the child env with a scrubbed allowlist so the agent can't read
         // Claudable's secrets (DB/Google/Git/Auth) via `printenv`. See buildAgentEnv.
         env: buildAgentEnv(),
+        // Lightweight cross-project guard: block tool calls that escape this
+        // project (other projects / app source / secrets). See buildProjectGuardHook.
+        hooks: {
+          PreToolUse: [{ hooks: [buildProjectGuardHook(absoluteProjectPath)] }],
+        },
         // See skillSettingSources above: ['project','user'] by default (auto-load
         // all skills), or ['project'] once any skill is disabled (load only the
         // staged enabled set, making per-project disabling a hard guarantee).
