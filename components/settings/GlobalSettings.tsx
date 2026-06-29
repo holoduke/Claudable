@@ -117,6 +117,7 @@ interface ServiceToken {
 export default function GlobalSettings({ isOpen, onClose, initialTab = 'general' }: GlobalSettingsProps) {
   const [activeTab, setActiveTab] = useState<SettingsTab>(initialTab);
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
+  const [userLoaded, setUserLoaded] = useState(false);
   const [serviceModalOpen, setServiceModalOpen] = useState(false);
   const [selectedProvider, setSelectedProvider] = useState<'github' | 'supabase' | 'vercel' | null>(null);
   const [tokens, setTokens] = useState<{ [key: string]: ServiceToken | null }>({
@@ -133,11 +134,13 @@ export default function GlobalSettings({ isOpen, onClose, initialTab = 'general'
   const [selectedCLI, setSelectedCLI] = useState<CLIOption | null>(null);
   const [apiKeyVisibility, setApiKeyVisibility] = useState<Record<string, boolean>>({});
 
-  // Show toast function
-  const showToast = (message: string, type: 'success' | 'error') => {
+  // Show toast function. Memoized so it has a stable identity — it's passed to
+  // UsersSettings, whose data-loading effect depends on it; an unstable ref
+  // would re-fire that effect (and re-fetch users) on every parent re-render.
+  const showToast = useCallback((message: string, type: 'success' | 'error') => {
     setToast({ message, type });
     setTimeout(() => setToast(null), 3000);
-  };
+  }, []);
 
   const loadAllTokens = useCallback(async () => {
     const providers = ['github', 'supabase', 'vercel'];
@@ -216,6 +219,8 @@ export default function GlobalSettings({ isOpen, onClose, initialTab = 'general'
       }
     } catch {
       setCurrentUser(null);
+    } finally {
+      setUserLoaded(true);
     }
   }, []);
 
@@ -231,10 +236,12 @@ export default function GlobalSettings({ isOpen, onClose, initialTab = 'general'
 
   const isAdmin = currentUser?.role === 'admin';
 
-  // If a non-admin somehow lands on the Users tab, fall back to General.
+  // If a non-admin somehow lands on the Users tab, fall back to General — but
+  // only once we actually know who the user is, so an initialTab='users' isn't
+  // wrongly redirected during the brief window before /api/users/me resolves.
   useEffect(() => {
-    if (activeTab === 'users' && !isAdmin) setActiveTab('general');
-  }, [activeTab, isAdmin]);
+    if (userLoaded && activeTab === 'users' && !isAdmin) setActiveTab('general');
+  }, [userLoaded, activeTab, isAdmin]);
 
   const saveGlobalSettings = async () => {
     setIsLoading(true);

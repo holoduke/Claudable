@@ -28,9 +28,12 @@ export function emailDomainAllowed(email: string): boolean {
 /** The single org (created on demand). Keyed by the primary allowed domain. */
 export async function ensureOrg() {
   const domain = primaryDomain();
-  const existing = await prisma.organization.findUnique({ where: { domain } });
-  if (existing) return existing;
-  return prisma.organization.create({ data: { name: DEFAULT_ORG_NAME, domain } });
+  // upsert is race-safe for concurrent first sign-ins (vs findUnique-then-create).
+  return prisma.organization.upsert({
+    where: { domain },
+    update: {},
+    create: { name: DEFAULT_ORG_NAME, domain },
+  });
 }
 
 /** Whether this email may sign in at all. */
@@ -50,28 +53,26 @@ export async function provisionUser(
   image?: string | null,
 ) {
   const lower = email.toLowerCase();
-  const bootstrap = (process.env.BOOTSTRAP_ADMIN_EMAIL || '').toLowerCase();
-  const existing = await prisma.user.findUnique({ where: { email: lower } });
-
-  if (existing) {
-    return prisma.user.update({
-      where: { email: lower },
-      data: {
-        name: name ?? existing.name,
-        image: image ?? existing.image,
-        lastLoginAt: new Date(),
-        ...(lower === bootstrap && existing.role !== 'admin' ? { role: 'admin' } : {}),
-      },
-    });
-  }
-
+  const bootstrap = !!process.env.BOOTSTRAP_ADMIN_EMAIL
+    && lower === process.env.BOOTSTRAP_ADMIN_EMAIL.toLowerCase();
   const org = await ensureOrg();
-  return prisma.user.create({
-    data: {
+
+  // upsert avoids a TOCTOU race between concurrent first sign-ins. The bootstrap
+  // admin is always (re)promoted AND reactivated, so they can never be locked
+  // out by a deactivation/demotion — their next sign-in restores access.
+  return prisma.user.upsert({
+    where: { email: lower },
+    update: {
+      name: name ?? undefined,
+      image: image ?? undefined,
+      lastLoginAt: new Date(),
+      ...(bootstrap ? { role: 'admin', isActive: true } : {}),
+    },
+    create: {
       email: lower,
       name: name ?? null,
       image: image ?? null,
-      role: lower === bootstrap ? 'admin' : 'user',
+      role: bootstrap ? 'admin' : 'user',
       orgId: org.id,
       isActive: true,
       lastLoginAt: new Date(),

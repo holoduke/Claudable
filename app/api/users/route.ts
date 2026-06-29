@@ -15,7 +15,7 @@ export async function GET() {
     const admin = await getAdminUser();
     if (!admin) return createErrorResponse('forbidden', 'Admin access required', 403);
 
-    const users = await listUsers();
+    const users = await listUsers(admin.orgId);
     return createSuccessResponse(users.map(serializeUser));
   } catch (error) {
     return handleApiError(error, 'API', 'Failed to list users');
@@ -31,8 +31,13 @@ export async function POST(request: NextRequest) {
     const email = typeof body.email === 'string' ? body.email : '';
     const name = typeof body.name === 'string' ? body.name : undefined;
 
-    const user = await addExternalUser(email, name);
-    return createSuccessResponse(serializeUser(user), 201);
+    const { user, created } = await addExternalUser(admin.orgId, email, name);
+    // 200 (not 201) when the user already existed, so the UI can tell the admin
+    // "already a member" instead of falsely confirming a new invite.
+    return createSuccessResponse(
+      { ...serializeUser(user), created },
+      created ? 201 : 200,
+    );
   } catch (error) {
     if (error instanceof Error && /valid email/u.test(error.message)) {
       return createErrorResponse('invalid_email', error.message, 400);

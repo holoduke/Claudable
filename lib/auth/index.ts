@@ -21,16 +21,17 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       return provisioned.isActive;
     },
     async jwt({ token, user }) {
-      // Only on sign-in (user present) — runs in Node, never on the Edge read path.
+      // Runs in Node (never on the Edge read path). Re-checked on every token
+      // rotation — not just at sign-in — so deactivation and role changes take
+      // effect without waiting for the token to expire. Returning null clears
+      // the session cookie, which logs out a user who has been deactivated.
       const email = (user?.email ?? token.email)?.toLowerCase();
-      if (user && email) {
-        const dbUser = await prisma.user.findUnique({ where: { email } });
-        if (dbUser) {
-          (token as any).uid = dbUser.id;
-          (token as any).role = dbUser.role;
-          (token as any).orgId = dbUser.orgId;
-        }
-      }
+      if (!email) return token;
+      const dbUser = await prisma.user.findUnique({ where: { email } });
+      if (!dbUser || !dbUser.isActive) return null;
+      (token as any).uid = dbUser.id;
+      (token as any).role = dbUser.role;
+      (token as any).orgId = dbUser.orgId;
       return token;
     },
     async session({ session, token }) {

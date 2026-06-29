@@ -24,28 +24,49 @@ export async function PATCH(
     const { id } = await params;
     const body = (await request.json().catch(() => null)) ?? {};
     const isSelf = id === admin.id;
+    const hasRole = 'role' in body;
+    const hasActive = 'isActive' in body;
 
-    if ('role' in body) {
-      if (isSelf && body.role !== 'admin') {
-        return createErrorResponse('self_change', 'You cannot change your own role', 400);
-      }
-      const updated = await setUserRole(id, body.role);
-      return createSuccessResponse(serializeUser(updated));
+    if (!hasRole && !hasActive) {
+      return createErrorResponse('no_op', 'Provide "role" and/or "isActive"', 400);
     }
 
-    if ('isActive' in body) {
-      if (isSelf && !body.isActive) {
-        return createErrorResponse('self_change', 'You cannot deactivate your own account', 400);
-      }
-      const updated = await setUserActive(id, Boolean(body.isActive));
-      return createSuccessResponse(serializeUser(updated));
+    // Validate every field up front so a malformed value can never half-apply.
+    if (hasRole && body.role !== 'admin' && body.role !== 'user') {
+      return createErrorResponse('invalid_role', 'Role must be "admin" or "user"', 400);
+    }
+    if (hasActive && typeof body.isActive !== 'boolean') {
+      return createErrorResponse('invalid_input', 'isActive must be a boolean', 400);
+    }
+    if (isSelf && hasRole && body.role !== 'admin') {
+      return createErrorResponse('self_change', 'You cannot change your own role', 400);
+    }
+    if (isSelf && hasActive && body.isActive === false) {
+      return createErrorResponse('self_change', 'You cannot deactivate your own account', 400);
     }
 
-    return createErrorResponse('no_op', 'Nothing to update', 400);
+    const target = await prisma.user.findUnique({ where: { id } });
+    if (!target) return createErrorResponse('not_found', 'User not found', 404);
+
+    // Never let the org drop to zero active admins (e.g. demoting/deactivating
+    // the other admin while you yourself later lose account access).
+    const demotingAdmin =
+      target.role === 'admin' &&
+      ((hasRole && body.role !== 'admin') || (hasActive && body.isActive === false));
+    if (demotingAdmin) {
+      const activeAdmins = await prisma.user.count({
+        where: { role: 'admin', isActive: true, orgId: target.orgId },
+      });
+      if (activeAdmins <= 1) {
+        return createErrorResponse('last_admin', 'Cannot remove the last active admin', 409);
+      }
+    }
+
+    let updated = target;
+    if (hasRole) updated = await setUserRole(id, body.role);
+    if (hasActive) updated = await setUserActive(id, body.isActive);
+    return createSuccessResponse(serializeUser(updated));
   } catch (error) {
-    if (error instanceof Error && /Role must be/u.test(error.message)) {
-      return createErrorResponse('invalid_role', error.message, 400);
-    }
     return handleApiError(error, 'API', 'Failed to update user');
   }
 }
