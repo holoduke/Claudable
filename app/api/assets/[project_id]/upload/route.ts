@@ -32,15 +32,22 @@ export async function POST(request: Request, { params }: RouteContext) {
       return NextResponse.json({ success: false, error: 'File field is required' }, { status: 400 });
     }
 
-    if (!file.type.startsWith('image/')) {
-      return NextResponse.json({ success: false, error: 'File must be an image' }, { status: 400 });
+    // Accept any file type (documents, archives, data, images…). Guard only on
+    // size so an upload can't exhaust disk. The stored name is a random UUID, so
+    // the original name/extension can never cause path traversal.
+    const MAX_UPLOAD_BYTES = Number(process.env.MAX_UPLOAD_BYTES || 50 * 1024 * 1024);
+    if (file.size > MAX_UPLOAD_BYTES) {
+      return NextResponse.json(
+        { success: false, error: `File too large (max ${Math.round(MAX_UPLOAD_BYTES / 1024 / 1024)}MB)` },
+        { status: 413 },
+      );
     }
 
     const projectAssetsPath = resolveAssetsPath(project_id);
     await fs.mkdir(projectAssetsPath, { recursive: true });
 
-    const originalName = file.name || 'image.png';
-    const extension = path.extname(originalName) || '.png';
+    const originalName = file.name || 'file';
+    const extension = path.extname(originalName); // '' when the file has no extension
     const uniqueName = `${randomUUID()}${extension}`;
     const absolutePath = path.join(projectAssetsPath, uniqueName);
     const resolvedAbsolutePath = path.resolve(absolutePath);
@@ -100,7 +107,7 @@ export async function POST(request: Request, { params }: RouteContext) {
     return NextResponse.json(
       {
         success: false,
-        error: 'Failed to upload image',
+        error: 'Failed to upload file',
         message: error instanceof Error ? error.message : 'Unknown error',
       },
       { status: 500 },
