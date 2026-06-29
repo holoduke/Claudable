@@ -4,6 +4,7 @@ import Image from 'next/image';
 import { AnimatePresence } from 'framer-motion';
 import { MotionDiv } from '@/lib/motion';
 import ServiceConnectionModal from '@/components/modals/ServiceConnectionModal';
+import UsersSettings from '@/components/settings/UsersSettings';
 import { FaCog } from 'react-icons/fa';
 import { useGlobalSettings } from '@/contexts/GlobalSettingsContext';
 import { getModelDefinitionsForCli, normalizeModelId } from '@/lib/constants/cliModels';
@@ -12,10 +13,18 @@ import type { CLIStatus } from '@/types/cli';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? '';
 
+type SettingsTab = 'general' | 'ai-agents' | 'services' | 'users' | 'about';
+
 interface GlobalSettingsProps {
   isOpen: boolean;
   onClose: () => void;
-  initialTab?: 'general' | 'ai-agents' | 'services' | 'about';
+  initialTab?: SettingsTab;
+}
+
+interface CurrentUser {
+  id: string;
+  email: string;
+  role: 'admin' | 'user';
 }
 
 interface CLIOption {
@@ -106,7 +115,8 @@ interface ServiceToken {
 }
 
 export default function GlobalSettings({ isOpen, onClose, initialTab = 'general' }: GlobalSettingsProps) {
-  const [activeTab, setActiveTab] = useState<'general' | 'ai-agents' | 'services' | 'about'>(initialTab);
+  const [activeTab, setActiveTab] = useState<SettingsTab>(initialTab);
+  const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
   const [serviceModalOpen, setServiceModalOpen] = useState(false);
   const [selectedProvider, setSelectedProvider] = useState<'github' | 'supabase' | 'vercel' | null>(null);
   const [tokens, setTokens] = useState<{ [key: string]: ServiceToken | null }>({
@@ -195,14 +205,36 @@ export default function GlobalSettings({ isOpen, onClose, initialTab = 'general'
     }
   }, []);
 
+  const loadCurrentUser = useCallback(async () => {
+    try {
+      const response = await fetch(`${API_BASE}/api/users/me`);
+      if (response.ok) {
+        const json = await response.json();
+        setCurrentUser((json?.data as CurrentUser) ?? null);
+      } else {
+        setCurrentUser(null);
+      }
+    } catch {
+      setCurrentUser(null);
+    }
+  }, []);
+
   // Load all service tokens and CLI data
   useEffect(() => {
     if (isOpen) {
       loadAllTokens();
       loadGlobalSettings();
       checkCLIStatus();
+      loadCurrentUser();
     }
-  }, [isOpen, loadAllTokens, loadGlobalSettings, checkCLIStatus]);
+  }, [isOpen, loadAllTokens, loadGlobalSettings, checkCLIStatus, loadCurrentUser]);
+
+  const isAdmin = currentUser?.role === 'admin';
+
+  // If a non-admin somehow lands on the Users tab, fall back to General.
+  useEffect(() => {
+    if (activeTab === 'users' && !isAdmin) setActiveTab('general');
+  }, [activeTab, isAdmin]);
 
   const saveGlobalSettings = async () => {
     setIsLoading(true);
@@ -385,12 +417,13 @@ export default function GlobalSettings({ isOpen, onClose, initialTab = 'general'
           {/* Tab Navigation */}
           <div className="border-b border-gray-200 ">
             <nav className="flex px-5">
-              {[
+              {([
                 { id: 'general' as const, label: 'General' },
                 { id: 'ai-agents' as const, label: 'AI Agents' },
                 { id: 'services' as const, label: 'Services' },
+                ...(isAdmin ? [{ id: 'users' as const, label: 'Users' }] : []),
                 { id: 'about' as const, label: 'About' }
-              ].map(tab => (
+              ] as { id: SettingsTab; label: string }[]).map(tab => (
                 <button
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id)}
@@ -729,6 +762,10 @@ export default function GlobalSettings({ isOpen, onClose, initialTab = 'general'
                   </div>
                 </div>
               </div>
+            )}
+
+            {activeTab === 'users' && isAdmin && currentUser && (
+              <UsersSettings currentUserId={currentUser.id} onToast={showToast} />
             )}
 
             {activeTab === 'about' && (
