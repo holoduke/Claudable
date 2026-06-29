@@ -373,6 +373,18 @@ export default function ChatPage() {
     previewUrlRef.current = previewUrl;
   }, [previewUrl]);
 
+  // Capture a dashboard thumbnail once the preview is up (best-effort, once per
+  // project). Delayed so the dev server has rendered before the screenshot.
+  const thumbCapturedForRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!previewUrl || thumbCapturedForRef.current === projectId) return;
+    const t = setTimeout(() => {
+      thumbCapturedForRef.current = projectId;
+      fetch(`${API_BASE}/api/projects/${projectId}/thumbnail`, { method: 'POST' }).catch(() => {});
+    }, 7000);
+    return () => clearTimeout(t);
+  }, [previewUrl, projectId]);
+
   const sendInitialPrompt = useCallback(async (initialPrompt: string) => {
     if (initialPromptSent) {
       return;

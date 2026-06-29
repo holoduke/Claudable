@@ -3,9 +3,13 @@
 FROM node:22-bookworm-slim
 
 # Tooling the agent needs at runtime: git (push), ripgrep (claude search), ca-certs.
+# chromium + fonts-liberation power server-side project thumbnails (headless capture).
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends git ca-certificates ripgrep curl \
+  && apt-get install -y --no-install-recommends git ca-certificates ripgrep curl chromium fonts-liberation \
   && rm -rf /var/lib/apt/lists/*
+
+# Path to the headless browser used for thumbnail capture (lib/services/thumbnail.ts).
+ENV CHROMIUM_PATH=/usr/bin/chromium
 
 # Claude Code CLI on PATH so the Agent SDK can spawn `claude` headless.
 RUN npm install -g @anthropic-ai/claude-code

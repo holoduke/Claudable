@@ -1240,13 +1240,28 @@ export default function HomePage() {
                           if (selectedModel) params.set('model', selectedModel);
                           router.push(`/${project.id}/chat${params.toString() ? '?' + params.toString() : ''}`);
                         }}
-                        className="group text-left p-4 rounded-xl border border-gray-200 bg-white hover:border-gray-300 hover:shadow-sm transition-all"
+                        className="group text-left rounded-xl border border-gray-200 bg-white hover:border-gray-300 hover:shadow-sm transition-all overflow-hidden"
                       >
-                        <div className="flex items-center gap-2 mb-1.5">
-                          <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: projectColor }} />
-                          <span className="text-sm font-medium text-gray-900 truncate">{project.name}</span>
+                        {/* Site thumbnail (headless screenshot of the preview). The
+                            gradient shows until/unless a thumbnail exists; the img
+                            hides itself on 404 to reveal it. */}
+                        <div className="aspect-video w-full bg-gradient-to-br from-gray-100 to-gray-200 relative">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={`${API_BASE}/api/projects/${project.id}/thumbnail`}
+                            alt=""
+                            loading="lazy"
+                            className="w-full h-full object-cover object-top"
+                            onError={(e) => { (e.currentTarget as HTMLImageElement).style.visibility = 'hidden'; }}
+                          />
                         </div>
-                        <p className="text-xs text-gray-400 group-hover:text-gray-600 transition-colors">Open project →</p>
+                        <div className="p-3">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: projectColor }} />
+                            <span className="text-sm font-medium text-gray-900 truncate">{project.name}</span>
+                          </div>
+                          <p className="text-xs text-gray-400 group-hover:text-gray-600 transition-colors">Open project →</p>
+                        </div>
                       </button>
                     );
                   })}
