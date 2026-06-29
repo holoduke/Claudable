@@ -48,6 +48,11 @@ model Project {
   updatedAt    DateTime @updatedAt @map("updated_at")
   lastActiveAt DateTime @default(now()) @map("last_active_at")
 
+  // Access control
+  orgId      String? @map("org_id")
+  ownerId    String? @map("owner_id")
+  visibility String  @default("org") // org | restricted
+
   // Relations
   messages              Message[]
   sessions              Session[]
@@ -56,8 +61,61 @@ model Project {
   commits               Commit[]
   toolUsages            ToolUsage[]
   userRequests          UserRequest[]
+  organization          Organization?  @relation(fields: [orgId], references: [id])
+  owner                 User?          @relation("OwnedProjects", fields: [ownerId], references: [id])
+  members               ProjectMember[]
 
+  @@index([orgId])
   @@map("projects")
+}
+
+// ============================================================
+// Auth & Access Control
+// ============================================================
+
+model Organization {
+  id        String   @id @default(cuid())
+  name      String
+  domain    String   @unique
+  createdAt DateTime @default(now()) @map("created_at")
+
+  users    User[]
+  projects Project[]
+
+  @@map("organizations")
+}
+
+model User {
+  id          String    @id @default(cuid())
+  email       String    @unique
+  name        String?
+  image       String?
+  role        String    @default("user") // admin | user
+  isActive    Boolean   @default(true) @map("is_active")
+  orgId       String    @map("org_id")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  lastLoginAt DateTime? @map("last_login_at")
+
+  organization  Organization    @relation(fields: [orgId], references: [id])
+  ownedProjects Project[]       @relation("OwnedProjects")
+  memberships   ProjectMember[]
+
+  @@index([orgId])
+  @@map("users")
+}
+
+model ProjectMember {
+  id        String   @id @default(cuid())
+  projectId String   @map("project_id")
+  userId    String   @map("user_id")
+  role      String   @default("editor") // viewer | editor
+  createdAt DateTime @default(now()) @map("created_at")
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, userId])
+  @@map("project_members")
 }
 
 model Message {
