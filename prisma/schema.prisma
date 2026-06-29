@@ -62,7 +62,7 @@ model Project {
   toolUsages            ToolUsage[]
   userRequests          UserRequest[]
   organization          Organization?  @relation(fields: [orgId], references: [id])
-  owner                 User?          @relation("OwnedProjects", fields: [ownerId], references: [id])
+  owner                 User?          @relation("OwnedProjects", fields: [ownerId], references: [id], onDelete: SetNull)
   members               ProjectMember[]
 
   @@index([orgId])

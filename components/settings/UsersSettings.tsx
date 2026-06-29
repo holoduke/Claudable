@@ -58,7 +58,8 @@ export default function UsersSettings({ currentUserId, onToast }: UsersSettingsP
       if (!res.ok || !json.success) throw new Error(json.message || 'Failed to add user');
       setNewEmail('');
       setNewName('');
-      onToast(`Invited ${email}`, 'success');
+      const created = json.data?.created !== false;
+      onToast(created ? `Invited ${email}` : `${email} is already a member`, 'success');
       await load();
     } catch (err) {
       onToast(err instanceof Error ? err.message : 'Failed to add user', 'error');

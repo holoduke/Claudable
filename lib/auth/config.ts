@@ -9,7 +9,9 @@ import Google from 'next-auth/providers/google';
 export const authConfig = {
   // Self-hosted behind a reverse proxy — trust the configured AUTH_URL host.
   trustHost: true,
-  session: { strategy: 'jwt' },
+  // 8h lifetime bounds how long the pure-Edge page gate can trust a stale token
+  // (the Node jwt callback revokes deactivated users sooner on any API/session hit).
+  session: { strategy: 'jwt', maxAge: 60 * 60 * 8 },
   pages: { signIn: '/login', error: '/login' },
   providers: [
     Google({
