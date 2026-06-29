@@ -20,3 +20,13 @@ export async function getSessionUser(): Promise<User | null> {
 export function authEnabled(): boolean {
   return process.env.AUTH_ENABLED === 'true';
 }
+
+/**
+ * Resolve the current user only if they are an active admin, else null.
+ * Used to gate the user-management API regardless of AUTH_ENABLED — admin
+ * operations always require a signed-in admin, even while the gate is off.
+ */
+export async function getAdminUser(): Promise<User | null> {
+  const user = await getSessionUser();
+  return user && user.role === 'admin' ? user : null;
+}
