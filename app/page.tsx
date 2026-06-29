@@ -160,7 +160,7 @@ export default function HomePage() {
   const [showAssistantDropdown, setShowAssistantDropdown] = useState(false);
   const [showModelDropdown, setShowModelDropdown] = useState(false);
   const [isCreatingProject, setIsCreatingProject] = useState(false);
-  const [uploadedImages, setUploadedImages] = useState<{ id: string; name: string; url: string; path: string; file?: File }[]>([]);
+  const [uploadedImages, setUploadedImages] = useState<{ id: string; name: string; url: string; path: string; file?: File; isImage?: boolean }[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
   const router = useRouter();
@@ -396,22 +396,23 @@ export default function HomePage() {
     
     try {
       const filesArray = Array.from(files as ArrayLike<File>);
-      const imagesToAdd = filesArray
-        .filter(file => file.type.startsWith('image/'))
-        .map(file => ({
-          id: crypto.randomUUID(),
-          name: file.name,
-          url: URL.createObjectURL(file),
-          path: '',
-          file,
-        }));
+      // Accept any file type. Images are sent to the model inline; other files
+      // are uploaded into the project and referenced by path (see handleSubmit).
+      const itemsToAdd = filesArray.map(file => ({
+        id: crypto.randomUUID(),
+        name: file.name,
+        url: URL.createObjectURL(file),
+        path: '',
+        file,
+        isImage: file.type.startsWith('image/'),
+      }));
 
-      if (imagesToAdd.length > 0) {
-        setUploadedImages(prev => [...prev, ...imagesToAdd]);
+      if (itemsToAdd.length > 0) {
+        setUploadedImages(prev => [...prev, ...itemsToAdd]);
       }
     } catch (error) {
-      console.error('Image processing failed:', error);
-      showToast('Failed to process image. Please try again.', 'error');
+      console.error('File processing failed:', error);
+      showToast('Failed to process file. Please try again.', 'error');
     } finally {
       setIsUploading(false);
       if (fileInputRef.current) {
@@ -520,17 +521,19 @@ export default function HomePage() {
         });
       }
       
-      // Upload images if any
+      // Upload all attachments into the new project's assets/. Images go to the
+      // model inline; other files are referenced by path so the agent reads them.
       let imageData: any[] = [];
-      
+      const attachedFileRefs: string[] = [];
+
       if (uploadedImages.length > 0) {
         try {
           for (let i = 0; i < uploadedImages.length; i++) {
-            const image = uploadedImages[i];
-            if (!image.file) continue;
-            
+            const item = uploadedImages[i];
+            if (!item.file) continue;
+
             const formData = new FormData();
-            formData.append('file', image.file);
+            formData.append('file', item.file);
 
             const uploadResponse = await fetchAPI(`${API_BASE}/api/assets/${createdProjectId}/upload`, {
               method: 'POST',
@@ -539,28 +542,39 @@ export default function HomePage() {
 
             if (uploadResponse.ok) {
               const result = await uploadResponse.json();
-              // Track image data for API
-              imageData.push({
-                name: result.filename || image.name,
-                path: result.absolute_path,
-                public_url: typeof result.public_url === 'string' ? result.public_url : undefined
-              });
+              if (item.isImage !== false && (item.isImage || item.file.type.startsWith('image/'))) {
+                imageData.push({
+                  name: result.filename || item.name,
+                  path: result.absolute_path,
+                  public_url: typeof result.public_url === 'string' ? result.public_url : undefined
+                });
+              } else {
+                attachedFileRefs.push(`"${item.name}" → ${result.path}`);
+              }
             }
           }
         } catch (uploadError) {
-          console.error('Image upload failed:', uploadError);
-          showToast('Images could not be uploaded, but project was created', 'error');
+          console.error('File upload failed:', uploadError);
+          showToast('Files could not be uploaded, but project was created', 'error');
         }
       }
-      
-      // Execute initial prompt directly with images
-      if (prompt.trim()) {
+
+      // Build the instruction, appending references to any non-image files so the
+      // agent knows to read them from the project's assets/.
+      let instruction = prompt.trim();
+      if (attachedFileRefs.length > 0) {
+        const block = `Attached files (read them from the project):\n` + attachedFileRefs.map(r => `- ${r}`).join('\n');
+        instruction = instruction ? `${instruction}\n\n${block}` : block;
+      }
+
+      // Execute the initial prompt (with images inline + file references in text).
+      if (instruction || imageData.length > 0) {
         try {
           const actResponse = await fetchAPI(`${API_BASE}/api/chat/${createdProjectId}/act`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              instruction: prompt.trim(), // Original prompt without image paths
+              instruction,
               images: imageData,
               isInitialPrompt: true,
               cliPreference: selectedAssistant,
@@ -941,17 +955,28 @@ export default function HomePage() {
             {/* Image thumbnails */}
             {uploadedImages.length > 0 && (
               <div className="mb-4 flex flex-wrap gap-2">
-                {uploadedImages.map((image, index) => (
+                {uploadedImages.map((image) => (
                   <div key={image.id} className="relative group">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img 
-                      src={image.url} 
-                      alt={image.name}
-                      className="w-20 h-20 object-cover rounded-lg border border-gray-200 "
-                    />
-                    <div className="absolute bottom-0 left-0 right-0 bg-black bg-opacity-50 text-white text-xs px-1 py-0.5 rounded-b-lg">
-                      Image #{index + 1}
-                    </div>
+                    {image.isImage === false ? (
+                      <div className="w-20 h-20 rounded-lg border border-gray-200 bg-gray-50 flex flex-col items-center justify-center p-1.5 text-center">
+                        <svg className="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                        </svg>
+                        <span className="text-[10px] leading-tight text-gray-600 mt-1 line-clamp-2 break-all">{image.name}</span>
+                      </div>
+                    ) : (
+                      <>
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={image.url}
+                          alt={image.name}
+                          className="w-20 h-20 object-cover rounded-lg border border-gray-200 "
+                        />
+                        <div className="absolute bottom-0 left-0 right-0 bg-black bg-opacity-50 text-white text-xs px-1 py-0.5 rounded-b-lg truncate">
+                          {image.name}
+                        </div>
+                      </>
+                    )}
                     <button
                       type="button"
                       onClick={() => removeImage(image.id)}
@@ -1017,15 +1042,14 @@ export default function HomePage() {
               <div className="flex gap-1 flex-wrap items-center">
                 {/* Image Upload Button */}
                 <div className="flex items-center gap-2">
-                  <label 
+                  <label
                     className="flex items-center justify-center w-8 h-8 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-full transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-                    title="Upload images"
+                    title="Upload images or files"
                   >
                     <ImageIcon className="h-4 w-4" />
                     <input
                       ref={fileInputRef}
                       type="file"
-                      accept="image/*"
                       multiple
                       onChange={handleImageUpload}
                       disabled={isUploading || isCreatingProject}
