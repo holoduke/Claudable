@@ -3,13 +3,14 @@
  * Main settings modal with tabs
  */
 import React, { useEffect, useMemo, useState } from 'react';
-import { FaCog, FaRobot, FaLock, FaPlug } from 'react-icons/fa';
+import { FaCog, FaRobot, FaLock, FaPlug, FaUsers } from 'react-icons/fa';
 import { SettingsModal } from './SettingsModal';
 import { GeneralSettings } from './GeneralSettings';
 import { AIAssistantSettings } from './AIAssistantSettings';
 import { EnvironmentSettings } from './EnvironmentSettings';
 import { ServiceSettings } from './ServiceSettings';
 import { SkillsSettings } from './SkillsSettings';
+import ProjectAccessSettings from './ProjectAccessSettings';
 import GlobalSettings from './GlobalSettings';
 
 interface ProjectSettingsProps {
@@ -22,7 +23,7 @@ interface ProjectSettingsProps {
   onProjectUpdated?: (update: { name: string; description?: string | null }) => void;
 }
 
-type SettingsTab = 'general' | 'ai-assistant' | 'environment' | 'services' | 'skills';
+type SettingsTab = 'general' | 'ai-assistant' | 'environment' | 'services' | 'skills' | 'access';
 
 export function ProjectSettings({
   isOpen,
@@ -63,6 +64,12 @@ export function ProjectSettings({
           id: 'skills' as SettingsTab,
           label: 'Skills',
           icon: <span className="w-4 h-4 inline-flex items-center justify-center text-sm leading-none">✦</span>,
+          hidden: !isProjectScoped,
+        },
+        {
+          id: 'access' as SettingsTab,
+          label: 'Access',
+          icon: <span className="w-4 h-4 inline-flex"><FaUsers /></span>,
           hidden: !isProjectScoped,
         },
       ].filter(tab => !('hidden' in tab) || !tab.hidden),
@@ -159,6 +166,10 @@ export function ProjectSettings({
 
           {activeTab === 'skills' && (
             <SkillsSettings projectId={projectId} />
+          )}
+
+          {activeTab === 'access' && isProjectScoped && (
+            <ProjectAccessSettings projectId={projectId} />
           )}
         </div>
       </div>

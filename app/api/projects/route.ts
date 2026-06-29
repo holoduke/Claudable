@@ -10,14 +10,26 @@ import type { CreateProjectInput } from '@/types/backend';
 import { serializeProjects, serializeProject } from '@/lib/serializers/project';
 import { getDefaultModelForCli, normalizeModelId } from '@/lib/constants/cliModels';
 import { createSuccessResponse, createErrorResponse, handleApiError } from '@/lib/utils/api-response';
+import { getSessionUser, authEnabled } from '@/lib/auth/session';
+import { accessibleProjectIds } from '@/lib/services/project-access';
 
 /**
  * GET /api/projects
- * Get all projects list
+ * Get all projects list. When the auth gate is enabled, restricted projects the
+ * signed-in user isn't assigned to are filtered out (hidden entirely).
  */
 export async function GET() {
   try {
     const projects = await getAllProjects();
+    if (authEnabled()) {
+      const me = await getSessionUser();
+      if (me) {
+        // getAllProjects spreads the full Prisma row, so ownerId/orgId/visibility
+        // exist at runtime even though the backend Project type omits them.
+        const allowed = await accessibleProjectIds(me, projects as unknown as Parameters<typeof accessibleProjectIds>[1]);
+        return createSuccessResponse(serializeProjects(projects.filter((p) => allowed.has(p.id))));
+      }
+    }
     return createSuccessResponse(serializeProjects(projects));
   } catch (error) {
     return handleApiError(error, 'API', 'Failed to fetch projects');
