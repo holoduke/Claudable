@@ -6,6 +6,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import GitHubRepoModal from '@/components/modals/GitHubRepoModal';
 import VercelProjectModal from '@/components/modals/VercelProjectModal';
 import SupabaseModal from '@/components/modals/SupabaseModal';
+import { isIntegrationVisible } from '@/lib/config/integrations';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? '';
 
@@ -69,7 +70,7 @@ export function ServiceSettings({ projectId, onOpenGlobalSettings }: ServiceSett
       status: 'disconnected',
       description: 'Connect to Supabase for backend services and database'
     }
-  ]);
+  ].filter(service => isIntegrationVisible(service.id)));
   
   const [gitHubModalOpen, setGitHubModalOpen] = useState(false);
   const [vercelModalOpen, setVercelModalOpen] = useState(false);
@@ -227,7 +228,7 @@ export function ServiceSettings({ projectId, onOpenGlobalSettings }: ServiceSett
         <h3 className="text-lg font-medium text-gray-900 mb-1">
           Service Integrations
         </h3>
-        <p className="text-sm text-gray-600 mb-4">Connect Git, Supabase and Vercel with a consistent, polished experience.</p>
+        <p className="text-sm text-gray-600 mb-4">Connect a Git repository to push code and deploy.</p>
 
         <div className="space-y-4">
           {services.map(service => (

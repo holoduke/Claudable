@@ -5,6 +5,7 @@ import { AnimatePresence } from 'framer-motion';
 import { MotionDiv } from '@/lib/motion';
 import ServiceConnectionModal from '@/components/modals/ServiceConnectionModal';
 import UsersSettings from '@/components/settings/UsersSettings';
+import { isIntegrationVisible } from '@/lib/config/integrations';
 import { FaCog } from 'react-icons/fa';
 import { useGlobalSettings } from '@/contexts/GlobalSettingsContext';
 import { getModelDefinitionsForCli, normalizeModelId } from '@/lib/constants/cliModels';
@@ -143,7 +144,7 @@ export default function GlobalSettings({ isOpen, onClose, initialTab = 'general'
   }, []);
 
   const loadAllTokens = useCallback(async () => {
-    const providers = ['github', 'supabase', 'vercel'];
+    const providers = ['github', 'supabase', 'vercel'].filter(isIntegrationVisible);
     const newTokens: { [key: string]: ServiceToken | null } = {};
     
     for (const provider of providers) {
@@ -712,7 +713,7 @@ export default function GlobalSettings({ isOpen, onClose, initialTab = 'general'
                   </p>
                   
                   <div className="space-y-4">
-                    {Object.entries(tokens).map(([provider, token]) => (
+                    {Object.entries(tokens).filter(([provider]) => isIntegrationVisible(provider)).map(([provider, token]) => (
                       <div key={provider} className="flex items-center justify-between p-4 bg-gray-50 rounded-xl border border-gray-200 ">
                         <div className="flex items-center gap-3">
                           <div className="text-gray-700 ">
