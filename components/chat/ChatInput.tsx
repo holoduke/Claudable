@@ -187,11 +187,9 @@ export default function ChatInput({
       return;
     }
 
-    if (!supportsImageUpload) {
-      console.error('❌ Current CLI does not support image upload:', preferredCli);
-      alert(`Only Claude CLI supports image uploads.\nCurrent CLI: ${preferredCli}\nSwitch to Claude CLI.`);
-      return;
-    }
+    // Note: image attachments need a CLI that can view images; other files are
+    // just dropped into the project and referenced by path, so any CLI is fine.
+    // The per-file loop below enforces the image-capability check only on images.
 
     console.log('📸 Starting image upload process:', {
       projectId,
@@ -204,10 +202,28 @@ export default function ChatInput({
     try {
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
+        const isImage = file.type.startsWith('image/');
 
-        // Check if file is an image
-        if (!file.type.startsWith('image/')) {
-          console.warn(`⚠️ Skipping non-image file: ${file.name}, type: ${file.type}`);
+        // Non-image files (PDFs, docs, data, …): upload into the project's
+        // assets/ and reference the path in the message so the agent reads it
+        // from disk. Works with any CLI.
+        if (!isImage) {
+          const fd = new FormData();
+          fd.append('file', file);
+          const res = await fetch(`${API_BASE}/api/assets/${projectId}/upload`, { method: 'POST', body: fd });
+          if (!res.ok) {
+            const t = await res.text();
+            throw new Error(`Failed to upload ${file.name}: ${res.status} ${t}`);
+          }
+          const r = await res.json();
+          const ref = `Attached file "${file.name}" → ${r.path} (read it from the project).`;
+          setMessage((prev) => (prev.trim() ? `${prev.trimEnd()}\n${ref}` : ref));
+          continue;
+        }
+
+        // Images require an image-capable CLI.
+        if (!supportsImageUpload) {
+          console.warn(`⚠️ Skipping image (CLI ${preferredCli} can't view images): ${file.name}`);
           continue;
         }
 
@@ -425,9 +441,9 @@ export default function ChatInput({
               ) : (
                 <button
                   type="button"
-                  aria-label="Upload images"
+                  aria-label="Upload files"
                   className="flex items-center justify-center w-8 h-8 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-full transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-                  title="Upload images"
+                  title="Upload images or files"
                   onClick={() => {
                     fileInputRef.current?.click();
                   }}
@@ -436,7 +452,6 @@ export default function ChatInput({
                   <input
                     ref={fileInputRef}
                     type="file"
-                    accept="image/*"
                     multiple
                     onChange={handleImageUpload}
                     disabled={isUploading || disabled}

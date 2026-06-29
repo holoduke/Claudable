@@ -14,6 +14,38 @@ import { CLAUDE_SYSTEM_PROMPT } from './prompts/claude-system-prompt';
 import { createMessage } from '../message';
 import { CLAUDE_DEFAULT_MODEL, normalizeClaudeModelId, getClaudeModelDisplayName } from '@/lib/constants/claudeModels';
 import path from 'path';
+
+/**
+ * The environment handed to the agent subprocess. The SDK REPLACES the child
+ * env with whatever we pass (it only falls back to `{...process.env}` when no
+ * `env` is given), so this is an allowlist: the agent gets the infrastructure
+ * vars + its own Claude/Anthropic auth, but NOT Claudable's secrets
+ * (DATABASE_URL, GOOGLE_CLIENT_SECRET, GIT_TOKEN, AUTH_SECRET, …). This stops a
+ * prompt-injected agent from `printenv`-ing the app's credentials.
+ *
+ * Generous on purpose: missing a var the CLI/npm/git needs would break runs, so
+ * we keep all standard runtime vars and pass through anything prefixed CLAUDE_ or
+ * ANTHROPIC_ (the agent's own config) while dropping everything else.
+ */
+const AGENT_ENV_ALLOW = new Set([
+  'PATH', 'HOME', 'USER', 'LOGNAME', 'SHELL', 'PWD', 'OLDPWD',
+  'LANG', 'LANGUAGE', 'LC_ALL', 'LC_CTYPE', 'TERM', 'TZ',
+  'TMPDIR', 'TMP', 'TEMP', 'HOSTNAME', 'NODE_ENV', 'NODE_OPTIONS',
+  'NODE_EXTRA_CA_CERTS', 'SSL_CERT_FILE', 'SSL_CERT_DIR',
+  'HTTP_PROXY', 'HTTPS_PROXY', 'NO_PROXY', 'http_proxy', 'https_proxy', 'no_proxy',
+  'npm_config_registry', 'COREPACK_ENABLE_DOWNLOAD_PROMPT',
+]);
+
+function buildAgentEnv(): Record<string, string> {
+  const env: Record<string, string> = {};
+  for (const [key, value] of Object.entries(process.env)) {
+    if (value == null) continue;
+    if (AGENT_ENV_ALLOW.has(key) || key.startsWith('CLAUDE_') || key.startsWith('ANTHROPIC_')) {
+      env[key] = value;
+    }
+  }
+  return env;
+}
 import fs from 'fs/promises';
 import { randomUUID } from 'crypto';
 import {
@@ -512,6 +544,9 @@ export async function executeClaude(
         cwd: absoluteProjectPath, // SDK uses `cwd` (workingDirectory is ignored); without this the agent edits Claudable's own /app
         workingDirectory: absoluteProjectPath, // Work only in project folder (protects Claudable root)
         additionalDirectories: [absoluteProjectPath],
+        // Replace the child env with a scrubbed allowlist so the agent can't read
+        // Claudable's secrets (DB/Google/Git/Auth) via `printenv`. See buildAgentEnv.
+        env: buildAgentEnv(),
         // See skillSettingSources above: ['project','user'] by default (auto-load
         // all skills), or ['project'] once any skill is disabled (load only the
         // staged enabled set, making per-project disabling a hard guarantee).
