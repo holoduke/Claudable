@@ -385,6 +385,20 @@ export default function ChatPage() {
     return () => clearTimeout(t);
   }, [previewUrl, projectId]);
 
+  // Re-capture the thumbnail whenever an agent run completes, so the dashboard
+  // tile always reflects the latest version of the site. Fires on the
+  // running -> not-running transition, after the preview has hot-reloaded.
+  const wasRunningRef = useRef(false);
+  useEffect(() => {
+    const justFinished = wasRunningRef.current && !isRunning;
+    wasRunningRef.current = isRunning;
+    if (!justFinished || !previewUrlRef.current) return;
+    const t = setTimeout(() => {
+      fetch(`${API_BASE}/api/projects/${projectId}/thumbnail`, { method: 'POST' }).catch(() => {});
+    }, 6000);
+    return () => clearTimeout(t);
+  }, [isRunning, projectId]);
+
   const sendInitialPrompt = useCallback(async (initialPrompt: string) => {
     if (initialPromptSent) {
       return;
