@@ -583,7 +583,7 @@ async function ensureProjectRootStructure(
 async function waitForPreviewReady(
   url: string,
   log: (chunk: Buffer | string) => void,
-  timeoutMs = 30_000,
+  timeoutMs = 60_000, // generous so a cold Angular/Next first build isn't cut off
   intervalMs = 1_000
 ) {
   const start = Date.now();
@@ -1044,7 +1044,18 @@ class PreviewManager {
     // reach the dev server (network_mode host -> proxy hits it via the gateway).
     const bindHost = process.env.PREVIEW_BIND_HOST;
     const devArgs = ['run', 'dev', '--', '--port', String(effectivePort)];
-    if (bindHost && bindHost.trim().length > 0) {
+    const previewProject = await getProjectById(projectId).catch(() => null);
+    if (stackKind(previewProject?.templateType) === 'angular') {
+      // Angular's dev server rejects unknown Host headers, and the preview is
+      // reached via the public host — allow it explicitly. Derived from the
+      // resolved URL (no infra domain hardcoded); honored by the v20 builder.
+      try {
+        const host = new URL(resolvedUrl).hostname;
+        if (host) devArgs.push('--allowed-hosts', host);
+      } catch {
+        /* keep default args */
+      }
+    } else if (bindHost && bindHost.trim().length > 0) {
       devArgs.push('--hostname', bindHost.trim());
     }
 
