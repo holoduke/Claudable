@@ -1196,6 +1196,39 @@ export default function HomePage() {
                 </button>
               ))}
             </div>
+
+            {/* Your projects — tiles below the prompt. The list comes from
+                /api/projects, which already filters to the projects the signed-in
+                user may access when the auth gate is on. */}
+            {projects.length > 0 && (
+              <div className="mt-12 w-full max-w-3xl mx-auto text-left">
+                <h2 className="text-sm font-medium text-gray-500 mb-3 px-1">Your projects</h2>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                  {projects.map((project) => {
+                    const projectCli = sanitizeAssistant(project.preferredCli);
+                    const projectColor = assistantBrandColors[projectCli] || assistantBrandColors[DEFAULT_ASSISTANT];
+                    return (
+                      <button
+                        key={project.id}
+                        onClick={() => {
+                          const params = new URLSearchParams();
+                          if (selectedAssistant) params.set('cli', selectedAssistant);
+                          if (selectedModel) params.set('model', selectedModel);
+                          router.push(`/${project.id}/chat${params.toString() ? '?' + params.toString() : ''}`);
+                        }}
+                        className="group text-left p-4 rounded-xl border border-gray-200 bg-white hover:border-gray-300 hover:shadow-sm transition-all"
+                      >
+                        <div className="flex items-center gap-2 mb-1.5">
+                          <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: projectColor }} />
+                          <span className="text-sm font-medium text-gray-900 truncate">{project.name}</span>
+                        </div>
+                        <p className="text-xs text-gray-400 group-hover:text-gray-600 transition-colors">Open project →</p>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>

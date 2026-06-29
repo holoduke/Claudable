@@ -2275,12 +2275,12 @@ const persistProjectPreferences = useCallback(
       loadDeployStatusRef.current?.();
     };
 
-    // NOTE: We intentionally do NOT stop the preview on `beforeunload`. That
-    // fires on every page refresh, and killing the dev server there forced a
-    // ~15-30s cold recompile on each reload (the fast-path could never reuse the
-    // running server). Leaving it running lets a refresh reattach instantly. The
-    // server is still stopped when the user navigates away from the project (the
-    // effect cleanup below), which bounds how many dev servers stay alive.
+    // NOTE: We intentionally do NOT stop the preview on `beforeunload` OR on
+    // unmount/navigation. Killing the dev server forced a ~15-30s cold recompile
+    // every time you returned to (or refreshed) a project. Leaving previews
+    // running keeps multiple projects warm, so switching back is instant. The
+    // PreviewManager bounds resource use on its own: it reaps idle previews
+    // (PREVIEW_IDLE_TIMEOUT_MS) and LRU-evicts when the port pool is full.
     window.addEventListener('services-updated', handleServicesUpdate);
 
     return () => {
@@ -2288,14 +2288,10 @@ const persistProjectPreferences = useCallback(
       window.removeEventListener('services-updated', handleServicesUpdate);
 
       // Stop deploy/publish pollers so they don't keep hitting the API after the
-      // chat page unmounts (e.g. navigating back to the dashboard).
+      // chat page unmounts (e.g. navigating back to the dashboard). The preview
+      // itself is deliberately left running (see note above) so it stays warm.
       if (deployPollRef.current) { clearInterval(deployPollRef.current); deployPollRef.current = null; }
       if (giteaPollRef.current) { clearInterval(giteaPollRef.current); giteaPollRef.current = null; }
-
-      const currentPreview = previewUrlRef.current;
-      if (currentPreview) {
-        fetch(`${API_BASE}/api/projects/${projectId}/preview/stop`, { method: 'POST' }).catch(() => {});
-      }
     };
   }, [projectId]);
 
