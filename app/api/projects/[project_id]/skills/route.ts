@@ -6,6 +6,7 @@
 
 import { NextRequest } from 'next/server';
 import { listAllSkills, saveSkill, SkillError } from '@/lib/services/skills';
+import { designSkillIds } from '@/lib/services/design-skills';
 import { createSuccessResponse, createErrorResponse, handleApiError } from '@/lib/utils/api-response';
 
 interface RouteContext {
@@ -16,7 +17,14 @@ export async function GET(_request: NextRequest, { params }: RouteContext) {
   try {
     const { project_id } = await params;
     const skills = await listAllSkills(project_id);
-    return createSuccessResponse(skills);
+    // Design skills are managed in the separate "Design" tab — keep them out of
+    // the general skills list so the two never mix.
+    const designIds = await designSkillIds();
+    const filtered = {
+      project: skills.project.filter((s) => !designIds.has(s.id)),
+      global: skills.global.filter((s) => !designIds.has(s.id)),
+    };
+    return createSuccessResponse(filtered);
   } catch (error) {
     if (error instanceof SkillError) {
       return createErrorResponse(error.message, undefined, error.status);

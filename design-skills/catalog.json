@@ -1,0 +1,398 @@
+[
+  {
+    "id": "agentic",
+    "name": "Agentic",
+    "description": "Conversational AI-first interface with minimal controls, clear outcomes, and delegated task flows for agentic workflows.",
+    "preview": "/design-previews/agentic.png"
+  },
+  {
+    "id": "ant",
+    "name": "Ant",
+    "description": "Structured, enterprise-focused design system emphasizing clarity, consistency, and efficiency for data-dense web applications.",
+    "preview": "/design-previews/ant.png"
+  },
+  {
+    "id": "artistic",
+    "name": "Artistic",
+    "description": "High-contrast, expressive style with creative typography and bold color choices for visually striking interfaces.",
+    "preview": "/design-previews/artistic.png"
+  },
+  {
+    "id": "basic",
+    "name": "Basic",
+    "description": "Print-inspired visual language for books, magazines, and reports with editorial grids and expressive typography.",
+    "preview": "/design-previews/basic.png"
+  },
+  {
+    "id": "bento",
+    "name": "Bento",
+    "description": "Modular grid layout with card-like blocks, clear hierarchy, soft spacing, and subtle visual contrast for organized, scannable interfaces.",
+    "preview": "/design-previews/bento.png"
+  },
+  {
+    "id": "bold",
+    "name": "Bold",
+    "description": "Strong visual presence with heavyweight typography, high-contrast colors, and commanding layouts.",
+    "preview": "/design-previews/bold.png"
+  },
+  {
+    "id": "brutalism",
+    "name": "Brutalism",
+    "description": "Raw, anti-design aesthetic inspired by concrete architecture with unadorned elements, jarring layouts, and functional minimalism.",
+    "preview": "/design-previews/brutalism.png"
+  },
+  {
+    "id": "cafe",
+    "name": "Cafe",
+    "description": "Cozy cafe-inspired interface with warm tones, soft typography, and clean layouts for a relaxed browsing experience.",
+    "preview": "/design-previews/cafe.png"
+  },
+  {
+    "id": "claude",
+    "name": "Claude",
+    "description": "A research-journal aesthetic printed on warm stone — authoritative, editorial, almost achromatic. Pages live on warm ivory parchment (never pure white), with near-black slate as the dominant ink.",
+    "preview": "/design-previews/claude.png"
+  },
+  {
+    "id": "claymorphism",
+    "name": "Claymorphism",
+    "description": "Soft, rounded 3D-like shapes mimicking malleable clay with playful, puffy elements and colorful surfaces.",
+    "preview": "/design-previews/claymorphism.png"
+  },
+  {
+    "id": "clean",
+    "name": "Clean",
+    "description": "Simplicity-focused design with ample whitespace, legible typography, and a limited color palette to reduce visual clutter.",
+    "preview": "/design-previews/clean.png"
+  },
+  {
+    "id": "codex",
+    "name": "Codex",
+    "description": "A radically minimal, blank-canvas interface built as a pure edge-to-edge surface, with almost no color and typography carrying the visual weight. Black serves as the only filled color, the only divider, and the sole surface tone cards.",
+    "preview": "/design-previews/codex.png"
+  },
+  {
+    "id": "colorful",
+    "name": "Colorful",
+    "description": "Vibrant, high-contrast palettes and gradients for engaging, memorable, and modern user experiences.",
+    "preview": "/design-previews/colorful.png"
+  },
+  {
+    "id": "contemporary",
+    "name": "Contemporary",
+    "description": "Current-era minimalist design with bento grids, dark mode support, and high-performance accessible layouts.",
+    "preview": "/design-previews/contemporary.png"
+  },
+  {
+    "id": "corporate",
+    "name": "Corporate",
+    "description": "Professional, brand-aligned design with structured grids, minimalist layouts, and consistent enterprise patterns.",
+    "preview": "/design-previews/corporate.png"
+  },
+  {
+    "id": "cosmic",
+    "name": "Cosmic",
+    "description": "Futuristic sci-fi aesthetic with dark themes, vibrant neon accents, and immersive spatial elements.",
+    "preview": "/design-previews/cosmic.png"
+  },
+  {
+    "id": "creative",
+    "name": "Creative",
+    "description": "Playful, character-driven design with expressive typography and bold graphics for landing pages and creative projects.",
+    "preview": "/design-previews/creative.png"
+  },
+  {
+    "id": "dithered",
+    "name": "Dithered",
+    "description": "Dot-pattern rendering technique that simulates shades with a limited palette for nostalgic, retro, high-contrast visuals.",
+    "preview": "/design-previews/dithered.png"
+  },
+  {
+    "id": "doodle",
+    "name": "Doodle",
+    "description": "Hand-drawn, sketch-like style with doodles, handwritten fonts, and imperfect lines for a playful, informal feel.",
+    "preview": "/design-previews/doodle.png"
+  },
+  {
+    "id": "dramatic",
+    "name": "Dramatic",
+    "description": "High-contrast, theatrical design with bold layouts, immersive visuals, and unconventional compositions that command attention.",
+    "preview": "/design-previews/dramatic.png"
+  },
+  {
+    "id": "editorial",
+    "name": "Editorial",
+    "description": "Magazine-inspired editorial layout with refined serif typography, structured grids, and elegant reading experiences.",
+    "preview": "/design-previews/editorial.png"
+  },
+  {
+    "id": "enterprise",
+    "name": "Enterprise",
+    "description": "Dark-themed cloud-platform aesthetic with modular grids, glass-like panels, and strong data hierarchy for productivity dashboards.",
+    "preview": "/design-previews/enterprise.png"
+  },
+  {
+    "id": "expressive",
+    "name": "Expressive",
+    "description": "Vibrant, personality-driven design with bold colors, playful graphics, and dynamic layouts that balance creativity with structure.",
+    "preview": "/design-previews/expressive.png"
+  },
+  {
+    "id": "fantasy",
+    "name": "Fantasy",
+    "description": "Game-inspired fantasy aesthetic with bold, premium visuals, rich color palettes, and immersive thematic elements.",
+    "preview": "/design-previews/fantasy.png"
+  },
+  {
+    "id": "fiction",
+    "name": "Fiction",
+    "description": "A playful, energetic, cartoonesque interface inspired by friendly children's-book illustrations — warm cream backgrounds, big bold custom display typography, saturated brand color blocks, thick black outlines, generously rounded shapes",
+    "preview": "/design-previews/fiction.png"
+  },
+  {
+    "id": "flat",
+    "name": "Flat",
+    "description": "Two-dimensional minimalist style with vibrant colors, clean typography, and no 3D effects for fast, user-friendly interfaces.",
+    "preview": "/design-previews/flat.png"
+  },
+  {
+    "id": "friendly",
+    "name": "Friendly",
+    "description": "Approachable, intuitive design with rounded elements, ample whitespace, and soft pastel color palettes.",
+    "preview": "/design-previews/friendly.png"
+  },
+  {
+    "id": "futuristic",
+    "name": "Futuristic",
+    "description": "Forward-looking design with tech-inspired typography, modern layouts, and a sleek, innovation-driven aesthetic.",
+    "preview": "/design-previews/futuristic.png"
+  },
+  {
+    "id": "geometric",
+    "name": "Geometric",
+    "description": "Geometric, structured design with clean typography, neutral colors, precise shapes, and intuitive layouts that stay out of the way.",
+    "preview": "/design-previews/geometric.png"
+  },
+  {
+    "id": "glassmorphism",
+    "name": "Glassmorphism",
+    "description": "Frosted glass effect with translucent layers, subtle blur, and luminous borders for depth and modern elegance.",
+    "preview": null
+  },
+  {
+    "id": "gradient",
+    "name": "Gradient",
+    "description": "Smooth color transitions and gradient-rich surfaces for modern, playful interfaces with visual depth.",
+    "preview": "/design-previews/gradient.png"
+  },
+  {
+    "id": "immersive",
+    "name": "Immersive",
+    "description": "An immersive, interactive, exhibit-style interface that blends storytelling, animation, and gamified elements to create a playful, experience-driven journey. The entire app sits on a single continuous brand-colored canvas (deep green)",
+    "preview": "/design-previews/immersive.png"
+  },
+  {
+    "id": "impeccable",
+    "name": "Impeccable",
+    "description": "A modern, graphic, editorial-poster aesthetic — warm and confident — built on alternating cream and burnt orange sections, an amber brand color.",
+    "preview": "/design-previews/impeccable.png"
+  },
+  {
+    "id": "levels",
+    "name": "Levels",
+    "description": "Conversion-focused design that removes friction and guides users toward action through clarity, trust, and speed.",
+    "preview": "/design-previews/levels.png"
+  },
+  {
+    "id": "lingo",
+    "name": "Lingo",
+    "description": "Playful, minimal design with bright colors, rounded shapes, tactile 3D borders, and friendly illustrations for approachable interfaces.",
+    "preview": "/design-previews/lingo.png"
+  },
+  {
+    "id": "material",
+    "name": "Material",
+    "description": "Google's Material Design with layered surfaces, dynamic theming, built-in motion, and responsive cross-platform patterns.",
+    "preview": "/design-previews/material.png"
+  },
+  {
+    "id": "matrix",
+    "name": "Matrix",
+    "description": "A cyber-slick, dark-only Matrix-inspired interface defined by minimalist fashion, high-tech digital elements",
+    "preview": "/design-previews/matrix.png"
+  },
+  {
+    "id": "minimal",
+    "name": "Minimal",
+    "description": "Stripped-back design emphasizing whitespace, clean typography, and restrained color for maximum clarity and focus.",
+    "preview": "/design-previews/minimal.png"
+  },
+  {
+    "id": "modern",
+    "name": "Modern",
+    "description": "Contemporary editorial style with serif typography, minimal palettes, and clean layouts for polished digital products.",
+    "preview": "/design-previews/modern.png"
+  },
+  {
+    "id": "mono",
+    "name": "Mono",
+    "description": "Monospace-driven, matrix-inspired design with high-contrast elements, compact density, and a hacker-chic aesthetic.",
+    "preview": "/design-previews/mono.png"
+  },
+  {
+    "id": "neobrutalism",
+    "name": "Neobrutalism",
+    "description": "Modern take on brutalism with bold borders, vivid accent colors, and raw, high-contrast layouts on warm surfaces.",
+    "preview": "/design-previews/neobrutalism.png"
+  },
+  {
+    "id": "neon",
+    "name": "Neon",
+    "description": "Electric neon glow effects with high-contrast color pairings for bold, attention-grabbing interfaces.",
+    "preview": "/design-previews/neon.png"
+  },
+  {
+    "id": "neumorphism",
+    "name": "Neumorphism",
+    "description": "Soft, extruded UI elements with inner and outer shadows on monochromatic surfaces for a tactile, embedded look.",
+    "preview": "/design-previews/neumorphism.png"
+  },
+  {
+    "id": "pacman",
+    "name": "Pacman",
+    "description": "Retro arcade-inspired design with pixel fonts, dotted borders, playful high-contrast colors, and 8-bit game aesthetics.",
+    "preview": "/design-previews/pacman.png"
+  },
+  {
+    "id": "paper",
+    "name": "Paper",
+    "description": "Paper-textured, print-inspired design with minimal colors, clean serif/sans typography, and tactile surface qualities.",
+    "preview": "/design-previews/paper.png"
+  },
+  {
+    "id": "perspective",
+    "name": "Perspective",
+    "description": "Spatial depth design with isometric views, vanishing points, and layered elements that guide attention through 3D-like realism.",
+    "preview": "/design-previews/perspective.png"
+  },
+  {
+    "id": "premium",
+    "name": "Premium",
+    "description": "Apple-inspired premium aesthetic with precise spacing, modern typography, and a refined, polished visual language.",
+    "preview": "/design-previews/premium.png"
+  },
+  {
+    "id": "professional",
+    "name": "Professional",
+    "description": "Polished, business-ready design with modern typography, structured layouts, and a trustworthy visual identity.",
+    "preview": "/design-previews/professional.png"
+  },
+  {
+    "id": "pulse",
+    "name": "Pulse",
+    "description": "Dynamic, vibrant style with thick borders, geometric shapes, high-contrast colors, and expressive typography conveying motion and vitality.",
+    "preview": "/design-previews/pulse.png"
+  },
+  {
+    "id": "refined",
+    "name": "Refined",
+    "description": "Carefully curated, modern minimal style with elegant serif typography and understated, sophisticated palettes.",
+    "preview": "/design-previews/refined.png"
+  },
+  {
+    "id": "retro",
+    "name": "Retro",
+    "description": "Throwback design with vintage-inspired typography, high-contrast retro palettes, and nostalgic visual elements.",
+    "preview": "/design-previews/retro.png"
+  },
+  {
+    "id": "riso",
+    "name": "Riso",
+    "description": "A playful, joyful, two-color risograph print aesthetic built on a single warm off-white paper surface running through every section",
+    "preview": "/design-previews/riso.png"
+  },
+  {
+    "id": "roku",
+    "name": "Roku",
+    "description": "App dashboard with purple-themed aesthetic, top-bar navigation, card-based layouts, and developer-first workflows.",
+    "preview": "/design-previews/roku.png"
+  },
+  {
+    "id": "sega",
+    "name": "Sega",
+    "description": "A playful, arcade-inspired interface for games — built on the VT323 pixel typeface, hard-edged 0px corners, chunky pill buttons that physically press into solid offset blocks",
+    "preview": "/design-previews/sega.png"
+  },
+  {
+    "id": "shadcn",
+    "name": "Shadcn",
+    "description": "Shadcn/ui-inspired design with minimal, clean components, monochrome palette, and utility-first patterns.",
+    "preview": "/design-previews/shadcn.png"
+  },
+  {
+    "id": "sketch",
+    "name": "Sketch",
+    "description": "A friendly, hand-drawn sketch interface inspired by pencil illustrations on warm cream paper. Soft teal brand accents, hand-written display headings, rounded pill controls.",
+    "preview": "/design-previews/sketch.png"
+  },
+  {
+    "id": "skeumorphism",
+    "name": "Skeumorphism",
+    "description": "Real-world mimicry with textured surfaces, 3D effects, and familiar physical metaphors for intuitive digital interfaces.",
+    "preview": "/design-previews/skeumorphism.png"
+  },
+  {
+    "id": "sleek",
+    "name": "Sleek",
+    "description": "Modern minimalist aesthetic with clean lines, intentional color palette, subtle interactions, and consistent spacing.",
+    "preview": "/design-previews/sleek.png"
+  },
+  {
+    "id": "spacious",
+    "name": "Spacious",
+    "description": "Generous whitespace, consistent padding, and grid-based layouts for clean, readable, and breathing interfaces.",
+    "preview": "/design-previews/spacious.png"
+  },
+  {
+    "id": "square",
+    "name": "Square",
+    "description": "Graceful, refined aesthetic with delicate typography, minimal palettes, and polished layouts that exude sophistication.",
+    "preview": "/design-previews/square.png"
+  },
+  {
+    "id": "stitch",
+    "name": "Stitch",
+    "description": "Clean, high-contrast enterprise design for data-driven workflows with intuitive drag-and-drop patterns and structured layouts.",
+    "preview": "/design-previews/stitch.png"
+  },
+  {
+    "id": "storytelling",
+    "name": "Storytelling",
+    "description": "Narrative-driven design using visuals, copy, and interaction to guide users through engaging, emotionally resonant journeys.",
+    "preview": "/design-previews/storytelling.png"
+  },
+  {
+    "id": "terracotta",
+    "name": "Terracotta",
+    "description": "A sun-baked, clay-toned editorial interface built on warm cream surfaces, ink-brown headlines set in a display serif, and a single terracotta accent.",
+    "preview": "/design-previews/terracotta.png"
+  },
+  {
+    "id": "tetris",
+    "name": "Tetris",
+    "description": "Classic block-game inspired design with playful colors, bold display fonts, and compact, high-energy layouts.",
+    "preview": "/design-previews/tetris.png"
+  },
+  {
+    "id": "vibrant",
+    "name": "Vibrant",
+    "description": "Lively, colorful design with bold playful typography, warm accents, and dynamic visual energy.",
+    "preview": "/design-previews/vibrant.png"
+  },
+  {
+    "id": "vintage",
+    "name": "Vintage",
+    "description": "1950s-1990s nostalgia with skeuomorphic touches, grainy textures, retro color palettes, and pixel-style typography.",
+    "preview": "/design-previews/vintage.png"
+  }
+]

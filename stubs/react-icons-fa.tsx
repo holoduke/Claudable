@@ -88,3 +88,4 @@ export const FaMagic = wrap(Sparkles);
 export const FaPuzzlePiece = wrap(Puzzle);
 export const FaSearch = wrap(Search);
 export const FaUsers = wrap(Users);
+export const FaPalette = wrap(Palette);

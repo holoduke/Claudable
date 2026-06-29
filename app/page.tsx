@@ -4,6 +4,7 @@ import { motion } from 'framer-motion';
 import { useRouter } from 'next/navigation';
 import CreateProjectModal from '@/components/modals/CreateProjectModal';
 import DeleteProjectModal from '@/components/modals/DeleteProjectModal';
+import DesignPickerModal from '@/components/modals/DesignPickerModal';
 import GlobalSettings from '@/components/settings/GlobalSettings';
 import { useGlobalSettings } from '@/contexts/GlobalSettingsContext';
 import { getDefaultModelForCli, getModelDisplayName } from '@/lib/constants/cliModels';
@@ -84,6 +85,8 @@ export default function HomePage() {
   const [selectedAssistant, setSelectedAssistant] = useState<ActiveCliId>(DEFAULT_ASSISTANT);
   const [selectedModel, setSelectedModel] = useState(DEFAULT_MODEL);
   const [usingGlobalDefaults, setUsingGlobalDefaults] = useState(true);
+  const [selectedDesign, setSelectedDesign] = useState<{ id: string; name: string } | null>(null);
+  const [showDesignPicker, setShowDesignPicker] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [cliStatus, setCLIStatus] = useState<CLIStatus>({});
   const [isInitialLoad, setIsInitialLoad] = useState(true);
@@ -487,7 +490,8 @@ export default function HomePage() {
           name: prompt.slice(0, 50) + (prompt.length > 50 ? '...' : ''),
           initialPrompt: prompt.trim(),
           preferredCli: selectedAssistant,
-          selectedModel
+          selectedModel,
+          designId: selectedDesign?.id ?? null
         })
       });
       
@@ -582,6 +586,7 @@ export default function HomePage() {
       });
       setUploadedImages([]);
       setPrompt('');
+      setSelectedDesign(null);
 
       const params = new URLSearchParams();
       if (selectedAssistant) params.set('cli', selectedAssistant);
@@ -1028,6 +1033,18 @@ export default function HomePage() {
                     />
                   </label>
                 </div>
+                {/* Design Selector */}
+                <button
+                  type="button"
+                  onClick={() => setShowDesignPicker(true)}
+                  title="Pick a design style"
+                  className="justify-center whitespace-nowrap text-sm font-medium transition-colors duration-100 ease-in-out border border-gray-200/50 bg-transparent shadow-sm hover:bg-gray-50 hover:border-gray-300/50 px-3 py-2 flex h-8 items-center gap-1.5 rounded-full text-gray-700 hover:text-gray-900"
+                >
+                  <span aria-hidden className="text-sm leading-none">🎨</span>
+                  <span className="hidden md:flex text-sm font-medium">
+                    {selectedDesign ? selectedDesign.name : 'Design'}
+                  </span>
+                </button>
                 {/* Agent Selector */}
                 <div className="relative z-[200]" ref={assistantDropdownRef}>
                   <button
@@ -1182,6 +1199,14 @@ export default function HomePage() {
           </div>
         </div>
       </div>
+
+      {/* Design Picker (new project) */}
+      <DesignPickerModal
+        isOpen={showDesignPicker}
+        selectedId={selectedDesign?.id ?? null}
+        onClose={() => setShowDesignPicker(false)}
+        onSelect={(d) => setSelectedDesign(d)}
+      />
 
       {/* Global Settings Modal */}
       <GlobalSettings
