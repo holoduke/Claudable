@@ -397,6 +397,35 @@ export async function saveSkill(
   };
 }
 
+/**
+ * Install a skill into a project by copying every file from `srcDir` into
+ * `<project>/.claude/skills/<id>/` (so multi-file skills like the design skills,
+ * which ship a SKILL.md + DESIGN.md, are copied whole). Overwrites any existing
+ * copy and ensures the skill is enabled. Used by the design-skills service.
+ */
+export async function installSkillFromDir(
+  projectId: string,
+  skillId: string,
+  srcDir: string,
+): Promise<void> {
+  const id = assertSafeSkillId(skillId);
+  const root = await skillsDir(projectId);
+  const dest = path.join(root, id);
+  await fs.rm(dest, { recursive: true, force: true });
+  await fs.mkdir(dest, { recursive: true });
+
+  for (const entry of await fs.readdir(srcDir)) {
+    const src = path.join(srcDir, entry);
+    if ((await fs.stat(src)).isFile()) {
+      await fs.copyFile(src, path.join(dest, entry));
+    }
+  }
+
+  // Make sure it isn't parked as disabled from a previous install.
+  const set = await getDisabledSet(projectId);
+  if (set.delete(id)) await writeDisabledSet(projectId, set);
+}
+
 export async function deleteSkill(projectId: string, name: string): Promise<boolean> {
   const slug = normalizeSkillName(name);
   const root = await skillsDir(projectId);

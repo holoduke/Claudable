@@ -61,6 +61,20 @@ export async function POST(request: NextRequest) {
     }
 
     const project = await createProject(input);
+
+    // Optionally seed the project with a chosen design skill. Done after
+    // creation (not inside createProject) to avoid a project<->skills import
+    // cycle, and best-effort so a design hiccup never fails project creation.
+    const designId = typeof body.designId === 'string' ? body.designId : (typeof body.design_id === 'string' ? body.design_id : '');
+    if (designId) {
+      try {
+        const { setActiveDesign } = await import('@/lib/services/design-skills');
+        await setActiveDesign(project.id, designId);
+      } catch (e) {
+        console.error('[API] Failed to apply design to new project:', e);
+      }
+    }
+
     return createSuccessResponse(serializeProject(project), 201);
   } catch (error) {
     return handleApiError(error, 'API', 'Failed to create project');
