@@ -132,7 +132,8 @@ jobs:
           # Try to fast-forward an existing checkout; if anything is off (wrong
           # remote, detached state, corruption) fall back to a clean re-clone so
           # a deploy never gets stuck on a broken /opt dir. Preserve the runtime
-          # .env (secrets) across a re-clone.
+          # .env (secrets) AND data/ (the persistent SQLite volume) across a
+          # re-clone — both are untracked, so a clean re-clone would lose them.
           if [ -d "$DIR/.git" ] && cd "$DIR" \\
                && git remote set-url origin "$REPO" \\
                && git fetch --depth=1 origin main \\
@@ -140,14 +141,19 @@ jobs:
             echo "Updated existing checkout at $DIR"
           else
             echo "::warning::checkout unusable, re-cloning $DIR"
-            [ -f "$DIR/.env" ] && cp "$DIR/.env" "/tmp/$APP.env.bak" || true
+            BACKUP="/tmp/$APP.deploy-backup"
+            rm -rf "$BACKUP"; mkdir -p "$BACKUP"
+            [ -f "$DIR/.env" ] && cp "$DIR/.env" "$BACKUP/.env" || true
+            [ -d "$DIR/data" ] && cp -a "$DIR/data" "$BACKUP/data" || true
             cd /
             sudo rm -rf "$DIR"
             sudo mkdir -p "$DIR"
             sudo chown "$(id -u):$(id -g)" "$DIR"
             git clone --depth=1 "$REPO" "$DIR"
             cd "$DIR"
-            [ -f "/tmp/$APP.env.bak" ] && cp "/tmp/$APP.env.bak" "$DIR/.env" || true
+            [ -f "$BACKUP/.env" ] && cp "$BACKUP/.env" "$DIR/.env" || true
+            [ -d "$BACKUP/data" ] && rm -rf "$DIR/data" && cp -a "$BACKUP/data" "$DIR/data" || true
+            rm -rf "$BACKUP"
           fi
 
           # --- Build & (re)start ----------------------------------------------
