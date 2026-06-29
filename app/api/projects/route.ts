@@ -12,6 +12,7 @@ import { getDefaultModelForCli, normalizeModelId } from '@/lib/constants/cliMode
 import { createSuccessResponse, createErrorResponse, handleApiError } from '@/lib/utils/api-response';
 import { getSessionUser, authEnabled } from '@/lib/auth/session';
 import { accessibleProjectIds } from '@/lib/services/project-access';
+import { isValidStack } from '@/lib/config/stacks';
 
 /**
  * GET /api/projects
@@ -46,6 +47,8 @@ export async function POST(request: NextRequest) {
     const preferredCli = String(body.preferredCli || body.preferred_cli || 'claude').toLowerCase();
     const requestedModel = body.selectedModel || body.selected_model;
 
+    const rawStack = typeof body.stackId === 'string' ? body.stackId : (typeof body.templateType === 'string' ? body.templateType : '');
+
     const input: CreateProjectInput = {
       project_id: body.project_id,
       name: body.name,
@@ -53,6 +56,7 @@ export async function POST(request: NextRequest) {
       preferredCli,
       selectedModel: normalizeModelId(preferredCli, requestedModel ?? getDefaultModelForCli(preferredCli)),
       description: body.description,
+      templateType: isValidStack(rawStack) ? rawStack : undefined,
     };
 
     // Validation

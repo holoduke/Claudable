@@ -61,7 +61,8 @@ export async function createProject(input: CreateProjectInput): Promise<Project>
       preferredCli: input.preferredCli || 'claude',
       selectedModel: normalizeModelId(input.preferredCli || 'claude', input.selectedModel ?? getDefaultModelForCli(input.preferredCli || 'claude')),
       status: 'idle',
-      templateType: 'nextjs',
+      // Tech stack chosen on the new-project screen (drives preview scaffolding).
+      templateType: input.templateType || 'nuxt',
       lastActiveAt: new Date(),
       previewUrl: null,
       previewPort: null,

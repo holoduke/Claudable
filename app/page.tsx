@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import CreateProjectModal from '@/components/modals/CreateProjectModal';
 import DeleteProjectModal from '@/components/modals/DeleteProjectModal';
 import DesignPickerModal from '@/components/modals/DesignPickerModal';
+import { STACKS, DEFAULT_STACK } from '@/lib/config/stacks';
 import GlobalSettings from '@/components/settings/GlobalSettings';
 import { useGlobalSettings } from '@/contexts/GlobalSettingsContext';
 import { getDefaultModelForCli, getModelDisplayName } from '@/lib/constants/cliModels';
@@ -87,6 +88,8 @@ export default function HomePage() {
   const [usingGlobalDefaults, setUsingGlobalDefaults] = useState(true);
   const [selectedDesign, setSelectedDesign] = useState<{ id: string; name: string } | null>(null);
   const [showDesignPicker, setShowDesignPicker] = useState(false);
+  const [selectedStack, setSelectedStack] = useState<string>(DEFAULT_STACK);
+  const [showStackMenu, setShowStackMenu] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [cliStatus, setCLIStatus] = useState<CLIStatus>({});
   const [isInitialLoad, setIsInitialLoad] = useState(true);
@@ -492,7 +495,8 @@ export default function HomePage() {
           initialPrompt: prompt.trim(),
           preferredCli: selectedAssistant,
           selectedModel,
-          designId: selectedDesign?.id ?? null
+          designId: selectedDesign?.id ?? null,
+          stackId: selectedStack
         })
       });
       
@@ -1069,6 +1073,41 @@ export default function HomePage() {
                     {selectedDesign ? selectedDesign.name : 'Design'}
                   </span>
                 </button>
+                {/* Tech-stack Selector */}
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={() => setShowStackMenu(v => !v)}
+                    title="Pick a tech stack"
+                    className="justify-center whitespace-nowrap text-sm font-medium transition-colors duration-100 ease-in-out border border-gray-200/50 bg-transparent shadow-sm hover:bg-gray-50 hover:border-gray-300/50 px-3 py-2 flex h-8 items-center gap-1.5 rounded-full text-gray-700 hover:text-gray-900"
+                  >
+                    <span aria-hidden className="text-sm leading-none">🧱</span>
+                    <span className="hidden md:flex text-sm font-medium">
+                      {STACKS.find(s => s.id === selectedStack)?.name ?? 'Stack'}
+                    </span>
+                  </button>
+                  {showStackMenu && (
+                    <>
+                      <div className="fixed inset-0 z-[290]" onClick={() => setShowStackMenu(false)} />
+                      <div className="absolute bottom-full mb-2 left-0 z-[300] w-72 rounded-xl border border-gray-200 bg-white shadow-lg p-1">
+                        {STACKS.map(s => (
+                          <button
+                            key={s.id}
+                            type="button"
+                            onClick={() => { setSelectedStack(s.id); setShowStackMenu(false); }}
+                            className={`w-full text-left px-3 py-2 rounded-lg transition-colors ${selectedStack === s.id ? 'bg-gray-100' : 'hover:bg-gray-50'}`}
+                          >
+                            <div className="flex items-center justify-between">
+                              <span className="text-sm font-medium text-gray-900">{s.name}</span>
+                              {selectedStack === s.id && <span className="text-xs text-blue-600">✓</span>}
+                            </div>
+                            <p className="text-xs text-gray-500 mt-0.5">{s.description}</p>
+                          </button>
+                        ))}
+                      </div>
+                    </>
+                  )}
+                </div>
                 {/* Agent Selector */}
                 <div className="relative z-[200]" ref={assistantDropdownRef}>
                   <button
