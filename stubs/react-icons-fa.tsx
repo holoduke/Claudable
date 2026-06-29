@@ -37,6 +37,7 @@ import {
   Sparkles,
   Square,
   Triangle,
+  Users,
   Workflow,
   X,
 } from 'lucide-react';
@@ -86,3 +87,4 @@ export const FaCheckCircle = wrap(CheckCircle2);
 export const FaMagic = wrap(Sparkles);
 export const FaPuzzlePiece = wrap(Puzzle);
 export const FaSearch = wrap(Search);
+export const FaUsers = wrap(Users);

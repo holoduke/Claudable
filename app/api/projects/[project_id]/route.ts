@@ -13,6 +13,8 @@ import {
 } from '@/lib/services/project';
 import type { UpdateProjectInput } from '@/types/backend';
 import { serializeProject } from '@/lib/serializers/project';
+import { getSessionUser, authEnabled } from '@/lib/auth/session';
+import { canAccessProject } from '@/lib/services/project-access';
 
 interface RouteContext {
   params: Promise<{ project_id: string }>;
@@ -35,6 +37,18 @@ export async function GET(
         { success: false, error: 'Project not found' },
         { status: 404 }
       );
+    }
+
+    // When the gate is on, a restricted project the user can't access is hidden
+    // (404, not 403 — don't reveal that it exists).
+    if (authEnabled()) {
+      const me = await getSessionUser();
+      if (me && !(await canAccessProject(me, project as never))) {
+        return NextResponse.json(
+          { success: false, error: 'Project not found' },
+          { status: 404 }
+        );
+      }
     }
 
     return NextResponse.json({ success: true, data: serializeProject(project) });
