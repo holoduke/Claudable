@@ -1,5 +1,8 @@
 import { NextResponse } from 'next/server';
 import fs from 'fs/promises';
+import { createWriteStream } from 'fs';
+import { Readable } from 'stream';
+import { pipeline } from 'stream/promises';
 import path from 'path';
 import { randomUUID } from 'crypto';
 import { getProjectById } from '@/lib/services/project';
@@ -35,7 +38,7 @@ export async function POST(request: Request, { params }: RouteContext) {
     // Accept any file type (documents, archives, data, images…). Guard only on
     // size so an upload can't exhaust disk. The stored name is a random UUID, so
     // the original name/extension can never cause path traversal.
-    const MAX_UPLOAD_BYTES = Number(process.env.MAX_UPLOAD_BYTES || 50 * 1024 * 1024);
+    const MAX_UPLOAD_BYTES = Number(process.env.MAX_UPLOAD_BYTES || 500 * 1024 * 1024);
     if (file.size > MAX_UPLOAD_BYTES) {
       return NextResponse.json(
         { success: false, error: `File too large (max ${Math.round(MAX_UPLOAD_BYTES / 1024 / 1024)}MB)` },
@@ -52,13 +55,18 @@ export async function POST(request: Request, { params }: RouteContext) {
     const absolutePath = path.join(projectAssetsPath, uniqueName);
     const resolvedAbsolutePath = path.resolve(absolutePath);
 
-    const arrayBuffer = await file.arrayBuffer();
-    await fs.writeFile(resolvedAbsolutePath, Buffer.from(arrayBuffer));
+    // Stream the body to disk instead of buffering the whole file in memory a
+    // second time via arrayBuffer() — matters for large uploads (zips, archives).
+    await pipeline(Readable.fromWeb(file.stream() as any), createWriteStream(resolvedAbsolutePath));
 
+    // Only images need a web-served copy (preview/<img>). Archives, zips, docs etc.
+    // are read by the agent from the project on disk, so skip the extra mirror
+    // copies for them — no point duplicating a large zip into public/uploads.
+    const isImage = (file.type || '').startsWith('image/');
     let hostPublicPath: string | null = null;
     let projectPublicPath: string | null = null;
     let publicUrl: string | null = null;
-    try {
+    if (isImage) try {
       const rootUploadsDir = path.join(process.cwd(), 'public', 'uploads');
       await fs.mkdir(rootUploadsDir, { recursive: true });
       const hostDestination = path.join(rootUploadsDir, uniqueName);
@@ -73,7 +81,7 @@ export async function POST(request: Request, { params }: RouteContext) {
       console.warn('[Assets Upload] Failed to mirror asset into application public/uploads:', copyError);
     }
 
-    try {
+    if (isImage) try {
       const projectRoot = project.repoPath
         ? (path.isAbsolute(project.repoPath) ? project.repoPath : path.resolve(process.cwd(), project.repoPath))
         : path.join(PROJECTS_DIR_ABSOLUTE, project_id);
