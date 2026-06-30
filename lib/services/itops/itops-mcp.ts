@@ -174,6 +174,24 @@ export function buildItopsMcpServer() {
         { app: z.string(), key: z.string(), value: z.string() },
         async (args) => { audit('coolify_set_env', { app: args.app, key: args.key }); if (!coolify.coolifyConfigured()) return text('Coolify not configured (set COOLIFY_API_TOKEN).'); return run(() => coolify.setEnv(args.app, args.key, args.value)); },
       ),
+      tool(
+        'coolify_list_projects',
+        'List Coolify projects (top-level containers for environments/resources).',
+        {},
+        async (_args) => { audit('coolify_list_projects', {}); if (!coolify.coolifyConfigured()) return text('Coolify not configured (set COOLIFY_API_TOKEN).'); return run(() => coolify.listProjects()); },
+      ),
+      tool(
+        'coolify_create_project',
+        'Create a new Coolify project. Returns its uuid.',
+        { name: z.string(), description: z.string().optional() },
+        async (args) => { audit('coolify_create_project', { name: args.name }); if (!coolify.coolifyConfigured()) return text('Coolify not configured (set COOLIFY_API_TOKEN).'); return run(() => coolify.createProject(args.name, args.description)); },
+      ),
+      tool(
+        'coolify_delete_project',
+        'Delete a Coolify project by name or uuid. Coolify refuses if the project still holds resources (it must be empty first).',
+        { project: z.string() },
+        async (args) => { audit('coolify_delete_project', args); if (!coolify.coolifyConfigured()) return text('Coolify not configured (set COOLIFY_API_TOKEN).'); return run(() => coolify.deleteProject(args.project)); },
+      ),
 
       // ---- Traefik (box plane): dynamic route files, gated on the mounted dir ----
       tool(

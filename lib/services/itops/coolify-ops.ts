@@ -95,3 +95,41 @@ export async function setEnv(nameOrUuid: string, key: string, value: string): Pr
   }
   return `Set ${key} on ${name} [${uuid}] (redeploy for it to take effect).`;
 }
+
+// ---- Projects (top-level Coolify containers for environments/resources) ------
+
+interface CoolifyProject {
+  uuid: string;
+  name: string;
+  description?: string | null;
+}
+
+export async function listProjects(): Promise<string> {
+  const projects = (await api('/projects')) as CoolifyProject[];
+  if (!projects?.length) return 'No Coolify projects.';
+  return projects.map((p) => `- ${p.name} [${p.uuid}]${p.description ? ` — ${p.description}` : ''}`).join('\n');
+}
+
+export async function createProject(name: string, description?: string): Promise<string> {
+  const created = (await api('/projects', {
+    method: 'POST',
+    body: JSON.stringify({ name, ...(description ? { description } : {}) }),
+  })) as { uuid: string };
+  return `Created project "${name}" [${created.uuid}].`;
+}
+
+async function resolveProjectUuid(nameOrUuid: string): Promise<{ uuid: string; name: string }> {
+  const projects = (await api('/projects')) as CoolifyProject[];
+  const byUuid = projects.find((p) => p.uuid === nameOrUuid);
+  if (byUuid) return { uuid: byUuid.uuid, name: byUuid.name };
+  const byName = projects.find((p) => p.name.toLowerCase() === nameOrUuid.toLowerCase());
+  if (byName) return { uuid: byName.uuid, name: byName.name };
+  throw new Error(`No Coolify project matching "${nameOrUuid}".`);
+}
+
+/** Coolify refuses to delete a project that still holds resources (it must be empty). */
+export async function deleteProject(nameOrUuid: string): Promise<string> {
+  const { uuid, name } = await resolveProjectUuid(nameOrUuid);
+  await api(`/projects/${uuid}`, { method: 'DELETE' });
+  return `Deleted project "${name}" [${uuid}].`;
+}
