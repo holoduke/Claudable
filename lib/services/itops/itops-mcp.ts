@@ -18,6 +18,7 @@ import { createSdkMcpServer, tool } from '@anthropic-ai/claude-agent-sdk';
 import { z } from 'zod';
 import { listDeployTargets } from './deploy-targets';
 import * as gitea from './gitea-ops';
+import * as giteaAdmin from './gitea-admin-ops';
 import * as coolify from './coolify-ops';
 import * as traefik from './traefik-ops';
 
@@ -141,6 +142,86 @@ export function buildItopsMcpServer() {
         'Create a new Git repository (under the configured org).',
         { name: z.string(), private: z.boolean().optional(), description: z.string().optional() },
         async (args) => { audit('gitea_create_repo', { name: args.name }); return run(async () => (await gitea.createRepo(args.name, { private: args.private, description: args.description })).message); },
+      ),
+
+      // ---- Gitea ADMIN: repo admin, access control, org/team admin ----
+      tool(
+        'gitea_delete_repo',
+        'Delete a Git repository. Irreversible.',
+        { repo: z.string(), owner: z.string().optional() },
+        async (args) => { audit('gitea_delete_repo', args); return run(() => giteaAdmin.deleteRepo(args.repo, args.owner)); },
+      ),
+      tool(
+        'gitea_edit_repo',
+        'Edit repo settings: visibility (private), description, default branch, archived.',
+        { repo: z.string(), private: z.boolean().optional(), description: z.string().optional(), default_branch: z.string().optional(), archived: z.boolean().optional(), owner: z.string().optional() },
+        async (args) => { audit('gitea_edit_repo', { repo: args.repo }); const { repo, owner, ...s } = args; return run(() => giteaAdmin.editRepo(repo, s, owner)); },
+      ),
+      tool(
+        'gitea_list_collaborators',
+        'List a repo\'s collaborators.',
+        { repo: z.string(), owner: z.string().optional() },
+        async (args) => { audit('gitea_list_collaborators', args); return run(() => giteaAdmin.listCollaborators(args.repo, args.owner)); },
+      ),
+      tool(
+        'gitea_add_collaborator',
+        'Grant a user access to a repo (set their permission). permission = read | write | admin.',
+        { repo: z.string(), username: z.string(), permission: z.enum(['read', 'write', 'admin']), owner: z.string().optional() },
+        async (args) => { audit('gitea_add_collaborator', { repo: args.repo, username: args.username, permission: args.permission }); return run(() => giteaAdmin.addCollaborator(args.repo, args.username, args.permission, args.owner)); },
+      ),
+      tool(
+        'gitea_remove_collaborator',
+        'Revoke a user\'s access to a repo.',
+        { repo: z.string(), username: z.string(), owner: z.string().optional() },
+        async (args) => { audit('gitea_remove_collaborator', { repo: args.repo, username: args.username }); return run(() => giteaAdmin.removeCollaborator(args.repo, args.username, args.owner)); },
+      ),
+      tool(
+        'gitea_list_branch_protections',
+        'List a repo\'s branch protection rules.',
+        { repo: z.string(), owner: z.string().optional() },
+        async (args) => { audit('gitea_list_branch_protections', args); return run(() => giteaAdmin.listBranchProtections(args.repo, args.owner)); },
+      ),
+      tool(
+        'gitea_set_branch_protection',
+        'Protect a branch: optionally require N approvals and/or block direct pushes (force PRs).',
+        { repo: z.string(), branch: z.string(), requiredApprovals: z.number().optional(), blockPush: z.boolean().optional(), owner: z.string().optional() },
+        async (args) => { audit('gitea_set_branch_protection', { repo: args.repo, branch: args.branch }); return run(() => giteaAdmin.setBranchProtection(args.repo, args.branch, { requiredApprovals: args.requiredApprovals, blockPush: args.blockPush }, args.owner)); },
+      ),
+      tool(
+        'gitea_list_teams',
+        'List the org\'s teams.',
+        { org: z.string().optional() },
+        async (args) => { audit('gitea_list_teams', args); return run(() => giteaAdmin.listTeams(args.org)); },
+      ),
+      tool(
+        'gitea_list_org_members',
+        'List the org\'s members.',
+        { org: z.string().optional() },
+        async (args) => { audit('gitea_list_org_members', args); return run(() => giteaAdmin.listOrgMembers(args.org)); },
+      ),
+      tool(
+        'gitea_create_team',
+        'Create an org team. permission = read | write | admin.',
+        { name: z.string(), permission: z.enum(['read', 'write', 'admin']), org: z.string().optional() },
+        async (args) => { audit('gitea_create_team', { name: args.name, permission: args.permission }); return run(() => giteaAdmin.createTeam(args.name, args.permission, args.org)); },
+      ),
+      tool(
+        'gitea_delete_team',
+        'Delete an org team by name or id.',
+        { team: z.string(), org: z.string().optional() },
+        async (args) => { audit('gitea_delete_team', args); return run(() => giteaAdmin.deleteTeam(args.team, args.org)); },
+      ),
+      tool(
+        'gitea_add_team_member',
+        'Add a user to an org team.',
+        { team: z.string(), username: z.string(), org: z.string().optional() },
+        async (args) => { audit('gitea_add_team_member', { team: args.team, username: args.username }); return run(() => giteaAdmin.addTeamMember(args.team, args.username, args.org)); },
+      ),
+      tool(
+        'gitea_remove_team_member',
+        'Remove a user from an org team.',
+        { team: z.string(), username: z.string(), org: z.string().optional() },
+        async (args) => { audit('gitea_remove_team_member', { team: args.team, username: args.username }); return run(() => giteaAdmin.removeTeamMember(args.team, args.username, args.org)); },
       ),
 
       // ---- Coolify (box plane): scoped verbs, gated on COOLIFY_API_TOKEN ----
