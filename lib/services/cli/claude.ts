@@ -16,6 +16,7 @@ import { ANGULAR_SYSTEM_PROMPT } from './prompts/angular-system-prompt';
 import { stackKind } from '@/lib/config/stacks';
 import { resolveProjectClaudeToken } from '../claude-credentials';
 import { buildItopsMcpServer } from '../itops/itops-mcp';
+import { isItopsEnabledForProject } from '../itops/user-itops';
 import { createMessage } from '../message';
 import { CLAUDE_DEFAULT_MODEL, normalizeClaudeModelId, getClaudeModelDisplayName } from '@/lib/constants/claudeModels';
 import path from 'path';
@@ -588,6 +589,10 @@ export async function executeClaude(
     const stackProject = await getProjectById(projectId).catch(() => null);
     const systemPromptForStack = selectSystemPrompt(stackProject?.templateType);
 
+    // it-ops is a per-USER capability: attach the broker for every project owned
+    // by a user who has it-ops enabled (admins self-enable; admins enable others).
+    const itopsEnabled = await isItopsEnabledForProject(projectId).catch(() => false);
+
     // Resolve the Claude credential for this project (a user's connected token),
     // falling back to the global env token. Built here so it overrides the scrubbed
     // CLAUDE_CODE_OAUTH_TOKEN in the agent env below.
@@ -661,12 +666,10 @@ export async function executeClaude(
         hooks: {
           PreToolUse: [{ hooks: [buildProjectGuardHook(absoluteProjectPath)] }],
         },
-        // Admin-enabled it-ops tools (in-process MCP broker). Only attached when
-        // the project has itopsEnabled — the tools run in THIS process (creds
-        // never reach the scrubbed agent env). See itops-mcp.ts.
-        ...((stackProject as { itopsEnabled?: boolean } | null)?.itopsEnabled
-          ? { mcpServers: { itops: buildItopsMcpServer() } }
-          : {}),
+        // it-ops tools (in-process MCP broker). Attached when the project's OWNER
+        // has it-ops enabled — the tools run in THIS process (creds never reach the
+        // scrubbed agent env). See itops-mcp.ts + user-itops.ts.
+        ...(itopsEnabled ? { mcpServers: { itops: buildItopsMcpServer() } } : {}),
         // See skillSettingSources above: ['project','user'] by default (auto-load
         // all skills), or ['project'] once any skill is disabled (load only the
         // staged enabled set, making per-project disabling a hard guarantee).

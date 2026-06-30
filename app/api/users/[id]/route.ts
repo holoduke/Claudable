@@ -7,7 +7,7 @@
  */
 import { NextRequest } from 'next/server';
 import { getAdminUser } from '@/lib/auth/session';
-import { setUserRole, setUserActive, deleteUser, serializeUser } from '@/lib/services/users';
+import { setUserRole, setUserActive, setUserItops, deleteUser, serializeUser } from '@/lib/services/users';
 import { prisma } from '@/lib/db/client';
 import { createSuccessResponse, createErrorResponse, handleApiError } from '@/lib/utils/api-response';
 
@@ -26,9 +26,10 @@ export async function PATCH(
     const isSelf = id === admin.id;
     const hasRole = 'role' in body;
     const hasActive = 'isActive' in body;
+    const hasItops = 'itopsEnabled' in body;
 
-    if (!hasRole && !hasActive) {
-      return createErrorResponse('no_op', 'Provide "role" and/or "isActive"', 400);
+    if (!hasRole && !hasActive && !hasItops) {
+      return createErrorResponse('no_op', 'Provide "role", "isActive" and/or "itopsEnabled"', 400);
     }
 
     // Validate every field up front so a malformed value can never half-apply.
@@ -37,6 +38,9 @@ export async function PATCH(
     }
     if (hasActive && typeof body.isActive !== 'boolean') {
       return createErrorResponse('invalid_input', 'isActive must be a boolean', 400);
+    }
+    if (hasItops && typeof body.itopsEnabled !== 'boolean') {
+      return createErrorResponse('invalid_input', 'itopsEnabled must be a boolean', 400);
     }
     if (isSelf && hasRole && body.role !== 'admin') {
       return createErrorResponse('self_change', 'You cannot change your own role', 400);
@@ -65,6 +69,7 @@ export async function PATCH(
     let updated = target;
     if (hasRole) updated = await setUserRole(id, body.role);
     if (hasActive) updated = await setUserActive(id, body.isActive);
+    if (hasItops) updated = await setUserItops(id, body.itopsEnabled);
     return createSuccessResponse(serializeUser(updated));
   } catch (error) {
     return handleApiError(error, 'API', 'Failed to update user');

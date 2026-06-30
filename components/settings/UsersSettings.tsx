@@ -10,6 +10,7 @@ interface ManagedUser {
   image: string | null;
   role: 'admin' | 'user';
   isActive: boolean;
+  itopsEnabled?: boolean;
   createdAt: string;
   lastLoginAt: string | null;
 }
@@ -208,6 +209,20 @@ export default function UsersSettings({ currentUserId, onToast }: UsersSettingsP
                     title={isSelf ? 'You cannot deactivate yourself' : u.isActive ? 'Deactivate' : 'Activate'}
                   >
                     {u.isActive ? 'Deactivate' : 'Activate'}
+                  </button>
+
+                  {/* it-ops tools (per-user; admins grant it to anyone) */}
+                  <button
+                    onClick={() => patchUser(u.id, { itopsEnabled: !u.itopsEnabled })}
+                    disabled={busy}
+                    className={`px-2.5 py-1.5 text-xs font-medium border rounded-full transition-colors disabled:opacity-50 ${
+                      u.itopsEnabled
+                        ? 'border-amber-300 bg-amber-50 text-amber-700 hover:bg-amber-100'
+                        : 'border-gray-200 bg-white text-gray-700 hover:bg-gray-50'
+                    }`}
+                    title={u.itopsEnabled ? 'Disable it-ops tools for this user' : 'Enable it-ops tools for this user'}
+                  >
+                    it-ops {u.itopsEnabled ? 'on' : 'off'}
                   </button>
 
                   {/* Remove */}

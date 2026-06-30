@@ -74,6 +74,10 @@ export async function setUserActive(id: string, isActive: boolean): Promise<User
   return prisma.user.update({ where: { id }, data: { isActive: Boolean(isActive) } });
 }
 
+export async function setUserItops(id: string, itopsEnabled: boolean): Promise<User> {
+  return prisma.user.update({ where: { id }, data: { itopsEnabled: Boolean(itopsEnabled) } });
+}
+
 export async function deleteUser(id: string): Promise<void> {
   await prisma.user.delete({ where: { id } });
 }
@@ -87,6 +91,7 @@ export function serializeUser(u: User) {
     image: u.image,
     role: u.role,
     isActive: u.isActive,
+    itopsEnabled: u.itopsEnabled,
     createdAt: u.createdAt,
     lastLoginAt: u.lastLoginAt,
   };
