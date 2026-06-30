@@ -78,6 +78,33 @@ export function buildItopsMcpServer() {
         },
       ),
       tool(
+        'propose_new_app_host',
+        'Propose provisioning a NEW app-host box (like box1: Docker + Coolify + Traefik with keyless Route53 DNS-01). Produces a concrete, reviewable plan — it does NOT create anything.',
+        {
+          domain: z.string().describe('Apex domain apps will live under, e.g. example.tf'),
+          notes: z.string().optional().describe('Why / any specifics'),
+        },
+        async (args) => {
+          audit('propose_new_app_host', args);
+          const plan = [
+            `PROPOSAL — new app-host for *.${args.domain} (NOT applied; for it-ops review)`,
+            args.notes ? `Notes: ${args.notes}` : '',
+            '',
+            'Use the reproducible bundle: itops/provision-app-host/ (provision-app-host.sh + README.md).',
+            'Steps (full detail + IAM policy in the README):',
+            `  1. Run provision-app-host.sh with APP_DOMAIN=${args.domain} (installs Docker + Coolify + Traefik).`,
+            '  2. Create the least-privilege Route53 DNS-01 IAM role and attach its instance profile to the box.',
+            '  3. Set IMDS to IMDSv2 + hop-limit >= 2 (so the proxy container can reach the role).',
+            `  4. Configure the Coolify proxy KEYLESS: env AWS_REGION + AWS_HOSTED_ZONE_ID only (NO static keys) + the route53 resolver flags; restart the proxy.`,
+            `  5. Add wildcard DNS *.${args.domain} -> the box public IP (Route53).`,
+            `  6. Register it in Claudable via ITOPS_DEPLOY_TARGETS.`,
+            '',
+            'CRITICAL: keep it keyless — static AWS keys + the org ForceMFA policy break cert renewals (the box1 trap).',
+          ].filter(Boolean).join('\n');
+          return text(plan);
+        },
+      ),
+      tool(
         'propose_infra_change',
         'Record a PROPOSED infrastructure change for human review (e.g. provision a box, edit Traefik/DNS, an IAM change). This does NOT apply anything — it produces a reviewable proposal. Use this for any change that touches a box, AWS, Coolify, or Traefik.',
         {
