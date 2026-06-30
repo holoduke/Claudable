@@ -53,6 +53,9 @@ model Project {
   ownerId    String? @map("owner_id")
   visibility String  @default("org") // org | restricted
 
+  // Which Claude credential the agent runs with (null = global env token).
+  claudeCredentialId String? @map("claude_credential_id")
+
   // Relations
   messages              Message[]
   sessions              Session[]
@@ -64,6 +67,7 @@ model Project {
   organization          Organization?  @relation(fields: [orgId], references: [id])
   owner                 User?          @relation("OwnedProjects", fields: [ownerId], references: [id], onDelete: SetNull)
   members               ProjectMember[]
+  claudeCredential      ClaudeCredential? @relation("ProjectClaudeCredential", fields: [claudeCredentialId], references: [id], onDelete: SetNull)
 
   @@index([orgId])
   @@map("projects")
@@ -99,9 +103,32 @@ model User {
   organization  Organization    @relation(fields: [orgId], references: [id])
   ownedProjects Project[]       @relation("OwnedProjects")
   memberships   ProjectMember[]
+  claudeCredentials ClaudeCredential[]
 
   @@index([orgId])
   @@map("users")
+}
+
+/**
+ * A user's Claude Code subscription token (from `claude setup-token`), stored
+ * encrypted (lib/crypto). Owner-only by default; `shareable` lets other users in
+ * the org select it for a project. A project's runs use its assigned credential
+ * (Project.claudeCredentialId), falling back to the global env token.
+ */
+model ClaudeCredential {
+  id         String    @id @default(cuid())
+  ownerId    String    @map("owner_id")
+  label      String
+  token      String // encrypted
+  shareable  Boolean   @default(false)
+  createdAt  DateTime  @default(now()) @map("created_at")
+  lastUsedAt DateTime? @map("last_used_at")
+
+  owner    User      @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  projects Project[] @relation("ProjectClaudeCredential")
+
+  @@index([ownerId])
+  @@map("claude_credentials")
 }
 
 model ProjectMember {
