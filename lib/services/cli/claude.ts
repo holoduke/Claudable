@@ -16,7 +16,6 @@ import { ANGULAR_SYSTEM_PROMPT } from './prompts/angular-system-prompt';
 import { stackKind } from '@/lib/config/stacks';
 import { resolveProjectClaudeToken } from '../claude-credentials';
 import { buildItopsMcpServer } from '../itops/itops-mcp';
-import { isItopsEnabledForProject } from '../itops/user-itops';
 import { createMessage } from '../message';
 import { CLAUDE_DEFAULT_MODEL, normalizeClaudeModelId, getClaudeModelDisplayName } from '@/lib/constants/claudeModels';
 import path from 'path';
@@ -469,7 +468,7 @@ export async function executeClaude(
   model: string = CLAUDE_DEFAULT_MODEL,
   sessionId?: string,
   requestId?: string,
-  options: { suppressUserError?: boolean; thinkingMode?: ThinkingMode } = {}
+  options: { suppressUserError?: boolean; thinkingMode?: ThinkingMode; requesterItopsEnabled?: boolean } = {}
 ): Promise<void> {
   console.log(`\n========================================`);
   console.log(`[ClaudeService] 🚀 Starting Claude Agent SDK`);
@@ -589,9 +588,10 @@ export async function executeClaude(
     const stackProject = await getProjectById(projectId).catch(() => null);
     const systemPromptForStack = selectSystemPrompt(stackProject?.templateType);
 
-    // it-ops is a per-USER capability: attach the broker for every project owned
-    // by a user who has it-ops enabled (admins self-enable; admins enable others).
-    const itopsEnabled = await isItopsEnabledForProject(projectId).catch(() => false);
+    // it-ops follows the USER running the agent, NOT the project: attach the broker
+    // only when the person who triggered this run has it-ops enabled. A different
+    // user opening the same project gets no tools unless they too have it-ops.
+    const itopsEnabled = options.requesterItopsEnabled === true;
 
     // Resolve the Claude credential for this project (a user's connected token),
     // falling back to the global env token. Built here so it overrides the scrubbed
@@ -1142,7 +1142,8 @@ export async function initializeNextJsProject(
   projectPath: string,
   initialPrompt: string,
   model: string = CLAUDE_DEFAULT_MODEL,
-  requestId?: string
+  requestId?: string,
+  requesterItopsEnabled?: boolean
 ): Promise<void> {
   console.log(`[ClaudeService] Initializing Nuxt project: ${projectId}`);
 
@@ -1155,7 +1156,7 @@ Use Nuxt 4 (Vue 3 <script setup lang="ts">, file-based routing in pages/) and Nu
 Build on the existing scaffold in the project root and implement the requested features.
 `.trim();
 
-  await executeClaude(projectId, projectPath, fullPrompt, model, undefined, requestId);
+  await executeClaude(projectId, projectPath, fullPrompt, model, undefined, requestId, { requesterItopsEnabled });
 }
 
 /**
@@ -1175,7 +1176,8 @@ export async function applyChanges(
   model: string = CLAUDE_DEFAULT_MODEL,
   sessionId?: string,
   requestId?: string,
-  thinkingMode?: ThinkingMode
+  thinkingMode?: ThinkingMode,
+  requesterItopsEnabled?: boolean
 ): Promise<void> {
   console.log(`[ClaudeService] Applying changes to project: ${projectId}`);
   try {
@@ -1184,6 +1186,7 @@ export async function applyChanges(
     await executeClaude(projectId, projectPath, instruction, model, sessionId, requestId, {
       suppressUserError: Boolean(sessionId),
       thinkingMode,
+      requesterItopsEnabled,
     });
   } catch (error) {
     // Resuming a corrupt/incompatible session can fail immediately (exit code 1 /
@@ -1192,6 +1195,7 @@ export async function applyChanges(
       console.warn('[ClaudeService] Resume failed; retrying with a fresh session:', error instanceof Error ? error.message : error);
       await executeClaude(projectId, projectPath, instruction, model, undefined, requestId, {
         thinkingMode,
+        requesterItopsEnabled,
       });
     } else {
       throw error;
