@@ -139,11 +139,13 @@ export async function createTeam(
   return `Created team "${name}" [id ${created.id}] (${permission}).`;
 }
 
-/** Resolve a team name (or numeric id string) to its id. */
+/** Resolve a team name (or numeric id string) to its id via the list endpoint. */
 async function teamId(team: string, o?: string): Promise<number> {
   if (/^\d+$/u.test(team)) return Number(team);
-  const t = (await api(`/orgs/${enc(org(o))}/teams/${enc(team)}`)) as { id: number };
-  return t.id;
+  const teams = (await api(`/orgs/${enc(org(o))}/teams`)) as Array<{ id: number; name: string }>;
+  const match = teams.find((t) => t.name.toLowerCase() === team.toLowerCase());
+  if (!match) throw new Error(`No team "${team}" in org.`);
+  return match.id;
 }
 
 export async function deleteTeam(team: string, o?: string): Promise<string> {
