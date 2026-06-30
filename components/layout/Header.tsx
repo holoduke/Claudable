@@ -1,6 +1,7 @@
 "use client";
 import { useState } from 'react';
 import ProjectSettings from '@/components/settings/ProjectSettings';
+import UserMenu from '@/components/layout/UserMenu';
 import { usePathname } from 'next/navigation';
 import Image from 'next/image';
 
@@ -68,6 +69,8 @@ export default function Header() {
                 <circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
             </button>
+            {/* My account (it-ops self-enable for admins, user management) */}
+            <UserMenu />
           </div>
         </div>
       </div>

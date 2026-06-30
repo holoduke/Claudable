@@ -6,6 +6,7 @@ import { MotionDiv } from '@/lib/motion';
 import ServiceConnectionModal from '@/components/modals/ServiceConnectionModal';
 import UsersSettings from '@/components/settings/UsersSettings';
 import ClaudeAccountSettings from '@/components/settings/ClaudeAccountSettings';
+import MyAccountSettings from '@/components/settings/MyAccountSettings';
 import { isIntegrationVisible } from '@/lib/config/integrations';
 import { FaCog } from 'react-icons/fa';
 import { useGlobalSettings } from '@/contexts/GlobalSettingsContext';
@@ -15,7 +16,7 @@ import type { CLIStatus } from '@/types/cli';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? '';
 
-type SettingsTab = 'general' | 'ai-agents' | 'services' | 'claude' | 'users' | 'about';
+type SettingsTab = 'general' | 'ai-agents' | 'services' | 'claude' | 'account' | 'users' | 'about';
 
 interface GlobalSettingsProps {
   isOpen: boolean;
@@ -27,6 +28,7 @@ interface CurrentUser {
   id: string;
   email: string;
   role: 'admin' | 'user';
+  itopsEnabled?: boolean;
 }
 
 interface CLIOption {
@@ -431,6 +433,7 @@ export default function GlobalSettings({ isOpen, onClose, initialTab = 'general'
                 { id: 'ai-agents' as const, label: 'AI Agents' },
                 { id: 'services' as const, label: 'Services' },
                 ...(currentUser ? [{ id: 'claude' as const, label: 'Claude' }] : []),
+                ...(currentUser ? [{ id: 'account' as const, label: 'My Account' }] : []),
                 ...(isAdmin ? [{ id: 'users' as const, label: 'Users' }] : []),
                 { id: 'about' as const, label: 'About' }
               ] as { id: SettingsTab; label: string }[]).map(tab => (
@@ -776,6 +779,10 @@ export default function GlobalSettings({ isOpen, onClose, initialTab = 'general'
 
             {activeTab === 'claude' && currentUser && (
               <ClaudeAccountSettings onToast={showToast} />
+            )}
+
+            {activeTab === 'account' && currentUser && (
+              <MyAccountSettings user={currentUser} onToast={showToast} onChanged={loadCurrentUser} />
             )}
 
             {activeTab === 'users' && isAdmin && currentUser && (

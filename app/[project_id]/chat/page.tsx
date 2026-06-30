@@ -9,6 +9,7 @@ import { SiTypescript, SiGo, SiRuby, SiSvelte, SiJson, SiYaml, SiCplusplus } fro
 import { VscJson } from 'react-icons/vsc';
 import ChatLog from '@/components/chat/ChatLog';
 import { ProjectSettings } from '@/components/settings/ProjectSettings';
+import UserMenu from '@/components/layout/UserMenu';
 import ChatInput from '@/components/chat/ChatInput';
 import DesignImportModal from '@/components/chat/DesignImportModal';
 import SkillsModal from '@/components/chat/SkillsModal';
@@ -2417,6 +2418,8 @@ const persistProjectPreferences = useCallback(
       {isResizing && <div className="fixed inset-0 z-[100] cursor-col-resize select-none" />}
 
       <div className="h-screen bg-white flex relative overflow-hidden">
+        {/* My account (always top-right) */}
+        <div className="fixed top-3 right-4 z-50"><UserMenu /></div>
         <div className="h-full w-full flex" ref={splitContainerRef}>
           {/* Left: Chat window */}
           <div

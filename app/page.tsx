@@ -7,6 +7,7 @@ import DeleteProjectModal from '@/components/modals/DeleteProjectModal';
 import DesignPickerModal from '@/components/modals/DesignPickerModal';
 import { STACKS, DEFAULT_STACK } from '@/lib/config/stacks';
 import GlobalSettings from '@/components/settings/GlobalSettings';
+import UserMenu from '@/components/layout/UserMenu';
 import { useGlobalSettings } from '@/contexts/GlobalSettingsContext';
 import { getDefaultModelForCli, getModelDisplayName } from '@/lib/constants/cliModels';
 import Image from 'next/image';
@@ -695,6 +696,8 @@ export default function HomePage() {
 
   return (
     <div className="flex h-screen relative overflow-hidden bg-white ">
+      {/* My account (always top-right) */}
+      <div className="fixed top-3 right-4 z-50"><UserMenu /></div>
       {/* Radial gradient background from bottom center */}
       <div className="absolute inset-0">
         <div className="absolute inset-0 bg-white " />
