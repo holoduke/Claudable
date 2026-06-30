@@ -14,18 +14,31 @@
  * instead of throwing, so the broker degrades gracefully until it's wired.
  */
 
+import { fetchWithTimeout } from './net';
+
 function base(): string {
   return (process.env.COOLIFY_API_BASE || 'http://localhost:8000').replace(/\/+$/u, '');
 }
+
+const enc = encodeURIComponent;
+// Mask env values whose KEY looks secret, regardless of Coolify's is_secret flag
+// (a secret added via the CLI/API may not be flagged) — never hand the agent creds.
+const SECRET_KEY_RE = /TOKEN|SECRET|KEY|PASSWORD|PASS|CREDENTIAL|PRIVATE|AUTH|DSN|DATABASE_URL/iu;
 
 export function coolifyConfigured(): boolean {
   return !!(process.env.COOLIFY_API_TOKEN && process.env.COOLIFY_API_TOKEN.trim().length > 0);
 }
 
+class CoolifyError extends Error {
+  constructor(public status: number, message: string) {
+    super(message);
+  }
+}
+
 async function api(path: string, init?: RequestInit): Promise<unknown> {
   const token = process.env.COOLIFY_API_TOKEN?.trim();
   if (!token) throw new Error('Coolify not configured (set COOLIFY_API_TOKEN).');
-  const res = await fetch(`${base()}/api/v1${path}`, {
+  const res = await fetchWithTimeout(`${base()}/api/v1${path}`, {
     ...init,
     headers: {
       Authorization: `Bearer ${token}`,
@@ -35,7 +48,7 @@ async function api(path: string, init?: RequestInit): Promise<unknown> {
     },
   });
   const body = await res.text();
-  if (!res.ok) throw new Error(`Coolify ${res.status}: ${body.slice(0, 300)}`);
+  if (!res.ok) throw new CoolifyError(res.status, `Coolify ${res.status}: ${body.slice(0, 300)}`);
   return body.length ? JSON.parse(body) : null;
 }
 
@@ -66,32 +79,40 @@ async function resolveUuid(nameOrUuid: string): Promise<{ uuid: string; name: st
 
 export async function restartApp(nameOrUuid: string): Promise<string> {
   const { uuid, name } = await resolveUuid(nameOrUuid);
-  await api(`/applications/${uuid}/restart`, { method: 'POST' });
+  await api(`/applications/${enc(uuid)}/restart`, { method: 'POST' });
   return `Restart triggered for ${name} [${uuid}].`;
 }
 
 export async function deployApp(nameOrUuid: string): Promise<string> {
   const { uuid, name } = await resolveUuid(nameOrUuid);
-  await api(`/deploy?uuid=${encodeURIComponent(uuid)}`);
+  await api(`/deploy?uuid=${enc(uuid)}`);
   return `Deploy triggered for ${name} [${uuid}].`;
 }
 
 export async function getEnvs(nameOrUuid: string): Promise<string> {
   const { uuid, name } = await resolveUuid(nameOrUuid);
-  const envs = (await api(`/applications/${uuid}/envs`)) as Array<{ key: string; value?: string; is_secret?: boolean }>;
+  const envs = (await api(`/applications/${enc(uuid)}/envs`)) as Array<{ key: string; value?: string; is_secret?: boolean }>;
   if (!envs?.length) return `${name}: no env vars.`;
-  // Never echo secret values back to the agent — only the keys.
-  return `${name} env:\n${envs.map((e) => `  ${e.key}=${e.is_secret ? '<secret>' : e.value ?? ''}`).join('\n')}`;
+  // Mask values flagged secret OR whose key looks secret — never echo creds.
+  return `${name} env:\n${envs
+    .map((e) => `  ${e.key}=${e.is_secret || SECRET_KEY_RE.test(e.key) ? '<secret>' : e.value ?? ''}`)
+    .join('\n')}`;
 }
 
 export async function setEnv(nameOrUuid: string, key: string, value: string): Promise<string> {
   const { uuid, name } = await resolveUuid(nameOrUuid);
   const payload = JSON.stringify({ key, value, is_preview: false });
-  // PATCH updates an existing key; if it doesn't exist Coolify 404s → POST creates.
+  // PATCH updates an existing key; only fall back to POST (create) on a genuine
+  // 404 — catching ALL errors would create a DUPLICATE var on a transient 5xx
+  // where the PATCH actually applied server-side.
   try {
-    await api(`/applications/${uuid}/envs`, { method: 'PATCH', body: payload });
-  } catch {
-    await api(`/applications/${uuid}/envs`, { method: 'POST', body: payload });
+    await api(`/applications/${enc(uuid)}/envs`, { method: 'PATCH', body: payload });
+  } catch (e) {
+    if (e instanceof CoolifyError && e.status === 404) {
+      await api(`/applications/${enc(uuid)}/envs`, { method: 'POST', body: payload });
+    } else {
+      throw e;
+    }
   }
   return `Set ${key} on ${name} [${uuid}] (redeploy for it to take effect).`;
 }
@@ -130,6 +151,6 @@ async function resolveProjectUuid(nameOrUuid: string): Promise<{ uuid: string; n
 /** Coolify refuses to delete a project that still holds resources (it must be empty). */
 export async function deleteProject(nameOrUuid: string): Promise<string> {
   const { uuid, name } = await resolveProjectUuid(nameOrUuid);
-  await api(`/projects/${uuid}`, { method: 'DELETE' });
+  await api(`/projects/${enc(uuid)}`, { method: 'DELETE' });
   return `Deleted project "${name}" [${uuid}].`;
 }

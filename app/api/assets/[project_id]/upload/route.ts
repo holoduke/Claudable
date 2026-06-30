@@ -23,6 +23,23 @@ function resolveAssetsPath(projectId: string): string {
   return path.join(PROJECTS_DIR_ABSOLUTE, projectId, 'assets');
 }
 
+const STALE_PART_MS = 6 * 60 * 60 * 1000; // 6h
+
+/** Delete .part files older than STALE_PART_MS (abandoned chunked uploads). */
+async function sweepStaleParts(tmpDir: string): Promise<void> {
+  const now = Date.now();
+  const files = await fs.readdir(tmpDir).catch(() => [] as string[]);
+  await Promise.all(
+    files
+      .filter((f) => f.endsWith('.part'))
+      .map(async (f) => {
+        const p = path.join(tmpDir, f);
+        const st = await fs.stat(p).catch(() => null);
+        if (st && now - st.mtimeMs > STALE_PART_MS) await fs.unlink(p).catch(() => {});
+      }),
+  );
+}
+
 function tooLarge(): NextResponse {
   return NextResponse.json(
     { success: false, error: `File too large (max ${Math.round(MAX_UPLOAD_BYTES / 1024 / 1024)}MB)` },
@@ -122,6 +139,12 @@ export async function POST(request: Request, { params }: RouteContext) {
       const tmpDir = path.join(projectAssetsPath, '.uploads');
       await fs.mkdir(tmpDir, { recursive: true });
       const partPath = path.join(tmpDir, `${uploadId}.part`);
+
+      // Best-effort sweep of abandoned .part files (a failed mid-sequence upload
+      // leaves one behind). Runs on chunk 0 so it can't fill the disk over time.
+      if (chunkIndex === 0) {
+        await sweepStaleParts(tmpDir).catch(() => {});
+      }
 
       // First chunk truncates; later chunks append (client sends them in order).
       await pipeline(
