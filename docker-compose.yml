@@ -42,3 +42,8 @@ services:
       # container restarts/redeploys — otherwise the agent loses all context and
       # "forgets" the conversation after every deploy.
       - ./claude-sessions:/home/node/.claude/projects
+      # it-ops (opt-in): mount the host's Traefik dynamic-route dir so the broker
+      # can publish routes. Inert unless you set TRAEFIK_DYNAMIC_HOST_DIR (the host
+      # path) AND TRAEFIK_DYNAMIC_DIR=/traefik-dynamic in .env. Default is a local
+      # throwaway so deployments that don't use it mount nothing meaningful.
+      - ${TRAEFIK_DYNAMIC_HOST_DIR:-./data/.no-traefik}:/traefik-dynamic
