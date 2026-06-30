@@ -70,12 +70,48 @@ export default function ChatInput({
   const [message, setMessage] = useState('');
   const [uploadedImages, setUploadedImages] = useState<UploadedImage[]>([]);
   const [isUploading, setIsUploading] = useState(false);
+  // Live upload feedback so a large file (e.g. a zip) never looks frozen.
+  const [uploadProgress, setUploadProgress] = useState<{ name: string; pct: number } | null>(null);
+  const [uploadError, setUploadError] = useState<string | null>(null);
   const [isDragOver, setIsDragOver] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const submissionLockRef = useRef(false);
   const supportsImageUpload = preferredCli !== 'cursor' && preferredCli !== 'qwen' && preferredCli !== 'glm';
+  // Client-side cap mirrors the server's MAX_UPLOAD_BYTES so oversized files fail
+  // instantly with a clear message instead of after a long, doomed transfer.
+  const maxUploadMb = Number(process.env.NEXT_PUBLIC_MAX_UPLOAD_MB) || 500;
+
+  // Upload one file via XHR so we get real upload progress (fetch can't report it)
+  // and never block the main thread. Resolves the parsed JSON response.
+  const uploadWithProgress = useCallback(
+    (file: File): Promise<any> =>
+      new Promise((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', `${API_BASE}/api/assets/${projectId}/upload`);
+        xhr.upload.onprogress = (ev) => {
+          if (ev.lengthComputable) {
+            setUploadProgress({ name: file.name, pct: Math.round((ev.loaded / ev.total) * 100) });
+          }
+        };
+        xhr.onload = () => {
+          if (xhr.status >= 200 && xhr.status < 300) {
+            try { resolve(JSON.parse(xhr.responseText)); }
+            catch { reject(new Error('Bad server response')); }
+          } else {
+            let msg = `${xhr.status}`;
+            try { msg = JSON.parse(xhr.responseText).error || msg; } catch { /* keep status */ }
+            reject(new Error(msg));
+          }
+        };
+        xhr.onerror = () => reject(new Error('Network error during upload'));
+        const fd = new FormData();
+        fd.append('file', file);
+        xhr.send(fd);
+      }),
+    [projectId],
+  );
 
 
   const modelOptionsForCli = useMemo(
@@ -191,32 +227,34 @@ export default function ChatInput({
     // just dropped into the project and referenced by path, so any CLI is fine.
     // The per-file loop below enforces the image-capability check only on images.
 
-    console.log('📸 Starting image upload process:', {
+    console.log('📸 Starting upload process:', {
       projectId,
       cli: preferredCli,
       fileCount: files.length
     });
 
     setIsUploading(true);
+    setUploadError(null);
 
     try {
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
         const isImage = file.type.startsWith('image/');
 
-        // Non-image files (PDFs, docs, data, …): upload into the project's
+        // Guard size up front so a large file fails fast with a clear message
+        // instead of uploading for minutes and then being rejected by the server.
+        if (file.size > maxUploadMb * 1024 * 1024) {
+          setUploadError(`"${file.name}" is ${(file.size / 1024 / 1024).toFixed(0)}MB — over the ${maxUploadMb}MB limit.`);
+          continue;
+        }
+
+        // Non-image files (zips, PDFs, docs, data, …): upload into the project's
         // assets/ and reference the path in the message so the agent reads it
         // from disk. Works with any CLI.
         if (!isImage) {
-          const fd = new FormData();
-          fd.append('file', file);
-          const res = await fetch(`${API_BASE}/api/assets/${projectId}/upload`, { method: 'POST', body: fd });
-          if (!res.ok) {
-            const t = await res.text();
-            throw new Error(`Failed to upload ${file.name}: ${res.status} ${t}`);
-          }
-          const r = await res.json();
-          const ref = `Attached file "${file.name}" → ${r.path} (read it from the project).`;
+          setUploadProgress({ name: file.name, pct: 0 });
+          const r = await uploadWithProgress(file);
+          const ref = `Attached file "${file.name}" → ${r.path} (read/unzip it from the project).`;
           setMessage((prev) => (prev.trim() ? `${prev.trimEnd()}\n${ref}` : ref));
           continue;
         }
@@ -224,26 +262,13 @@ export default function ChatInput({
         // Images require an image-capable CLI.
         if (!supportsImageUpload) {
           console.warn(`⚠️ Skipping image (CLI ${preferredCli} can't view images): ${file.name}`);
+          setUploadError(`${preferredCli} can't view images — switch to Claude CLI for image input.`);
           continue;
         }
 
         console.log(`📸 Uploading image ${i + 1}/${files.length}:`, file.name);
-
-        const formData = new FormData();
-        formData.append('file', file);
-
-        const response = await fetch(`${API_BASE}/api/assets/${projectId}/upload`, {
-          method: 'POST',
-          body: formData
-        });
-
-        if (!response.ok) {
-          const errorText = await response.text();
-          console.error(`❌ Upload failed for ${file.name}:`, response.status, errorText);
-          throw new Error(`Failed to upload ${file.name}: ${response.status} ${errorText}`);
-        }
-
-        const result = await response.json();
+        setUploadProgress({ name: file.name, pct: 0 });
+        const result = await uploadWithProgress(file);
         console.log('✅ Image upload successful:', result);
         const imageUrl = URL.createObjectURL(file);
 
@@ -273,15 +298,17 @@ export default function ChatInput({
         });
       }
     } catch (error) {
-      console.error('❌ Image upload failed:', error);
-      alert('Image upload failed. Please try again.');
+      console.error('❌ Upload failed:', error);
+      // Inline, non-blocking error (alert() freezes the browser tab).
+      setUploadError(`Upload failed: ${error instanceof Error ? error.message : 'please try again'}`);
     } finally {
       setIsUploading(false);
+      setUploadProgress(null);
       if (fileInputRef.current) {
         fileInputRef.current.value = '';
       }
     }
-  }, [projectId, supportsImageUpload, preferredCli]);
+  }, [projectId, supportsImageUpload, preferredCli, maxUploadMb, uploadWithProgress]);
 
   useEffect(() => {
     adjustTextareaHeight();
@@ -338,11 +365,12 @@ export default function ChatInput({
   const handleDragEnter = (e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    console.log('📸 Drag enter event triggered:', { projectId, supportsImageUpload });
-    if (projectId && supportsImageUpload) {
+    console.log('📸 Drag enter event triggered:', { projectId });
+    // Any file is droppable (non-image files work with any CLI); only need a project.
+    if (projectId) {
       setIsDragOver(true);
     } else {
-      console.log('📸 Drag enter ignored: missing projectId or unsupported CLI');
+      console.log('📸 Drag enter ignored: no project selected');
     }
   };
 
@@ -357,11 +385,7 @@ export default function ChatInput({
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    if (projectId && supportsImageUpload) {
-      e.dataTransfer.dropEffect = 'copy';
-    } else {
-      e.dataTransfer.dropEffect = 'none';
-    }
+    e.dataTransfer.dropEffect = projectId ? 'copy' : 'none';
   };
 
   const handleDrop = (e: React.DragEvent) => {
@@ -381,8 +405,8 @@ export default function ChatInput({
       }))
     });
 
-    if (!projectId || !supportsImageUpload) {
-      console.log('📸 Drop event blocked: missing projectId or unsupported CLI');
+    if (!projectId) {
+      console.log('📸 Drop event blocked: no project selected');
       return;
     }
 
@@ -412,13 +436,32 @@ export default function ChatInput({
         {/* Drag & Drop Overlay */}
         {isDragOver && (
           <div className="absolute inset-0 flex flex-col items-center justify-center bg-blue-50 bg-opacity-95 rounded-2xl z-10 pointer-events-none">
-            <div className="text-blue-600 text-lg font-medium mb-2">Drop images here</div>
-            <div className="text-blue-500 text-sm">Drag and drop your image files</div>
+            <div className="text-blue-600 text-lg font-medium mb-2">Drop file here</div>
+            <div className="text-blue-500 text-sm">Images, zips, docs — the agent reads them from the project</div>
             <div className="mt-4">
               <svg className="w-12 h-12 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
               </svg>
             </div>
+          </div>
+        )}
+
+        {/* Upload progress — keeps a large file (e.g. a zip) from looking frozen */}
+        {uploadProgress && (
+          <div className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2">
+            <div className="flex items-center justify-between text-xs text-blue-700 mb-1">
+              <span className="truncate pr-2">Uploading {uploadProgress.name}</span>
+              <span className="tabular-nums">{uploadProgress.pct}%</span>
+            </div>
+            <div className="h-1.5 w-full rounded-full bg-blue-100 overflow-hidden">
+              <div className="h-full bg-blue-500 transition-all duration-150" style={{ width: `${uploadProgress.pct}%` }} />
+            </div>
+          </div>
+        )}
+        {uploadError && (
+          <div className="flex items-start justify-between gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+            <span>{uploadError}</span>
+            <button type="button" onClick={() => setUploadError(null)} className="shrink-0 text-red-500 hover:text-red-700" aria-label="Dismiss">✕</button>
           </div>
         )}
 
@@ -538,7 +581,7 @@ export default function ChatInput({
             className="w-full ring-offset-background placeholder:text-gray-500 focus-visible:outline-none focus-visible:ring-0 disabled:cursor-not-allowed disabled:opacity-50 resize-none text-[16px] leading-snug md:text-base bg-transparent focus:bg-transparent rounded-md p-2 text-gray-900 border border-gray-200 "
             id="chatinput"
             placeholder={placeholder}
-            disabled={disabled || isUploading || isSubmitting}
+            disabled={disabled || isSubmitting}
             style={{ minHeight: '60px' }}
           />
           {isDragOver && projectId && supportsImageUpload && (
