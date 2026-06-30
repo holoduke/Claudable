@@ -49,6 +49,10 @@ export async function POST(request: NextRequest) {
 
     const rawStack = typeof body.stackId === 'string' ? body.stackId : (typeof body.templateType === 'string' ? body.templateType : '');
 
+    // The signed-in creator owns the project (drives per-user it-ops). Null when
+    // not logged in (auth gate off) — such projects simply have no it-ops owner.
+    const creator = await getSessionUser();
+
     const input: CreateProjectInput = {
       project_id: body.project_id,
       name: body.name,
@@ -57,6 +61,7 @@ export async function POST(request: NextRequest) {
       selectedModel: normalizeModelId(preferredCli, requestedModel ?? getDefaultModelForCli(preferredCli)),
       description: body.description,
       templateType: isValidStack(rawStack) ? rawStack : undefined,
+      ownerId: creator?.id ?? null,
     };
 
     // Validation

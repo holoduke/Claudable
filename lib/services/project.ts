@@ -61,6 +61,9 @@ export async function createProject(input: CreateProjectInput): Promise<Project>
       preferredCli: input.preferredCli || 'claude',
       selectedModel: normalizeModelId(input.preferredCli || 'claude', input.selectedModel ?? getDefaultModelForCli(input.preferredCli || 'claude')),
       status: 'idle',
+      // The signed-in creator owns the project (drives per-user it-ops). Undefined
+      // when created without a session (auth gate off / not logged in).
+      ownerId: input.ownerId ?? undefined,
       // Tech stack chosen on the new-project screen (drives preview scaffolding).
       templateType: input.templateType || 'nuxt',
       lastActiveAt: new Date(),
