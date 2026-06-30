@@ -5,7 +5,7 @@ const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? '';
 
 interface MyAccountSettingsProps {
   user: { id: string; email: string; role: 'admin' | 'user'; itopsEnabled?: boolean };
-  onToast?: (message: string, type?: 'success' | 'error') => void;
+  onToast?: (message: string, type: 'success' | 'error') => void;
   onChanged?: () => void; // reload the current user after a change
 }
 
