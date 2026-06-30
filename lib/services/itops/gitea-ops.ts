@@ -26,14 +26,15 @@ function authHeaders(): Record<string, string> | null {
   };
 }
 
-/** owner defaults to the configured org (or must be passed for user-owned repos). */
-function ownerOrThrow(owner?: string): string {
+/** owner defaults to the configured org (or must be passed for user-owned repos). Shared with gitea-admin-ops. */
+export function ownerOrThrow(owner?: string): string {
   const resolved = owner?.trim() || getGitProviderConfig().org;
   if (!resolved) throw new Error('No repo owner: pass owner or set GIT_ORG.');
   return resolved;
 }
 
-async function api(path: string, init?: RequestInit): Promise<unknown> {
+/** Low-level Gitea API call (auth + base URL). Exported for the admin ops module. */
+export async function api(path: string, init?: RequestInit): Promise<unknown> {
   const headers = authHeaders();
   if (!headers) throw new Error('Gitea not configured (no GIT_TOKEN).');
   const { apiBaseUrl } = getGitProviderConfig();
