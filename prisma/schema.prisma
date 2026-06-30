@@ -56,6 +56,9 @@ model Project {
   // Which Claude credential the agent runs with (null = global env token).
   claudeCredentialId String? @map("claude_credential_id")
 
+  // Admin-only: expose the shared it-ops MCP tools to this project's agent.
+  itopsEnabled Boolean @default(false) @map("itops_enabled")
+
   // Relations
   messages              Message[]
   sessions              Session[]

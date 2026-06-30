@@ -15,6 +15,7 @@ import { NEXT_SYSTEM_PROMPT } from './prompts/next-system-prompt';
 import { ANGULAR_SYSTEM_PROMPT } from './prompts/angular-system-prompt';
 import { stackKind } from '@/lib/config/stacks';
 import { resolveProjectClaudeToken } from '../claude-credentials';
+import { buildItopsMcpServer } from '../itops/itops-mcp';
 import { createMessage } from '../message';
 import { CLAUDE_DEFAULT_MODEL, normalizeClaudeModelId, getClaudeModelDisplayName } from '@/lib/constants/claudeModels';
 import path from 'path';
@@ -660,6 +661,12 @@ export async function executeClaude(
         hooks: {
           PreToolUse: [{ hooks: [buildProjectGuardHook(absoluteProjectPath)] }],
         },
+        // Admin-enabled it-ops tools (in-process MCP broker). Only attached when
+        // the project has itopsEnabled — the tools run in THIS process (creds
+        // never reach the scrubbed agent env). See itops-mcp.ts.
+        ...((stackProject as { itopsEnabled?: boolean } | null)?.itopsEnabled
+          ? { mcpServers: { itops: buildItopsMcpServer() } }
+          : {}),
         // See skillSettingSources above: ['project','user'] by default (auto-load
         // all skills), or ['project'] once any skill is disabled (load only the
         // staged enabled set, making per-project disabling a hard guarantee).
