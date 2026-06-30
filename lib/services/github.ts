@@ -221,7 +221,7 @@ export async function connectProjectToGitHub(projectId: string, options: CreateR
 
   // Inject self-hosted deploy scaffolding (Dockerfile, compose, Gitea Actions
   // workflow) so push-to-main auto-deploys at <site>.<deploy-domain>.
-  await injectDeployScaffolding(repoPath, { repoName: options.repoName });
+  await injectDeployScaffolding(repoPath, { repoName: options.repoName, templateType: project.templateType });
 
   addOrUpdateRemote(repoPath, 'origin', cloneUrl);
   commitAll(repoPath, 'Initial commit - connected to Claudable');
@@ -267,7 +267,7 @@ export async function pushProjectToGitHub(projectId: string): Promise<boolean> {
 
     // Keep deploy scaffolding present even if the agent edited the project.
     const repoName = (data.repo_name as string) || path.basename(repoPath);
-    await injectDeployScaffolding(repoPath, { repoName });
+    await injectDeployScaffolding(repoPath, { repoName, templateType: project.templateType });
 
     const committed = commitAll(repoPath, 'Update from Claudable');
     if (!committed) {
