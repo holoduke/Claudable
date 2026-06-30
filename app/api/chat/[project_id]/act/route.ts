@@ -10,6 +10,7 @@ import {
   updateProjectActivity,
 } from '@/lib/services/project';
 import { createMessage } from '@/lib/services/message';
+import { getSessionUser } from '@/lib/auth/session';
 import { initializeNextJsProject as initializeClaudeProject, applyChanges as applyClaudeChanges } from '@/lib/services/cli/claude';
 import { initializeNextJsProject as initializeCodexProject, applyChanges as applyCodexChanges } from '@/lib/services/cli/codex';
 import { initializeNextJsProject as initializeCursorProject, applyChanges as applyCursorChanges } from '@/lib/services/cli/cursor';
@@ -238,6 +239,13 @@ async function normalizeImageAttachment(
 export async function POST(request: NextRequest, { params }: RouteContext) {
   try {
     const { project_id } = await params;
+
+    // it-ops follows the USER triggering this run (not the project). Resolve it
+    // HERE, in request scope — the agent runs fire-and-forget below, where the
+    // session cookies are no longer available.
+    const requester = await getSessionUser();
+    const requesterItopsEnabled = !!requester?.itopsEnabled;
+
     const rawBody = await request.json().catch(() => ({}));
     const body = (rawBody && typeof rawBody === 'object' ? rawBody : {}) as ChatActRequest &
       Record<string, unknown>;
@@ -423,12 +431,14 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
           ? initializeGLMProject
           : initializeClaudeProject;
 
-      executor(
+      // requesterItopsEnabled is the 6th arg — only the Claude executor reads it.
+      (executor as (...args: unknown[]) => Promise<void>)(
         project_id,
         projectPath,
         finalInstruction,
         selectedModel,
         requestId,
+        cliPreference === 'claude' ? requesterItopsEnabled : undefined,
       ).catch((error) => {
         console.error('[API] Failed to initialize project:', error);
       });
@@ -461,6 +471,7 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
         sessionId,
         requestId,
         cliPreference === 'claude' ? thinkingMode : undefined,
+        cliPreference === 'claude' ? requesterItopsEnabled : undefined,
       ).catch(async (error) => {
         console.error('[API] Failed to execute AI:', error);
         // If the executor rejected outright, its own finally never marked the

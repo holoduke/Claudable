@@ -2418,8 +2418,6 @@ const persistProjectPreferences = useCallback(
       {isResizing && <div className="fixed inset-0 z-[100] cursor-col-resize select-none" />}
 
       <div className="h-screen bg-white flex relative overflow-hidden">
-        {/* My account (always top-right) */}
-        <div className="fixed top-3 right-4 z-50"><UserMenu /></div>
         <div className="h-full w-full flex" ref={splitContainerRef}>
           {/* Left: Chat window */}
           <div
@@ -2710,6 +2708,9 @@ const persistProjectPreferences = useCallback(
                     </button>
                   </div>
                   )}
+
+                  {/* My account — rightmost, so Publish stays to its left */}
+                  <UserMenu />
                 </div>
               </div>
               
