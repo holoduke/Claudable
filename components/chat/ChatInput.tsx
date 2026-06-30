@@ -83,35 +83,52 @@ export default function ChatInput({
   // instantly with a clear message instead of after a long, doomed transfer.
   const maxUploadMb = Number(process.env.NEXT_PUBLIC_MAX_UPLOAD_MB) || 500;
 
-  // Upload one file via XHR so we get real upload progress (fetch can't report it)
-  // and never block the main thread. Resolves the parsed JSON response.
+  // Upload a file in sub-limit CHUNKS via XHR. Chunking is required because the
+  // Next server (and proxies like Traefik) cap a single request body at ~10MB;
+  // it also gives smooth progress and never blocks the main thread. The chunks of
+  // one file share an uploadId; the server appends them and the last one finalizes.
   const uploadWithProgress = useCallback(
-    (file: File): Promise<any> =>
-      new Promise((resolve, reject) => {
-        const xhr = new XMLHttpRequest();
-        // Raw-body upload (not multipart) so large files stream to disk server-side
-        // and never hit the FormData parse limit. Name/type ride in the query string.
-        const qs = `filename=${encodeURIComponent(file.name)}&type=${encodeURIComponent(file.type || '')}`;
-        xhr.open('POST', `${API_BASE}/api/assets/${projectId}/upload?${qs}`);
-        xhr.setRequestHeader('Content-Type', file.type || 'application/octet-stream');
-        xhr.upload.onprogress = (ev) => {
-          if (ev.lengthComputable) {
-            setUploadProgress({ name: file.name, pct: Math.round((ev.loaded / ev.total) * 100) });
-          }
-        };
-        xhr.onload = () => {
-          if (xhr.status >= 200 && xhr.status < 300) {
-            try { resolve(JSON.parse(xhr.responseText)); }
-            catch { reject(new Error('Bad server response')); }
-          } else {
-            let msg = `${xhr.status}`;
-            try { msg = JSON.parse(xhr.responseText).error || msg; } catch { /* keep status */ }
-            reject(new Error(msg));
-          }
-        };
-        xhr.onerror = () => reject(new Error('Network error during upload'));
-        xhr.send(file);
-      }),
+    (file: File): Promise<any> => {
+      const CHUNK = 8 * 1024 * 1024; // 8MB — comfortably under the ~10MB body cap
+      const total = Math.max(1, Math.ceil(file.size / CHUNK));
+      const uploadId = crypto.randomUUID();
+
+      const sendChunk = (i: number): Promise<any> =>
+        new Promise((resolve, reject) => {
+          const start = i * CHUNK;
+          const blob = file.slice(start, Math.min(start + CHUNK, file.size));
+          const xhr = new XMLHttpRequest();
+          const qs =
+            `filename=${encodeURIComponent(file.name)}&type=${encodeURIComponent(file.type || '')}` +
+            `&uploadId=${uploadId}&chunkIndex=${i}&chunks=${total}`;
+          xhr.open('POST', `${API_BASE}/api/assets/${projectId}/upload?${qs}`);
+          xhr.setRequestHeader('Content-Type', 'application/octet-stream');
+          xhr.upload.onprogress = (ev) => {
+            if (ev.lengthComputable) {
+              const overall = Math.round(((start + ev.loaded) / Math.max(1, file.size)) * 100);
+              setUploadProgress({ name: file.name, pct: Math.min(100, overall) });
+            }
+          };
+          xhr.onload = () => {
+            if (xhr.status >= 200 && xhr.status < 300) {
+              try { resolve(JSON.parse(xhr.responseText)); }
+              catch { reject(new Error('Bad server response')); }
+            } else {
+              let msg = `${xhr.status}`;
+              try { msg = JSON.parse(xhr.responseText).error || msg; } catch { /* keep status */ }
+              reject(new Error(msg));
+            }
+          };
+          xhr.onerror = () => reject(new Error('Network error during upload'));
+          xhr.send(blob);
+        });
+
+      return (async () => {
+        let last: any;
+        for (let i = 0; i < total; i++) last = await sendChunk(i); // in order
+        return last;
+      })();
+    },
     [projectId],
   );
 
