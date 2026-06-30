@@ -96,7 +96,18 @@ export async function setBranchProtection(
     dismiss_stale_approvals: (opts.requiredApprovals ?? 0) > 0,
     require_signed_commits: false,
   };
-  await api(`/repos/${enc(o)}/${enc(repo)}/branch_protections`, { method: 'POST', body: JSON.stringify(body) });
+  // Idempotent: PATCH the existing rule if there is one, else POST a new one
+  // (a second POST for the same branch 422s in Gitea).
+  const rules = (await api(`/repos/${enc(o)}/${enc(repo)}/branch_protections`)) as Array<{
+    branch_name?: string;
+    rule_name?: string;
+  }>;
+  const existing = rules.find((r) => (r.rule_name || r.branch_name) === branch);
+  if (existing) {
+    await api(`/repos/${enc(o)}/${enc(repo)}/branch_protections/${enc(branch)}`, { method: 'PATCH', body: JSON.stringify(body) });
+  } else {
+    await api(`/repos/${enc(o)}/${enc(repo)}/branch_protections`, { method: 'POST', body: JSON.stringify(body) });
+  }
   return `Protected ${branch} on ${o}/${repo}` +
     `${opts.requiredApprovals ? `, require ${opts.requiredApprovals} approval(s)` : ''}` +
     `${opts.blockPush ? ', block direct push' : ''}.`;

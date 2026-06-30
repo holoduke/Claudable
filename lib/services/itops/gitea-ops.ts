@@ -9,6 +9,7 @@
  * broker no access Claudable didn't already hold.
  */
 import { getGitProviderConfig, getEnvGitToken } from '../git-provider';
+import { fetchWithTimeout } from './net';
 
 export interface GiteaResult {
   ok: boolean;
@@ -38,11 +39,23 @@ export async function api(path: string, init?: RequestInit): Promise<unknown> {
   const headers = authHeaders();
   if (!headers) throw new Error('Gitea not configured (no GIT_TOKEN).');
   const { apiBaseUrl } = getGitProviderConfig();
-  const res = await fetch(`${apiBaseUrl}${path}`, { ...init, headers: { ...headers, ...init?.headers } });
+  const res = await fetchWithTimeout(`${apiBaseUrl}${path}`, { ...init, headers: { ...headers, ...init?.headers } });
   const body = await res.text();
   if (!res.ok) throw new Error(`Gitea ${res.status}: ${body.slice(0, 300)}`);
   return body.length ? JSON.parse(body) : null;
 }
+
+/** Encode each path segment for the Contents API (keep `/` as the separator),
+ * and reject traversal segments — `repo`/`owner` are encoded, `path` must be too. */
+function encodeRepoPath(p: string): string {
+  const parts = p.split('/').filter((s) => s.length > 0);
+  if (parts.some((s) => s === '..' || s === '.')) throw new Error(`Invalid path "${p}".`);
+  return parts.map(encodeURIComponent).join('/');
+}
+
+// Files whose contents the broker refuses to return — the GIT_TOKEN can see every
+// repo, so reading these would hand the agent secrets from OTHER projects' repos.
+const SECRET_FILE_RE = /(^|\/)(\.env|\.npmrc|\.netrc|id_rsa|id_ed25519|.*\.pem|.*\.key|.*\.p12|.*\.pfx)(\.[\w-]+)?$|secret|credential|password/iu;
 
 export async function listRepos(owner?: string): Promise<string> {
   const org = owner?.trim() || getGitProviderConfig().org;
@@ -54,9 +67,12 @@ export async function listRepos(owner?: string): Promise<string> {
 
 export async function readFile(repo: string, path: string, ref?: string, owner?: string): Promise<string> {
   const o = ownerOrThrow(owner);
+  if (SECRET_FILE_RE.test(path)) {
+    throw new Error(`Refusing to read "${path}" — looks like a secret/credential file.`);
+  }
   const q = ref ? `?ref=${encodeURIComponent(ref)}` : '';
   const file = (await api(
-    `/repos/${encodeURIComponent(o)}/${encodeURIComponent(repo)}/contents/${path}${q}`,
+    `/repos/${encodeURIComponent(o)}/${encodeURIComponent(repo)}/contents/${encodeRepoPath(path)}${q}`,
   )) as { content?: string; encoding?: string };
   if (!file.content) return '(empty or not a file)';
   return Buffer.from(file.content, (file.encoding as BufferEncoding) || 'base64').toString('utf8');
@@ -72,7 +88,7 @@ export async function writeFile(
   owner?: string,
 ): Promise<GiteaResult> {
   const o = ownerOrThrow(owner);
-  const contentsPath = `/repos/${encodeURIComponent(o)}/${encodeURIComponent(repo)}/contents/${path}`;
+  const contentsPath = `/repos/${encodeURIComponent(o)}/${encodeURIComponent(repo)}/contents/${encodeRepoPath(path)}`;
 
   // A PUT updates if it exists (needs the blob sha) or creates if not.
   let sha: string | undefined;

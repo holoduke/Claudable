@@ -10,7 +10,7 @@ import {
   updateProjectActivity,
 } from '@/lib/services/project';
 import { createMessage } from '@/lib/services/message';
-import { getSessionUser } from '@/lib/auth/session';
+import { getSessionUser, authEnabled } from '@/lib/auth/session';
 import { initializeNextJsProject as initializeClaudeProject, applyChanges as applyClaudeChanges } from '@/lib/services/cli/claude';
 import { initializeNextJsProject as initializeCodexProject, applyChanges as applyCodexChanges } from '@/lib/services/cli/codex';
 import { initializeNextJsProject as initializeCursorProject, applyChanges as applyCursorChanges } from '@/lib/services/cli/cursor';
@@ -244,6 +244,11 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
     // HERE, in request scope — the agent runs fire-and-forget below, where the
     // session cookies are no longer available.
     const requester = await getSessionUser();
+    // When the auth gate is on, the agent must not run for an unauthenticated
+    // caller (it executes with bypassPermissions against the project files).
+    if (authEnabled() && !requester) {
+      return NextResponse.json({ success: false, error: 'Authentication required' }, { status: 401 });
+    }
     const requesterItopsEnabled = !!requester?.itopsEnabled;
 
     const rawBody = await request.json().catch(() => ({}));

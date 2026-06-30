@@ -74,6 +74,9 @@ export async function PUT(
   { params }: RouteContext
 ) {
   try {
+    if (authEnabled() && !(await getSessionUser())) {
+      return NextResponse.json({ success: false, error: 'Authentication required' }, { status: 401 });
+    }
     const { project_id } = await params;
     const body = (await request.json().catch(() => null)) ?? {};
 
@@ -129,6 +132,9 @@ export async function DELETE(
   { params }: RouteContext
 ) {
   try {
+    if (authEnabled() && !(await getSessionUser())) {
+      return NextResponse.json({ success: false, error: 'Authentication required' }, { status: 401 });
+    }
     const { project_id } = await params;
     await deleteProject(project_id);
 

@@ -7,7 +7,7 @@
  */
 import { NextRequest } from 'next/server';
 import { getAdminUser } from '@/lib/auth/session';
-import { setUserRole, setUserActive, setUserItops, deleteUser, serializeUser } from '@/lib/services/users';
+import { deleteUser, serializeUser } from '@/lib/services/users';
 import { prisma } from '@/lib/db/client';
 import { createSuccessResponse, createErrorResponse, handleApiError } from '@/lib/utils/api-response';
 
@@ -49,8 +49,13 @@ export async function PATCH(
       return createErrorResponse('self_change', 'You cannot deactivate your own account', 400);
     }
 
-    const target = await prisma.user.findUnique({ where: { id } });
+    // Scope to the admin's org so a UUID from another org can't be modified.
+    const target = await prisma.user.findFirst({ where: { id, orgId: admin.orgId } });
     if (!target) return createErrorResponse('not_found', 'User not found', 404);
+
+    if (hasItops && body.itopsEnabled && !target.isActive) {
+      return createErrorResponse('invalid_input', 'Cannot enable it-ops on an inactive account', 400);
+    }
 
     // Never let the org drop to zero active admins (e.g. demoting/deactivating
     // the other admin while you yourself later lose account access).
@@ -66,10 +71,16 @@ export async function PATCH(
       }
     }
 
-    let updated = target;
-    if (hasRole) updated = await setUserRole(id, body.role);
-    if (hasActive) updated = await setUserActive(id, body.isActive);
-    if (hasItops) updated = await setUserItops(id, body.itopsEnabled);
+    // One atomic update so a mid-sequence failure can't leave a half-applied,
+    // inconsistent authorization state (e.g. role changed but isActive not).
+    const updated = await prisma.user.update({
+      where: { id },
+      data: {
+        ...(hasRole ? { role: body.role } : {}),
+        ...(hasActive ? { isActive: body.isActive } : {}),
+        ...(hasItops ? { itopsEnabled: body.itopsEnabled } : {}),
+      },
+    });
     return createSuccessResponse(serializeUser(updated));
   } catch (error) {
     return handleApiError(error, 'API', 'Failed to update user');
@@ -89,7 +100,8 @@ export async function DELETE(
       return createErrorResponse('self_change', 'You cannot delete your own account', 400);
     }
 
-    const target = await prisma.user.findUnique({ where: { id } });
+    // Scope to the admin's org so a UUID from another org can't be deleted.
+    const target = await prisma.user.findFirst({ where: { id, orgId: admin.orgId } });
     if (!target) return createErrorResponse('not_found', 'User not found', 404);
 
     await deleteUser(id);
