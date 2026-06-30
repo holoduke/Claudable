@@ -7,15 +7,28 @@
  *  - The tools run inside the Claudable process, NOT in the agent. The agent
  *    calls a tool and receives only its result — it never sees credentials, and
  *    the scrubbed agent env (buildAgentEnv) is unchanged.
- *  - This first set is READ-ONLY + PROPOSE-ONLY. Nothing here mutates infra.
- *    Write/provision tools come later, each one allowlisted, scoped to a broker
- *    role, and routed through human review (Atlantis PR) — never a direct apply.
+ *  - WRITE tools are SCOPED to the box/dev plane (Gitea, Coolify, Traefik) and to
+ *    specific verbs — not a raw API/shell passthrough. The AWS/IAM cloud plane
+ *    stays PROPOSE-ONLY (propose_infra_change / propose_new_app_host): the agent
+ *    can draft a reviewable plan but never touches AWS directly.
  *  - Every invocation is logged.
  */
 import tls from 'tls';
 import { createSdkMcpServer, tool } from '@anthropic-ai/claude-agent-sdk';
 import { z } from 'zod';
 import { listDeployTargets } from './deploy-targets';
+import * as gitea from './gitea-ops';
+import * as coolify from './coolify-ops';
+import * as traefik from './traefik-ops';
+
+/** Wrap a write op so a thrown error comes back as a clean tool result, not a crash. */
+async function run(fn: () => Promise<string>): Promise<{ content: { type: 'text'; text: string }[] }> {
+  try {
+    return text(await fn());
+  } catch (e) {
+    return text(`error: ${e instanceof Error ? e.message : String(e)}`);
+  }
+}
 
 const text = (s: string) => ({ content: [{ type: 'text' as const, text: s }] });
 
@@ -104,9 +117,93 @@ export function buildItopsMcpServer() {
           return text(plan);
         },
       ),
+      // ---- Gitea (dev plane): real read/write via Claudable's existing token ----
+      tool(
+        'gitea_list_repos',
+        'List Git repositories (in the configured org, or pass an owner).',
+        { owner: z.string().optional() },
+        async (args) => { audit('gitea_list_repos', args); return run(() => gitea.listRepos(args.owner)); },
+      ),
+      tool(
+        'gitea_read_file',
+        'Read a file from a Git repo.',
+        { repo: z.string(), path: z.string(), ref: z.string().optional(), owner: z.string().optional() },
+        async (args) => { audit('gitea_read_file', { repo: args.repo, path: args.path }); return run(() => gitea.readFile(args.repo, args.path, args.ref, args.owner)); },
+      ),
+      tool(
+        'gitea_write_file',
+        'Create or update a file in a Git repo (commits it). Optionally on a branch.',
+        { repo: z.string(), path: z.string(), content: z.string(), message: z.string(), branch: z.string().optional(), owner: z.string().optional() },
+        async (args) => { audit('gitea_write_file', { repo: args.repo, path: args.path, branch: args.branch }); return run(async () => (await gitea.writeFile(args.repo, args.path, args.content, args.message, args.branch, args.owner)).message); },
+      ),
+      tool(
+        'gitea_create_repo',
+        'Create a new Git repository (under the configured org).',
+        { name: z.string(), private: z.boolean().optional(), description: z.string().optional() },
+        async (args) => { audit('gitea_create_repo', { name: args.name }); return run(async () => (await gitea.createRepo(args.name, { private: args.private, description: args.description })).message); },
+      ),
+
+      // ---- Coolify (box plane): scoped verbs, gated on COOLIFY_API_TOKEN ----
+      tool(
+        'coolify_list_apps',
+        'List Coolify applications (name, uuid, status, fqdn).',
+        {},
+        async (_args) => { audit('coolify_list_apps', {}); if (!coolify.coolifyConfigured()) return text('Coolify not configured (set COOLIFY_API_TOKEN).'); return run(() => coolify.listApps()); },
+      ),
+      tool(
+        'coolify_restart_app',
+        'Restart a Coolify application by name or uuid.',
+        { app: z.string() },
+        async (args) => { audit('coolify_restart_app', args); if (!coolify.coolifyConfigured()) return text('Coolify not configured (set COOLIFY_API_TOKEN).'); return run(() => coolify.restartApp(args.app)); },
+      ),
+      tool(
+        'coolify_deploy_app',
+        'Trigger a (re)deploy of a Coolify application by name or uuid.',
+        { app: z.string() },
+        async (args) => { audit('coolify_deploy_app', args); if (!coolify.coolifyConfigured()) return text('Coolify not configured (set COOLIFY_API_TOKEN).'); return run(() => coolify.deployApp(args.app)); },
+      ),
+      tool(
+        'coolify_get_envs',
+        'List a Coolify app\'s env var keys (secret values are masked).',
+        { app: z.string() },
+        async (args) => { audit('coolify_get_envs', args); if (!coolify.coolifyConfigured()) return text('Coolify not configured (set COOLIFY_API_TOKEN).'); return run(() => coolify.getEnvs(args.app)); },
+      ),
+      tool(
+        'coolify_set_env',
+        'Set (create or update) one env var on a Coolify app. Redeploy to apply.',
+        { app: z.string(), key: z.string(), value: z.string() },
+        async (args) => { audit('coolify_set_env', { app: args.app, key: args.key }); if (!coolify.coolifyConfigured()) return text('Coolify not configured (set COOLIFY_API_TOKEN).'); return run(() => coolify.setEnv(args.app, args.key, args.value)); },
+      ),
+
+      // ---- Traefik (box plane): dynamic route files, gated on the mounted dir ----
+      tool(
+        'traefik_list_routes',
+        'List Traefik dynamic route files.',
+        {},
+        async (_args) => { audit('traefik_list_routes', {}); if (!(await traefik.traefikConfigured())) return text('Traefik dynamic dir not mounted (TRAEFIK_DYNAMIC_DIR).'); return run(() => traefik.listRoutes()); },
+      ),
+      tool(
+        'traefik_read_route',
+        'Read a Traefik dynamic route file by name (e.g. myapp.yml).',
+        { name: z.string() },
+        async (args) => { audit('traefik_read_route', args); if (!(await traefik.traefikConfigured())) return text('Traefik dynamic dir not mounted (TRAEFIK_DYNAMIC_DIR).'); return run(() => traefik.readRoute(args.name)); },
+      ),
+      tool(
+        'traefik_write_route',
+        'Write a Traefik dynamic route file (router+service YAML). Traefik hot-reloads it; HTTPS via the existing Route53 resolver. Filename must be lowercase + end .yml.',
+        { name: z.string(), yaml: z.string() },
+        async (args) => { audit('traefik_write_route', { name: args.name }); if (!(await traefik.traefikConfigured())) return text('Traefik dynamic dir not mounted (TRAEFIK_DYNAMIC_DIR).'); return run(() => traefik.writeRoute(args.name, args.yaml)); },
+      ),
+      tool(
+        'traefik_remove_route',
+        'Remove a Traefik dynamic route file by name (withdraws its route).',
+        { name: z.string() },
+        async (args) => { audit('traefik_remove_route', args); if (!(await traefik.traefikConfigured())) return text('Traefik dynamic dir not mounted (TRAEFIK_DYNAMIC_DIR).'); return run(() => traefik.removeRoute(args.name)); },
+      ),
+
       tool(
         'propose_infra_change',
-        'Record a PROPOSED infrastructure change for human review (e.g. provision a box, edit Traefik/DNS, an IAM change). This does NOT apply anything — it produces a reviewable proposal. Use this for any change that touches a box, AWS, Coolify, or Traefik.',
+        'Record a PROPOSED infrastructure change for human review (e.g. provision a box, an AWS/IAM or DNS change). This does NOT apply anything — it produces a reviewable proposal. Use this for any change to AWS/IAM or anything outside the Gitea/Coolify/Traefik write tools.',
         {
           title: z.string().describe('Short title of the change'),
           summary: z.string().describe('What and why'),
