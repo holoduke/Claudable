@@ -21,6 +21,9 @@ export default function ProjectClaudeSettings({ projectId }: Props) {
   const [loading, setLoading] = useState(true);
   const [denied, setDenied] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // it-ops toggle: null = not an admin (section hidden); boolean = admin
+  const [itops, setItops] = useState<boolean | null>(null);
+  const [itopsBusy, setItopsBusy] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -44,6 +47,34 @@ export default function ProjectClaudeSettings({ projectId }: Props) {
   }, [projectId]);
 
   useEffect(() => { load(); }, [load]);
+
+  // Admin-only it-ops toggle: the GET 403s for non-admins, so the section stays hidden.
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`${API_BASE}/api/projects/${projectId}/itops`)
+      .then(async (r) => (r.ok ? r.json() : null))
+      .then((j) => { if (!cancelled && j?.success) setItops(!!j.data.enabled); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [projectId]);
+
+  const toggleItops = async () => {
+    if (itops === null) return;
+    setItopsBusy(true);
+    const next = !itops;
+    try {
+      const res = await fetch(`${API_BASE}/api/projects/${projectId}/itops`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled: next }),
+      });
+      if (res.ok) setItops(next);
+    } catch {
+      /* keep previous */
+    } finally {
+      setItopsBusy(false);
+    }
+  };
 
   const choose = async (value: string) => {
     const credId = value === '__default__' ? null : value;
@@ -101,6 +132,24 @@ export default function ProjectClaudeSettings({ projectId }: Props) {
         <p className="text-xs text-gray-400">
           No connected accounts yet. Connect one under Global Settings → Claude, or ask a teammate to share theirs.
         </p>
+      )}
+
+      {itops !== null && (
+        <div className="mt-6 pt-5 border-t border-gray-200">
+          <div className="flex items-center justify-between gap-4">
+            <div className="pr-2">
+              <p className="font-medium text-gray-900">it-ops tools <span className="text-xs font-normal text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded">admin</span></p>
+              <p className="text-sm text-gray-600">
+                Give this project&apos;s agent the shared it-ops tools (infra health, deploy targets, and proposing
+                infra changes for review). Read-only / propose-only — it never gets credentials or applies changes directly.
+              </p>
+            </div>
+            <label className="relative inline-flex items-center cursor-pointer flex-shrink-0">
+              <input type="checkbox" className="sr-only peer" checked={itops} disabled={itopsBusy} onChange={toggleItops} />
+              <div className="w-11 h-6 bg-gray-200 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-amber-600" />
+            </label>
+          </div>
+        </div>
       )}
     </div>
   );
