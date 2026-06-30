@@ -89,7 +89,11 @@ export default function ChatInput({
     (file: File): Promise<any> =>
       new Promise((resolve, reject) => {
         const xhr = new XMLHttpRequest();
-        xhr.open('POST', `${API_BASE}/api/assets/${projectId}/upload`);
+        // Raw-body upload (not multipart) so large files stream to disk server-side
+        // and never hit the FormData parse limit. Name/type ride in the query string.
+        const qs = `filename=${encodeURIComponent(file.name)}&type=${encodeURIComponent(file.type || '')}`;
+        xhr.open('POST', `${API_BASE}/api/assets/${projectId}/upload?${qs}`);
+        xhr.setRequestHeader('Content-Type', file.type || 'application/octet-stream');
         xhr.upload.onprogress = (ev) => {
           if (ev.lengthComputable) {
             setUploadProgress({ name: file.name, pct: Math.round((ev.loaded / ev.total) * 100) });
@@ -106,9 +110,7 @@ export default function ChatInput({
           }
         };
         xhr.onerror = () => reject(new Error('Network error during upload'));
-        const fd = new FormData();
-        fd.append('file', file);
-        xhr.send(fd);
+        xhr.send(file);
       }),
     [projectId],
   );

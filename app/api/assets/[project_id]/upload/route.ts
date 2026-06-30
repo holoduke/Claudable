@@ -28,41 +28,77 @@ export async function POST(request: Request, { params }: RouteContext) {
       return NextResponse.json({ success: false, error: 'Project not found' }, { status: 404 });
     }
 
-    const formData = await request.formData();
-    const file = formData.get('file');
+    const MAX_UPLOAD_BYTES = Number(process.env.MAX_UPLOAD_BYTES || 500 * 1024 * 1024);
+    const contentType = request.headers.get('content-type') || '';
 
-    if (!(file instanceof File)) {
-      return NextResponse.json({ success: false, error: 'File field is required' }, { status: 400 });
+    // Two upload modes:
+    //  - multipart/form-data: small files from existing callers (project create, …).
+    //  - raw body (any other content-type): large files (zips/archives) sent as the
+    //    raw request body so we stream to disk and never hit undici's FormData parse
+    //    limit. The client passes ?filename= & ?type= in the query string.
+    let originalName: string;
+    let declaredType: string;
+    let bodyStream: Readable;
+
+    if (contentType.includes('multipart/form-data')) {
+      const formData = await request.formData();
+      const file = formData.get('file');
+      if (!(file instanceof File)) {
+        return NextResponse.json({ success: false, error: 'File field is required' }, { status: 400 });
+      }
+      if (file.size > MAX_UPLOAD_BYTES) {
+        return NextResponse.json(
+          { success: false, error: `File too large (max ${Math.round(MAX_UPLOAD_BYTES / 1024 / 1024)}MB)` },
+          { status: 413 },
+        );
+      }
+      originalName = file.name || 'file';
+      declaredType = file.type || '';
+      bodyStream = Readable.fromWeb(file.stream() as any);
+    } else {
+      const url = new URL(request.url);
+      originalName = url.searchParams.get('filename') || 'file';
+      declaredType = url.searchParams.get('type') || contentType || '';
+      const declaredLen = Number(request.headers.get('content-length') || 0);
+      if (declaredLen && declaredLen > MAX_UPLOAD_BYTES) {
+        return NextResponse.json(
+          { success: false, error: `File too large (max ${Math.round(MAX_UPLOAD_BYTES / 1024 / 1024)}MB)` },
+          { status: 413 },
+        );
+      }
+      if (!request.body) {
+        return NextResponse.json({ success: false, error: 'Empty request body' }, { status: 400 });
+      }
+      bodyStream = Readable.fromWeb(request.body as any);
     }
 
-    // Accept any file type (documents, archives, data, images…). Guard only on
-    // size so an upload can't exhaust disk. The stored name is a random UUID, so
-    // the original name/extension can never cause path traversal.
-    const MAX_UPLOAD_BYTES = Number(process.env.MAX_UPLOAD_BYTES || 500 * 1024 * 1024);
-    if (file.size > MAX_UPLOAD_BYTES) {
+    const projectAssetsPath = resolveAssetsPath(project_id);
+    await fs.mkdir(projectAssetsPath, { recursive: true });
+
+    // The stored name is a random UUID, so the original name/extension can never
+    // cause path traversal. Only the extension is carried over.
+    const extension = path.extname(originalName); // '' when the file has no extension
+    const uniqueName = `${randomUUID()}${extension}`;
+    const absolutePath = path.join(projectAssetsPath, uniqueName);
+    const resolvedAbsolutePath = path.resolve(absolutePath);
+
+    // Stream straight to disk (no full-file buffering) — matters for large zips.
+    await pipeline(bodyStream, createWriteStream(resolvedAbsolutePath));
+
+    // Enforce the cap for raw-body uploads that lied about / omitted content-length.
+    const written = (await fs.stat(resolvedAbsolutePath)).size;
+    if (written > MAX_UPLOAD_BYTES) {
+      await fs.unlink(resolvedAbsolutePath).catch(() => {});
       return NextResponse.json(
         { success: false, error: `File too large (max ${Math.round(MAX_UPLOAD_BYTES / 1024 / 1024)}MB)` },
         { status: 413 },
       );
     }
 
-    const projectAssetsPath = resolveAssetsPath(project_id);
-    await fs.mkdir(projectAssetsPath, { recursive: true });
-
-    const originalName = file.name || 'file';
-    const extension = path.extname(originalName); // '' when the file has no extension
-    const uniqueName = `${randomUUID()}${extension}`;
-    const absolutePath = path.join(projectAssetsPath, uniqueName);
-    const resolvedAbsolutePath = path.resolve(absolutePath);
-
-    // Stream the body to disk instead of buffering the whole file in memory a
-    // second time via arrayBuffer() — matters for large uploads (zips, archives).
-    await pipeline(Readable.fromWeb(file.stream() as any), createWriteStream(resolvedAbsolutePath));
-
     // Only images need a web-served copy (preview/<img>). Archives, zips, docs etc.
     // are read by the agent from the project on disk, so skip the extra mirror
     // copies for them — no point duplicating a large zip into public/uploads.
-    const isImage = (file.type || '').startsWith('image/');
+    const isImage = (declaredType || '').startsWith('image/');
     let hostPublicPath: string | null = null;
     let projectPublicPath: string | null = null;
     let publicUrl: string | null = null;
