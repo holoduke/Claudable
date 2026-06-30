@@ -5,6 +5,7 @@ import { AnimatePresence } from 'framer-motion';
 import { MotionDiv } from '@/lib/motion';
 import ServiceConnectionModal from '@/components/modals/ServiceConnectionModal';
 import UsersSettings from '@/components/settings/UsersSettings';
+import ClaudeAccountSettings from '@/components/settings/ClaudeAccountSettings';
 import { isIntegrationVisible } from '@/lib/config/integrations';
 import { FaCog } from 'react-icons/fa';
 import { useGlobalSettings } from '@/contexts/GlobalSettingsContext';
@@ -14,7 +15,7 @@ import type { CLIStatus } from '@/types/cli';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? '';
 
-type SettingsTab = 'general' | 'ai-agents' | 'services' | 'users' | 'about';
+type SettingsTab = 'general' | 'ai-agents' | 'services' | 'claude' | 'users' | 'about';
 
 interface GlobalSettingsProps {
   isOpen: boolean;
@@ -429,6 +430,7 @@ export default function GlobalSettings({ isOpen, onClose, initialTab = 'general'
                 { id: 'general' as const, label: 'General' },
                 { id: 'ai-agents' as const, label: 'AI Agents' },
                 { id: 'services' as const, label: 'Services' },
+                ...(currentUser ? [{ id: 'claude' as const, label: 'Claude' }] : []),
                 ...(isAdmin ? [{ id: 'users' as const, label: 'Users' }] : []),
                 { id: 'about' as const, label: 'About' }
               ] as { id: SettingsTab; label: string }[]).map(tab => (
@@ -770,6 +772,10 @@ export default function GlobalSettings({ isOpen, onClose, initialTab = 'general'
                   </div>
                 </div>
               </div>
+            )}
+
+            {activeTab === 'claude' && currentUser && (
+              <ClaudeAccountSettings onToast={showToast} />
             )}
 
             {activeTab === 'users' && isAdmin && currentUser && (

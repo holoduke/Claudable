@@ -14,6 +14,7 @@ import { CLAUDE_SYSTEM_PROMPT } from './prompts/claude-system-prompt';
 import { NEXT_SYSTEM_PROMPT } from './prompts/next-system-prompt';
 import { ANGULAR_SYSTEM_PROMPT } from './prompts/angular-system-prompt';
 import { stackKind } from '@/lib/config/stacks';
+import { resolveProjectClaudeToken } from '../claude-credentials';
 import { createMessage } from '../message';
 import { CLAUDE_DEFAULT_MODEL, normalizeClaudeModelId, getClaudeModelDisplayName } from '@/lib/constants/claudeModels';
 import path from 'path';
@@ -586,6 +587,17 @@ export async function executeClaude(
     const stackProject = await getProjectById(projectId).catch(() => null);
     const systemPromptForStack = selectSystemPrompt(stackProject?.templateType);
 
+    // Resolve the Claude credential for this project (a user's connected token),
+    // falling back to the global env token. Built here so it overrides the scrubbed
+    // CLAUDE_CODE_OAUTH_TOKEN in the agent env below.
+    const agentEnv = buildAgentEnv();
+    try {
+      const projectToken = await resolveProjectClaudeToken(projectId);
+      if (projectToken) agentEnv.CLAUDE_CODE_OAUTH_TOKEN = projectToken;
+    } catch (e) {
+      console.error('[ClaudeService] Failed to resolve project Claude credential:', e);
+    }
+
     // Security: Verify project path is within allowed directory
     const allowedBasePath = path.resolve(process.cwd(), process.env.PROJECTS_DIR || './data/projects');
     const relativeToBase = path.relative(allowedBasePath, absoluteProjectPath);
@@ -640,8 +652,9 @@ export async function executeClaude(
         workingDirectory: absoluteProjectPath, // Work only in project folder (protects Claudable root)
         additionalDirectories: [absoluteProjectPath],
         // Replace the child env with a scrubbed allowlist so the agent can't read
-        // Claudable's secrets (DB/Google/Git/Auth) via `printenv`. See buildAgentEnv.
-        env: buildAgentEnv(),
+        // Claudable's secrets (DB/Google/Git/Auth) via `printenv`. CLAUDE_CODE_OAUTH_TOKEN
+        // is overridden above with the project's assigned credential when set.
+        env: agentEnv,
         // Lightweight cross-project guard: block tool calls that escape this
         // project (other projects / app source / secrets). See buildProjectGuardHook.
         hooks: {

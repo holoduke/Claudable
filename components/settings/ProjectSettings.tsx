@@ -12,6 +12,7 @@ import { ServiceSettings } from './ServiceSettings';
 import { SkillsSettings } from './SkillsSettings';
 import ProjectAccessSettings from './ProjectAccessSettings';
 import DesignSettings from './DesignSettings';
+import ProjectClaudeSettings from './ProjectClaudeSettings';
 import GlobalSettings from './GlobalSettings';
 
 interface ProjectSettingsProps {
@@ -24,7 +25,7 @@ interface ProjectSettingsProps {
   onProjectUpdated?: (update: { name: string; description?: string | null }) => void;
 }
 
-type SettingsTab = 'general' | 'ai-assistant' | 'environment' | 'services' | 'skills' | 'design' | 'access';
+type SettingsTab = 'general' | 'ai-assistant' | 'environment' | 'services' | 'skills' | 'design' | 'claude' | 'access';
 
 export function ProjectSettings({
   isOpen,
@@ -71,6 +72,12 @@ export function ProjectSettings({
           id: 'design' as SettingsTab,
           label: 'Design',
           icon: <span className="w-4 h-4 inline-flex"><FaPalette /></span>,
+          hidden: !isProjectScoped,
+        },
+        {
+          id: 'claude' as SettingsTab,
+          label: 'Claude',
+          icon: <span className="w-4 h-4 inline-flex"><FaRobot /></span>,
           hidden: !isProjectScoped,
         },
         {
@@ -177,6 +184,10 @@ export function ProjectSettings({
 
           {activeTab === 'design' && isProjectScoped && (
             <DesignSettings projectId={projectId} />
+          )}
+
+          {activeTab === 'claude' && isProjectScoped && (
+            <ProjectClaudeSettings projectId={projectId} />
           )}
 
           {activeTab === 'access' && isProjectScoped && (
