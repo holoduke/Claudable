@@ -39,6 +39,8 @@ export interface CreateProjectInput {
   description?: string;
   /** Tech stack id (see lib/config/stacks). Stored as the project's templateType. */
   templateType?: string;
+  /** The signed-in creator; owns the project (drives per-user it-ops). */
+  ownerId?: string | null;
 }
 
 export interface UpdateProjectInput {
