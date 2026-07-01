@@ -1,7 +1,9 @@
 import { NextResponse } from 'next/server';
+import { denyUnlessAdmin } from '@/lib/auth/gate';
 import { listSupabaseOrganizations } from '@/lib/services/supabase';
 
 export async function GET() {
+  const _adg = await denyUnlessAdmin(); if (_adg) return _adg;
   try {
     const organizations = await listSupabaseOrganizations();
     return NextResponse.json({ success: true, organizations });

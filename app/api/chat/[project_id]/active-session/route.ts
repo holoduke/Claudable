@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { denyUnlessProjectAccess } from '@/lib/auth/gate';
 import { getActiveSession } from '@/lib/services/chat-sessions';
 
 interface RouteContext {
@@ -8,6 +9,8 @@ interface RouteContext {
 export async function GET(_request: Request, { params }: RouteContext) {
   try {
     const { project_id } = await params;
+    const _gate = await denyUnlessProjectAccess(project_id);
+    if (_gate) return _gate;
     const session = await getActiveSession(project_id);
 
     // Return 200 with null data when no session exists (successful query, no results)

@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { denyUnlessProjectAccess } from '@/lib/auth/gate';
 import { getActiveRequests } from '@/lib/services/user-requests';
 
 interface RouteContext {
@@ -8,6 +9,8 @@ interface RouteContext {
 export async function GET(_request: Request, { params }: RouteContext) {
   try {
     const { project_id } = await params;
+    const _gate = await denyUnlessProjectAccess(project_id);
+    if (_gate) return _gate;
     const summary = await getActiveRequests(project_id);
     return NextResponse.json(summary);
   } catch (error) {

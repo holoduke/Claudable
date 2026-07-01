@@ -13,7 +13,12 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   ...authConfig,
   callbacks: {
     ...authConfig.callbacks,
-    async signIn({ user }) {
+    async signIn({ user, profile }) {
+      // Require a Google-VERIFIED email. Without this, the domain allowlist is
+      // spoofable: anyone can create a personal Google account with the string
+      // `someone@alloweddomain.com` (email_verified:false) and be provisioned a
+      // real — possibly admin — account for an address they don't control.
+      if (profile && profile.email_verified !== true) return false;
       const email = user.email?.toLowerCase();
       if (!email) return false;
       if (!(await isSignInAllowed(email))) return false; // -> /login?error=AccessDenied

@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { denyUnlessAdmin } from '@/lib/auth/gate';
 import { createSupabaseProject } from '@/lib/services/supabase';
 
 export async function POST(request: NextRequest) {
+  const _adg = await denyUnlessAdmin(); if (_adg) return _adg;
   try {
     const body = (await request.json().catch(() => null)) ?? {};
     const projectId =

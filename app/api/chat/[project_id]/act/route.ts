@@ -4,6 +4,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { denyUnlessProjectAccess } from '@/lib/auth/gate';
 import {
   getProjectById,
   updateProject,
@@ -266,6 +267,8 @@ async function normalizeImageAttachment(
 export async function POST(request: NextRequest, { params }: RouteContext) {
   try {
     const { project_id } = await params;
+    const _gate = await denyUnlessProjectAccess(project_id);
+    if (_gate) return _gate;
 
     // it-ops follows the USER triggering this run (not the project). Resolve it
     // HERE, in request scope — the agent runs fire-and-forget below, where the

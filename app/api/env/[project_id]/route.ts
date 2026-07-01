@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { denyUnlessProjectAccess } from '@/lib/auth/gate';
 import { listEnvVars, createEnvVar } from '@/lib/services/env';
 
 interface RouteContext {
@@ -8,6 +9,8 @@ interface RouteContext {
 export async function GET(_request: NextRequest, { params }: RouteContext) {
   try {
     const { project_id } = await params;
+    const _gate = await denyUnlessProjectAccess(project_id);
+    if (_gate) return _gate;
     const envVars = await listEnvVars(project_id);
     return NextResponse.json(envVars);
   } catch (error) {
@@ -26,6 +29,8 @@ export async function GET(_request: NextRequest, { params }: RouteContext) {
 export async function POST(request: NextRequest, { params }: RouteContext) {
   try {
     const { project_id } = await params;
+    const _gate = await denyUnlessProjectAccess(project_id);
+    if (_gate) return _gate;
     const body = (await request.json().catch(() => null)) ?? {};
     if (!body?.key || typeof body.key !== 'string') {
       return NextResponse.json(

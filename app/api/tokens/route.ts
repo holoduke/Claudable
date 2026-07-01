@@ -1,8 +1,10 @@
 import { NextRequest } from 'next/server';
+import { denyUnlessAdmin } from '@/lib/auth/gate';
 import { createServiceToken } from '@/lib/services/tokens';
 import { createSuccessResponse, handleApiError } from '@/lib/utils/api-response';
 
 export async function POST(request: NextRequest) {
+  const _adg = await denyUnlessAdmin(); if (_adg) return _adg;
   try {
     const body = (await request.json().catch(() => null)) ?? {};
     const provider = typeof body?.provider === 'string' ? body.provider : '';

@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { denyUnlessAdmin } from '@/lib/auth/gate';
 import { getSupabaseApiKeys } from '@/lib/services/supabase';
 
 interface RouteContext {
@@ -6,6 +7,7 @@ interface RouteContext {
 }
 
 export async function GET(_request: Request, { params }: RouteContext) {
+  const _adg = await denyUnlessAdmin(); if (_adg) return _adg;
   try {
     const { supabase_project_id } = await params;
     const keys = await getSupabaseApiKeys(supabase_project_id);
