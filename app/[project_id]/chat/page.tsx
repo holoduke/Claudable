@@ -11,6 +11,7 @@ import ChatLog from '@/components/chat/ChatLog';
 import { ProjectSettings } from '@/components/settings/ProjectSettings';
 import UserMenu from '@/components/layout/UserMenu';
 import VisualEditorPanel, { type SelectedElement } from '@/components/chat/VisualEditorPanel';
+import CommentsLayer, { type CommentPin, type ComposeAnchor } from '@/components/chat/CommentsLayer';
 import ChatInput from '@/components/chat/ChatInput';
 import DesignImportModal from '@/components/chat/DesignImportModal';
 import SkillsModal from '@/components/chat/SkillsModal';
@@ -252,6 +253,12 @@ export default function ChatPage() {
   const [styleEdits, setStyleEdits] = useState<Record<string, string>>({});
   const [textEdit, setTextEdit] = useState<string | null>(null);
   const [persistingEdit, setPersistingEdit] = useState(false);
+  // --- Comments (pinned review annotations) ---
+  const [commentMode, setCommentMode] = useState(false);
+  const [comments, setComments] = useState<CommentPin[]>([]);
+  const [pinPositions, setPinPositions] = useState<Record<string, { x: number | null; y: number | null }>>({});
+  const [activePinId, setActivePinId] = useState<string | null>(null);
+  const [composeAnchor, setComposeAnchor] = useState<ComposeAnchor | null>(null);
   const [deviceMode, setDeviceMode] = useState<'desktop'|'mobile'>('desktop');
   const [showGlobalSettings, setShowGlobalSettings] = useState(false);
   const [uploadedImages, setUploadedImages] = useState<{name: string; url: string; base64?: string; path?: string}[]>([]);
@@ -1047,6 +1054,7 @@ const persistProjectPreferences = useCallback(
   // Toggle the preview into/out of click-to-select edit mode.
   useEffect(() => {
     postToPreview({ type: editMode ? 'enter' : 'exit' });
+    if (editMode) setCommentMode(false); // edit + comment modes are mutually exclusive
     if (!editMode) { setSelectedEl(null); setStyleEdits({}); setTextEdit(null); }
   }, [editMode, postToPreview]);
 
@@ -1104,6 +1112,90 @@ const persistProjectPreferences = useCallback(
     // runAct is a hoisted, stable function declaration — intentionally not a dep.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedEl, styleEdits, textEdit]);
+
+  // --- Comments (pinned review annotations, Claudable-only) -----------------
+  const postComments = useCallback((msg: Record<string, unknown>) => {
+    if (!previewUrl || !iframeRef.current?.contentWindow) return;
+    try { iframeRef.current.contentWindow.postMessage({ source: 'claudable-comments-cmd', ...msg }, new URL(previewUrl).origin); } catch { /* not ready */ }
+  }, [previewUrl]);
+
+  const loadComments = useCallback(async (route: string) => {
+    try {
+      const r = await fetch(`${API_BASE}/api/projects/${projectId}/comments?route=${encodeURIComponent(route)}`);
+      const j = await r.json();
+      if (j.success) setComments((j.data as any[]).map((c, i) => ({ ...c, index: i + 1, route })));
+    } catch { /* ignore */ }
+  }, [projectId]);
+
+  // Enter/exit comment mode (mutually exclusive with edit mode).
+  useEffect(() => {
+    postComments({ type: commentMode ? 'enter' : 'exit' });
+    if (commentMode) { setEditMode(false); loadComments(currentRoute || '/'); }
+    else { setComposeAnchor(null); setActivePinId(null); }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [commentMode, postComments]);
+
+  // Reload the pin set when the previewed route changes while commenting.
+  useEffect(() => {
+    if (!commentMode) return;
+    setActivePinId(null); setComposeAnchor(null);
+    loadComments(currentRoute || '/');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentRoute]);
+
+  // Push the current pins to the in-iframe bridge whenever they change.
+  useEffect(() => {
+    if (!commentMode) return;
+    postComments({ type: 'renderPins', activeId: activePinId, pins: comments.map((c) => ({ id: c.id, index: c.index, anchorSelector: c.anchorSelector, relX: c.relX, relY: c.relY, resolved: c.resolved })) });
+  }, [comments, activePinId, commentMode, postComments]);
+
+  // Receive events from the comments bridge.
+  useEffect(() => {
+    if (!previewUrl) return;
+    let origin: string;
+    try { origin = new URL(previewUrl).origin; } catch { return; }
+    const onMsg = (e: MessageEvent) => {
+      if (e.origin !== origin) return;
+      const d = e.data as any;
+      if (!d || d.source !== 'claudable-comments') return;
+      if (d.type === 'placed') { setActivePinId(null); setComposeAnchor({ anchorSelector: d.anchorSelector, relX: d.relX, relY: d.relY, x: d.x, y: d.y }); }
+      else if (d.type === 'pinPositions') { const m: Record<string, { x: number | null; y: number | null }> = {}; (d.positions || []).forEach((p: any) => { m[p.id] = { x: p.x, y: p.y }; }); setPinPositions(m); }
+      else if (d.type === 'pinClicked') { setComposeAnchor(null); setActivePinId(d.id); }
+    };
+    window.addEventListener('message', onMsg);
+    return () => window.removeEventListener('message', onMsg);
+  }, [previewUrl]);
+
+  const submitNewComment = useCallback(async (body: string) => {
+    if (!composeAnchor) return;
+    const route = currentRoute || '/';
+    try {
+      const r = await fetch(`${API_BASE}/api/projects/${projectId}/comments`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ route, anchorSelector: composeAnchor.anchorSelector, relX: composeAnchor.relX, relY: composeAnchor.relY, body }),
+      });
+      const j = await r.json();
+      if (j.success) { setComposeAnchor(null); await loadComments(route); }
+    } catch { /* ignore */ }
+  }, [composeAnchor, currentRoute, projectId, loadComments]);
+
+  const resolveCommentById = useCallback(async (id: string, resolved: boolean) => {
+    await fetch(`${API_BASE}/api/projects/${projectId}/comments/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ resolved }) }).catch(() => {});
+    await loadComments(currentRoute || '/');
+  }, [projectId, currentRoute, loadComments]);
+
+  const deleteCommentById = useCallback(async (id: string) => {
+    await fetch(`${API_BASE}/api/projects/${projectId}/comments/${id}`, { method: 'DELETE' }).catch(() => {});
+    setActivePinId(null);
+    await loadComments(currentRoute || '/');
+  }, [projectId, currentRoute, loadComments]);
+
+  const clearAllComments = useCallback(async () => {
+    if (typeof window !== 'undefined' && !window.confirm('Delete ALL comments in this project (every route)?')) return;
+    await fetch(`${API_BASE}/api/projects/${projectId}/comments`, { method: 'DELETE' }).catch(() => {});
+    setActivePinId(null); setComposeAnchor(null);
+    await loadComments(currentRoute || '/');
+  }, [projectId, currentRoute, loadComments]);
 
   // Keep-warm heartbeat: while a preview is open, ping its status every few
   // minutes so the server-side idle sweep doesn't evict an actively-viewed
@@ -2663,8 +2755,38 @@ const persistProjectPreferences = useCallback(
                     </button>
                   )}
 
+                  {/* Comment mode toggle */}
+                  {previewUrl && (
+                    <button
+                      onClick={() => { setShowPreview(true); setCommentMode((v) => !v); }}
+                      title={commentMode ? 'Exit comments' : 'Add comments to the page'}
+                      className={`h-9 flex items-center gap-2 px-3 rounded-lg text-sm font-medium border transition-colors ${
+                        commentMode
+                          ? 'bg-[#DE7356] text-white border-[#DE7356]'
+                          : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'
+                      }`}
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2Z" /></svg>
+                      Comment
+                      {comments.length > 0 && (
+                        <span className={`ml-0.5 min-w-[18px] h-[18px] px-1 rounded-full text-[11px] font-semibold flex items-center justify-center ${commentMode ? 'bg-white/25 text-white' : 'bg-[#DE7356]/15 text-[#DE7356]'}`}>{comments.length}</span>
+                      )}
+                    </button>
+                  )}
+
+                  {/* Clear all comments (project-wide) */}
+                  {commentMode && previewUrl && (
+                    <button
+                      onClick={clearAllComments}
+                      title="Delete all comments in this project"
+                      className="h-9 flex items-center px-3 rounded-lg text-sm font-medium border border-gray-200 bg-white text-gray-600 hover:text-red-600 hover:border-red-200 hover:bg-red-50 transition-colors"
+                    >
+                      Clear all
+                    </button>
+                  )}
+
                   {/* Center Controls */}
-                  {showPreview && !editMode && previewUrl && (
+                  {showPreview && !editMode && !commentMode && previewUrl && (
                     <div className="flex items-center gap-3">
                       {/* Route Navigation */}
                       <div className="h-9 flex items-center bg-gray-100 rounded-lg px-3 border border-gray-200 ">
@@ -2834,14 +2956,14 @@ const persistProjectPreferences = useCallback(
                   >
                 {previewUrl ? (
                   <div className="relative w-full h-full bg-gray-100 flex items-center justify-center">
-                    <div 
-                      className={`bg-white ${
-                        deviceMode === 'mobile' 
-                          ? 'w-[375px] h-[667px] rounded-[25px] border-8 border-gray-800 shadow-2xl' 
+                    <div
+                      className={`relative bg-white ${
+                        deviceMode === 'mobile'
+                          ? 'w-[375px] h-[667px] rounded-[25px] border-8 border-gray-800 shadow-2xl'
                           : 'w-full h-full'
                       } overflow-hidden`}
                     >
-                      <iframe 
+                      <iframe
                         ref={iframeRef}
                         className="w-full h-full border-none bg-white "
                         src={previewUrl}
@@ -2856,7 +2978,22 @@ const persistProjectPreferences = useCallback(
                           if (overlay) overlay.style.display = 'none';
                         }}
                       />
-                      
+
+                      {/* Comment pins overlay (dots render inside the iframe; threads here) */}
+                      {commentMode && (
+                        <CommentsLayer
+                          comments={comments}
+                          positions={pinPositions}
+                          activeId={activePinId}
+                          compose={composeAnchor}
+                          onSubmitNew={submitNewComment}
+                          onCancelCompose={() => setComposeAnchor(null)}
+                          onResolve={resolveCommentById}
+                          onDelete={deleteCommentById}
+                          onCloseThread={() => setActivePinId(null)}
+                        />
+                      )}
+
                       {/* Error overlay */}
                     <div 
                       id="iframe-error-overlay"
