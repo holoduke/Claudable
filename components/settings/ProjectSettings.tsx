@@ -13,6 +13,7 @@ import { SkillsSettings } from './SkillsSettings';
 import ProjectAccessSettings from './ProjectAccessSettings';
 import DesignSettings from './DesignSettings';
 import ProjectClaudeSettings from './ProjectClaudeSettings';
+import ProjectDatabaseSettings from './ProjectDatabaseSettings';
 import GlobalSettings from './GlobalSettings';
 
 interface ProjectSettingsProps {
@@ -25,7 +26,7 @@ interface ProjectSettingsProps {
   onProjectUpdated?: (update: { name: string; description?: string | null }) => void;
 }
 
-type SettingsTab = 'general' | 'ai-assistant' | 'environment' | 'services' | 'skills' | 'design' | 'claude' | 'access';
+type SettingsTab = 'general' | 'ai-assistant' | 'environment' | 'services' | 'database' | 'skills' | 'design' | 'claude' | 'access';
 
 export function ProjectSettings({
   isOpen,
@@ -61,6 +62,12 @@ export function ProjectSettings({
           id: 'services' as SettingsTab,
           label: 'Services',
           icon: <span className="w-4 h-4 inline-flex"><FaPlug /></span>,
+        },
+        {
+          id: 'database' as SettingsTab,
+          label: 'Database',
+          icon: <span className="w-4 h-4 inline-flex items-center justify-center text-sm leading-none">🗄️</span>,
+          hidden: !isProjectScoped,
         },
         {
           id: 'skills' as SettingsTab,
@@ -167,6 +174,10 @@ export function ProjectSettings({
             <EnvironmentSettings projectId={projectId} />
           )}
           
+          {activeTab === 'database' && (
+            <ProjectDatabaseSettings projectId={projectId} />
+          )}
+
           {activeTab === 'services' && (
             <ServiceSettings
               projectId={projectId}

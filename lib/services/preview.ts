@@ -8,6 +8,7 @@ import fs from 'fs/promises';
 import { findAvailablePort } from '@/lib/utils/ports';
 import { getProjectById, updateProject, updateProjectStatus } from './project';
 import { prisma } from '@/lib/db/client';
+import { getDatabaseUrl } from '@/lib/services/database';
 
 /**
  * Clear persisted preview URLs/ports for ALL projects. Called once on boot: after
@@ -1280,6 +1281,13 @@ class PreviewManager {
       WEB_PORT: String(preferredPort),
       NEXT_PUBLIC_APP_URL: initialUrl,
     };
+
+    // If a Postgres was provisioned for this project, expose DATABASE_URL to the
+    // dev server so the generated app can talk to its database in the preview.
+    try {
+      const dbUrl = await getDatabaseUrl(projectId);
+      if (dbUrl) env.DATABASE_URL = dbUrl;
+    } catch { /* non-fatal */ }
 
     const previewProcess: PreviewProcess = {
       process: null,
