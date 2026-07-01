@@ -55,7 +55,7 @@ export default function SharePage({ params }: { params: Promise<{ token: string 
   const loadComments = useCallback(async (r: string) => {
     if (!info) return;
     try {
-      const res = await fetch(`${API_BASE}/api/projects/${info.projectId}/comments?route=${encodeURIComponent(r)}&shareToken=${encodeURIComponent(token)}`);
+      const res = await fetch(`${API_BASE}/api/projects/${info.projectId}/comments?route=${encodeURIComponent(r)}`, { headers: { 'X-Share-Token': token } });
       const j = await res.json();
       if (j.success) setComments((j.data as any[]).map((c, i) => ({ ...c, index: i + 1 })));
     } catch { /* ignore */ }

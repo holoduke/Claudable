@@ -41,7 +41,7 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
       ? (path.isAbsolute(project.repoPath) ? project.repoPath : path.resolve(process.cwd(), project.repoPath))
       : path.join(PROJECTS_DIR_ABSOLUTE, project_id);
 
-    const result = revertToCheckpoint(project_id, projectPath, sha);
+    const result = await revertToCheckpoint(project_id, projectPath, sha);
     if (!result.ok) return createErrorResponse('revert_failed', result.error || 'Revert failed', 400);
     return createSuccessResponse({ reverted: true, newSha: result.newSha ?? null });
   } catch (error) {

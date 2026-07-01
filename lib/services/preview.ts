@@ -362,6 +362,7 @@ export default defineNuxtPlugin(() => {
     if (!msg) return;
     const line = (kind + '|' + msg + '|' + (extra || '')).slice(0, 600);
     if (seenErrors.has(line)) return; // dedupe repeats
+    if (seenErrors.size > 500) seenErrors.clear(); // bound memory on high-variance errors
     seenErrors.add(line);
     post({ source: 'claudable-errors', type: 'error', error: { kind, message: String(msg).slice(0, 500), at: (extra || '').slice(0, 200) } });
     ship('error', kind + ': ' + msg, extra);
@@ -409,7 +410,14 @@ export default defineNuxtPlugin(() => {
     console.warn = function () {
       try {
         const msg = Array.prototype.map.call(arguments, (a) => (a && a.stack) ? a.stack : String(a)).join(' ').trim();
-        if (msg) ship('warn', msg, '');
+        // Only ship substantive warnings (deprecations, leaks, hydration, a11y…)
+        // and dedupe — a framework warning on every render must not spam the buffer.
+        const key = 'warn|' + msg.slice(0, 200);
+        if (msg && /deprecat|will be removed|memory leak|hydrat|mismatch|invalid|missing|failed|slow|violation|accessib/iu.test(msg) && !seenErrors.has(key)) {
+          if (seenErrors.size > 500) seenErrors.clear();
+          seenErrors.add(key);
+          ship('warn', msg, '');
+        }
       } catch {}
       return origWarn.apply(console, arguments);
     };

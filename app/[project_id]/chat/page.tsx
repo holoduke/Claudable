@@ -2870,6 +2870,9 @@ const persistProjectPreferences = useCallback(
                           : 'text-gray-600 hover:text-gray-900 '
                       }`}
                       onClick={() => setShowPreview(true)}
+                      title="Preview"
+                      aria-label="Preview"
+                      aria-pressed={showPreview}
                     >
                       <span className="w-4 h-4 flex items-center justify-center"><FaDesktop size={16} /></span>
                     </button>
@@ -2880,6 +2883,9 @@ const persistProjectPreferences = useCallback(
                           : 'text-gray-600 hover:text-gray-900 '
                       }`}
                       onClick={() => setShowPreview(false)}
+                      title="Code"
+                      aria-label="Code"
+                      aria-pressed={!showPreview}
                     >
                       <span className="w-4 h-4 flex items-center justify-center"><FaCode size={16} /></span>
                     </button>
