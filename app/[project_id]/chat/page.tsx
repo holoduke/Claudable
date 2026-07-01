@@ -2883,14 +2883,13 @@ const persistProjectPreferences = useCallback(
                     <button
                       onClick={() => { setShowPreview(true); setEditMode((v) => !v); }}
                       title={editMode ? 'Exit visual editor' : 'Edit elements visually'}
-                      className={`h-9 flex items-center gap-2 px-3 rounded-lg text-sm font-medium border transition-colors ${
+                      className={`h-9 w-9 flex items-center justify-center rounded-lg border transition-colors ${
                         editMode
                           ? 'bg-[#DE7356] text-white border-[#DE7356]'
                           : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'
                       }`}
                     >
-                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9" /><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" /></svg>
-                      Edit
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9" /><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" /></svg>
                     </button>
                   )}
 
@@ -2899,16 +2898,15 @@ const persistProjectPreferences = useCallback(
                     <button
                       onClick={() => { setShowPreview(true); setCommentMode((v) => !v); }}
                       title={commentMode ? 'Exit comments' : 'Add comments to the page'}
-                      className={`h-9 flex items-center gap-2 px-3 rounded-lg text-sm font-medium border transition-colors ${
+                      className={`relative h-9 w-9 flex items-center justify-center rounded-lg border transition-colors ${
                         commentMode
                           ? 'bg-[#DE7356] text-white border-[#DE7356]'
                           : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'
                       }`}
                     >
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2Z" /></svg>
-                      Comment
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2Z" /></svg>
                       {comments.length > 0 && (
-                        <span className={`ml-0.5 min-w-[18px] h-[18px] px-1 rounded-full text-[11px] font-semibold flex items-center justify-center ${commentMode ? 'bg-white/25 text-white' : 'bg-[#DE7356]/15 text-[#DE7356]'}`}>{comments.length}</span>
+                        <span className={`absolute -top-1.5 -right-1.5 min-w-[17px] h-[17px] px-1 rounded-full text-[10px] font-semibold flex items-center justify-center ring-2 ring-white ${commentMode ? 'bg-white text-[#DE7356]' : 'bg-[#DE7356] text-white'}`}>{comments.length}</span>
                       )}
                     </button>
                   )}
@@ -2918,9 +2916,9 @@ const persistProjectPreferences = useCallback(
                     <button
                       onClick={clearAllComments}
                       title="Delete all comments in this project"
-                      className="h-9 flex items-center px-3 rounded-lg text-sm font-medium border border-gray-200 bg-white text-gray-600 hover:text-red-600 hover:border-red-200 hover:bg-red-50 transition-colors"
+                      className="h-9 w-9 flex items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-600 hover:text-red-600 hover:border-red-200 hover:bg-red-50 transition-colors"
                     >
-                      Clear all
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /><line x1="10" y1="11" x2="10" y2="17" /><line x1="14" y1="11" x2="14" y2="17" /></svg>
                     </button>
                   )}
 
@@ -2973,7 +2971,7 @@ const persistProjectPreferences = useCallback(
 
                         {/* Open preview in a new tab */}
                         <button
-                          className="h-9 px-3 flex items-center gap-2 bg-gray-100 text-gray-700 hover:text-gray-900 hover:bg-gray-200 rounded-lg transition-colors text-sm font-medium"
+                          className="h-9 w-9 flex items-center justify-center bg-gray-100 text-gray-700 hover:text-gray-900 hover:bg-gray-200 rounded-lg transition-colors"
                           onClick={() => {
                             if (!previewUrl) return;
                             const suffix = currentRoute && currentRoute !== '/' ? currentRoute : '';
@@ -2986,7 +2984,6 @@ const persistProjectPreferences = useCallback(
                             <polyline points="15 3 21 3 21 9" />
                             <line x1="10" y1="14" x2="21" y2="3" />
                           </svg>
-                          Preview
                         </button>
 
                         {/* Device selector dropdown */}
@@ -2994,11 +2991,10 @@ const persistProjectPreferences = useCallback(
                           <div className="h-9 flex items-center bg-gray-100 rounded-lg border border-gray-200">
                             <button
                               onClick={() => setDeviceMenuOpen((v) => !v)}
-                              className="h-full flex items-center gap-2 px-2.5 text-sm text-gray-700 hover:text-gray-900 rounded-l-lg"
-                              title="Choose a device"
+                              className="h-full flex items-center gap-1 px-2.5 text-sm text-gray-700 hover:text-gray-900 rounded-l-lg"
+                              title={`Device: ${currentDevice.name}`}
                             >
-                              {currentDevice.desktop ? <FaDesktop size={13} /> : <FaMobileAlt size={13} />}
-                              <span className="max-w-[130px] truncate">{currentDevice.name}</span>
+                              {currentDevice.desktop ? <FaDesktop size={14} /> : <FaMobileAlt size={14} />}
                               <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9" /></svg>
                             </button>
                             {!currentDevice.desktop && (
@@ -3068,12 +3064,12 @@ const persistProjectPreferences = useCallback(
 
                   {/* Stop Button */}
                   {showPreview && previewUrl && (
-                    <button 
-                      className="h-9 px-3 bg-red-500 hover:bg-red-600 text-white rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
+                    <button
+                      className="h-9 w-9 bg-red-500 hover:bg-red-600 text-white rounded-lg transition-colors flex items-center justify-center"
                       onClick={stop}
+                      title="Stop preview server"
                     >
                       <FaStop size={12} />
-                      Stop
                     </button>
                   )}
                   
@@ -3081,11 +3077,16 @@ const persistProjectPreferences = useCallback(
                   {showPreview && previewUrl && (
                     <button
                       onClick={shareReviewLink}
-                      title="Get a public link for stakeholders to review + comment"
-                      className="h-9 flex items-center gap-2 px-3 rounded-lg text-sm font-medium border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 transition-colors"
+                      title={shareCopied ? 'Review link copied to clipboard' : 'Get a public link for stakeholders to review + comment'}
+                      className={`h-9 w-9 flex items-center justify-center rounded-lg border transition-colors ${
+                        shareCopied ? 'bg-emerald-50 text-emerald-600 border-emerald-200' : 'border-gray-200 bg-white text-gray-700 hover:bg-gray-50'
+                      }`}
                     >
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.6" y1="13.5" x2="15.4" y2="17.5"/><line x1="15.4" y1="6.5" x2="8.6" y2="10.5"/></svg>
-                      {shareCopied ? 'Link copied!' : 'Share'}
+                      {shareCopied ? (
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
+                      ) : (
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.6" y1="13.5" x2="15.4" y2="17.5"/><line x1="15.4" y1="6.5" x2="8.6" y2="10.5"/></svg>
+                      )}
                     </button>
                   )}
 
@@ -3093,16 +3094,16 @@ const persistProjectPreferences = useCallback(
                   {showPreview && previewUrl && (
                     <div className="relative">
                     <button
-                      className="h-9 flex items-center gap-2 px-3 bg-black text-white rounded-lg text-sm font-medium transition-colors hover:bg-gray-900 border border-black/10 shadow-sm"
+                      className="relative h-9 w-9 flex items-center justify-center bg-black text-white rounded-lg transition-colors hover:bg-gray-900 border border-black/10 shadow-sm"
                       onClick={() => setShowPublishPanel(true)}
+                      title="Publish this project"
                     >
                       <FaRocket size={14} />
-                      Publish
                       {deploymentStatus === 'deploying' && (
-                        <span className="ml-2 inline-block w-2 h-2 rounded-full bg-amber-400"></span>
+                        <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-amber-400 ring-2 ring-white"></span>
                       )}
                       {deploymentStatus === 'ready' && (
-                        <span className="ml-2 inline-block w-2 h-2 rounded-full bg-emerald-400"></span>
+                        <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-emerald-400 ring-2 ring-white"></span>
                       )}
                     </button>
                   </div>
