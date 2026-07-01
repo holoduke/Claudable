@@ -276,6 +276,8 @@ export default function ChatPage() {
   const [pinPositions, setPinPositions] = useState<Record<string, { x: number | null; y: number | null }>>({});
   const [activePinId, setActivePinId] = useState<string | null>(null);
   const [composeAnchor, setComposeAnchor] = useState<ComposeAnchor | null>(null);
+  // Runtime errors reported by the preview (for one-click "fix with AI").
+  const [previewErrors, setPreviewErrors] = useState<{ kind: string; message: string; at: string }[]>([]);
   const [deviceId, setDeviceId] = useState<string>('desktop');
   const [orientation, setOrientation] = useState<'portrait'|'landscape'>('portrait');
   const [deviceScale, setDeviceScale] = useState(1);
@@ -1192,6 +1194,33 @@ const persistProjectPreferences = useCallback(
     window.addEventListener('message', onMsg);
     return () => window.removeEventListener('message', onMsg);
   }, [previewUrl]);
+
+  // Collect runtime errors the preview reports (deduped, capped).
+  useEffect(() => {
+    if (!previewUrl) return;
+    let origin: string;
+    try { origin = new URL(previewUrl).origin; } catch { return; }
+    const onMsg = (e: MessageEvent) => {
+      if (e.origin !== origin) return;
+      const d = e.data as any;
+      if (d?.source === 'claudable-errors' && d.type === 'error' && d.error?.message) {
+        setPreviewErrors((prev) => (prev.some((x) => x.message === d.error.message) ? prev : [...prev.slice(-9), d.error]));
+      }
+    };
+    window.addEventListener('message', onMsg);
+    return () => window.removeEventListener('message', onMsg);
+  }, [previewUrl]);
+  // Clear on route change or when a new turn starts (errors get re-reported if still present).
+  useEffect(() => { setPreviewErrors([]); }, [currentRoute]);
+  useEffect(() => { if (hasActiveRequests) setPreviewErrors([]); }, [hasActiveRequests]);
+
+  const fixPreviewErrors = useCallback(() => {
+    if (!previewErrors.length) return;
+    const list = previewErrors.map((e, i) => `${i + 1}. [${e.kind}] ${e.message}${e.at ? ` (${e.at})` : ''}`).join('\n');
+    const instruction = `The live preview is throwing these runtime errors on route "${currentRouteRef.current || '/'}":\n\n${list}\n\nFind the cause in the source and fix it. Keep the change minimal and don't introduce new behavior.`;
+    setPreviewErrors([]);
+    runActRef.current?.(instruction, []);
+  }, [previewErrors]);
 
   const submitNewComment = useCallback(async (body: string) => {
     if (!composeAnchor) return;
@@ -3147,6 +3176,20 @@ const persistProjectPreferences = useCallback(
                         onDelete={deleteCommentById}
                         onCloseThread={() => setActivePinId(null)}
                       />
+                    )}
+
+                    {/* Runtime-error → one-click fix banner */}
+                    {previewErrors.length > 0 && !hasActiveRequests && !editMode && !commentMode && (
+                      <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-40 max-w-[92%]">
+                        <div className="flex items-center gap-3 bg-red-600 text-white rounded-xl shadow-xl pl-3 pr-2 py-2">
+                          <span className="shrink-0">⚠️</span>
+                          <span className="text-sm truncate" title={previewErrors[previewErrors.length - 1]?.message}>
+                            {previewErrors.length} runtime error{previewErrors.length > 1 ? 's' : ''} — {previewErrors[previewErrors.length - 1]?.message}
+                          </span>
+                          <button onClick={fixPreviewErrors} className="shrink-0 text-xs font-semibold bg-white text-red-600 rounded-lg px-3 py-1.5 hover:bg-red-50">Fix with AI</button>
+                          <button onClick={() => setPreviewErrors([])} className="shrink-0 text-white/80 hover:text-white text-sm px-1" aria-label="Dismiss">✕</button>
+                        </div>
+                      </div>
                     )}
                   </div>
                 ) : (
