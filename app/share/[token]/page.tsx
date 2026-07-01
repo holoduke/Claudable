@@ -21,10 +21,16 @@ export default function SharePage({ params }: { params: Promise<{ token: string 
   const [viewport, setViewport] = useState({ w: 0, h: 0 });
   const [previewLoaded, setPreviewLoaded] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
+  // Comment mode ON = clicks place comments (links intercepted); OFF = browse
+  // the site normally (links/buttons work). Existing comment pins stay visible
+  // and clickable in both modes.
+  const [commentMode, setCommentMode] = useState(true);
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const paneRef = useRef<HTMLDivElement>(null);
   const routeRef = useRef('/');
   routeRef.current = route;
+  const commentModeRef = useRef(true);
+  commentModeRef.current = commentMode;
   const commentsRef = useRef<CommentPin[]>([]);
   commentsRef.current = comments;
   const activeIdRef = useRef<string | null>(null);
@@ -85,7 +91,7 @@ export default function SharePage({ params }: { params: Promise<{ token: string 
         // handshake. Re-arm comment mode + re-draw pins now that its listener
         // exists; the single enter() on mount races the iframe load and is lost.
         setPreviewLoaded(true); // hides the "starting…" overlay + stops retrying
-        post({ type: 'enter' });
+        post({ type: commentModeRef.current ? 'enter' : 'exit' }); // respect the toggle
         post({ type: 'renderPins', activeId: activeIdRef.current, pins: commentsRef.current.map((c) => ({ id: c.id, index: c.index, anchorSelector: c.anchorSelector, relX: c.relX, relY: c.relY, resolved: c.resolved })) });
         setRoute(d.path.startsWith('/') ? d.path : `/${d.path}`);
       } else if (d?.source === 'claudable-comments') {
@@ -98,8 +104,13 @@ export default function SharePage({ params }: { params: Promise<{ token: string 
     return () => window.removeEventListener('message', onMsg);
   }, [info?.previewUrl, nameConfirmed, post]);
 
-  // Enter comment mode once ready.
-  useEffect(() => { if (info?.previewUrl && nameConfirmed) post({ type: 'enter' }); }, [info?.previewUrl, nameConfirmed, post]);
+  // Send enter/exit when the toggle flips (and once ready). Turning it off lets
+  // the reviewer click links/buttons; existing pins stay visible either way.
+  useEffect(() => {
+    if (!info?.previewUrl || !nameConfirmed) return;
+    post({ type: commentMode ? 'enter' : 'exit' });
+    if (!commentMode) { setCompose(null); setActiveId(null); }
+  }, [commentMode, info?.previewUrl, nameConfirmed, previewLoaded, post]);
   // The share endpoint returns immediately and warms the dev server in the
   // background, so the first iframe load can hit a not-yet-ready (502) preview.
   // Reload it every few seconds until the plugin reports ready, then stop.
@@ -174,7 +185,17 @@ export default function SharePage({ params }: { params: Promise<{ token: string 
       <div className="h-12 shrink-0 bg-white border-b border-gray-200 flex items-center px-4 gap-3">
         <span className="w-2 h-2 rounded-full bg-[#DE7356]" />
         <span className="font-semibold text-gray-900 text-sm">{info.projectName}</span>
-        <span className="text-xs text-gray-400">review · click anywhere to comment · {route}</span>
+        <button
+          onClick={() => setCommentMode((v) => !v)}
+          title={commentMode ? 'Commenting on — click the page to leave a comment. Click to browse instead.' : 'Browsing — links work. Click to leave comments.'}
+          className={`h-8 flex items-center gap-1.5 px-2.5 rounded-lg text-xs font-medium border transition-colors ${
+            commentMode ? 'bg-[#DE7356] text-white border-[#DE7356]' : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'
+          }`}
+        >
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2Z" /></svg>
+          {commentMode ? 'Commenting' : 'Comment'}
+        </button>
+        <span className="text-xs text-gray-400 hidden sm:inline">{commentMode ? 'click the page to comment' : 'browsing — links work'} · {route}</span>
         <span className="ml-auto text-xs text-gray-500">You: {guestName}</span>
       </div>
       <div ref={paneRef} className="relative flex-1 min-h-0">
