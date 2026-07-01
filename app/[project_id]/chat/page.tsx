@@ -1273,14 +1273,31 @@ const persistProjectPreferences = useCallback(
 
   // Keep-warm heartbeat: while a preview is open, ping its status every few
   // minutes so the server-side idle sweep doesn't evict an actively-viewed
-  // preview (the status read refreshes its lastAccessedAt).
+  // preview (the status read refreshes its lastAccessedAt). Also ping the moment
+  // the tab is refocused — background tabs get their timers throttled/frozen, so
+  // this both resets the idle clock on return AND proactively rebuilds a preview
+  // that was already evicted, so it's warming while you look at it.
   useEffect(() => {
     if (!previewUrl) return;
-    const id = setInterval(() => {
-      fetch(`${API_BASE}/api/projects/${projectId}/preview/status`, { cache: 'no-store' }).catch(() => {});
-    }, 5 * 60 * 1000);
-    return () => clearInterval(id);
-  }, [previewUrl, projectId]);
+    const ping = () => {
+      fetch(`${API_BASE}/api/projects/${projectId}/preview/status`, { cache: 'no-store' })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((j) => {
+          const st = j?.data?.status;
+          if (st && st !== 'running' && st !== 'starting') start(); // evicted → rebuild now
+        })
+        .catch(() => {});
+    };
+    const id = setInterval(ping, 5 * 60 * 1000);
+    const onVisible = () => { if (document.visibilityState === 'visible') ping(); };
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('focus', onVisible);
+    return () => {
+      clearInterval(id);
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('focus', onVisible);
+    };
+  }, [previewUrl, projectId, start]);
 
   // Navigate to specific route in iframe
   const navigateToRoute = (route: string) => {
