@@ -29,7 +29,8 @@ interface CommentsLayerProps {
   activeId: string | null;
   compose: ComposeAnchor | null;
   viewport: { w: number; h: number };
-  onSubmitNew: (body: string) => void;
+  /** Return true on success, false on failure — drives the inline error state. */
+  onSubmitNew: (body: string) => Promise<boolean> | boolean | void;
   onCancelCompose: () => void;
   onResolve: (id: string, resolved: boolean) => void;
   onDelete: (id: string) => void;
@@ -67,9 +68,28 @@ export default function CommentsLayer({
   comments, positions, activeId, compose, viewport, onSubmitNew, onCancelCompose, onResolve, onDelete, onCloseThread,
 }: CommentsLayerProps) {
   const [draft, setDraft] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const composeRef = useRef<HTMLTextAreaElement>(null);
 
-  useEffect(() => { if (compose) { setDraft(''); setTimeout(() => composeRef.current?.focus(), 30); } }, [compose]);
+  useEffect(() => { if (compose) { setDraft(''); setSubmitError(null); setSubmitting(false); setTimeout(() => composeRef.current?.focus(), 30); } }, [compose]);
+
+  // One submit at a time. Awaits the parent's POST, surfaces failures inline, and
+  // guards against a second click adding the comment twice.
+  const doSubmit = async () => {
+    const text = draft.trim();
+    if (!text || submitting) return;
+    setSubmitting(true);
+    setSubmitError(null);
+    try {
+      const ok = await onSubmitNew(text);
+      if (ok === false) setSubmitError('Couldn’t add your comment — check your connection and try again.');
+    } catch {
+      setSubmitError('Couldn’t add your comment — check your connection and try again.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   const active = activeId ? comments.find((c) => c.id === activeId) : null;
   const activePos = activeId ? positions[activeId] : null;
@@ -86,19 +106,24 @@ export default function CommentsLayer({
             ref={composeRef}
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && draft.trim()) onSubmitNew(draft.trim()); if (e.key === 'Escape') onCancelCompose(); }}
+            onKeyDown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); void doSubmit(); } if (e.key === 'Escape') onCancelCompose(); }}
             placeholder="Add a comment…"
             rows={3}
-            className="w-full text-sm border border-gray-200 rounded-md p-2 focus:outline-none focus:ring-2 focus:ring-[#DE7356]/30 resize-none"
+            disabled={submitting}
+            className="w-full text-sm border border-gray-200 rounded-md p-2 focus:outline-none focus:ring-2 focus:ring-[#DE7356]/30 resize-none disabled:opacity-60"
           />
+          {submitError && <p className="text-[11px] text-red-600 mt-1 px-0.5">{submitError}</p>}
           <div className="flex items-center justify-end gap-2 mt-1">
-            <button onClick={onCancelCompose} className="text-xs text-gray-500 hover:text-gray-800 px-2 py-1">Cancel</button>
+            <button onClick={onCancelCompose} disabled={submitting} className="text-xs text-gray-500 hover:text-gray-800 px-2 py-1 disabled:opacity-40">Cancel</button>
             <button
-              onClick={() => draft.trim() && onSubmitNew(draft.trim())}
-              disabled={!draft.trim()}
-              className="text-xs font-medium text-white bg-[#DE7356] hover:bg-[#c65f43] rounded-md px-3 py-1 disabled:opacity-40"
+              onClick={() => void doSubmit()}
+              disabled={!draft.trim() || submitting}
+              className="text-xs font-medium text-white bg-[#DE7356] hover:bg-[#c65f43] rounded-md px-3 py-1 disabled:opacity-40 flex items-center gap-1.5"
             >
-              Comment
+              {submitting && (
+                <svg className="animate-spin" width="11" height="11" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" className="opacity-25" /><path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" strokeWidth="4" strokeLinecap="round" /></svg>
+              )}
+              {submitting ? 'Adding…' : 'Comment'}
             </button>
           </div>
         </div>

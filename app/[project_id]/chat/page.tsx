@@ -1223,17 +1223,24 @@ const persistProjectPreferences = useCallback(
     runActRef.current?.(instruction, []);
   }, [previewErrors]);
 
-  const submitNewComment = useCallback(async (body: string) => {
-    if (!composeAnchor) return;
+  const submitNewComment = useCallback(async (body: string): Promise<boolean> => {
+    if (!composeAnchor) return false;
     const route = currentRoute || '/';
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 15000);
     try {
       const r = await fetch(`${API_BASE}/api/projects/${projectId}/comments`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: ctrl.signal,
         body: JSON.stringify({ route, anchorSelector: composeAnchor.anchorSelector, relX: composeAnchor.relX, relY: composeAnchor.relY, body }),
       });
-      const j = await r.json();
-      if (j.success) { setComposeAnchor(null); await loadComments(route); }
-    } catch { /* ignore */ }
+      const j = await r.json().catch(() => null);
+      if (j?.success) { setComposeAnchor(null); await loadComments(route); return true; }
+      return false;
+    } catch {
+      return false;
+    } finally {
+      clearTimeout(timer);
+    }
   }, [composeAnchor, currentRoute, projectId, loadComments]);
 
   const resolveCommentById = useCallback(async (id: string, resolved: boolean) => {
