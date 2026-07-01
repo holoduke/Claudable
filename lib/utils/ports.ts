@@ -73,7 +73,8 @@ async function isPortAvailable(port: number): Promise<boolean> {
 
 export async function findAvailablePort(
   startPort?: number,
-  endPort?: number
+  endPort?: number,
+  exclude?: Set<number>
 ): Promise<number> {
   const { start: defaultStart, end: defaultEnd } = resolveDefaultBounds();
 
@@ -103,6 +104,10 @@ export async function findAvailablePort(
   }
 
   for (let port = rangeStart; port <= rangeEnd; port += 1) {
+    // Skip ports the caller has already reserved in-flight (a dev server that
+    // hasn't bound yet wouldn't fail the TCP probe below, so two concurrent
+    // starts could otherwise pick the same port — a cross-project preview leak).
+    if (exclude?.has(port)) continue;
     // eslint-disable-next-line no-await-in-loop
     const available = await isPortAvailable(port);
     if (available) {
