@@ -10,6 +10,7 @@ import { prisma } from '@/lib/db/client';
 import { canAccessProject } from '@/lib/services/project-access';
 import { getProjectById } from '@/lib/services/project';
 import { revertToCheckpoint } from '@/lib/services/checkpoints';
+import { getActiveRequests } from '@/lib/services/user-requests';
 import { createSuccessResponse, createErrorResponse, handleApiError } from '@/lib/utils/api-response';
 
 export const runtime = 'nodejs';
@@ -33,13 +34,27 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
       if (!dbProject || !(await canAccessProject(user, dbProject))) return createErrorResponse('forbidden', 'Access denied', 403);
     }
 
+    // Don't revert while an agent turn is running: the executor's file writes
+    // would race `git restore` + `git clean -fd` and the end-of-turn snapshot
+    // would capture a half-reverted tree. Ask the user to wait.
+    if ((await getActiveRequests(project_id)).hasActiveRequests) {
+      return createErrorResponse('busy', 'The agent is still working — wait for it to finish before reverting', 409);
+    }
+
     const body = (await request.json().catch(() => null)) ?? {};
     const sha = typeof body.sha === 'string' ? body.sha.trim() : '';
     if (!/^[0-9a-f]{7,40}$/iu.test(sha)) return createErrorResponse('invalid', 'A valid checkpoint sha is required', 400);
 
-    const projectPath = project.repoPath
-      ? (path.isAbsolute(project.repoPath) ? project.repoPath : path.resolve(process.cwd(), project.repoPath))
-      : path.join(PROJECTS_DIR_ABSOLUTE, project_id);
+    const projectPath = path.resolve(
+      project.repoPath
+        ? (path.isAbsolute(project.repoPath) ? project.repoPath : path.resolve(process.cwd(), project.repoPath))
+        : path.join(PROJECTS_DIR_ABSOLUTE, project_id),
+    );
+    // Revert runs `git clean -fd` in projectPath — refuse if it isn't inside the
+    // projects sandbox (guards a legacy/crafted repoPath from an unbounded clean).
+    if (projectPath !== PROJECTS_DIR_ABSOLUTE && !projectPath.startsWith(PROJECTS_DIR_ABSOLUTE + path.sep)) {
+      return createErrorResponse('forbidden', 'Project path is outside the projects directory', 400);
+    }
 
     const result = await revertToCheckpoint(project_id, projectPath, sha);
     if (!result.ok) return createErrorResponse('revert_failed', result.error || 'Revert failed', 400);

@@ -28,12 +28,16 @@ const buffers = new Map<string, DiagEntry[]>();
 
 function push(projectId: string, entry: DiagEntry): void {
   // Bound how many projects we retain (buffers are never explicitly cleared on
-  // preview stop). Map preserves insertion order → drop the oldest.
-  if (!buffers.has(projectId) && buffers.size >= MAX_PROJECTS) {
+  // preview stop). Evict the LEAST-recently-written project — re-inserting the
+  // current key below moves it to the end, so Map order is true LRU (evicting by
+  // insertion order would drop the actively-streaming project mid-debug).
+  const existing = buffers.get(projectId);
+  buffers.delete(projectId);
+  if (existing === undefined && buffers.size >= MAX_PROJECTS) {
     const oldest = buffers.keys().next().value;
     if (oldest !== undefined) buffers.delete(oldest);
   }
-  const buf = buffers.get(projectId) ?? [];
+  const buf = existing ?? [];
   // Collapse consecutive duplicates (same source+message) into the latest.
   const last = buf[buf.length - 1];
   if (last && last.source === entry.source && last.message === entry.message) {

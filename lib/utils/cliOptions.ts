@@ -1,7 +1,11 @@
 import { CLI_OPTIONS, type CLIOption } from '@/types/cli';
 import { getModelDefinitionsForCli, normalizeModelId } from '@/lib/constants/cliModels';
 
-export const ACTIVE_CLI_IDS = ['claude', 'codex', 'cursor', 'qwen', 'glm'] as const;
+// Claude-only deployment: the container ships only the `claude` CLI. The other
+// upstream adapters (codex/cursor/qwen/glm) are hidden — glm in particular is
+// DANGEROUS here: it redirects ANTHROPIC_BASE_URL to z.ai process-wide, which
+// would leak the subscription OAuth token and hijack concurrent Claude runs.
+export const ACTIVE_CLI_IDS = ['claude'] as const;
 
 export type ActiveCliId = (typeof ACTIVE_CLI_IDS)[number];
 

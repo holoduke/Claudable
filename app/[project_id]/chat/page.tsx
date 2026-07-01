@@ -285,6 +285,14 @@ export default function ChatPage() {
   const [allComments, setAllComments] = useState<(CommentPin & { route: string })[]>([]);
   const commentModeRef = useRef(false);
   commentModeRef.current = commentMode;
+  const editModeRef = useRef(false);
+  editModeRef.current = editMode;
+  // Latest pins/active id, read by the stable claudable-preview handler so it can
+  // re-push them after ANY iframe (re)load — not just parent-initiated ones.
+  const commentsRef = useRef<CommentPin[]>([]);
+  commentsRef.current = comments;
+  const activePinIdRef = useRef<string | null>(null);
+  activePinIdRef.current = activePinId;
   // A comment we're navigating to (may be on another route): fired once its
   // route's pins have loaded so the preview can scroll to it.
   const pendingScrollRef = useRef<{ id: string; anchorSelector: string; route: string } | null>(null);
@@ -1081,9 +1089,26 @@ const persistProjectPreferences = useCallback(
         // re-fires the renderPins + pending-scroll effects with a live listener,
         // so navigating to a comment shows/scrolls to it on the FIRST click.
         setPreviewReady(true);
-        if (commentModeRef.current) {
-          try { iframeRef.current?.contentWindow?.postMessage({ source: 'claudable-comments-cmd', type: 'enter' }, previewOrigin); } catch { /* not ready */ }
-        }
+        // Re-arm on EVERY report (dev-server reload, error-overlay refresh,
+        // stop→start, idle rebuild) — not just parent-initiated navigation. A
+        // freshly (re)loaded plugin starts with pins=[] and no active mode; if we
+        // don't re-push here the dots vanish while the mode stays "on" (B2), and
+        // edit mode's click-to-select goes dead. Mirrors the share page.
+        const win = iframeRef.current?.contentWindow;
+        try {
+          if (commentModeRef.current) {
+            win?.postMessage({ source: 'claudable-comments-cmd', type: 'enter' }, previewOrigin);
+            win?.postMessage({
+              source: 'claudable-comments-cmd',
+              type: 'renderPins',
+              activeId: activePinIdRef.current,
+              pins: commentsRef.current.map((c) => ({ id: c.id, index: c.index, anchorSelector: c.anchorSelector, relX: c.relX, relY: c.relY, resolved: c.resolved })),
+            }, previewOrigin);
+          }
+          if (editModeRef.current) {
+            win?.postMessage({ source: 'claudable-editor-cmd', type: 'enter' }, previewOrigin);
+          }
+        } catch { /* iframe not ready */ }
       }
     };
     window.addEventListener('message', onMessage);
@@ -1204,7 +1229,12 @@ const persistProjectPreferences = useCallback(
   useEffect(() => {
     postComments({ type: commentMode ? 'enter' : 'exit' });
     if (commentMode) { setEditMode(false); loadComments(currentRouteRef.current || '/'); }
-    else { setComposeAnchor(null); setActivePinId(null); setShowCommentsList(false); }
+    else {
+      setComposeAnchor(null); setActivePinId(null); setShowCommentsList(false);
+      // Wipe the in-iframe pin dots — otherwise they linger with pointer-events
+      // and swallow clicks while browsing / get selected in edit mode (B6).
+      postComments({ type: 'renderPins', pins: [] });
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [commentMode, postComments]);
 
@@ -1330,7 +1360,7 @@ const persistProjectPreferences = useCallback(
     try {
       const res = await fetch(`${API_BASE}/api/projects/${projectId}/share`, { method: 'POST' });
       const j = await res.json();
-      if (!j.success || !j.data?.token) throw new Error(j.error?.message || 'Could not create share link');
+      if (!j.success || !j.data?.token) throw new Error(j.message || 'Could not create share link');
       const link = `${window.location.origin}/share/${j.data.token}`;
       try { await navigator.clipboard.writeText(link); } catch { window.prompt('Copy this review link:', link); }
       setShareCopied(true);

@@ -2886,9 +2886,9 @@ const ToolResultMessage = ({
                   <div className="mt-1.5">
                     <button
                       onClick={() => handleRevert((message as any).commitSha)}
-                      disabled={revertingSha === (message as any).commitSha}
-                      className="text-[11px] text-gray-400 hover:text-[#DE7356] inline-flex items-center gap-1 disabled:opacity-50"
-                      title="Restore the project to how it was after this step"
+                      disabled={!!revertingSha || serverBusy}
+                      className="text-[11px] text-gray-400 hover:text-[#DE7356] inline-flex items-center gap-1 disabled:opacity-50 disabled:hover:text-gray-400"
+                      title={serverBusy ? 'Wait for the agent to finish before reverting' : 'Restore the project to how it was after this step'}
                     >
                       <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 7v6h6"/><path d="M3 13a9 9 0 1 0 3-7.7L3 8"/></svg>
                       {revertingSha === (message as any).commitSha ? 'Reverting…' : 'Revert to here'}

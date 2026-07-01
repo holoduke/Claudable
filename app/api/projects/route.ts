@@ -68,6 +68,12 @@ export async function POST(request: NextRequest) {
     if (!input.project_id || !input.name) {
       return createErrorResponse('project_id and name are required', undefined, 400);
     }
+    // project_id becomes a filesystem path segment (repoPath, checkpoints GIT_DIR,
+    // asset dirs). Constrain it to a safe slug so a value like "../../x" can't
+    // plant a worktree — and later a `git clean -fd` — outside the sandbox.
+    if (!/^[A-Za-z0-9_-]{1,64}$/.test(input.project_id)) {
+      return createErrorResponse('project_id must be 1-64 chars: letters, digits, hyphen, underscore', undefined, 400);
+    }
 
     const project = await createProject(input);
 

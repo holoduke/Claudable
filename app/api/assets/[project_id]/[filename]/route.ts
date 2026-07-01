@@ -49,7 +49,14 @@ export async function GET(_request: Request, { params }: RouteContext) {
       return NextResponse.json({ success: false, error: 'Project not found' }, { status: 404 });
     }
 
-    const filePath = path.join(PROJECTS_DIR_ABSOLUTE, project_id, 'assets', filename);
+    // Path-traversal guard: `filename` is URL-decoded by Next, so a value like
+    // "..%2F..%2Fcc.db" would otherwise escape the assets dir and read arbitrary
+    // files. Reject separators, then resolve + prefix-check the final path.
+    const assetsDir = path.join(PROJECTS_DIR_ABSOLUTE, project_id, 'assets');
+    const filePath = path.resolve(assetsDir, filename);
+    if (/[\\/]/.test(filename) || filename.includes('..') || (filePath !== assetsDir && !filePath.startsWith(assetsDir + path.sep))) {
+      return NextResponse.json({ success: false, error: 'Invalid filename' }, { status: 400 });
+    }
     console.log('📸 Checking file path:', {
       filePath,
       exists: await fs.access(filePath).then(() => true).catch(() => false)
@@ -64,7 +71,6 @@ export async function GET(_request: Request, { params }: RouteContext) {
       });
 
       // Check if assets directory exists
-      const assetsDir = path.join(PROJECTS_DIR_ABSOLUTE, project_id, 'assets');
       const assetsDirExists = await fs.access(assetsDir).then(() => true).catch(() => false);
       console.log('📸 Assets directory exists:', assetsDirExists);
 
