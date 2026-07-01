@@ -16,6 +16,7 @@ import { ANGULAR_SYSTEM_PROMPT } from './prompts/angular-system-prompt';
 import { stackKind } from '@/lib/config/stacks';
 import { resolveProjectClaudeToken } from '../claude-credentials';
 import { buildItopsMcpServer } from '../itops/itops-mcp';
+import { buildDiagnosticsMcpServer } from '../diagnostics-mcp';
 import { getProjectService } from '../project-services';
 import { createMessage } from '../message';
 import { CLAUDE_DEFAULT_MODEL, normalizeClaudeModelId, getClaudeModelDisplayName } from '@/lib/constants/claudeModels';
@@ -589,6 +590,10 @@ export async function executeClaude(
     const stackProject = await getProjectById(projectId).catch(() => null);
     let systemPromptForStack = selectSystemPrompt(stackProject?.templateType);
 
+    // Tell the agent about the live diagnostics tool so it verifies its own work
+    // and can act on real runtime errors instead of guessing.
+    systemPromptForStack += `\n\n## Checking the running app\nYou have a tool \`mcp__appdiag__check_app_health\` that returns the CURRENTLY RUNNING preview's uncaught browser errors, console errors/warnings, and Nuxt backend (server) errors. Use it to:\n- verify a change actually works after you edit (check for new errors before saying you're done),\n- investigate when the user reports something is broken,\n- find real bugs to fix proactively.\nAn empty result means nothing has been reported since the preview last started — it is not proof the app is bug-free; exercise the feature in the preview, then check again.`;
+
     // If a Postgres was provisioned for this project, tell the agent so it builds
     // data-backed features against DATABASE_URL (set in the preview + deploy env).
     try {
@@ -679,7 +684,12 @@ export async function executeClaude(
         // it-ops tools (in-process MCP broker). Attached when the project's OWNER
         // has it-ops enabled — the tools run in THIS process (creds never reach the
         // scrubbed agent env). See itops-mcp.ts + user-itops.ts.
-        ...(itopsEnabled ? { mcpServers: { itops: buildItopsMcpServer() } } : {}),
+        // `appdiag` (always on): lets the agent read the running preview's console
+        // + Nuxt backend errors to self-diagnose. `itops` (opt-in): infra broker.
+        mcpServers: {
+          appdiag: buildDiagnosticsMcpServer(projectId),
+          ...(itopsEnabled ? { itops: buildItopsMcpServer() } : {}),
+        },
         // See skillSettingSources above: ['project','user'] by default (auto-load
         // all skills), or ['project'] once any skill is disabled (load only the
         // staged enabled set, making per-project disabling a hard guarantee).

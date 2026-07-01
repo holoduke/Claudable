@@ -9,6 +9,7 @@ import { findAvailablePort } from '@/lib/utils/ports';
 import { getProjectById, updateProject, updateProjectStatus } from './project';
 import { prisma } from '@/lib/db/client';
 import { getDatabaseUrl } from '@/lib/services/database';
+import { recordBackendChunk } from '@/lib/services/diagnostics';
 
 /**
  * Clear persisted preview URLs/ports for ALL projects. Called once on boot: after
@@ -137,7 +138,7 @@ const pnpmCommand = process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm';
  * The plugin is inert outside the preview iframe and is gitignored so it never
  * ships to the deployed app.
  */
-async function ensurePreviewRouteReporter(projectPath: string): Promise<void> {
+async function ensurePreviewRouteReporter(projectPath: string, projectId: string): Promise<void> {
   try {
     // Only meaningful for Nuxt projects.
     const hasNuxtConfig = await fs
@@ -165,6 +166,7 @@ export default defineNuxtPlugin(() => {
   // then '*' only as a last resort. Used to scope BOTH outgoing posts and to
   // validate incoming commands, so a page that frames the preview can't drive it.
   const CLAUDABLE_ORIGIN = ${JSON.stringify(claudableOrigin)};
+  const CLAUDABLE_PROJECT_ID = ${JSON.stringify(projectId)};
   let target = CLAUDABLE_ORIGIN || '*';
   try {
     if (!CLAUDABLE_ORIGIN && document.referrer) target = new URL(document.referrer).origin;
@@ -362,6 +364,26 @@ export default defineNuxtPlugin(() => {
     if (seenErrors.has(line)) return; // dedupe repeats
     seenErrors.add(line);
     post({ source: 'claudable-errors', type: 'error', error: { kind, message: String(msg).slice(0, 500), at: (extra || '').slice(0, 200) } });
+    ship('error', kind + ': ' + msg, extra);
+  };
+
+  // Ship console/runtime errors to Claudable (server-side buffer) so the agent
+  // can query "what's broken?" even when no chat window is watching. Batched,
+  // text/plain (a CORS "simple" request → no preflight), fire-and-forget.
+  const SHIP_URL = CLAUDABLE_ORIGIN && CLAUDABLE_PROJECT_ID ? CLAUDABLE_ORIGIN + '/api/projects/' + encodeURIComponent(CLAUDABLE_PROJECT_ID) + '/client-logs' : '';
+  let shipQueue = [];
+  let shipTimer = 0;
+  const ship = (level, message, at) => {
+    if (!SHIP_URL || !message) return;
+    shipQueue.push({ level: level, message: String(message).slice(0, 600), at: String(at || '').slice(0, 200) });
+    if (shipQueue.length > 40) shipQueue.shift();
+    if (shipTimer) return;
+    shipTimer = setTimeout(() => {
+      shipTimer = 0;
+      const batch = shipQueue.splice(0, shipQueue.length);
+      if (!batch.length) return;
+      try { fetch(SHIP_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify({ entries: batch }), keepalive: true }).catch(function () {}); } catch (_e) {}
+    }, 1500);
   };
   window.addEventListener('error', (e) => {
     if (e && e.message) reportError('runtime', e.message, (e.filename || '') + (e.lineno ? ':' + e.lineno : ''));
@@ -380,6 +402,16 @@ export default defineNuxtPlugin(() => {
         if (msg && /error|failed|cannot|undefined is not|is not a function|unexpected|exception/iu.test(msg)) reportError('console', msg, '');
       } catch {}
       return origErr.apply(console, arguments);
+    };
+    // console.warn → shipped to the diagnostics buffer only (no "Fix with AI"
+    // banner; warnings are context for the agent, not user-facing alerts).
+    const origWarn = console.warn.bind(console);
+    console.warn = function () {
+      try {
+        const msg = Array.prototype.map.call(arguments, (a) => (a && a.stack) ? a.stack : String(a)).join(' ').trim();
+        if (msg) ship('warn', msg, '');
+      } catch {}
+      return origWarn.apply(console, arguments);
     };
   } catch {}
 });
@@ -1235,7 +1267,7 @@ class PreviewManager {
     }
 
     // Make the preview report its route to the URL bar (cross-origin iframe).
-    await ensurePreviewRouteReporter(projectPath);
+    await ensurePreviewRouteReporter(projectPath, projectId);
 
     const previewBounds = resolvePreviewBounds();
     let preferredPort: number;
@@ -1459,6 +1491,7 @@ class PreviewManager {
 
     child.stdout?.on('data', (chunk) => {
       log(chunk);
+      try { recordBackendChunk(projectId, chunk, 'stdout'); } catch { /* diagnostics are best-effort */ }
       if (previewProcess.status === 'starting') {
         previewProcess.status = 'running';
       }
@@ -1466,6 +1499,7 @@ class PreviewManager {
 
     child.stderr?.on('data', (chunk) => {
       log(chunk);
+      try { recordBackendChunk(projectId, chunk, 'stderr'); } catch { /* diagnostics are best-effort */ }
     });
 
     child.on('exit', (code, signal) => {
