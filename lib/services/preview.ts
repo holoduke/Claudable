@@ -351,6 +351,20 @@ export default defineNuxtPlugin(() => {
       commenting = false; document.removeEventListener('click', onCommentClick, true); document.documentElement.style.cursor = '';
     } else if (d.type === 'renderPins') {
       renderPins(d.pins, d.activeId);
+    } else if (d.type === 'scrollTo') {
+      // Jump to a comment's anchor element and briefly flash it, then reposition pins.
+      try {
+        const el = document.querySelector(d.anchorSelector);
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
+          const prevOutline = el.style.outline;
+          const prevTransition = el.style.transition;
+          el.style.transition = 'outline .2s ease';
+          el.style.outline = '3px solid rgba(222,115,86,.8)';
+          setTimeout(() => { try { el.style.outline = prevOutline; el.style.transition = prevTransition; } catch {} }, 1400);
+        }
+      } catch {}
+      setTimeout(schedulePos, 400);
     }
   });
   window.addEventListener('scroll', schedulePos, true);
