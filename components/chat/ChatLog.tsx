@@ -822,9 +822,27 @@ interface ChatLogProps {
    *  /requests/active poll). Drives the busy indicator even if a live status
    *  event was missed (reconnect / late join). */
   serverBusy?: boolean;
+  /** Called after a successful checkpoint revert so the parent can refresh the preview. */
+  onReverted?: () => void;
 }
 
-export default function ChatLog({ projectId, onSessionStatusChange, onProjectStatusUpdate, onSseFallbackActive, startRequest, completeRequest, onAddUserMessage, serverBusy = false }: ChatLogProps) {
+export default function ChatLog({ projectId, onSessionStatusChange, onProjectStatusUpdate, onSseFallbackActive, startRequest, completeRequest, onAddUserMessage, serverBusy = false, onReverted }: ChatLogProps) {
+  const [revertingSha, setRevertingSha] = useState<string | null>(null);
+  const handleRevert = useCallback(async (sha: string) => {
+    if (typeof window !== 'undefined' && !window.confirm('Revert the project to how it was after this step? Later changes will be rolled back (you can re-run to move forward again).')) return;
+    setRevertingSha(sha);
+    try {
+      const res = await fetch(`/api/projects/${projectId}/checkpoints/revert`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sha }),
+      });
+      if (res.ok) onReverted?.();
+      else alert('Revert failed. The checkpoint may no longer be available.');
+    } catch {
+      alert('Revert failed.');
+    } finally {
+      setRevertingSha(null);
+    }
+  }, [projectId, onReverted]);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [selectedLog, setSelectedLog] = useState<LogEntry | null>(null);
@@ -2861,6 +2879,20 @@ const ToolResultMessage = ({
                         {renderContentWithThinking(shortenPath(messageText))}
                       </div>
                     )}
+                  </div>
+                )}
+
+                {message.role === 'assistant' && message.isFinal && (message as any).commitSha && (
+                  <div className="mt-1.5">
+                    <button
+                      onClick={() => handleRevert((message as any).commitSha)}
+                      disabled={revertingSha === (message as any).commitSha}
+                      className="text-[11px] text-gray-400 hover:text-[#DE7356] inline-flex items-center gap-1 disabled:opacity-50"
+                      title="Restore the project to how it was after this step"
+                    >
+                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 7v6h6"/><path d="M3 13a9 9 0 1 0 3-7.7L3 8"/></svg>
+                      {revertingSha === (message as any).commitSha ? 'Reverting…' : 'Revert to here'}
+                    </button>
                   </div>
                 )}
             </div>

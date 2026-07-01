@@ -16,6 +16,7 @@ export interface RealtimeMessage {
   sessionId?: string | null;
   cliSource?: string | null;
   requestId?: string | null;
+  commitSha?: string | null;
   createdAt: string;
   updatedAt?: string;
   isStreaming?: boolean;

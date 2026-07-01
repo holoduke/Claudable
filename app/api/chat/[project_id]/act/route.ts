@@ -11,6 +11,24 @@ import {
 } from '@/lib/services/project';
 import { createMessage } from '@/lib/services/message';
 import { getSessionUser, authEnabled } from '@/lib/auth/session';
+import { createCheckpoint } from '@/lib/services/checkpoints';
+import { prisma } from '@/lib/db/client';
+
+/** After a turn completes, snapshot the source and stamp the sha on the last
+ * assistant message so the UI can offer a one-click revert to this point. */
+async function checkpointTurn(projectId: string, projectPath: string, instruction: string): Promise<void> {
+  try {
+    const sha = createCheckpoint(projectId, projectPath, instruction || 'Agent turn');
+    if (!sha) return;
+    const msg = await prisma.message.findFirst({
+      where: { projectId, role: 'assistant' },
+      orderBy: { createdAt: 'desc' },
+    });
+    if (msg) await prisma.message.update({ where: { id: msg.id }, data: { commitSha: sha } });
+  } catch {
+    /* checkpoints are best-effort — never fail the turn */
+  }
+}
 import { initializeNextJsProject as initializeClaudeProject, applyChanges as applyClaudeChanges } from '@/lib/services/cli/claude';
 import { initializeNextJsProject as initializeCodexProject, applyChanges as applyCodexChanges } from '@/lib/services/cli/codex';
 import { initializeNextJsProject as initializeCursorProject, applyChanges as applyCursorChanges } from '@/lib/services/cli/cursor';
@@ -444,7 +462,8 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
         selectedModel,
         requestId,
         cliPreference === 'claude' ? requesterItopsEnabled : undefined,
-      ).catch((error) => {
+      ).then(() => { void checkpointTurn(project_id, projectPath, finalInstruction); })
+       .catch((error) => {
         console.error('[API] Failed to initialize project:', error);
       });
     } else {
@@ -477,7 +496,8 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
         requestId,
         cliPreference === 'claude' ? thinkingMode : undefined,
         cliPreference === 'claude' ? requesterItopsEnabled : undefined,
-      ).catch(async (error) => {
+      ).then(() => { void checkpointTurn(project_id, projectPath, finalInstruction); })
+       .catch(async (error) => {
         console.error('[API] Failed to execute AI:', error);
         // If the executor rejected outright, its own finally never marked the
         // request terminal — do it here so the row can't get stuck in an

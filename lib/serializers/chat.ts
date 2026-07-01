@@ -32,6 +32,7 @@ export function serializeMessage(
     sessionId: message.sessionId ?? null,
     cliSource: message.cliSource ?? null,
     requestId: message.requestId ?? undefined,
+    commitSha: message.commitSha ?? null,
     createdAt: message.createdAt.toISOString(),
     updatedAt: message.updatedAt.toISOString(),
     ...overrides,
