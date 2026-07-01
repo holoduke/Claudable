@@ -12,19 +12,31 @@ import {
 import { createMessage } from '@/lib/services/message';
 import { getSessionUser, authEnabled } from '@/lib/auth/session';
 import { createCheckpoint } from '@/lib/services/checkpoints';
+import { streamManager } from '@/lib/services/stream';
 import { prisma } from '@/lib/db/client';
 
-/** After a turn completes, snapshot the source and stamp the sha on the last
- * assistant message so the UI can offer a one-click revert to this point. */
-async function checkpointTurn(projectId: string, projectPath: string, instruction: string): Promise<void> {
+/** After a turn completes, snapshot the source and stamp the sha on this turn's
+ * assistant message so the UI can offer a one-click revert to this point. The
+ * message was already streamed to the client before the sha existed, so we
+ * re-publish it — otherwise "Revert to here" wouldn't appear until a reload. */
+async function checkpointTurn(projectId: string, projectPath: string, instruction: string, requestId?: string): Promise<void> {
   try {
-    const sha = createCheckpoint(projectId, projectPath, instruction || 'Agent turn');
+    const sha = await createCheckpoint(projectId, projectPath, instruction || 'Agent turn');
     if (!sha) return;
+    // Scope to THIS turn's assistant message via requestId (falls back to the
+    // newest assistant message if the turn didn't carry one) so a concurrent or
+    // later turn's message can't be stamped by mistake.
     const msg = await prisma.message.findFirst({
-      where: { projectId, role: 'assistant' },
+      where: { projectId, role: 'assistant', ...(requestId ? { requestId } : {}) },
       orderBy: { createdAt: 'desc' },
     });
-    if (msg) await prisma.message.update({ where: { id: msg.id }, data: { commitSha: sha } });
+    if (!msg) return;
+    const updated = await prisma.message.update({ where: { id: msg.id }, data: { commitSha: sha } });
+    try {
+      // The Message row has no updatedAt column; serializeMessage needs one.
+      const forStream = { ...updated, updatedAt: updated.createdAt } as unknown as Parameters<typeof serializeMessage>[0];
+      streamManager.publish(projectId, { type: 'message', data: serializeMessage(forStream, { requestId, isFinal: true }) });
+    } catch { /* live update is best-effort; the sha is persisted regardless */ }
   } catch {
     /* checkpoints are best-effort — never fail the turn */
   }
@@ -35,7 +47,6 @@ import { initializeNextJsProject as initializeCursorProject, applyChanges as app
 import { initializeNextJsProject as initializeQwenProject, applyChanges as applyQwenChanges } from '@/lib/services/cli/qwen';
 import { initializeNextJsProject as initializeGLMProject, applyChanges as applyGLMChanges } from '@/lib/services/cli/glm';
 import { getDefaultModelForCli, normalizeModelId } from '@/lib/constants/cliModels';
-import { streamManager } from '@/lib/services/stream';
 import type { ChatActRequest } from '@/types/backend';
 import { generateProjectId } from '@/lib/utils';
 import { previewManager } from '@/lib/services/preview';
@@ -462,7 +473,7 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
         selectedModel,
         requestId,
         cliPreference === 'claude' ? requesterItopsEnabled : undefined,
-      ).then(() => { void checkpointTurn(project_id, projectPath, finalInstruction); })
+      ).then(() => { void checkpointTurn(project_id, projectPath, finalInstruction, requestId); })
        .catch((error) => {
         console.error('[API] Failed to initialize project:', error);
       });
@@ -496,7 +507,7 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
         requestId,
         cliPreference === 'claude' ? thinkingMode : undefined,
         cliPreference === 'claude' ? requesterItopsEnabled : undefined,
-      ).then(() => { void checkpointTurn(project_id, projectPath, finalInstruction); })
+      ).then(() => { void checkpointTurn(project_id, projectPath, finalInstruction, requestId); })
        .catch(async (error) => {
         console.error('[API] Failed to execute AI:', error);
         // If the executor rejected outright, its own finally never marked the

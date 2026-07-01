@@ -72,7 +72,19 @@ export default function CommentsLayer({
   const [submitError, setSubmitError] = useState<string | null>(null);
   const composeRef = useRef<HTMLTextAreaElement>(null);
 
-  useEffect(() => { if (compose) { setDraft(''); setSubmitError(null); setSubmitting(false); setTimeout(() => composeRef.current?.focus(), 30); } }, [compose]);
+  // Reset ONLY when a genuinely new comment is placed — key on the placement
+  // identity (anchor + rel position), NOT the `compose` object, whose identity
+  // churns as the pane resizes (live-positioned). Keying on the object wiped the
+  // user's draft (and re-enabled submit mid-flight) on any resize. See review.
+  const composeKey = compose ? `${compose.anchorSelector}|${compose.relX}|${compose.relY}` : '';
+  useEffect(() => {
+    if (!composeKey) return;
+    setDraft('');
+    setSubmitError(null);
+    setSubmitting(false);
+    const t = setTimeout(() => composeRef.current?.focus(), 30);
+    return () => clearTimeout(t);
+  }, [composeKey]);
 
   // One submit at a time. Awaits the parent's POST, surfaces failures inline, and
   // guards against a second click adding the comment twice.

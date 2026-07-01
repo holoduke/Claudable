@@ -23,9 +23,16 @@ export interface DiagEntry {
 }
 
 const CAP_PER_PROJECT = 150;
+const MAX_PROJECTS = 40; // bound total memory: evict the oldest project's buffer past this
 const buffers = new Map<string, DiagEntry[]>();
 
 function push(projectId: string, entry: DiagEntry): void {
+  // Bound how many projects we retain (buffers are never explicitly cleared on
+  // preview stop). Map preserves insertion order → drop the oldest.
+  if (!buffers.has(projectId) && buffers.size >= MAX_PROJECTS) {
+    const oldest = buffers.keys().next().value;
+    if (oldest !== undefined) buffers.delete(oldest);
+  }
   const buf = buffers.get(projectId) ?? [];
   // Collapse consecutive duplicates (same source+message) into the latest.
   const last = buf[buf.length - 1];

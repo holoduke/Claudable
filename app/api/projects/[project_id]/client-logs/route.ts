@@ -22,10 +22,15 @@ interface RouteContext {
 export async function POST(request: NextRequest, { params }: RouteContext) {
   try {
     const { project_id } = await params;
+    // Reject oversized bodies before reading them into memory — this endpoint is
+    // unauthenticated (preview telemetry), so cap the blast radius of a bad/hostile client.
+    const declaredLen = Number(request.headers.get('content-length') || '0');
+    if (Number.isFinite(declaredLen) && declaredLen > 64 * 1024) return new Response(null, { status: 204 });
+
     const project = await prisma.project.findUnique({ where: { id: project_id }, select: { id: true } });
     if (!project) return new Response(null, { status: 204 }); // silently drop; plugin ignores the response
 
-    const raw = await request.text().catch(() => '');
+    const raw = (await request.text().catch(() => '')).slice(0, 64 * 1024);
     let parsed: unknown = null;
     try { parsed = raw ? JSON.parse(raw) : null; } catch { parsed = null; }
     const entries = parsed && typeof parsed === 'object' && Array.isArray((parsed as { entries?: unknown }).entries)

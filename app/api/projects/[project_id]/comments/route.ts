@@ -47,7 +47,9 @@ async function gate(projectId: string, manage = false, shareToken?: string | nul
 export async function GET(request: NextRequest, { params }: RouteContext) {
   try {
     const { project_id } = await params;
-    const g = await gate(project_id, false, request.nextUrl.searchParams.get('shareToken'));
+    // Share token travels in a header, not the query string, so it isn't captured
+    // in access logs / browser history / the Referer header.
+    const g = await gate(project_id, false, request.headers.get('x-share-token'));
     if ('error' in g) return g.error;
     const route = request.nextUrl.searchParams.get('route') || undefined;
     return createSuccessResponse(await listComments(project_id, route));
