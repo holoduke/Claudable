@@ -2,13 +2,18 @@
  * Preview comments for a project.
  *   GET    ?route=/path   -> comments for that route (all routes if omitted)
  *   POST   { route, anchorSelector, relX, relY, body } -> create (author = session)
- *   DELETE                -> clear ALL comments in the project
+ *   DELETE                -> clear ALL comments in the project (manager only)
+ *
+ * When the auth gate is on, reads require project access and the project-wide
+ * clear requires manage rights; a project id from another org can't be touched.
  */
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { getSessionUser, authEnabled } from '@/lib/auth/session';
-import { getProjectById } from '@/lib/services/project';
+import { prisma } from '@/lib/db/client';
+import { canAccessProject, canManageProject } from '@/lib/services/project-access';
 import { listComments, createComment, clearComments } from '@/lib/services/comments';
 import { createSuccessResponse, createErrorResponse, handleApiError } from '@/lib/utils/api-response';
+import type { User } from '@prisma/client';
 
 export const runtime = 'nodejs';
 
@@ -16,15 +21,30 @@ interface RouteContext {
   params: Promise<{ project_id: string }>;
 }
 
-async function requireProject(projectId: string) {
-  const project = await getProjectById(projectId);
-  return project;
+type Gate = { project: NonNullable<Awaited<ReturnType<typeof loadProject>>>; user: User | null } | { error: Response };
+
+function loadProject(projectId: string) {
+  return prisma.project.findUnique({ where: { id: projectId } });
+}
+
+/** Existence + (when the gate is on) access/manage check. */
+async function gate(projectId: string, manage = false): Promise<Gate> {
+  const project = await loadProject(projectId);
+  if (!project) return { error: createErrorResponse('not_found', 'Project not found', 404) };
+  const user = await getSessionUser();
+  if (authEnabled()) {
+    if (!user) return { error: createErrorResponse('unauthorized', 'Authentication required', 401) };
+    const allowed = manage ? canManageProject(user, project) : await canAccessProject(user, project);
+    if (!allowed) return { error: createErrorResponse('forbidden', 'Access denied', 403) };
+  }
+  return { project, user };
 }
 
 export async function GET(request: NextRequest, { params }: RouteContext) {
   try {
     const { project_id } = await params;
-    if (!(await requireProject(project_id))) return createErrorResponse('not_found', 'Project not found', 404);
+    const g = await gate(project_id);
+    if ('error' in g) return g.error;
     const route = request.nextUrl.searchParams.get('route') || undefined;
     return createSuccessResponse(await listComments(project_id, route));
   } catch (error) {
@@ -35,19 +55,22 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
 export async function POST(request: NextRequest, { params }: RouteContext) {
   try {
     const { project_id } = await params;
-    const user = await getSessionUser();
-    if (authEnabled() && !user) return createErrorResponse('unauthorized', 'Authentication required', 401);
-    if (!(await requireProject(project_id))) return createErrorResponse('not_found', 'Project not found', 404);
+    const g = await gate(project_id);
+    if ('error' in g) return g.error;
 
     const body = (await request.json().catch(() => null)) ?? {};
     const { route, anchorSelector, relX, relY } = body;
-    if (typeof route !== 'string' || typeof anchorSelector !== 'string' ||
-        typeof relX !== 'number' || typeof relY !== 'number' ||
-        typeof body.body !== 'string' || !body.body.trim()) {
-      return createErrorResponse('invalid', 'route, anchorSelector, relX, relY and body are required', 400);
+    const bounded = (n: unknown): n is number => typeof n === 'number' && Number.isFinite(n) && n >= 0 && n <= 1;
+    if (
+      typeof route !== 'string' || route.length === 0 || route.length > 512 ||
+      typeof anchorSelector !== 'string' || anchorSelector.length === 0 || anchorSelector.length > 2048 ||
+      !bounded(relX) || !bounded(relY) ||
+      typeof body.body !== 'string' || !body.body.trim()
+    ) {
+      return createErrorResponse('invalid', 'Invalid comment payload', 400);
     }
 
-    const authorName = user?.name || (user?.email ? user.email.split('@')[0] : null);
+    const authorName = g.user?.name || (g.user?.email ? g.user.email.split('@')[0] : null);
     const created = await createComment({
       projectId: project_id,
       route,
@@ -55,7 +78,7 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
       relX,
       relY,
       body: body.body.trim().slice(0, 4000),
-      authorId: user?.id ?? null,
+      authorId: g.user?.id ?? null,
       authorName,
     });
     return createSuccessResponse(created);
@@ -67,8 +90,8 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
 export async function DELETE(_request: NextRequest, { params }: RouteContext) {
   try {
     const { project_id } = await params;
-    if (authEnabled() && !(await getSessionUser())) return createErrorResponse('unauthorized', 'Authentication required', 401);
-    if (!(await requireProject(project_id))) return createErrorResponse('not_found', 'Project not found', 404);
+    const g = await gate(project_id, true); // project-wide wipe → manage rights
+    if ('error' in g) return g.error;
     const removed = await clearComments(project_id);
     return createSuccessResponse({ removed });
   } catch (error) {
