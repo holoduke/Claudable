@@ -1210,6 +1210,22 @@ class PreviewManager {
     return { logs };
   }
 
+  /**
+   * The project's public preview URL WITHOUT waiting for the dev server to boot.
+   * Only meaningful for the per-project-subdomain setup (PREVIEW_URL_TEMPLATE with
+   * `{project}`), where the URL is deterministic and port-independent — so a
+   * caller can return it immediately and warm the server in the background,
+   * instead of blocking ~20-30s on a cold start. Returns null when the URL
+   * depends on the assigned port (must start first to know it).
+   */
+  public deterministicPreviewUrl(projectId: string): string | null {
+    const running = this.processes.get(projectId);
+    if (running?.url) return running.url;
+    const tmpl = process.env.PREVIEW_URL_TEMPLATE || '';
+    if (tmpl.includes('{project}') && previewRouteDir()) return previewUrlFor(projectId, 0);
+    return null;
+  }
+
   public async start(projectId: string): Promise<PreviewInfo> {
     const existing = this.processes.get(projectId);
     if (existing && existing.status !== 'error') {
