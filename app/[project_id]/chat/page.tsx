@@ -4,12 +4,13 @@ import { AnimatePresence } from 'framer-motion';
 import { MotionDiv, MotionH3, MotionP, MotionButton } from '@/lib/motion';
 import { useRouter, useSearchParams, useParams } from 'next/navigation';
 import dynamic from 'next/dynamic';
-import { FaCode, FaDesktop, FaMobileAlt, FaPlay, FaStop, FaSync, FaCog, FaRocket, FaFolder, FaFolderOpen, FaFile, FaFileCode, FaCss3Alt, FaHtml5, FaJs, FaReact, FaPython, FaDocker, FaGitAlt, FaMarkdown, FaDatabase, FaPhp, FaJava, FaRust, FaVuejs, FaLock, FaHome, FaChevronUp, FaChevronRight, FaChevronDown, FaArrowLeft, FaArrowRight, FaRedo, FaFileImport, FaPuzzlePiece } from 'react-icons/fa';
+import { FaCode, FaDesktop, FaMobileAlt, FaPlay, FaStop, FaSync, FaCog, FaRocket, FaFolder, FaFolderOpen, FaFile, FaFileCode, FaCss3Alt, FaHtml5, FaJs, FaReact, FaPython, FaDocker, FaGitAlt, FaMarkdown, FaDatabase, FaPhp, FaJava, FaRust, FaVuejs, FaLock, FaHome, FaChevronUp, FaChevronRight, FaChevronDown, FaArrowLeft, FaArrowRight, FaRedo, FaFileImport, FaPuzzlePiece, FaEdit } from 'react-icons/fa';
 import { SiTypescript, SiGo, SiRuby, SiSvelte, SiJson, SiYaml, SiCplusplus } from 'react-icons/si';
 import { VscJson } from 'react-icons/vsc';
 import ChatLog from '@/components/chat/ChatLog';
 import { ProjectSettings } from '@/components/settings/ProjectSettings';
 import UserMenu from '@/components/layout/UserMenu';
+import VisualEditorPanel, { type SelectedElement } from '@/components/chat/VisualEditorPanel';
 import ChatInput from '@/components/chat/ChatInput';
 import DesignImportModal from '@/components/chat/DesignImportModal';
 import SkillsModal from '@/components/chat/SkillsModal';
@@ -245,6 +246,12 @@ export default function ChatPage() {
   const [isRunning, setIsRunning] = useState(false);
   const [isSseFallbackActive, setIsSseFallbackActive] = useState(false);
   const [showPreview, setShowPreview] = useState(true);
+  // --- Visual editor (inline edit mode) ---
+  const [editMode, setEditMode] = useState(false);
+  const [selectedEl, setSelectedEl] = useState<SelectedElement | null>(null);
+  const [styleEdits, setStyleEdits] = useState<Record<string, string>>({});
+  const [textEdit, setTextEdit] = useState<string | null>(null);
+  const [persistingEdit, setPersistingEdit] = useState(false);
   const [deviceMode, setDeviceMode] = useState<'desktop'|'mobile'>('desktop');
   const [showGlobalSettings, setShowGlobalSettings] = useState(false);
   const [uploadedImages, setUploadedImages] = useState<{name: string; url: string; base64?: string; path?: string}[]>([]);
@@ -1028,6 +1035,75 @@ const persistProjectPreferences = useCallback(
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
   }, [previewUrl]);
+
+  // --- Visual editor bridge (parent side) ---------------------------------
+  const postToPreview = useCallback((msg: Record<string, unknown>) => {
+    if (!previewUrl || !iframeRef.current?.contentWindow) return;
+    try {
+      iframeRef.current.contentWindow.postMessage({ source: 'claudable-editor-cmd', ...msg }, new URL(previewUrl).origin);
+    } catch { /* iframe not ready */ }
+  }, [previewUrl]);
+
+  // Toggle the preview into/out of click-to-select edit mode.
+  useEffect(() => {
+    postToPreview({ type: editMode ? 'enter' : 'exit' });
+    if (!editMode) { setSelectedEl(null); setStyleEdits({}); setTextEdit(null); }
+  }, [editMode, postToPreview]);
+
+  // Receive the selected element from the preview editor bridge.
+  useEffect(() => {
+    if (!previewUrl) return;
+    let origin: string;
+    try { origin = new URL(previewUrl).origin; } catch { return; }
+    const onMsg = (e: MessageEvent) => {
+      if (e.origin !== origin) return;
+      const d = e.data as { source?: string; type?: string; element?: SelectedElement } | null;
+      if (d?.source === 'claudable-editor' && d.type === 'selected' && d.element) {
+        setSelectedEl(d.element);
+        setStyleEdits({});
+        setTextEdit(null);
+      }
+    };
+    window.addEventListener('message', onMsg);
+    return () => window.removeEventListener('message', onMsg);
+  }, [previewUrl]);
+
+  const applyStyle = useCallback((prop: string, value: string) => {
+    setStyleEdits((prev) => ({ ...prev, [prop]: value }));
+    postToPreview({ type: 'applyStyle', prop, value });
+  }, [postToPreview]);
+
+  const applyText = useCallback((value: string) => {
+    setTextEdit(value);
+    postToPreview({ type: 'applyText', value });
+  }, [postToPreview]);
+
+  const persistEdits = useCallback(async () => {
+    if (!selectedEl) return;
+    const styleLines = Object.entries(styleEdits).map(([k, v]) => `  - ${k}: ${v}`);
+    const instruction = [
+      `Visual edit — persist these preview-only changes into the source code:`,
+      ``,
+      `Element: <${selectedEl.tag}>${selectedEl.id ? ` #${selectedEl.id}` : ''}${selectedEl.classes.length ? ` .${selectedEl.classes.join('.')}` : ''}`,
+      `CSS selector: ${selectedEl.selector}`,
+      selectedEl.text ? `Current text: "${selectedEl.text.slice(0, 100)}"` : '',
+      textEdit !== null && textEdit !== selectedEl.text ? `New text: "${textEdit}"` : '',
+      styleLines.length ? `Style changes:\n${styleLines.join('\n')}` : '',
+      ``,
+      `Locate this element in the source (match the selector / tag / classes) and apply the change idiomatically — prefer Tailwind classes or scoped styles as fits the codebase. Keep the diff minimal.`,
+    ].filter(Boolean).join('\n');
+    setPersistingEdit(true);
+    try {
+      await runAct(instruction, []);
+      setStyleEdits({});
+      setTextEdit(null);
+      setEditMode(false);
+    } finally {
+      setPersistingEdit(false);
+    }
+    // runAct is a hoisted, stable function declaration — intentionally not a dep.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedEl, styleEdits, textEdit]);
 
   // Keep-warm heartbeat: while a preview is open, ping its status every few
   // minutes so the server-side idle sweep doesn't evict an actively-viewed
@@ -2419,11 +2495,24 @@ const persistProjectPreferences = useCallback(
 
       <div className="h-screen bg-white flex relative overflow-hidden">
         <div className="h-full w-full flex" ref={splitContainerRef}>
-          {/* Left: Chat window */}
+          {/* Left: Visual editor inspector (edit mode) or Chat window */}
           <div
             style={{ width: `${chatWidthPct}%` }}
             className="h-full flex flex-col min-w-0"
           >
+            {editMode ? (
+              <VisualEditorPanel
+                element={selectedEl}
+                edits={styleEdits}
+                textEdit={textEdit}
+                onApplyStyle={applyStyle}
+                onApplyText={applyText}
+                onPersist={persistEdits}
+                onClose={() => setEditMode(false)}
+                persisting={persistingEdit}
+              />
+            ) : (
+            <>
             {/* Chat header */}
             <div className="bg-white border-b border-gray-200 p-4 h-[73px] flex items-center">
               <div className="flex items-center gap-3">
@@ -2511,6 +2600,8 @@ const persistProjectPreferences = useCallback(
                 cliChangeDisabled={isUpdatingModel}
               />
             </div>
+            </>
+            )}
           </div>
 
           {/* Draggable divider to resize the chat / preview split */}
@@ -2555,9 +2646,25 @@ const persistProjectPreferences = useCallback(
                       <span className="w-4 h-4 flex items-center justify-center"><FaCode size={16} /></span>
                     </button>
                   </div>
-                  
+
+                  {/* Inline visual editor toggle — only meaningful with a live preview */}
+                  {previewUrl && (
+                    <button
+                      onClick={() => { setShowPreview(true); setEditMode((v) => !v); }}
+                      title={editMode ? 'Exit visual editor' : 'Edit elements visually'}
+                      className={`h-9 flex items-center gap-2 px-3 rounded-lg text-sm font-medium border transition-colors ${
+                        editMode
+                          ? 'bg-[#DE7356] text-white border-[#DE7356]'
+                          : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'
+                      }`}
+                    >
+                      <FaEdit size={13} />
+                      Edit
+                    </button>
+                  )}
+
                   {/* Center Controls */}
-                  {showPreview && previewUrl && (
+                  {showPreview && !editMode && previewUrl && (
                     <div className="flex items-center gap-3">
                       {/* Route Navigation */}
                       <div className="h-9 flex items-center bg-gray-100 rounded-lg px-3 border border-gray-200 ">

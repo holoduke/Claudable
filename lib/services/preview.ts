@@ -41,18 +41,113 @@ async function ensurePreviewRouteReporter(projectPath: string): Promise<void> {
 // Inert outside the preview iframe; gitignored so it never ships to production.
 export default defineNuxtPlugin(() => {
   if (typeof window === 'undefined' || window.parent === window) return;
-  // Target the embedding (Claudable) origin rather than '*', so route paths
-  // aren't broadcast to an arbitrary parent if this preview is framed elsewhere.
+  // Target the embedding (Claudable) origin rather than '*', so nothing is
+  // broadcast to an arbitrary parent if this preview is framed elsewhere.
   let target = '*';
   try { if (document.referrer) target = new URL(document.referrer).origin; } catch {}
-  const post = (p: string) => {
-    try { window.parent.postMessage({ source: 'claudable-preview', path: p }, target); } catch {}
-  };
+  const post = (msg) => { try { window.parent.postMessage(msg, target); } catch {} };
+
+  // --- route reporter: keep the preview URL bar in sync with in-app navigation ---
+  const postRoute = (p) => post({ source: 'claudable-preview', path: p });
   try {
     const router = useRouter();
-    post(router.currentRoute.value.fullPath);
-    router.afterEach((to) => post(to.fullPath));
+    postRoute(router.currentRoute.value.fullPath);
+    router.afterEach((to) => postRoute(to.fullPath));
   } catch {}
+
+  // --- visual editor bridge: click-to-select + live CSS/text editing ----------
+  let editing = false;
+  let selected = null;
+  let hoverBox = null;
+  let selBox = null;
+  const ensureBoxes = () => {
+    if (hoverBox) return;
+    const mk = (color, bg) => {
+      const d = document.createElement('div');
+      d.style.cssText = 'position:fixed;pointer-events:none;z-index:2147483647;border:2px solid ' + color +
+        ';border-radius:2px;background:' + bg + ';display:none;box-sizing:border-box;transition:all .04s ease-out;';
+      document.body.appendChild(d);
+      return d;
+    };
+    hoverBox = mk('#3b82f6', 'rgba(59,130,246,0.06)');
+    selBox = mk('#DE7356', 'rgba(222,115,86,0.08)');
+  };
+  const drawBox = (el, box) => {
+    if (!el || !box) return;
+    const r = el.getBoundingClientRect();
+    box.style.display = 'block';
+    box.style.left = r.left + 'px'; box.style.top = r.top + 'px';
+    box.style.width = r.width + 'px'; box.style.height = r.height + 'px';
+  };
+  // Stable-ish CSS selector path (id short-circuits; else nth-of-type chain).
+  const cssPath = (el) => {
+    const parts = [];
+    let node = el;
+    while (node && node.nodeType === 1 && node.tagName.toLowerCase() !== 'html') {
+      if (node.id) { parts.unshift('#' + (window.CSS && CSS.escape ? CSS.escape(node.id) : node.id)); break; }
+      let sel = node.tagName.toLowerCase();
+      const parent = node.parentElement;
+      if (parent) {
+        const sibs = Array.prototype.filter.call(parent.children, (c) => c.tagName === node.tagName);
+        if (sibs.length > 1) sel += ':nth-of-type(' + (sibs.indexOf(node) + 1) + ')';
+      }
+      parts.unshift(sel);
+      node = node.parentElement;
+    }
+    return parts.join(' > ');
+  };
+  const CURATED = ['color','backgroundColor','fontSize','fontWeight','lineHeight','letterSpacing','textAlign','padding','margin','borderRadius','borderWidth','borderColor','width','height','display','opacity'];
+  const describe = (el) => {
+    const cs = getComputedStyle(el);
+    const styles = {};
+    CURATED.forEach((k) => { styles[k] = cs[k]; });
+    return {
+      selector: cssPath(el),
+      tag: el.tagName.toLowerCase(),
+      id: el.id || null,
+      classes: Array.prototype.slice.call(el.classList),
+      text: (el.textContent || '').trim().slice(0, 300),
+      editableText: el.children.length === 0,
+      styles,
+    };
+  };
+  const onOver = (e) => { if (!editing) return; const t = e.target; if (!t || t === document.body) return; ensureBoxes(); drawBox(t, hoverBox); };
+  const onOut = () => { if (hoverBox) hoverBox.style.display = 'none'; };
+  const onClick = (e) => {
+    if (!editing) return;
+    e.preventDefault(); e.stopPropagation();
+    selected = e.target;
+    ensureBoxes(); drawBox(selected, selBox); hoverBox.style.display = 'none';
+    post({ source: 'claudable-editor', type: 'selected', element: describe(selected) });
+  };
+  const enter = () => {
+    if (editing) return;
+    editing = true; ensureBoxes();
+    document.addEventListener('mouseover', onOver, true);
+    document.addEventListener('mouseout', onOut, true);
+    document.addEventListener('click', onClick, true);
+    document.documentElement.style.cursor = 'crosshair';
+  };
+  const exit = () => {
+    editing = false;
+    document.removeEventListener('mouseover', onOver, true);
+    document.removeEventListener('mouseout', onOut, true);
+    document.removeEventListener('click', onClick, true);
+    if (hoverBox) hoverBox.style.display = 'none';
+    if (selBox) selBox.style.display = 'none';
+    document.documentElement.style.cursor = '';
+    selected = null;
+  };
+  window.addEventListener('message', (ev) => {
+    const d = ev.data;
+    if (!d || d.source !== 'claudable-editor-cmd') return;
+    if (d.type === 'enter') enter();
+    else if (d.type === 'exit') exit();
+    else if (d.type === 'applyStyle' && selected) { try { selected.style[d.prop] = d.value; drawBox(selected, selBox); } catch {} }
+    else if (d.type === 'applyText' && selected) { try { selected.textContent = d.value; drawBox(selected, selBox); } catch {} }
+  });
+  window.addEventListener('scroll', () => { if (selected) drawBox(selected, selBox); }, true);
+  window.addEventListener('resize', () => { if (selected) drawBox(selected, selBox); });
 });
 `,
       'utf8',
