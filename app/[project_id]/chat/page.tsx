@@ -278,6 +278,7 @@ export default function ChatPage() {
   const [composeAnchor, setComposeAnchor] = useState<ComposeAnchor | null>(null);
   // Runtime errors reported by the preview (for one-click "fix with AI").
   const [previewErrors, setPreviewErrors] = useState<{ kind: string; message: string; at: string }[]>([]);
+  const [shareCopied, setShareCopied] = useState(false);
   const [deviceId, setDeviceId] = useState<string>('desktop');
   const [orientation, setOrientation] = useState<'portrait'|'landscape'>('portrait');
   const [deviceScale, setDeviceScale] = useState(1);
@@ -1252,6 +1253,21 @@ const persistProjectPreferences = useCallback(
     setActivePinId(null); setComposeAnchor(null);
     await loadComments(currentRoute || '/');
   }, [projectId, currentRoute, loadComments]);
+
+  // Create (or reuse) a public review link and copy it to the clipboard.
+  const shareReviewLink = useCallback(async () => {
+    try {
+      const res = await fetch(`${API_BASE}/api/projects/${projectId}/share`, { method: 'POST' });
+      const j = await res.json();
+      if (!j.success || !j.data?.token) throw new Error(j.error?.message || 'Could not create share link');
+      const link = `${window.location.origin}/share/${j.data.token}`;
+      try { await navigator.clipboard.writeText(link); } catch { window.prompt('Copy this review link:', link); }
+      setShareCopied(true);
+      setTimeout(() => setShareCopied(false), 2000);
+    } catch (e) {
+      window.alert(e instanceof Error ? e.message : 'Could not create share link');
+    }
+  }, [projectId]);
 
   // --- Device frame fit-scaling: keep any device frame inside the pane ---
   const currentDevice = DEVICE_PRESETS.find((d) => d.id === deviceId) ?? DEVICE_PRESETS[0];
@@ -3061,6 +3077,18 @@ const persistProjectPreferences = useCallback(
                     </button>
                   )}
                   
+                  {/* Share a review link */}
+                  {showPreview && previewUrl && (
+                    <button
+                      onClick={shareReviewLink}
+                      title="Get a public link for stakeholders to review + comment"
+                      className="h-9 flex items-center gap-2 px-3 rounded-lg text-sm font-medium border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 transition-colors"
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.6" y1="13.5" x2="15.4" y2="17.5"/><line x1="15.4" y1="6.5" x2="8.6" y2="10.5"/></svg>
+                      {shareCopied ? 'Link copied!' : 'Share'}
+                    </button>
+                  )}
+
                   {/* Publish/Update */}
                   {showPreview && previewUrl && (
                     <div className="relative">

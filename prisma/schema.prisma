@@ -68,6 +68,7 @@ model Project {
   toolUsages            ToolUsage[]
   userRequests          UserRequest[]
   comments              Comment[]
+  shares                ProjectShare[]
   organization          Organization?  @relation(fields: [orgId], references: [id])
   owner                 User?          @relation("OwnedProjects", fields: [ownerId], references: [id], onDelete: SetNull)
   members               ProjectMember[]
@@ -98,6 +99,18 @@ model Comment {
 
   @@index([projectId, route])
   @@map("comments")
+}
+
+/// A revocable public link that lets a stakeholder view the live preview and leave
+/// pinned comments without a Claudable account (read + comment only).
+model ProjectShare {
+  id        String   @id @default(cuid())
+  projectId String   @unique @map("project_id")
+  token     String   @unique
+  createdAt DateTime @default(now()) @map("created_at")
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@map("project_shares")
 }
 
 // ============================================================
