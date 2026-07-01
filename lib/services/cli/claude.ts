@@ -16,6 +16,7 @@ import { ANGULAR_SYSTEM_PROMPT } from './prompts/angular-system-prompt';
 import { stackKind } from '@/lib/config/stacks';
 import { resolveProjectClaudeToken } from '../claude-credentials';
 import { buildItopsMcpServer } from '../itops/itops-mcp';
+import { getProjectService } from '../project-services';
 import { createMessage } from '../message';
 import { CLAUDE_DEFAULT_MODEL, normalizeClaudeModelId, getClaudeModelDisplayName } from '@/lib/constants/claudeModels';
 import path from 'path';
@@ -586,7 +587,16 @@ export async function executeClaude(
 
     // Pick the system prompt for the project's tech stack (Nuxt | Next.js | Angular).
     const stackProject = await getProjectById(projectId).catch(() => null);
-    const systemPromptForStack = selectSystemPrompt(stackProject?.templateType);
+    let systemPromptForStack = selectSystemPrompt(stackProject?.templateType);
+
+    // If a Postgres was provisioned for this project, tell the agent so it builds
+    // data-backed features against DATABASE_URL (set in the preview + deploy env).
+    try {
+      const dbSvc = await getProjectService(projectId, 'database');
+      if ((dbSvc?.serviceData as { engine?: string } | undefined)?.engine === 'postgresql') {
+        systemPromptForStack += `\n\n## Database\nThis project has a PostgreSQL database. Its connection string is in the DATABASE_URL environment variable (already set in the running preview). Use it for any data persistence — prefer Prisma (schema datasource \`url = env("DATABASE_URL")\`, run \`prisma db push\`) or Drizzle/pg. Never hardcode credentials; always read DATABASE_URL from the environment.`;
+      }
+    } catch { /* non-fatal */ }
 
     // it-ops follows the USER running the agent, NOT the project: attach the broker
     // only when the person who triggered this run has it-ops enabled. A different
