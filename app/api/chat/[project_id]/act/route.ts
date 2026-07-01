@@ -55,6 +55,7 @@ import {
   upsertUserRequest,
   markUserRequestAsProcessing,
   markUserRequestAsFailed,
+  getActiveRequests,
 } from '@/lib/services/user-requests';
 
 interface RouteContext {
@@ -286,6 +287,18 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
       return NextResponse.json(
         { success: false, error: 'Project not found' },
         { status: 404 },
+      );
+    }
+
+    // One turn at a time. The single authoritative busy check — the client's
+    // event-driven isRunning flips false right after this POST returns (the API
+    // replies "started" immediately), so without this a second prompt (or a
+    // prompt after a mid-run reload) would launch a concurrent agent run that
+    // races file writes with the first. Reject instead.
+    if ((await getActiveRequests(project_id)).hasActiveRequests) {
+      return NextResponse.json(
+        { success: false, error: 'busy', message: 'The agent is still working on the previous request — wait for it to finish.' },
+        { status: 409 },
       );
     }
 

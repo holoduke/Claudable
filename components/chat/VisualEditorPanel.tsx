@@ -21,6 +21,8 @@ interface VisualEditorPanelProps {
   onPersist: () => void;
   onClose: () => void;
   persisting?: boolean;
+  /** An agent turn is running — block "Apply to code" (it would launch another). */
+  busy?: boolean;
 }
 
 // Grouped, curated CSS controls. `kind` picks the input widget.
@@ -70,7 +72,7 @@ function toHex(value: string | undefined): string {
 }
 
 export default function VisualEditorPanel({
-  element, edits, textEdit, onApplyStyle, onApplyText, onPersist, onClose, persisting,
+  element, edits, textEdit, onApplyStyle, onApplyText, onPersist, onClose, persisting, busy = false,
 }: VisualEditorPanelProps) {
   const val = (prop: string) => (prop in edits ? edits[prop] : element?.styles[prop] ?? '');
   const dirtyCount = useMemo(
@@ -173,10 +175,11 @@ export default function VisualEditorPanel({
       <div className="border-t border-gray-200 p-3">
         <button
           onClick={onPersist}
-          disabled={!element || dirtyCount === 0 || persisting}
+          disabled={!element || dirtyCount === 0 || persisting || busy}
+          title={busy ? 'The agent is busy — apply once it finishes' : undefined}
           className="w-full h-9 rounded-lg bg-[#DE7356] text-white text-sm font-medium hover:bg-[#c65f43] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
         >
-          {persisting ? 'Applying…' : dirtyCount === 0 ? 'No changes yet' : `Apply ${dirtyCount} change${dirtyCount > 1 ? 's' : ''} to code`}
+          {busy ? 'Agent busy…' : persisting ? 'Applying…' : dirtyCount === 0 ? 'No changes yet' : `Apply ${dirtyCount} change${dirtyCount > 1 ? 's' : ''} to code`}
         </button>
         <p className="text-[11px] text-gray-400 mt-2 text-center">
           Live changes are preview-only until applied to code (via the agent).

@@ -280,6 +280,13 @@ export default function ChatPage() {
   // True once the preview iframe's plugin has reported in for the current load.
   // Reset on navigation so we don't push pins/scroll into a still-loading page.
   const [previewReady, setPreviewReady] = useState(false);
+  const previewReadyRef = useRef(false);
+  previewReadyRef.current = previewReady;
+  // The injected review bridge is Nuxt-only. If the iframe loads but never
+  // reports in, the stack has no bridge (Next.js/Angular) → gate the review
+  // tools with a hint instead of leaving silently-dead buttons.
+  const [bridgeAbsent, setBridgeAbsent] = useState(false);
+  const bridgeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Comments overview list (left pane): ALL comments across every route.
   const [showCommentsList, setShowCommentsList] = useState(false);
   const [allComments, setAllComments] = useState<(CommentPin & { route: string })[]>([]);
@@ -1089,6 +1096,8 @@ const persistProjectPreferences = useCallback(
         // re-fires the renderPins + pending-scroll effects with a live listener,
         // so navigating to a comment shows/scrolls to it on the FIRST click.
         setPreviewReady(true);
+        setBridgeAbsent(false); // a report proves the bridge is present
+        if (bridgeTimerRef.current) { clearTimeout(bridgeTimerRef.current); bridgeTimerRef.current = null; }
         // Re-arm on EVERY report (dev-server reload, error-overlay refresh,
         // stop→start, idle rebuild) — not just parent-initiated navigation. A
         // freshly (re)loaded plugin starts with pins=[] and no active mode; if we
@@ -1160,6 +1169,9 @@ const persistProjectPreferences = useCallback(
 
   const persistEdits = useCallback(async () => {
     if (!selectedEl) return;
+    // "Apply to code" launches an agent turn — refuse while one is running so it
+    // doesn't race (the server would 409 anyway). The button is also disabled.
+    if (hasActiveRequests) return;
     const styleLines = Object.entries(styleEdits).map(([k, v]) => `  - ${k}: ${v}`);
     const instruction = [
       `Visual edit — persist these preview-only changes into the source code:`,
@@ -1453,6 +1465,7 @@ const persistProjectPreferences = useCallback(
       const normalizedRoute = route.startsWith('/') ? route : `/${route}`;
       const newUrl = `${baseUrl}${normalizedRoute}`;
       setPreviewReady(false); // the new page's plugin hasn't reported yet
+      setBridgeAbsent(false);
       iframeRef.current.src = newUrl;
       setCurrentRoute(normalizedRoute);
     }
@@ -1472,6 +1485,7 @@ const persistProjectPreferences = useCallback(
       const url = new URL(baseUrl + normalizedRoute);
       url.searchParams.set('_ts', Date.now().toString());
       setPreviewReady(false); // wait for the reloaded page's plugin to report before pushing pins
+      setBridgeAbsent(false);
       iframeRef.current.src = url.toString();
     } catch (error) {
       console.warn('Failed to refresh preview iframe:', error);
@@ -2843,6 +2857,7 @@ const persistProjectPreferences = useCallback(
                 onPersist={persistEdits}
                 onClose={() => setEditMode(false)}
                 persisting={persistingEdit}
+                busy={hasActiveRequests}
               />
             ) : showCommentsList ? (
               <CommentsListPanel
@@ -2925,7 +2940,11 @@ const persistProjectPreferences = useCallback(
                   // Pass images to runAct
                   runAct(message, images);
                 }}
-                disabled={isRunning}
+                // Gate on BOTH the event-driven signal and the DB-authoritative
+                // one: isRunning flips false as soon as the POST returns, but a
+                // turn is still running — hasActiveRequests keeps input locked
+                // (and survives a mid-run reload). Matches the server 409 guard.
+                disabled={isRunning || hasActiveRequests}
                 placeholder={mode === 'act' ? "Ask Claudable..." : "Chat with Claudable..."}
                 mode={mode}
                 onModeChange={setMode}
@@ -2999,8 +3018,9 @@ const persistProjectPreferences = useCallback(
                   {previewUrl && (
                     <button
                       onClick={() => { setShowPreview(true); setEditMode((v) => !v); }}
-                      title={editMode ? 'Exit visual editor' : 'Edit elements visually'}
-                      className={`h-9 w-9 flex items-center justify-center rounded-lg border transition-colors ${
+                      disabled={bridgeAbsent}
+                      title={bridgeAbsent ? 'Visual editing needs the preview bridge (currently Nuxt only)' : editMode ? 'Exit visual editor' : 'Edit elements visually'}
+                      className={`h-9 w-9 flex items-center justify-center rounded-lg border transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
                         editMode
                           ? 'bg-[#DE7356] text-white border-[#DE7356]'
                           : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'
@@ -3014,8 +3034,9 @@ const persistProjectPreferences = useCallback(
                   {previewUrl && (
                     <button
                       onClick={() => { setShowPreview(true); setCommentMode((v) => !v); }}
-                      title={commentMode ? 'Exit comments' : 'Add comments to the page'}
-                      className={`relative h-9 w-9 flex items-center justify-center rounded-lg border transition-colors ${
+                      disabled={bridgeAbsent}
+                      title={bridgeAbsent ? 'Comments need the preview bridge (currently Nuxt only)' : commentMode ? 'Exit comments' : 'Add comments to the page'}
+                      className={`relative h-9 w-9 flex items-center justify-center rounded-lg border transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
                         commentMode
                           ? 'bg-[#DE7356] text-white border-[#DE7356]'
                           : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'
@@ -3284,6 +3305,12 @@ const persistProjectPreferences = useCallback(
                           // Hide error overlay when loaded successfully
                           const overlay = document.getElementById('iframe-error-overlay');
                           if (overlay) overlay.style.display = 'none';
+                          // Bridge-absence probe: if no plugin report lands within
+                          // a grace window, this stack has no review bridge (non-Nuxt).
+                          if (bridgeTimerRef.current) clearTimeout(bridgeTimerRef.current);
+                          bridgeTimerRef.current = setTimeout(() => {
+                            if (!previewReadyRef.current) setBridgeAbsent(true);
+                          }, 5000);
                         }}
                       />
 
