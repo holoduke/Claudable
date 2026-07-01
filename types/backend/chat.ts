@@ -24,6 +24,7 @@ export interface Message {
   createdAt: Date;
   updatedAt: Date;
   requestId?: string | null;
+  commitSha?: string | null;
 }
 
 export interface ImageAttachment {
