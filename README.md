@@ -69,8 +69,6 @@ How to start? Simply login to Claude Code (or Cursor CLI), start Claudable, and 
 
 ## Features
 
-![Claudable Demo](assets/gif/Claudable_v2_cc_4_1080p.gif)
-
 - **Powerful Agent Performance**: Leverage the full power of Claude Code and Cursor CLI Agent capabilities
 - **Natural Language to Code**: Simply describe what you want to build, and Claudable generates production-ready Next.js code
 - **Instant Preview**: See your changes immediately with hot-reload as AI builds your app
@@ -80,16 +78,6 @@ How to start? Simply login to Claude Code (or Cursor CLI), start Claudable, and 
 - **GitHub Integration**: Automatic version control and continuous deployment setup
 - **Supabase Database**: Connect production PostgreSQL with authentication ready to use
 - **Desktop App**: Available as Electron desktop application for Mac, Windows, and Linux
-
-## Demo Examples
-
-### Codex CLI Example
-
-![Codex CLI Demo](assets/gif/Claudable_v2_codex_1_1080p.gif)
-
-### Qwen Code Example
-
-![Qwen Code Demo](assets/gif/Claudable_v2_qwen_1_1080p.gif)
 
 ## Supported AI Coding Agents
 
