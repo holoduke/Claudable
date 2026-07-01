@@ -7,6 +7,24 @@ import path from 'path';
 import fs from 'fs/promises';
 import { findAvailablePort } from '@/lib/utils/ports';
 import { getProjectById, updateProject, updateProjectStatus } from './project';
+import { prisma } from '@/lib/db/client';
+
+/**
+ * Clear persisted preview URLs/ports for ALL projects. Called once on boot: after
+ * a restart the in-memory process map is empty and every dev server is dead, so a
+ * cached previewUrl/previewPort is stale and — since ports get reused across
+ * projects — could otherwise point a project at another project's preview.
+ */
+async function clearAllPreviewState(): Promise<void> {
+  try {
+    await prisma.project.updateMany({
+      where: { OR: [{ previewUrl: { not: null } }, { previewPort: { not: null } }] },
+      data: { previewUrl: null, previewPort: null },
+    });
+  } catch {
+    /* non-fatal: the frontend uses live status, this is defense-in-depth */
+  }
+}
 import { scaffoldForStack } from '@/lib/utils/scaffold-dispatch';
 import { stackKind } from '@/lib/config/stacks';
 import { PREVIEW_CONFIG } from '@/lib/config/constants';
@@ -799,12 +817,27 @@ class PreviewManager {
   // can't both pass the "not running" check and spawn duplicate dev servers,
   // which would exhaust the preview port range and orphan processes.
   private starting = new Map<string, Promise<PreviewInfo>>();
+  // Ports picked but whose dev server hasn't bound yet. Reserved atomically so two
+  // concurrent starts can't land on the same port (a cross-project preview leak).
+  private reservedPorts = new Set<number>();
+  private reservedByProject = new Map<string, number>();
   private sweepTimer: NodeJS.Timeout | null = null;
 
   constructor() {
     // Periodically reclaim ports held by previews nobody is watching anymore.
     this.sweepTimer = setInterval(() => this.evictIdle(), PREVIEW_SWEEP_INTERVAL_MS);
     this.sweepTimer.unref?.();
+    // On boot the process map is empty but the DB may hold previewUrl/previewPort
+    // from before a restart — those servers are dead and their ports may be reused
+    // by OTHER projects, so a stale URL could point at the wrong project. Clear them.
+    void clearAllPreviewState();
+  }
+
+  /** Ports currently held (live processes) or reserved in-flight. */
+  private usedPorts(): Set<number> {
+    const s = new Set<number>(this.reservedPorts);
+    for (const p of this.processes.values()) if (typeof p.port === 'number') s.add(p.port);
+    return s;
   }
 
   /** Stop previews that haven't been accessed within the idle window. */
@@ -943,6 +976,10 @@ class PreviewManager {
 
     const startPromise = this.startInternal(projectId).finally(() => {
       this.starting.delete(projectId);
+      // Always release any in-flight port reservation (success or failure) so a
+      // failed start can't permanently shrink the port pool.
+      const rp = this.reservedByProject.get(projectId);
+      if (rp !== undefined) { this.reservedPorts.delete(rp); this.reservedByProject.delete(projectId); }
     });
     this.starting.set(projectId, startPromise);
     return startPromise;
@@ -985,7 +1022,9 @@ class PreviewManager {
     const previewBounds = resolvePreviewBounds();
     let preferredPort: number;
     try {
-      preferredPort = await findAvailablePort(previewBounds.start, previewBounds.end);
+      // Exclude ports held by other live/starting previews so a concurrent start
+      // can't pick the same one before this project's dev server binds.
+      preferredPort = await findAvailablePort(previewBounds.start, previewBounds.end, this.usedPorts());
     } catch (poolFull) {
       // Pool exhausted — evict the least-recently-used preview to free a port,
       // then try once more.
@@ -993,8 +1032,13 @@ class PreviewManager {
       if (!victim || victim === projectId) throw poolFull;
       console.log(`[PreviewManager] Port pool full; evicting LRU preview ${victim} to make room for ${projectId}`);
       await this.stop(victim).catch(() => {});
-      preferredPort = await findAvailablePort(previewBounds.start, previewBounds.end);
+      preferredPort = await findAvailablePort(previewBounds.start, previewBounds.end, this.usedPorts());
     }
+    // Reserve immediately (before the async spawn) so it's excluded from any
+    // concurrent start until this project's process is registered below. Tracked
+    // per-project so start()'s finally always releases it (success or failure).
+    this.reservedPorts.add(preferredPort);
+    this.reservedByProject.set(projectId, preferredPort);
 
     // When Claudable runs remotely (e.g. on a server), localhost:<port> is not
     // reachable from the user's browser. PREVIEW_URL_TEMPLATE (e.g.
@@ -1171,6 +1215,8 @@ class PreviewManager {
 
     previewProcess.process = child;
     this.processes.set(projectId, previewProcess);
+    // Now tracked via `processes` — free the in-flight reservation.
+    this.reservedPorts.delete(preferredPort);
 
     child.stdout?.on('data', (chunk) => {
       log(chunk);
