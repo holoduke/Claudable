@@ -352,6 +352,35 @@ export default defineNuxtPlugin(() => {
   });
   window.addEventListener('scroll', schedulePos, true);
   window.addEventListener('resize', schedulePos);
+
+  // --- error bridge: report runtime errors so Claudable can offer a one-click fix ---
+  const seenErrors = new Set();
+  const reportError = (kind, msg, extra) => {
+    if (!msg) return;
+    const line = (kind + '|' + msg + '|' + (extra || '')).slice(0, 600);
+    if (seenErrors.has(line)) return; // dedupe repeats
+    seenErrors.add(line);
+    post({ source: 'claudable-errors', type: 'error', error: { kind, message: String(msg).slice(0, 500), at: (extra || '').slice(0, 200) } });
+  };
+  window.addEventListener('error', (e) => {
+    if (e && e.message) reportError('runtime', e.message, (e.filename || '') + (e.lineno ? ':' + e.lineno : ''));
+  });
+  window.addEventListener('unhandledrejection', (e) => {
+    const r = e && e.reason;
+    reportError('promise', (r && (r.message || r.toString())) || 'Unhandled promise rejection', '');
+  });
+  try {
+    const origErr = console.error.bind(console);
+    console.error = function () {
+      try {
+        const parts = Array.prototype.map.call(arguments, (a) => (a && a.stack) ? a.stack : (typeof a === 'object' ? '' : String(a))).filter(Boolean);
+        const msg = parts.join(' ').trim();
+        // Skip framework HMR/noise; only surface things that look like real errors.
+        if (msg && /error|failed|cannot|undefined is not|is not a function|unexpected|exception/iu.test(msg)) reportError('console', msg, '');
+      } catch {}
+      return origErr.apply(console, arguments);
+    };
+  } catch {}
 });
 `,
       'utf8',
