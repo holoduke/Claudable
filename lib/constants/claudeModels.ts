@@ -94,6 +94,9 @@ export const CLAUDE_MODEL_DEFINITIONS: ClaudeModelDefinition[] = [
       'claude-3-5-sonnet',
       'claude-3-5-sonnet-20241022',
       'claude-3-5-sonnet-latest',
+      'claude-3-7-sonnet-20250219',
+      'claude-3-7-sonnet',
+      'claude-3.7-sonnet',
     ],
   },
   {
@@ -137,7 +140,15 @@ const CLAUDE_MODEL_ALIAS_MAP: Record<string, ClaudeModelId> = CLAUDE_MODEL_DEFIN
 export function normalizeClaudeModelId(model?: string | null): ClaudeModelId {
   if (!model) return CLAUDE_DEFAULT_MODEL;
   const normalized = model.trim().toLowerCase().replace(/[\s_]+/g, '-');
-  return CLAUDE_MODEL_ALIAS_MAP[normalized] ?? CLAUDE_DEFAULT_MODEL;
+  const resolved = CLAUDE_MODEL_ALIAS_MAP[normalized];
+  if (!resolved) {
+    // An unrecognized id silently falls back to the DEFAULT (the flagship / most
+    // expensive) model — a stale client value or typo would then bill the user
+    // for Opus. Surface it so it's diagnosable rather than a silent upgrade.
+    console.warn(`[claudeModels] Unknown model "${model}" → falling back to ${CLAUDE_DEFAULT_MODEL}`);
+    return CLAUDE_DEFAULT_MODEL;
+  }
+  return resolved;
 }
 
 export function getClaudeModelDefinition(id: string): ClaudeModelDefinition | undefined {

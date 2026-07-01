@@ -48,7 +48,7 @@ export default function SharePage({ params }: { params: Promise<{ token: string 
   useEffect(() => {
     fetch(`${API_BASE}/api/share/${token}`)
       .then((r) => r.json())
-      .then((j) => { if (j.success) setInfo(j.data); else setError(j.error?.message || 'Invalid or revoked link'); })
+      .then((j) => { if (j.success) setInfo(j.data); else setError(j.message || 'Invalid or revoked link'); })
       .catch(() => setError('Could not load this share link'));
   }, [token]);
 
@@ -200,12 +200,24 @@ export default function SharePage({ params }: { params: Promise<{ token: string 
       </div>
       <div ref={paneRef} className="relative flex-1 min-h-0">
         {info.previewUrl ? (
-          <iframe key={reloadKey} ref={iframeRef} src={info.previewUrl} className="w-full h-full border-none bg-white" />
+          <iframe
+            key={reloadKey}
+            ref={iframeRef}
+            src={info.previewUrl}
+            className="w-full h-full border-none bg-white"
+            onLoad={() => {
+              // Fallback: on stacks without the injected plugin (Next/Angular) the
+              // claudable-preview handshake never arrives. Dismiss the overlay a
+              // moment after the iframe loads so it can't cover a working app
+              // forever (comment mode just won't arm on those stacks).
+              setTimeout(() => setPreviewLoaded(true), 1500);
+            }}
+          />
         ) : (
           <div className="h-full flex items-center justify-center text-gray-400">Preview is starting… refresh in a moment.</div>
         )}
         {info.previewUrl && !previewLoaded && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-gray-50/95 text-gray-500 z-40">
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-gray-50/95 text-gray-500 z-40 pointer-events-none">
             <svg className="animate-spin text-[#DE7356]" width="26" height="26" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" className="opacity-20" /><path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" strokeWidth="4" strokeLinecap="round" /></svg>
             <p className="text-sm">Starting the preview… this can take up to a minute on first open.</p>
           </div>
@@ -217,6 +229,7 @@ export default function SharePage({ params }: { params: Promise<{ token: string 
           compose={compose}
           viewport={viewport}
           onSubmitNew={submitNew}
+          readOnly
           onCancelCompose={() => setCompose(null)}
           onResolve={() => { /* guests can't resolve */ }}
           onDelete={() => { /* guests can't delete */ }}

@@ -42,11 +42,8 @@ async function checkpointTurn(projectId: string, projectPath: string, instructio
   }
 }
 import { initializeNextJsProject as initializeClaudeProject, applyChanges as applyClaudeChanges } from '@/lib/services/cli/claude';
-import { initializeNextJsProject as initializeCodexProject, applyChanges as applyCodexChanges } from '@/lib/services/cli/codex';
-import { initializeNextJsProject as initializeCursorProject, applyChanges as applyCursorChanges } from '@/lib/services/cli/cursor';
-import { initializeNextJsProject as initializeQwenProject, applyChanges as applyQwenChanges } from '@/lib/services/cli/qwen';
-import { initializeNextJsProject as initializeGLMProject, applyChanges as applyGLMChanges } from '@/lib/services/cli/glm';
 import { getDefaultModelForCli, normalizeModelId } from '@/lib/constants/cliModels';
+import { sanitizeActiveCli } from '@/lib/utils/cliOptions';
 import type { ChatActRequest } from '@/types/backend';
 import { generateProjectId } from '@/lib/utils';
 import { previewManager } from '@/lib/services/preview';
@@ -329,7 +326,10 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
       coerceString(legacyBody['cli_preference']) ??
       project.preferredCli ??
       'claude';
-    const cliPreference = cliPreferenceRaw.toLowerCase();
+    // Server-side gate, not just UI hiding: only CLIs in ACTIVE_CLI_IDS may run.
+    // A raw API call with cliPreference:'glm' would otherwise redirect
+    // ANTHROPIC_BASE_URL to z.ai process-wide (token leak + hijacks other runs).
+    const cliPreference = sanitizeActiveCli(cliPreferenceRaw.toLowerCase());
 
     const selectedModelRaw =
       coerceString(body.selectedModel) ??
@@ -453,60 +453,43 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
       console.warn('[API] Preview auto-start check failed (will continue):', error);
     }
 
+    // Claude-only deployment: cliPreference is sanitized to 'claude' above, so
+    // only the Claude executor runs (the codex/cursor/qwen/glm adapters are
+    // removed — glm redirected ANTHROPIC_BASE_URL to z.ai process-wide).
     if (isInitialPrompt) {
-      const executor =
-        cliPreference === 'codex'
-          ? initializeCodexProject
-          : cliPreference === 'cursor'
-          ? initializeCursorProject
-          : cliPreference === 'qwen'
-          ? initializeQwenProject
-          : cliPreference === 'glm'
-          ? initializeGLMProject
-          : initializeClaudeProject;
-
-      // requesterItopsEnabled is the 6th arg — only the Claude executor reads it.
-      (executor as (...args: unknown[]) => Promise<void>)(
+      initializeClaudeProject(
         project_id,
         projectPath,
         finalInstruction,
         selectedModel,
         requestId,
-        cliPreference === 'claude' ? requesterItopsEnabled : undefined,
+        requesterItopsEnabled,
       ).then(() => { void checkpointTurn(project_id, projectPath, finalInstruction, requestId); })
-       .catch((error) => {
+       .catch(async (error) => {
         console.error('[API] Failed to initialize project:', error);
+        // Mark terminal on outright rejection — otherwise the request row stays
+        // 'processing' and locks the project for ACTIVE_REQUEST_STALE_MS (~20m).
+        if (requestId) {
+          await markUserRequestAsFailed(
+            requestId,
+            error instanceof Error ? error.message : 'Project initialization failed',
+          ).catch((markError) => {
+            console.error('[API] Failed to mark request failed:', markError);
+          });
+        }
       });
     } else {
-      const executor =
-        cliPreference === 'codex'
-          ? applyCodexChanges
-          : cliPreference === 'cursor'
-          ? applyCursorChanges
-          : cliPreference === 'qwen'
-          ? applyQwenChanges
-          : cliPreference === 'glm'
-          ? applyGLMChanges
-          : applyClaudeChanges;
+      const sessionId = project.activeClaudeSessionId || undefined;
 
-      const sessionId =
-        cliPreference === 'claude'
-          ? project.activeClaudeSessionId || undefined
-          : cliPreference === 'cursor'
-          ? project.activeCursorSessionId || undefined
-          : undefined;
-
-      // thinkingMode is only consumed by the Claude executor; other CLIs
-      // ignore the extra argument. Cast to avoid a union-arity type error.
-      (executor as (...args: unknown[]) => Promise<void>)(
+      applyClaudeChanges(
         project_id,
         projectPath,
         finalInstruction,
         selectedModel,
         sessionId,
         requestId,
-        cliPreference === 'claude' ? thinkingMode : undefined,
-        cliPreference === 'claude' ? requesterItopsEnabled : undefined,
+        thinkingMode,
+        requesterItopsEnabled,
       ).then(() => { void checkpointTurn(project_id, projectPath, finalInstruction, requestId); })
        .catch(async (error) => {
         console.error('[API] Failed to execute AI:', error);

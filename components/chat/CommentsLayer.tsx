@@ -35,6 +35,8 @@ interface CommentsLayerProps {
   onResolve: (id: string, resolved: boolean) => void;
   onDelete: (id: string) => void;
   onCloseThread: () => void;
+  /** Hide Resolve/Delete (e.g. guests on the share page can't manage). */
+  readOnly?: boolean;
 }
 
 /** Keep a popover of size (w,h) fully inside the viewport, anchored near (x,y). */
@@ -65,7 +67,7 @@ function Avatar({ name, image }: { name: string; image: string | null }) {
 
 /** Absolute overlay sized to the iframe; pin coords are iframe-viewport coords. */
 export default function CommentsLayer({
-  comments, positions, activeId, compose, viewport, onSubmitNew, onCancelCompose, onResolve, onDelete, onCloseThread,
+  comments, positions, activeId, compose, viewport, onSubmitNew, onCancelCompose, onResolve, onDelete, onCloseThread, readOnly = false,
 }: CommentsLayerProps) {
   const [draft, setDraft] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -158,12 +160,14 @@ export default function CommentsLayer({
             </div>
             <button onClick={onCloseThread} className="text-gray-300 hover:text-gray-600 text-sm shrink-0" aria-label="Close">✕</button>
           </div>
-          <div className="flex items-center justify-end gap-2 px-3 pb-2 border-t border-gray-100 pt-2">
-            <button onClick={() => onResolve(active.id, !active.resolved)} className="text-xs text-gray-600 hover:text-gray-900 px-2 py-1 rounded hover:bg-gray-100">
-              {active.resolved ? 'Reopen' : 'Resolve'}
-            </button>
-            <button onClick={() => onDelete(active.id)} className="text-xs text-red-500 hover:text-red-700 px-2 py-1 rounded hover:bg-red-50">Delete</button>
-          </div>
+          {!readOnly && (
+            <div className="flex items-center justify-end gap-2 px-3 pb-2 border-t border-gray-100 pt-2">
+              <button onClick={() => onResolve(active.id, !active.resolved)} className="text-xs text-gray-600 hover:text-gray-900 px-2 py-1 rounded hover:bg-gray-100">
+                {active.resolved ? 'Reopen' : 'Resolve'}
+              </button>
+              <button onClick={() => onDelete(active.id)} className="text-xs text-red-500 hover:text-red-700 px-2 py-1 rounded hover:bg-red-50">Delete</button>
+            </div>
+          )}
         </div>
       )}
     </div>

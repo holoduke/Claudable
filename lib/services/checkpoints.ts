@@ -28,7 +28,13 @@ const EXCLUDES = ['.git', 'node_modules', '.next', '.nuxt', '.output', 'dist', '
 const MAX_GIT_OUTPUT = 512 * 1024; // cap captured stdout/stderr per git call
 
 function gitDir(projectId: string): string {
-  return path.join(CHECKPOINTS_ROOT, projectId);
+  // Defense-in-depth: never let a crafted projectId escape CHECKPOINTS_ROOT (the
+  // shadow GIT_DIR pairs with a work-tree where `git clean -fd` runs on revert).
+  const dir = path.resolve(CHECKPOINTS_ROOT, projectId);
+  if (dir !== CHECKPOINTS_ROOT && !dir.startsWith(CHECKPOINTS_ROOT + path.sep)) {
+    throw new Error('Invalid projectId for checkpoint repo');
+  }
+  return dir;
 }
 
 function git(projectId: string, projectPath: string, args: string[]): Promise<{ ok: boolean; out: string }> {
@@ -52,7 +58,11 @@ const queues = new Map<string, Promise<unknown>>();
 function withLock<T>(projectId: string, fn: () => Promise<T>): Promise<T> {
   const prev = queues.get(projectId) ?? Promise.resolve();
   const next = prev.then(fn, fn);
-  queues.set(projectId, next.catch(() => {}));
+  const tail = next.catch(() => {});
+  queues.set(projectId, tail);
+  // Drop the entry once this is the last queued op, so the map doesn't retain a
+  // settled promise per project for the process lifetime.
+  tail.then(() => { if (queues.get(projectId) === tail) queues.delete(projectId); });
   return next;
 }
 

@@ -22,10 +22,15 @@ interface RouteContext {
 export async function POST(request: NextRequest, { params }: RouteContext) {
   try {
     const { project_id } = await params;
-    // Reject oversized bodies before reading them into memory — this endpoint is
-    // unauthenticated (preview telemetry), so cap the blast radius of a bad/hostile client.
-    const declaredLen = Number(request.headers.get('content-length') || '0');
-    if (Number.isFinite(declaredLen) && declaredLen > 64 * 1024) return new Response(null, { status: 204 });
+    // Reject oversized/unbounded bodies before reading them — this endpoint is
+    // unauthenticated (preview telemetry). The plugin always sends a small JSON
+    // body with a Content-Length; require one within cap, which also rejects
+    // chunked/unknown-length bodies a hostile client could stream to blow memory.
+    const CAP = 64 * 1024;
+    const declaredLen = Number(request.headers.get('content-length'));
+    if (!Number.isFinite(declaredLen) || declaredLen <= 0 || declaredLen > CAP) {
+      return new Response(null, { status: 204 });
+    }
 
     const project = await prisma.project.findUnique({ where: { id: project_id }, select: { id: true } });
     if (!project) return new Response(null, { status: 204 }); // silently drop; plugin ignores the response

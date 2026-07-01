@@ -9,8 +9,14 @@ export async function getOrCreateShare(projectId: string): Promise<{ token: stri
   const existing = await prisma.projectShare.findUnique({ where: { projectId } });
   if (existing) return { token: existing.token };
   const token = randomBytes(18).toString('base64url');
-  const created = await prisma.projectShare.create({ data: { projectId, token } });
-  return { token: created.token };
+  // upsert (not create) so two concurrent calls — e.g. a double-clicked Share
+  // button — don't race the projectId @unique constraint into a P2002 500.
+  const row = await prisma.projectShare.upsert({
+    where: { projectId },
+    update: {},
+    create: { projectId, token },
+  });
+  return { token: row.token };
 }
 
 export async function getShare(projectId: string): Promise<{ token: string } | null> {
