@@ -590,6 +590,10 @@ export async function executeClaude(
     const stackProject = await getProjectById(projectId).catch(() => null);
     let systemPromptForStack = selectSystemPrompt(stackProject?.templateType);
 
+    // Tell the agent which model it's running as — otherwise it guesses its own
+    // version wrong (e.g. answering "4.6" when the user selected Fable 5).
+    systemPromptForStack += `\n\nYou are running as ${modelLabel} (model id \`${resolvedModel}\`). If asked which model you are, answer with this.`;
+
     // Tell the agent about the live diagnostics tool so it verifies its own work
     // and can act on real runtime errors instead of guessing.
     systemPromptForStack += `\n\n## Checking the running app\nYou have a tool \`mcp__appdiag__check_app_health\` that returns the CURRENTLY RUNNING preview's uncaught browser errors, console errors/warnings, and Nuxt backend (server) errors. Use it to:\n- verify a change actually works after you edit (check for new errors before saying you're done),\n- investigate when the user reports something is broken,\n- find real bugs to fix proactively.\nAn empty result means nothing has been reported since the preview last started — it is not proof the app is bug-free; exercise the feature in the preview, then check again.`;
