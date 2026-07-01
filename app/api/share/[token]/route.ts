@@ -24,12 +24,20 @@ export async function GET(_request: NextRequest, { params }: RouteContext) {
     const project = await getProjectById(projectId);
     if (!project) return createErrorResponse('not_found', 'Project not found', 404);
 
-    // Ensure the preview is live so the reviewer sees a running app.
-    let previewUrl: string | null = null;
-    try {
-      const info = await previewManager.start(projectId);
-      previewUrl = info.url;
-    } catch { /* fall back to whatever's persisted */ }
+    // Get the reviewer to a running app fast. For per-project subdomains the URL
+    // is deterministic, so return it immediately and warm the dev server in the
+    // background (a cold start is ~20-30s — never make the reviewer wait on it;
+    // the share page retries the iframe until the app reports ready). Only block
+    // on start() when the URL isn't knowable without the assigned port.
+    let previewUrl = previewManager.deterministicPreviewUrl(projectId);
+    if (previewUrl) {
+      void previewManager.start(projectId).catch(() => {});
+    } else {
+      try {
+        const info = await previewManager.start(projectId);
+        previewUrl = info.url;
+      } catch { /* fall back to whatever's persisted */ }
+    }
 
     return createSuccessResponse({
       projectId,

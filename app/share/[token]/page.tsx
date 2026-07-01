@@ -19,6 +19,8 @@ export default function SharePage({ params }: { params: Promise<{ token: string 
   const [activeId, setActiveId] = useState<string | null>(null);
   const [compose, setCompose] = useState<ComposeAnchor | null>(null);
   const [viewport, setViewport] = useState({ w: 0, h: 0 });
+  const [previewLoaded, setPreviewLoaded] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const paneRef = useRef<HTMLDivElement>(null);
   const routeRef = useRef('/');
@@ -82,6 +84,7 @@ export default function SharePage({ params }: { params: Promise<{ token: string 
         // The plugin posts its route on (re)init — this is our "iframe is ready"
         // handshake. Re-arm comment mode + re-draw pins now that its listener
         // exists; the single enter() on mount races the iframe load and is lost.
+        setPreviewLoaded(true); // hides the "starting…" overlay + stops retrying
         post({ type: 'enter' });
         post({ type: 'renderPins', activeId: activeIdRef.current, pins: commentsRef.current.map((c) => ({ id: c.id, index: c.index, anchorSelector: c.anchorSelector, relX: c.relX, relY: c.relY, resolved: c.resolved })) });
         setRoute(d.path.startsWith('/') ? d.path : `/${d.path}`);
@@ -97,6 +100,19 @@ export default function SharePage({ params }: { params: Promise<{ token: string 
 
   // Enter comment mode once ready.
   useEffect(() => { if (info?.previewUrl && nameConfirmed) post({ type: 'enter' }); }, [info?.previewUrl, nameConfirmed, post]);
+  // The share endpoint returns immediately and warms the dev server in the
+  // background, so the first iframe load can hit a not-yet-ready (502) preview.
+  // Reload it every few seconds until the plugin reports ready, then stop.
+  useEffect(() => {
+    if (!nameConfirmed || !info?.previewUrl || previewLoaded) return;
+    let tries = 0;
+    const id = setInterval(() => {
+      tries += 1;
+      if (tries > 20) { clearInterval(id); return; } // ~70s ceiling
+      setReloadKey((k) => k + 1);
+    }, 3500);
+    return () => clearInterval(id);
+  }, [nameConfirmed, info?.previewUrl, previewLoaded]);
   // Reload pins on route change.
   useEffect(() => { if (nameConfirmed) { setActiveId(null); setCompose(null); loadComments(route); } }, [route, nameConfirmed, loadComments]);
   // Push pins to the bridge.
@@ -163,9 +179,15 @@ export default function SharePage({ params }: { params: Promise<{ token: string 
       </div>
       <div ref={paneRef} className="relative flex-1 min-h-0">
         {info.previewUrl ? (
-          <iframe ref={iframeRef} src={info.previewUrl} className="w-full h-full border-none bg-white" />
+          <iframe key={reloadKey} ref={iframeRef} src={info.previewUrl} className="w-full h-full border-none bg-white" />
         ) : (
           <div className="h-full flex items-center justify-center text-gray-400">Preview is starting… refresh in a moment.</div>
+        )}
+        {info.previewUrl && !previewLoaded && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-gray-50/95 text-gray-500 z-40">
+            <svg className="animate-spin text-[#DE7356]" width="26" height="26" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" className="opacity-20" /><path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" strokeWidth="4" strokeLinecap="round" /></svg>
+            <p className="text-sm">Starting the preview… this can take up to a minute on first open.</p>
+          </div>
         )}
         <CommentsLayer
           comments={comments}
