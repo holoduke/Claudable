@@ -25,6 +25,89 @@ async function clearAllPreviewState(): Promise<void> {
     /* non-fatal: the frontend uses live status, this is defense-in-depth */
   }
 }
+
+// --- Per-project preview routing --------------------------------------------
+// A stable per-project subdomain (preview-<slug>.<domain>) whose Traefik route we
+// rewrite to the current port on every start. Because the hostname is keyed to the
+// PROJECT (not the port), a port getting reused by another project can never make
+// one project's preview show another's — the definitive fix for the port-reuse leak.
+const PREVIEW_ROUTE_PREFIX = 'preview-';
+
+function previewRouteDir(): string | null {
+  const d = process.env.TRAEFIK_DYNAMIC_DIR?.trim();
+  return d && d.length ? d : null;
+}
+
+/** Active when the URL template is {project}-based AND we have a dynamic route dir. */
+function perProjectPreview(): boolean {
+  return (process.env.PREVIEW_URL_TEMPLATE || '').includes('{project}') && !!previewRouteDir();
+}
+
+function hashSlug(s: string): string {
+  let h = 0;
+  for (let i = 0; i < s.length; i += 1) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+  return h.toString(36);
+}
+
+/** projectId → a valid DNS label ('preview-' + slug must stay <= 63 chars). */
+function previewSlug(projectId: string): string {
+  const s = projectId.toLowerCase().replace(/[^a-z0-9-]/gu, '-').replace(/-+/gu, '-').replace(/^-|-$/gu, '');
+  return s.length <= 55 ? s : `${s.slice(0, 46)}-${hashSlug(projectId)}`;
+}
+
+function previewUrlFor(projectId: string, port: number): string {
+  const tmpl = process.env.PREVIEW_URL_TEMPLATE || '';
+  if (tmpl.includes('{project}') && previewRouteDir()) return tmpl.replace('{project}', previewSlug(projectId));
+  if (tmpl.includes('{port}')) return tmpl.replace('{port}', String(port));
+  return `http://localhost:${port}`;
+}
+
+function previewRouteFile(projectId: string): string {
+  return path.join(previewRouteDir()!, `${PREVIEW_ROUTE_PREFIX}${previewSlug(projectId)}.yml`);
+}
+
+/** Write/refresh this project's Traefik route to point at its current port. */
+async function writePreviewRoute(projectId: string, port: number): Promise<void> {
+  const dir = previewRouteDir();
+  if (!dir) return;
+  let host: string;
+  try { host = new URL(previewUrlFor(projectId, port)).host; } catch { return; }
+  const gw = process.env.DEPLOY_HOST_GATEWAY || 'host.docker.internal';
+  const name = `${PREVIEW_ROUTE_PREFIX}${previewSlug(projectId)}`;
+  const yaml = `# Auto-managed by Claudable (preview). Per-project route so a reused port can't cross projects.
+http:
+  routers:
+    ${name}:
+      rule: "Host(\`${host}\`)"
+      entryPoints: [https]
+      service: ${name}
+      tls:
+        certResolver: letsencrypt
+  services:
+    ${name}:
+      loadBalancer:
+        servers:
+          - url: "http://${gw}:${port}"
+`;
+  await fs.writeFile(previewRouteFile(projectId), yaml, 'utf8').catch(() => {});
+}
+
+async function removePreviewRoute(projectId: string): Promise<void> {
+  if (!previewRouteDir()) return;
+  await fs.unlink(previewRouteFile(projectId)).catch(() => {});
+}
+
+/** On boot, remove all stale per-project preview routes (their dev servers are dead). */
+async function sweepPreviewRoutes(): Promise<void> {
+  const dir = previewRouteDir();
+  if (!dir) return;
+  const files = await fs.readdir(dir).catch(() => [] as string[]);
+  await Promise.all(
+    files
+      .filter((f) => f.startsWith(PREVIEW_ROUTE_PREFIX) && f.endsWith('.yml'))
+      .map((f) => fs.unlink(path.join(dir, f)).catch(() => {})),
+  );
+}
 import { scaffoldForStack } from '@/lib/utils/scaffold-dispatch';
 import { stackKind } from '@/lib/config/stacks';
 import { PREVIEW_CONFIG } from '@/lib/config/constants';
@@ -829,8 +912,10 @@ class PreviewManager {
     this.sweepTimer.unref?.();
     // On boot the process map is empty but the DB may hold previewUrl/previewPort
     // from before a restart — those servers are dead and their ports may be reused
-    // by OTHER projects, so a stale URL could point at the wrong project. Clear them.
+    // by OTHER projects, so a stale URL could point at the wrong project. Clear them
+    // and remove all stale per-project preview routes (dev servers are all dead).
     void clearAllPreviewState();
+    void sweepPreviewRoutes();
   }
 
   /** Ports currently held (live processes) or reserved in-flight. */
@@ -1043,13 +1128,7 @@ class PreviewManager {
     // When Claudable runs remotely (e.g. on a server), localhost:<port> is not
     // reachable from the user's browser. PREVIEW_URL_TEMPLATE (e.g.
     // "https://preview-{port}.example.com") yields a publicly-routed URL instead.
-    const buildPreviewUrl = (port: number): string => {
-      const tmpl = process.env.PREVIEW_URL_TEMPLATE;
-      if (tmpl && tmpl.includes('{port}')) {
-        return tmpl.replace('{port}', String(port));
-      }
-      return `http://localhost:${port}`;
-    };
+    const buildPreviewUrl = (port: number): string => previewUrlFor(projectId, port);
 
     const initialUrl = buildPreviewUrl(preferredPort);
 
@@ -1179,6 +1258,12 @@ class PreviewManager {
     env.NEXT_PUBLIC_APP_URL = resolvedUrl;
     previewProcess.url = resolvedUrl;
 
+    // Per-project mode: (re)write this project's Traefik route to the current port
+    // so the stable subdomain always points at THIS project's dev server.
+    if (perProjectPreview()) {
+      await writePreviewRoute(projectId, effectivePort);
+    }
+
     // Bind to all interfaces when hosting remotely so the reverse proxy can
     // reach the dev server (network_mode host -> proxy hits it via the gateway).
     const bindHost = process.env.PREVIEW_BIND_HOST;
@@ -1304,6 +1389,9 @@ class PreviewManager {
   }
 
   public async stop(projectId: string): Promise<PreviewInfo> {
+    // Withdraw the project's preview route so its subdomain stops resolving to a
+    // now-dead port (leaving it would 502; worse, the port could be reused).
+    await removePreviewRoute(projectId);
     const processInfo = this.processes.get(projectId);
     if (!processInfo) {
       const project = await getProjectById(projectId);
