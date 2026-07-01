@@ -277,6 +277,9 @@ export default function ChatPage() {
   const [pinPositions, setPinPositions] = useState<Record<string, { x: number | null; y: number | null }>>({});
   const [activePinId, setActivePinId] = useState<string | null>(null);
   const [composeAnchor, setComposeAnchor] = useState<ComposeAnchor | null>(null);
+  // True once the preview iframe's plugin has reported in for the current load.
+  // Reset on navigation so we don't push pins/scroll into a still-loading page.
+  const [previewReady, setPreviewReady] = useState(false);
   // Comments overview list (left pane): ALL comments across every route.
   const [showCommentsList, setShowCommentsList] = useState(false);
   const [allComments, setAllComments] = useState<(CommentPin & { route: string })[]>([]);
@@ -1074,8 +1077,10 @@ const persistProjectPreferences = useCallback(
       const data = event.data as { source?: string; path?: string } | null;
       if (data && data.source === 'claudable-preview' && typeof data.path === 'string') {
         setCurrentRoute(data.path.startsWith('/') ? data.path : `/${data.path}`);
-        // Re-arm comment mode after a (re)load so pins/placement survive a
-        // route navigation (e.g. jumping to a comment on another route).
+        // The plugin has reported in → the (re)loaded page is ready. Flipping this
+        // re-fires the renderPins + pending-scroll effects with a live listener,
+        // so navigating to a comment shows/scrolls to it on the FIRST click.
+        setPreviewReady(true);
         if (commentModeRef.current) {
           try { iframeRef.current?.contentWindow?.postMessage({ source: 'claudable-comments-cmd', type: 'enter' }, previewOrigin); } catch { /* not ready */ }
         }
@@ -1212,23 +1217,25 @@ const persistProjectPreferences = useCallback(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentRoute]);
 
-  // Push the current pins to the in-iframe bridge whenever they change.
+  // Push the current pins to the in-iframe bridge whenever they change OR once
+  // the (re)loaded preview reports ready — so pins land even after a navigation.
   useEffect(() => {
-    if (!commentMode) return;
+    if (!commentMode || !previewReady) return;
     postComments({ type: 'renderPins', activeId: activePinId, pins: comments.map((c) => ({ id: c.id, index: c.index, anchorSelector: c.anchorSelector, relX: c.relX, relY: c.relY, resolved: c.resolved })) });
-  }, [comments, activePinId, commentMode, postComments]);
+  }, [comments, activePinId, commentMode, previewReady, postComments]);
 
-  // After navigating to another route for goToComment, wait until that route's
-  // comments have loaded (the pin is present), then scroll to + activate it.
+  // After navigating to another route for goToComment, wait until the preview is
+  // ready AND that route's comments have loaded (the pin exists), then scroll to
+  // + activate it. Gating on previewReady is what makes the FIRST click work.
   useEffect(() => {
     const p = pendingScrollRef.current;
-    if (!p || (currentRoute || '/') !== (p.route || '/')) return;
+    if (!p || !previewReady || (currentRoute || '/') !== (p.route || '/')) return;
     if (!comments.some((c) => c.id === p.id)) return; // pins for the new route not loaded yet
     pendingScrollRef.current = null;
     setActivePinId(p.id);
-    const t = setTimeout(() => postComments({ type: 'scrollTo', anchorSelector: p.anchorSelector }), 200);
+    const t = setTimeout(() => postComments({ type: 'scrollTo', anchorSelector: p.anchorSelector }), 250);
     return () => clearTimeout(t);
-  }, [comments, currentRoute, postComments]);
+  }, [comments, currentRoute, previewReady, postComments]);
 
   // Keep the overview list fresh: reload it when open, or when the current
   // route's comments change (add/resolve/delete) while it's open.
@@ -1415,6 +1422,7 @@ const persistProjectPreferences = useCallback(
       // Ensure route starts with /
       const normalizedRoute = route.startsWith('/') ? route : `/${route}`;
       const newUrl = `${baseUrl}${normalizedRoute}`;
+      setPreviewReady(false); // the new page's plugin hasn't reported yet
       iframeRef.current.src = newUrl;
       setCurrentRoute(normalizedRoute);
     }
@@ -1433,6 +1441,7 @@ const persistProjectPreferences = useCallback(
       const baseUrl = previewUrl.split('?')[0] || previewUrl;
       const url = new URL(baseUrl + normalizedRoute);
       url.searchParams.set('_ts', Date.now().toString());
+      setPreviewReady(false); // wait for the reloaded page's plugin to report before pushing pins
       iframeRef.current.src = url.toString();
     } catch (error) {
       console.warn('Failed to refresh preview iframe:', error);
