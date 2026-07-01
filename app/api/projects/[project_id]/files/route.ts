@@ -3,6 +3,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { denyUnlessProjectAccess } from '@/lib/auth/gate';
 import { listProjectDirectory, FileBrowserError } from '@/lib/services/file-browser';
 
 interface RouteContext {
@@ -12,6 +13,8 @@ interface RouteContext {
 export async function GET(request: NextRequest, { params }: RouteContext) {
   try {
     const { project_id } = await params;
+    const _gate = await denyUnlessProjectAccess(project_id);
+    if (_gate) return _gate;
     const url = new URL(request.url);
     const dir = url.searchParams.get('path') ?? '.';
 

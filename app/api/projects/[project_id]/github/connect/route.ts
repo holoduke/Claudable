@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { denyUnlessProjectAccess } from '@/lib/auth/gate';
 import { connectProjectToGitHub } from '@/lib/services/github';
 
 interface RouteContext {
@@ -8,6 +9,8 @@ interface RouteContext {
 export async function POST(request: NextRequest, { params }: RouteContext) {
   try {
     const { project_id } = await params;
+    const _gate = await denyUnlessProjectAccess(project_id);
+    if (_gate) return _gate;
     const body = (await request.json().catch(() => null)) ?? {};
     if (!body || typeof body !== 'object') {
       return NextResponse.json({ success: false, error: 'Invalid payload' }, { status: 400 });

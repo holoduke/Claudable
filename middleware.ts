@@ -10,10 +10,27 @@ export default auth((req) => {
   if (process.env.AUTH_ENABLED !== 'true') return;
 
   const { pathname } = req.nextUrl;
+
+  // Static files (favicon, /public images, fonts) must load even for an
+  // unauthenticated visitor so the /login page renders. Only for NON-API paths —
+  // an /api/*.js path must never skip the gate (that was the extension bypass).
+  if (!pathname.startsWith('/api/') && /\.(?:png|jpe?g|svg|gif|webp|ico|css|js|map|woff2?|ttf|otf)$/i.test(pathname)) {
+    return;
+  }
+
   const isPublic =
-    pathname.startsWith('/login') ||
+    pathname === '/login' ||
+    pathname.startsWith('/login/') ||
     pathname.startsWith('/api/auth') ||
-    pathname.startsWith('/api/health');
+    pathname === '/api/health' ||
+    // Public stakeholder-review surface (the token is the credential).
+    pathname === '/share' ||
+    pathname.startsWith('/share/') ||
+    pathname.startsWith('/api/share/') ||
+    // Guest review endpoints — the handlers self-authorize (X-Share-Token for
+    // comments; client-logs is intentionally open preview telemetry). A signed-in
+    // user still needs a session there; passing them through here is safe.
+    /^\/api\/projects\/[^/]+\/(comments|client-logs)$/.test(pathname);
 
   if (req.auth || isPublic) return;
 
@@ -28,6 +45,8 @@ export default auth((req) => {
 });
 
 export const config = {
-  // Run on everything except Next internals and static asset files.
-  matcher: ['/((?!_next/static|_next/image|favicon.ico|.*\\.(?:png|jpe?g|svg|gif|webp|ico|css|js|woff2?|ttf|otf)).*)'],
+  // Run on everything except Next internals. Static-asset skipping is handled
+  // INSIDE the function (non-API only) so /api can never be bypassed by a path
+  // that merely contains a static extension.
+  matcher: ['/((?!_next/static|_next/image|favicon.ico).*)'],
 };

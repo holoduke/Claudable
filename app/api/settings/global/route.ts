@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { denyUnlessAdmin, denyUnlessSignedIn } from '@/lib/auth/gate';
 import {
   loadGlobalSettings,
   updateGlobalSettings,
@@ -14,11 +15,16 @@ function serialize(settings: Awaited<ReturnType<typeof loadGlobalSettings>>) {
 }
 
 export async function GET() {
+  // Any signed-in user may read global settings (the app-wide provider fetches
+  // this on load); only admins may WRITE. Note: if secret apiKeys are ever
+  // stored in cli_settings, redact them here for non-admins.
+  const _sg = await denyUnlessSignedIn(); if (_sg) return _sg;
   const settings = await loadGlobalSettings();
   return NextResponse.json(serialize(settings));
 }
 
 export async function PUT(request: NextRequest) {
+  const _adg = await denyUnlessAdmin(); if (_adg) return _adg;
   try {
     const body = (await request.json().catch(() => null)) ?? {};
     const candidate = body && typeof body === 'object' ? (body as Record<string, unknown>) : {};

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { denyUnlessProjectAccess } from '@/lib/auth/gate';
 import {
   getProjectCliPreference,
   updateProjectCliPreference,
@@ -10,6 +11,8 @@ interface RouteContext {
 
 export async function GET(_request: NextRequest, { params }: RouteContext) {
   const { project_id } = await params;
+  const _gate = await denyUnlessProjectAccess(project_id);
+  if (_gate) return _gate;
   const preference = await getProjectCliPreference(project_id);
   if (!preference) {
     return NextResponse.json(
@@ -24,6 +27,8 @@ export async function GET(_request: NextRequest, { params }: RouteContext) {
 export async function POST(request: NextRequest, { params }: RouteContext) {
   try {
     const { project_id } = await params;
+    const _gate = await denyUnlessProjectAccess(project_id);
+    if (_gate) return _gate;
     const body = (await request.json().catch(() => null)) ?? {};
     if (!body || typeof body !== 'object') {
       return NextResponse.json(

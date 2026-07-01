@@ -4,6 +4,7 @@
  */
 
 import { NextRequest } from 'next/server';
+import { denyUnlessProjectAccess } from '@/lib/auth/gate';
 import { streamManager } from '@/lib/services/stream';
 
 interface RouteContext {
@@ -19,6 +20,8 @@ export async function GET(
   { params }: RouteContext
 ) {
   const { project_id } = await params;
+  const _gate = await denyUnlessProjectAccess(project_id);
+  if (_gate) return _gate;
 
   // Create ReadableStream
   const stream = new ReadableStream({

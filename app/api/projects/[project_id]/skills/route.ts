@@ -5,6 +5,7 @@
  */
 
 import { NextRequest } from 'next/server';
+import { denyUnlessProjectAccess } from '@/lib/auth/gate';
 import { listAllSkills, saveSkill, SkillError } from '@/lib/services/skills';
 import { designSkillIds } from '@/lib/services/design-skills';
 import { createSuccessResponse, createErrorResponse, handleApiError } from '@/lib/utils/api-response';
@@ -16,6 +17,8 @@ interface RouteContext {
 export async function GET(_request: NextRequest, { params }: RouteContext) {
   try {
     const { project_id } = await params;
+    const _gate = await denyUnlessProjectAccess(project_id);
+    if (_gate) return _gate;
     const skills = await listAllSkills(project_id);
     // Design skills are managed in the separate "Design" tab — keep them out of
     // the general skills list so the two never mix.
@@ -36,6 +39,8 @@ export async function GET(_request: NextRequest, { params }: RouteContext) {
 export async function POST(request: NextRequest, { params }: RouteContext) {
   try {
     const { project_id } = await params;
+    const _gate = await denyUnlessProjectAccess(project_id);
+    if (_gate) return _gate;
     const body = await request.json().catch(() => ({}));
     if (!body || typeof body.name !== 'string' || body.name.trim().length === 0) {
       return createErrorResponse('name is required', undefined, 400);

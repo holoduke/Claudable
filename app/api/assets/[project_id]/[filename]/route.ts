@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { denyUnlessProjectAccess } from '@/lib/auth/gate';
 import fs from 'fs/promises';
 import path from 'path';
 import { getProjectById } from '@/lib/services/project';
@@ -33,6 +34,8 @@ function inferContentType(filename: string): string {
 
 export async function GET(_request: Request, { params }: RouteContext) {
   const { project_id, filename } = await params;
+  const _gate = await denyUnlessProjectAccess(project_id);
+  if (_gate) return _gate;
 
   try {
 

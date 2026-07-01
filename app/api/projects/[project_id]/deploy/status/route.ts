@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { denyUnlessProjectAccess } from '@/lib/auth/gate';
 import { getDeployRunStatus } from '@/lib/services/github';
 
 interface RouteContext {
@@ -13,6 +14,8 @@ interface RouteContext {
 export async function GET(_request: Request, { params }: RouteContext) {
   try {
     const { project_id } = await params;
+    const _gate = await denyUnlessProjectAccess(project_id);
+    if (_gate) return _gate;
     const status = await getDeployRunStatus(project_id);
     const res = NextResponse.json({ success: true, ...status });
     res.headers.set('Cache-Control', 'no-store');

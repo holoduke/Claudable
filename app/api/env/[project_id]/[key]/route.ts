@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { denyUnlessProjectAccess } from '@/lib/auth/gate';
 import { updateEnvVar, deleteEnvVar } from '@/lib/services/env';
 
 interface RouteContext {
@@ -8,6 +9,8 @@ interface RouteContext {
 export async function PUT(request: NextRequest, { params }: RouteContext) {
   try {
     const { project_id, key } = await params;
+    const _gate = await denyUnlessProjectAccess(project_id);
+    if (_gate) return _gate;
     const body = (await request.json().catch(() => null)) ?? {};
     if (typeof body?.value !== 'string') {
       return NextResponse.json(
@@ -44,6 +47,8 @@ export async function PUT(request: NextRequest, { params }: RouteContext) {
 export async function DELETE(_request: NextRequest, { params }: RouteContext) {
   try {
     const { project_id, key } = await params;
+    const _gate = await denyUnlessProjectAccess(project_id);
+    if (_gate) return _gate;
     const deleted = await deleteEnvVar(project_id, key);
     if (!deleted) {
       return NextResponse.json(

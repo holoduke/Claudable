@@ -15,6 +15,7 @@ import type { UpdateProjectInput } from '@/types/backend';
 import { serializeProject } from '@/lib/serializers/project';
 import { getSessionUser, authEnabled } from '@/lib/auth/session';
 import { canAccessProject } from '@/lib/services/project-access';
+import { denyUnlessProjectAccess } from '@/lib/auth/gate';
 
 interface RouteContext {
   params: Promise<{ project_id: string }>;
@@ -74,10 +75,9 @@ export async function PUT(
   { params }: RouteContext
 ) {
   try {
-    if (authEnabled() && !(await getSessionUser())) {
-      return NextResponse.json({ success: false, error: 'Authentication required' }, { status: 401 });
-    }
     const { project_id } = await params;
+    const denied = await denyUnlessProjectAccess(project_id, { manage: true });
+    if (denied) return denied;
     const body = (await request.json().catch(() => null)) ?? {};
 
     const input: UpdateProjectInput = {
@@ -132,10 +132,9 @@ export async function DELETE(
   { params }: RouteContext
 ) {
   try {
-    if (authEnabled() && !(await getSessionUser())) {
-      return NextResponse.json({ success: false, error: 'Authentication required' }, { status: 401 });
-    }
     const { project_id } = await params;
+    const denied = await denyUnlessProjectAccess(project_id, { manage: true });
+    if (denied) return denied;
     await deleteProject(project_id);
 
     return NextResponse.json({

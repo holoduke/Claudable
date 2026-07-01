@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { denyUnlessAdmin } from '@/lib/auth/gate';
 import {
   deleteServiceToken,
   getPlainServiceToken,
@@ -15,6 +16,7 @@ function isProvider(value: string): boolean {
 }
 
 export async function GET(request: NextRequest, { params }: RouteContext) {
+  const _adg = await denyUnlessAdmin(); if (_adg) return _adg;
   const { segments = [] } = await params;
 
   if (segments.length === 1) {
@@ -59,6 +61,7 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
 }
 
 export async function DELETE(_request: NextRequest, { params }: RouteContext) {
+  const _adg = await denyUnlessAdmin(); if (_adg) return _adg;
   const { segments = [] } = await params;
 
   if (segments.length !== 1) {

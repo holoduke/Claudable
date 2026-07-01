@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { denyUnlessProjectAccess } from '@/lib/auth/gate';
 import { triggerVercelDeployment } from '@/lib/services/vercel';
 
 interface RouteContext {
@@ -8,6 +9,8 @@ interface RouteContext {
 export async function POST(_request: Request, { params }: RouteContext) {
   try {
     const { project_id } = await params;
+    const _gate = await denyUnlessProjectAccess(project_id);
+    if (_gate) return _gate;
     const result = await triggerVercelDeployment(project_id);
     return NextResponse.json({
       success: true,

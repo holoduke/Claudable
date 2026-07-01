@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { denyUnlessProjectAccess } from '@/lib/auth/gate';
 import { getSessionById } from '@/lib/services/chat-sessions';
 
 interface RouteContext {
@@ -8,6 +9,8 @@ interface RouteContext {
 export async function GET(_request: Request, { params }: RouteContext) {
   try {
     const { project_id, session_id } = await params;
+    const _gate = await denyUnlessProjectAccess(project_id);
+    if (_gate) return _gate;
     const session = await getSessionById(project_id, session_id);
     if (!session) {
       return NextResponse.json({ success: false, error: 'Session not found' }, { status: 404 });

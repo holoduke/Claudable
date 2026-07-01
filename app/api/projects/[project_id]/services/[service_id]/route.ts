@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { deleteProjectService } from '@/lib/services/project-services';
+import { denyUnlessProjectAccess } from '@/lib/auth/gate';
 
 interface RouteContext {
   params: Promise<{ project_id: string; service_id: string }>;
@@ -7,8 +8,10 @@ interface RouteContext {
 
 export async function DELETE(_request: Request, { params }: RouteContext) {
   try {
-    const { service_id } = await params;
-    const deleted = await deleteProjectService(service_id);
+    const { project_id, service_id } = await params;
+    const denied = await denyUnlessProjectAccess(project_id, { manage: true });
+    if (denied) return denied;
+    const deleted = await deleteProjectService(service_id, project_id);
     if (!deleted) {
       return NextResponse.json({ success: false, error: 'Service not found' }, { status: 404 });
     }

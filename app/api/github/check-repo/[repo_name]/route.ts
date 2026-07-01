@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { denyUnlessSignedIn } from '@/lib/auth/gate';
 import { checkRepositoryAvailability } from '@/lib/services/github';
 
 interface RouteContext {
@@ -6,6 +7,7 @@ interface RouteContext {
 }
 
 export async function GET(_request: Request, { params }: RouteContext) {
+  const _adg = await denyUnlessSignedIn(); if (_adg) return _adg;
   try {
     const { repo_name } = await params;
     const result = await checkRepositoryAvailability(repo_name);

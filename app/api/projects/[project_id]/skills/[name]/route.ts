@@ -5,6 +5,7 @@
  */
 
 import { NextRequest } from 'next/server';
+import { denyUnlessProjectAccess } from '@/lib/auth/gate';
 import { getSkill, deleteSkill, setSkillEnabled, SkillError } from '@/lib/services/skills';
 import { createSuccessResponse, createErrorResponse, handleApiError } from '@/lib/utils/api-response';
 
@@ -16,6 +17,8 @@ interface RouteContext {
 export async function PATCH(request: NextRequest, { params }: RouteContext) {
   try {
     const { project_id, name } = await params;
+    const _gate = await denyUnlessProjectAccess(project_id);
+    if (_gate) return _gate;
     const body = await request.json().catch(() => ({}));
     if (typeof body?.enabled !== 'boolean') {
       return createErrorResponse('enabled (boolean) is required', undefined, 400);
@@ -33,6 +36,8 @@ export async function PATCH(request: NextRequest, { params }: RouteContext) {
 export async function GET(_request: NextRequest, { params }: RouteContext) {
   try {
     const { project_id, name } = await params;
+    const _gate = await denyUnlessProjectAccess(project_id);
+    if (_gate) return _gate;
     const skill = await getSkill(project_id, name);
     if (!skill) {
       return createErrorResponse('Skill not found', undefined, 404);
@@ -49,6 +54,8 @@ export async function GET(_request: NextRequest, { params }: RouteContext) {
 export async function DELETE(_request: NextRequest, { params }: RouteContext) {
   try {
     const { project_id, name } = await params;
+    const _gate = await denyUnlessProjectAccess(project_id);
+    if (_gate) return _gate;
     const ok = await deleteSkill(project_id, name);
     return createSuccessResponse({ deleted: ok, name });
   } catch (error) {

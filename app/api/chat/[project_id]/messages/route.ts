@@ -4,6 +4,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { denyUnlessProjectAccess } from '@/lib/auth/gate';
 import { getMessagesByProjectId, createMessage, deleteMessagesByProjectId, getMessagesCountByProjectId } from '@/lib/services/message';
 import type { CreateMessageInput } from '@/types/backend';
 import { serializeMessages, serializeMessage } from '@/lib/serializers/chat';
@@ -22,6 +23,8 @@ export async function GET(
 ) {
   try {
     const { project_id } = await params;
+    const _gate = await denyUnlessProjectAccess(project_id);
+    if (_gate) return _gate;
     const { searchParams } = new URL(request.url);
     // Clamp pagination so a NaN / negative / huge value can't break the query.
     const rawLimit = parseInt(searchParams.get('limit') || '50', 10);
@@ -71,6 +74,8 @@ export async function POST(
 ) {
   try {
     const { project_id } = await params;
+    const _gate = await denyUnlessProjectAccess(project_id);
+    if (_gate) return _gate;
     const payload = await request.json();
 
     const content =
@@ -152,6 +157,8 @@ export async function DELETE(
 ) {
   try {
     const { project_id } = await params;
+    const _gate = await denyUnlessProjectAccess(project_id);
+    if (_gate) return _gate;
     const { searchParams } = new URL(request.url);
     const conversationId =
       searchParams.get('conversationId') ?? searchParams.get('conversation_id') ?? undefined;

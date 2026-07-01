@@ -4,6 +4,7 @@
  */
 
 import { NextResponse } from 'next/server';
+import { denyUnlessProjectAccess } from '@/lib/auth/gate';
 import { previewManager } from '@/lib/services/preview';
 
 interface RouteContext {
@@ -16,6 +17,8 @@ export async function POST(
 ) {
   try {
     const { project_id } = await params;
+    const _gate = await denyUnlessProjectAccess(project_id);
+    if (_gate) return _gate;
     const preview = await previewManager.stop(project_id);
 
     return NextResponse.json({
