@@ -12,6 +12,7 @@ import { ProjectSettings } from '@/components/settings/ProjectSettings';
 import UserMenu from '@/components/layout/UserMenu';
 import VisualEditorPanel, { type SelectedElement } from '@/components/chat/VisualEditorPanel';
 import CommentsLayer, { type CommentPin, type ComposeAnchor } from '@/components/chat/CommentsLayer';
+import CommentsListPanel from '@/components/chat/CommentsListPanel';
 import ChatInput from '@/components/chat/ChatInput';
 import DesignImportModal from '@/components/chat/DesignImportModal';
 import SkillsModal from '@/components/chat/SkillsModal';
@@ -276,6 +277,14 @@ export default function ChatPage() {
   const [pinPositions, setPinPositions] = useState<Record<string, { x: number | null; y: number | null }>>({});
   const [activePinId, setActivePinId] = useState<string | null>(null);
   const [composeAnchor, setComposeAnchor] = useState<ComposeAnchor | null>(null);
+  // Comments overview list (left pane): ALL comments across every route.
+  const [showCommentsList, setShowCommentsList] = useState(false);
+  const [allComments, setAllComments] = useState<(CommentPin & { route: string })[]>([]);
+  const commentModeRef = useRef(false);
+  commentModeRef.current = commentMode;
+  // A comment we're navigating to (may be on another route): fired once its
+  // route's pins have loaded so the preview can scroll to it.
+  const pendingScrollRef = useRef<{ id: string; anchorSelector: string; route: string } | null>(null);
   // Runtime errors reported by the preview (for one-click "fix with AI").
   const [previewErrors, setPreviewErrors] = useState<{ kind: string; message: string; at: string }[]>([]);
   const [shareCopied, setShareCopied] = useState(false);
@@ -1065,6 +1074,11 @@ const persistProjectPreferences = useCallback(
       const data = event.data as { source?: string; path?: string } | null;
       if (data && data.source === 'claudable-preview' && typeof data.path === 'string') {
         setCurrentRoute(data.path.startsWith('/') ? data.path : `/${data.path}`);
+        // Re-arm comment mode after a (re)load so pins/placement survive a
+        // route navigation (e.g. jumping to a comment on another route).
+        if (commentModeRef.current) {
+          try { iframeRef.current?.contentWindow?.postMessage({ source: 'claudable-comments-cmd', type: 'enter' }, previewOrigin); } catch { /* not ready */ }
+        }
       }
     };
     window.addEventListener('message', onMessage);
@@ -1156,11 +1170,36 @@ const persistProjectPreferences = useCallback(
     } catch { /* ignore */ }
   }, [projectId]);
 
+  // ALL comments across every route (powers the overview list). Omitting `route`
+  // returns the whole project's comments.
+  const loadAllComments = useCallback(async () => {
+    try {
+      const r = await fetch(`${API_BASE}/api/projects/${projectId}/comments`);
+      const j = await r.json();
+      if (j.success) setAllComments(j.data as (CommentPin & { route: string })[]);
+    } catch { /* ignore */ }
+  }, [projectId]);
+
+  // Jump to a comment: switch route if needed (the preview reloads and its pins
+  // reload), then scroll to + highlight the anchor. Same-route jumps are instant.
+  const goToComment = useCallback((c: CommentPin & { route: string }) => {
+    const route = c.route || '/';
+    setShowPreview(true);
+    if (!commentMode) setCommentMode(true);
+    if (route !== (currentRouteRef.current || '/')) {
+      pendingScrollRef.current = { id: c.id, anchorSelector: c.anchorSelector, route };
+      navigateToRoute(route);
+    } else {
+      setActivePinId(c.id);
+      postComments({ type: 'scrollTo', anchorSelector: c.anchorSelector });
+    }
+  }, [commentMode, postComments]);
+
   // Enter/exit comment mode (mutually exclusive with edit mode).
   useEffect(() => {
     postComments({ type: commentMode ? 'enter' : 'exit' });
     if (commentMode) { setEditMode(false); loadComments(currentRouteRef.current || '/'); }
-    else { setComposeAnchor(null); setActivePinId(null); }
+    else { setComposeAnchor(null); setActivePinId(null); setShowCommentsList(false); }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [commentMode, postComments]);
 
@@ -1178,6 +1217,24 @@ const persistProjectPreferences = useCallback(
     if (!commentMode) return;
     postComments({ type: 'renderPins', activeId: activePinId, pins: comments.map((c) => ({ id: c.id, index: c.index, anchorSelector: c.anchorSelector, relX: c.relX, relY: c.relY, resolved: c.resolved })) });
   }, [comments, activePinId, commentMode, postComments]);
+
+  // After navigating to another route for goToComment, wait until that route's
+  // comments have loaded (the pin is present), then scroll to + activate it.
+  useEffect(() => {
+    const p = pendingScrollRef.current;
+    if (!p || (currentRoute || '/') !== (p.route || '/')) return;
+    if (!comments.some((c) => c.id === p.id)) return; // pins for the new route not loaded yet
+    pendingScrollRef.current = null;
+    setActivePinId(p.id);
+    const t = setTimeout(() => postComments({ type: 'scrollTo', anchorSelector: p.anchorSelector }), 200);
+    return () => clearTimeout(t);
+  }, [comments, currentRoute, postComments]);
+
+  // Keep the overview list fresh: reload it when open, or when the current
+  // route's comments change (add/resolve/delete) while it's open.
+  useEffect(() => {
+    if (showCommentsList) loadAllComments();
+  }, [showCommentsList, comments, loadAllComments]);
 
   // Receive events from the comments bridge.
   useEffect(() => {
@@ -2748,6 +2805,14 @@ const persistProjectPreferences = useCallback(
                 onClose={() => setEditMode(false)}
                 persisting={persistingEdit}
               />
+            ) : showCommentsList ? (
+              <CommentsListPanel
+                comments={allComments}
+                currentRoute={currentRoute}
+                activeId={activePinId}
+                onSelect={goToComment}
+                onClose={() => setShowCommentsList(false)}
+              />
             ) : (
             <>
             {/* Chat header */}
@@ -2921,6 +2986,21 @@ const persistProjectPreferences = useCallback(
                       {comments.length > 0 && (
                         <span className={`absolute -top-1.5 -right-1.5 min-w-[17px] h-[17px] px-1 rounded-full text-[10px] font-semibold flex items-center justify-center ring-2 ring-white ${commentMode ? 'bg-white text-[#DE7356]' : 'bg-[#DE7356] text-white'}`}>{comments.length}</span>
                       )}
+                    </button>
+                  )}
+
+                  {/* Show all comments in a left-pane list */}
+                  {commentMode && previewUrl && (
+                    <button
+                      onClick={() => setShowCommentsList((v) => !v)}
+                      title="List all comments across the site"
+                      aria-label="List all comments"
+                      aria-pressed={showCommentsList}
+                      className={`h-9 w-9 flex items-center justify-center rounded-lg border transition-colors ${
+                        showCommentsList ? 'bg-[#DE7356] text-white border-[#DE7356]' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
+                      }`}
+                    >
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="8" y1="6" x2="21" y2="6" /><line x1="8" y1="12" x2="21" y2="12" /><line x1="8" y1="18" x2="21" y2="18" /><line x1="3" y1="6" x2="3.01" y2="6" /><line x1="3" y1="12" x2="3.01" y2="12" /><line x1="3" y1="18" x2="3.01" y2="18" /></svg>
                     </button>
                   )}
 
