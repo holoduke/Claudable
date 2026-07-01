@@ -37,6 +37,23 @@ import {
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? '';
 
+/** Named device presets for the preview device selector (portrait dimensions). */
+type DevicePreset = { id: string; name: string; w?: number; h?: number; desktop?: boolean };
+const DEVICE_PRESETS: DevicePreset[] = [
+  { id: 'desktop', name: 'Responsive · Desktop', desktop: true },
+  { id: 'iphone-se', name: 'iPhone SE', w: 375, h: 667 },
+  { id: 'iphone-14', name: 'iPhone 14 / 15', w: 390, h: 844 },
+  { id: 'iphone-15-pro-max', name: 'iPhone 15 Pro Max', w: 430, h: 932 },
+  { id: 'pixel-7', name: 'Pixel 7', w: 412, h: 915 },
+  { id: 'galaxy-s20', name: 'Samsung Galaxy S20', w: 360, h: 800 },
+  { id: 'galaxy-fold', name: 'Galaxy Z Fold', w: 344, h: 882 },
+  { id: 'ipad-mini', name: 'iPad Mini', w: 768, h: 1024 },
+  { id: 'ipad-air', name: 'iPad Air', w: 820, h: 1180 },
+  { id: 'ipad-pro-11', name: 'iPad Pro 11"', w: 834, h: 1194 },
+  { id: 'ipad-pro-129', name: 'iPad Pro 12.9"', w: 1024, h: 1366 },
+  { id: 'surface-pro', name: 'Surface Pro', w: 912, h: 1368 },
+];
+
 /** Human relative time, e.g. "just now", "5 minutes ago", "2 hours ago", "3 days ago". */
 const assistantBrandColors = ACTIVE_CLI_BRAND_COLORS;
 
@@ -259,8 +276,11 @@ export default function ChatPage() {
   const [pinPositions, setPinPositions] = useState<Record<string, { x: number | null; y: number | null }>>({});
   const [activePinId, setActivePinId] = useState<string | null>(null);
   const [composeAnchor, setComposeAnchor] = useState<ComposeAnchor | null>(null);
-  const [deviceMode, setDeviceMode] = useState<'desktop'|'tablet'|'mobile'>('desktop');
+  const [deviceId, setDeviceId] = useState<string>('desktop');
   const [orientation, setOrientation] = useState<'portrait'|'landscape'>('portrait');
+  const [deviceScale, setDeviceScale] = useState(1);
+  const [deviceMenuOpen, setDeviceMenuOpen] = useState(false);
+  const deviceViewportRef = useRef<HTMLDivElement>(null);
   const [showGlobalSettings, setShowGlobalSettings] = useState(false);
   const [uploadedImages, setUploadedImages] = useState<{name: string; url: string; base64?: string; path?: string}[]>([]);
   const [isInitializing, setIsInitializing] = useState(true);
@@ -1197,6 +1217,29 @@ const persistProjectPreferences = useCallback(
     setActivePinId(null); setComposeAnchor(null);
     await loadComments(currentRoute || '/');
   }, [projectId, currentRoute, loadComments]);
+
+  // --- Device frame fit-scaling: keep any device frame inside the pane ---
+  const currentDevice = DEVICE_PRESETS.find((d) => d.id === deviceId) ?? DEVICE_PRESETS[0];
+  const deviceDims = currentDevice.desktop
+    ? null
+    : orientation === 'landscape'
+      ? { w: currentDevice.h!, h: currentDevice.w! }
+      : { w: currentDevice.w!, h: currentDevice.h! };
+  const ddW = deviceDims?.w ?? 0;
+  const ddH = deviceDims?.h ?? 0;
+  useEffect(() => {
+    const el = deviceViewportRef.current;
+    if (!el || !ddW || !ddH) { setDeviceScale(1); return; }
+    const compute = () => {
+      const pad = 32; // breathing room around the frame
+      const s = Math.min(1, (el.clientWidth - pad) / ddW, (el.clientHeight - pad) / ddH);
+      setDeviceScale(s > 0 ? s : 1);
+    };
+    compute();
+    const ro = new ResizeObserver(compute);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [ddW, ddH]);
 
   // Keep-warm heartbeat: while a preview is open, ping its status every few
   // minutes so the server-side idle sweep doesn't evict an actively-viewed
@@ -2851,54 +2894,47 @@ const persistProjectPreferences = useCallback(
                           Preview
                         </button>
 
-                        {/* Device Mode Toggle */}
-                        <div className="h-9 flex items-center gap-1 bg-gray-100 rounded-lg px-1 border border-gray-200 ">
-                          <button
-                            aria-label="Desktop preview"
-                            className={`h-7 w-7 flex items-center justify-center rounded transition-colors ${
-                              deviceMode === 'desktop' 
-                                ? 'text-blue-600 bg-blue-50 ' 
-                                : 'text-gray-400 hover:text-gray-600 '
-                            }`}
-                            onClick={() => setDeviceMode('desktop')}
-                          >
-                            <FaDesktop size={14} />
-                          </button>
-                          <button
-                            aria-label="Tablet preview"
-                            className={`h-7 w-7 flex items-center justify-center rounded transition-colors ${
-                              deviceMode === 'tablet'
-                                ? 'text-blue-600 bg-blue-50 '
-                                : 'text-gray-400 hover:text-gray-600 '
-                            }`}
-                            onClick={() => setDeviceMode('tablet')}
-                            title="Tablet"
-                          >
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="4" y="2" width="16" height="20" rx="2" /><line x1="12" y1="18" x2="12" y2="18" /></svg>
-                          </button>
-                          <button
-                            aria-label="Mobile preview"
-                            className={`h-7 w-7 flex items-center justify-center rounded transition-colors ${
-                              deviceMode === 'mobile'
-                                ? 'text-blue-600 bg-blue-50 '
-                                : 'text-gray-400 hover:text-gray-600 '
-                            }`}
-                            onClick={() => setDeviceMode('mobile')}
-                            title="Phone"
-                          >
-                            <FaMobileAlt size={14} />
-                          </button>
-                          {deviceMode !== 'desktop' && (
-                            <>
-                              <div className="w-px h-4 bg-gray-300 mx-0.5" />
+                        {/* Device selector dropdown */}
+                        <div className="relative">
+                          <div className="h-9 flex items-center bg-gray-100 rounded-lg border border-gray-200">
+                            <button
+                              onClick={() => setDeviceMenuOpen((v) => !v)}
+                              className="h-full flex items-center gap-2 px-2.5 text-sm text-gray-700 hover:text-gray-900 rounded-l-lg"
+                              title="Choose a device"
+                            >
+                              {currentDevice.desktop ? <FaDesktop size={13} /> : <FaMobileAlt size={13} />}
+                              <span className="max-w-[130px] truncate">{currentDevice.name}</span>
+                              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9" /></svg>
+                            </button>
+                            {!currentDevice.desktop && (
                               <button
                                 aria-label="Rotate orientation"
-                                className="h-7 w-7 flex items-center justify-center rounded text-gray-400 hover:text-gray-600 transition-colors"
                                 onClick={() => setOrientation((o) => (o === 'portrait' ? 'landscape' : 'portrait'))}
                                 title={orientation === 'portrait' ? 'Rotate to landscape' : 'Rotate to portrait'}
+                                className="h-7 w-7 mr-0.5 flex items-center justify-center rounded text-gray-400 hover:text-gray-700 hover:bg-white transition-colors border-l border-gray-200"
                               >
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2 12a10 10 0 0 1 10-10c2.76 0 5.26 1.12 7.07 2.93M22 12a10 10 0 0 1-10 10c-2.76 0-5.26-1.12-7.07-2.93" /><polyline points="19 2 19 5 16 5" /><polyline points="5 22 5 19 8 19" /></svg>
+                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2 12a10 10 0 0 1 10-10c2.76 0 5.26 1.12 7.07 2.93M22 12a10 10 0 0 1-10 10c-2.76 0-5.26-1.12-7.07-2.93" /><polyline points="19 2 19 5 16 5" /><polyline points="5 22 5 19 8 19" /></svg>
                               </button>
+                            )}
+                          </div>
+                          {deviceMenuOpen && (
+                            <>
+                              <div className="fixed inset-0 z-40" onClick={() => setDeviceMenuOpen(false)} />
+                              <div className="absolute left-0 top-full mt-1 z-50 w-56 max-h-80 overflow-y-auto bg-white rounded-lg shadow-xl border border-gray-200 py-1">
+                                {DEVICE_PRESETS.map((d) => (
+                                  <button
+                                    key={d.id}
+                                    onClick={() => { setDeviceId(d.id); setDeviceMenuOpen(false); }}
+                                    className={`w-full flex items-center justify-between gap-2 px-3 py-1.5 text-sm text-left hover:bg-gray-50 ${d.id === deviceId ? 'text-[#DE7356] font-medium' : 'text-gray-700'}`}
+                                  >
+                                    <span className="flex items-center gap-2 min-w-0">
+                                      {d.desktop ? <FaDesktop size={12} className="shrink-0 text-gray-400" /> : <FaMobileAlt size={12} className="shrink-0 text-gray-400" />}
+                                      <span className="truncate">{d.name}</span>
+                                    </span>
+                                    {!d.desktop && <span className="text-[11px] text-gray-400 shrink-0">{d.w}×{d.h}</span>}
+                                  </button>
+                                ))}
+                              </div>
                             </>
                           )}
                         </div>
@@ -2982,20 +3018,17 @@ const persistProjectPreferences = useCallback(
                     style={{ height: '100%' }}
                   >
                 {previewUrl ? (
-                  <div className="relative w-full h-full bg-gray-100 flex items-center justify-center overflow-auto p-2">
+                  <div ref={deviceViewportRef} className="relative w-full h-full bg-gray-100 flex items-center justify-center overflow-hidden">
                     <div
                       className={`relative bg-white overflow-hidden shrink-0 ${
-                        deviceMode === 'desktop'
+                        !deviceDims
                           ? 'w-full h-full'
-                          : `border-gray-800 shadow-2xl ${deviceMode === 'mobile' ? 'rounded-[28px] border-8' : 'rounded-[18px] border-[12px]'}`
+                          : `border-gray-800 shadow-2xl ${(currentDevice.w ?? 0) < 500 ? 'rounded-[28px] border-8' : 'rounded-[18px] border-[12px]'}`
                       }`}
                       style={
-                        deviceMode === 'desktop'
+                        !deviceDims
                           ? undefined
-                          : (() => {
-                              const [w, h] = deviceMode === 'mobile' ? [375, 667] : [768, 1024];
-                              return orientation === 'landscape' ? { width: h, height: w } : { width: w, height: h };
-                            })()
+                          : { width: ddW, height: ddH, transform: deviceScale < 1 ? `scale(${deviceScale})` : undefined, transformOrigin: 'center' }
                       }
                     >
                       <iframe
