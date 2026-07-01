@@ -6,6 +6,7 @@ import { getProjectService, upsertProjectServiceConnection, updateProjectService
 import { ensureGitRepository, ensureGitConfig, initializeMainBranch, addOrUpdateRemote, commitAll, pushToRemote } from '@/lib/services/git';
 import { getGitProviderConfig, getEnvGitToken } from '@/lib/services/git-provider';
 import { injectDeployScaffolding } from '@/lib/services/scaffold-deploy';
+import { getDatabaseUrl } from '@/lib/services/database';
 import type { GitHubUserInfo, CreateRepoOptions, GitHubRepositoryInfo } from '@/types/shared';
 
 class GitHubError extends Error {
@@ -273,6 +274,20 @@ export async function pushProjectToGitHub(projectId: string): Promise<boolean> {
     if (!committed) {
       console.log('[GitService] No changes to commit before push');
       return false;
+    }
+
+    // If a Postgres was provisioned, sync its DATABASE_URL as a repo Action secret
+    // so the deploy workflow injects it into the deployed app's runtime env.
+    try {
+      const dbUrl = await getDatabaseUrl(projectId);
+      if (dbUrl) {
+        await githubFetch(token, `/repos/${data.owner}/${repoName}/actions/secrets/DATABASE_URL`, {
+          method: 'PUT',
+          body: JSON.stringify({ data: dbUrl }),
+        });
+      }
+    } catch (e) {
+      console.warn('[GitService] Could not sync DATABASE_URL secret:', e instanceof Error ? e.message : e);
     }
 
     // Basic-auth the push with the token. The username must be the token-owning

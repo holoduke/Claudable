@@ -143,6 +143,7 @@ jobs:
       - name: Build, deploy and route ${site}
         env:
           DEPLOY_TOKEN: \${{ secrets.DEPLOY_TOKEN }}
+          DATABASE_URL: \${{ secrets.DATABASE_URL }}
         run: |
           set -euo pipefail
           APP=${site}
@@ -184,6 +185,14 @@ jobs:
           # compose env_file / volume mounts don't fail on a first deploy.
           touch "$DIR/.env"
           mkdir -p "$DIR/data"
+
+          # Inject the managed DATABASE_URL (from the repo secret) into the runtime
+          # .env so a Claudable-provisioned Postgres is available to the deployed app.
+          if [ -n "\${DATABASE_URL:-}" ]; then
+            grep -v '^DATABASE_URL=' "$DIR/.env" > "$DIR/.env.next" 2>/dev/null || true
+            echo "DATABASE_URL=$DATABASE_URL" >> "$DIR/.env.next"
+            mv "$DIR/.env.next" "$DIR/.env"
+          fi
 
           # --force-recreate guarantees the freshly-built image actually runs
           # (a plain 'up -d' keeps the old container, so new code never goes
