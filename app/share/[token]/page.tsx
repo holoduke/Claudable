@@ -23,6 +23,10 @@ export default function SharePage({ params }: { params: Promise<{ token: string 
   const paneRef = useRef<HTMLDivElement>(null);
   const routeRef = useRef('/');
   routeRef.current = route;
+  const commentsRef = useRef<CommentPin[]>([]);
+  commentsRef.current = comments;
+  const activeIdRef = useRef<string | null>(null);
+  activeIdRef.current = activeId;
 
   // Restore a previously entered guest name.
   useEffect(() => {
@@ -75,6 +79,11 @@ export default function SharePage({ params }: { params: Promise<{ token: string 
       if (e.origin !== origin) return;
       const d = e.data as any;
       if (d?.source === 'claudable-preview' && typeof d.path === 'string') {
+        // The plugin posts its route on (re)init — this is our "iframe is ready"
+        // handshake. Re-arm comment mode + re-draw pins now that its listener
+        // exists; the single enter() on mount races the iframe load and is lost.
+        post({ type: 'enter' });
+        post({ type: 'renderPins', activeId: activeIdRef.current, pins: commentsRef.current.map((c) => ({ id: c.id, index: c.index, anchorSelector: c.anchorSelector, relX: c.relX, relY: c.relY, resolved: c.resolved })) });
         setRoute(d.path.startsWith('/') ? d.path : `/${d.path}`);
       } else if (d?.source === 'claudable-comments') {
         if (d.type === 'placed') { setActiveId(null); setCompose({ anchorSelector: d.anchorSelector, relX: d.relX, relY: d.relY, x: d.x, y: d.y }); }
@@ -84,7 +93,7 @@ export default function SharePage({ params }: { params: Promise<{ token: string 
     };
     window.addEventListener('message', onMsg);
     return () => window.removeEventListener('message', onMsg);
-  }, [info?.previewUrl, nameConfirmed]);
+  }, [info?.previewUrl, nameConfirmed, post]);
 
   // Enter comment mode once ready.
   useEffect(() => { if (info?.previewUrl && nameConfirmed) post({ type: 'enter' }); }, [info?.previewUrl, nameConfirmed, post]);
