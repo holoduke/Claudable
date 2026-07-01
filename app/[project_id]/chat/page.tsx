@@ -259,7 +259,8 @@ export default function ChatPage() {
   const [pinPositions, setPinPositions] = useState<Record<string, { x: number | null; y: number | null }>>({});
   const [activePinId, setActivePinId] = useState<string | null>(null);
   const [composeAnchor, setComposeAnchor] = useState<ComposeAnchor | null>(null);
-  const [deviceMode, setDeviceMode] = useState<'desktop'|'mobile'>('desktop');
+  const [deviceMode, setDeviceMode] = useState<'desktop'|'tablet'|'mobile'>('desktop');
+  const [orientation, setOrientation] = useState<'portrait'|'landscape'>('portrait');
   const [showGlobalSettings, setShowGlobalSettings] = useState(false);
   const [uploadedImages, setUploadedImages] = useState<{name: string; url: string; base64?: string; path?: string}[]>([]);
   const [isInitializing, setIsInitializing] = useState(true);
@@ -2864,16 +2865,42 @@ const persistProjectPreferences = useCallback(
                             <FaDesktop size={14} />
                           </button>
                           <button
+                            aria-label="Tablet preview"
+                            className={`h-7 w-7 flex items-center justify-center rounded transition-colors ${
+                              deviceMode === 'tablet'
+                                ? 'text-blue-600 bg-blue-50 '
+                                : 'text-gray-400 hover:text-gray-600 '
+                            }`}
+                            onClick={() => setDeviceMode('tablet')}
+                            title="Tablet"
+                          >
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="4" y="2" width="16" height="20" rx="2" /><line x1="12" y1="18" x2="12" y2="18" /></svg>
+                          </button>
+                          <button
                             aria-label="Mobile preview"
                             className={`h-7 w-7 flex items-center justify-center rounded transition-colors ${
-                              deviceMode === 'mobile' 
-                                ? 'text-blue-600 bg-blue-50 ' 
+                              deviceMode === 'mobile'
+                                ? 'text-blue-600 bg-blue-50 '
                                 : 'text-gray-400 hover:text-gray-600 '
                             }`}
                             onClick={() => setDeviceMode('mobile')}
+                            title="Phone"
                           >
                             <FaMobileAlt size={14} />
                           </button>
+                          {deviceMode !== 'desktop' && (
+                            <>
+                              <div className="w-px h-4 bg-gray-300 mx-0.5" />
+                              <button
+                                aria-label="Rotate orientation"
+                                className="h-7 w-7 flex items-center justify-center rounded text-gray-400 hover:text-gray-600 transition-colors"
+                                onClick={() => setOrientation((o) => (o === 'portrait' ? 'landscape' : 'portrait'))}
+                                title={orientation === 'portrait' ? 'Rotate to landscape' : 'Rotate to portrait'}
+                              >
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2 12a10 10 0 0 1 10-10c2.76 0 5.26 1.12 7.07 2.93M22 12a10 10 0 0 1-10 10c-2.76 0-5.26-1.12-7.07-2.93" /><polyline points="19 2 19 5 16 5" /><polyline points="5 22 5 19 8 19" /></svg>
+                              </button>
+                            </>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -2955,13 +2982,21 @@ const persistProjectPreferences = useCallback(
                     style={{ height: '100%' }}
                   >
                 {previewUrl ? (
-                  <div className="relative w-full h-full bg-gray-100 flex items-center justify-center">
+                  <div className="relative w-full h-full bg-gray-100 flex items-center justify-center overflow-auto p-2">
                     <div
-                      className={`relative bg-white ${
-                        deviceMode === 'mobile'
-                          ? 'w-[375px] h-[667px] rounded-[25px] border-8 border-gray-800 shadow-2xl'
-                          : 'w-full h-full'
-                      } overflow-hidden`}
+                      className={`relative bg-white overflow-hidden shrink-0 ${
+                        deviceMode === 'desktop'
+                          ? 'w-full h-full'
+                          : `border-gray-800 shadow-2xl ${deviceMode === 'mobile' ? 'rounded-[28px] border-8' : 'rounded-[18px] border-[12px]'}`
+                      }`}
+                      style={
+                        deviceMode === 'desktop'
+                          ? undefined
+                          : (() => {
+                              const [w, h] = deviceMode === 'mobile' ? [375, 667] : [768, 1024];
+                              return orientation === 'landscape' ? { width: h, height: w } : { width: w, height: h };
+                            })()
+                      }
                     >
                       <iframe
                         ref={iframeRef}
