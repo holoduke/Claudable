@@ -280,7 +280,11 @@ export default function ChatPage() {
   const [orientation, setOrientation] = useState<'portrait'|'landscape'>('portrait');
   const [deviceScale, setDeviceScale] = useState(1);
   const [deviceMenuOpen, setDeviceMenuOpen] = useState(false);
+  const [deviceViewport, setDeviceViewport] = useState<{ w: number; h: number }>({ w: 0, h: 0 });
   const deviceViewportRef = useRef<HTMLDivElement>(null);
+  // Always points at the latest runAct closure (used by persistEdits).
+  const runActRef = useRef<((m?: string, i?: any[]) => Promise<void>) | null>(null);
+  const currentRouteRef = useRef<string>('/');
   const [showGlobalSettings, setShowGlobalSettings] = useState(false);
   const [uploadedImages, setUploadedImages] = useState<{name: string; url: string; base64?: string; path?: string}[]>([]);
   const [isInitializing, setIsInitializing] = useState(true);
@@ -1123,14 +1127,15 @@ const persistProjectPreferences = useCallback(
     ].filter(Boolean).join('\n');
     setPersistingEdit(true);
     try {
-      await runAct(instruction, []);
+      // Always call the LATEST runAct (a fresh closure each render) via a ref, so
+      // the persisted edit uses the current model/mode — not a stale captured one.
+      await runActRef.current?.(instruction, []);
       setStyleEdits({});
       setTextEdit(null);
       setEditMode(false);
     } finally {
       setPersistingEdit(false);
     }
-    // runAct is a hoisted, stable function declaration — intentionally not a dep.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedEl, styleEdits, textEdit]);
 
@@ -1144,14 +1149,14 @@ const persistProjectPreferences = useCallback(
     try {
       const r = await fetch(`${API_BASE}/api/projects/${projectId}/comments?route=${encodeURIComponent(route)}`);
       const j = await r.json();
-      if (j.success) setComments((j.data as any[]).map((c, i) => ({ ...c, index: i + 1, route })));
+      if (j.success) setComments((j.data as any[]).map((c, i) => ({ ...c, index: i + 1 })));
     } catch { /* ignore */ }
   }, [projectId]);
 
   // Enter/exit comment mode (mutually exclusive with edit mode).
   useEffect(() => {
     postComments({ type: commentMode ? 'enter' : 'exit' });
-    if (commentMode) { setEditMode(false); loadComments(currentRoute || '/'); }
+    if (commentMode) { setEditMode(false); loadComments(currentRouteRef.current || '/'); }
     else { setComposeAnchor(null); setActivePinId(null); }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [commentMode, postComments]);
@@ -1159,7 +1164,8 @@ const persistProjectPreferences = useCallback(
   // Reload the pin set when the previewed route changes while commenting.
   useEffect(() => {
     if (!commentMode) return;
-    setActivePinId(null); setComposeAnchor(null);
+    // Clear stale pins/positions so the old route's dots don't flash on the new page.
+    setActivePinId(null); setComposeAnchor(null); setComments([]); setPinPositions({});
     loadComments(currentRoute || '/');
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentRoute]);
@@ -1228,18 +1234,42 @@ const persistProjectPreferences = useCallback(
   const ddW = deviceDims?.w ?? 0;
   const ddH = deviceDims?.h ?? 0;
   useEffect(() => {
+    // Re-run on previewUrl change: the observed element only mounts once the
+    // preview is up, so without previewUrl in deps the observer would never attach.
     const el = deviceViewportRef.current;
-    if (!el || !ddW || !ddH) { setDeviceScale(1); return; }
+    if (!el) return;
     const compute = () => {
+      const w = el.clientWidth, h = el.clientHeight;
+      setDeviceViewport({ w, h });
+      if (!ddW || !ddH) { setDeviceScale(1); return; }
       const pad = 32; // breathing room around the frame
-      const s = Math.min(1, (el.clientWidth - pad) / ddW, (el.clientHeight - pad) / ddH);
+      const s = Math.min(1, (w - pad) / ddW, (h - pad) / ddH);
       setDeviceScale(s > 0 ? s : 1);
     };
     compute();
     const ro = new ResizeObserver(compute);
     ro.observe(el);
     return () => ro.disconnect();
-  }, [ddW, ddH]);
+  }, [ddW, ddH, previewUrl]);
+
+  // Convert iframe-space pin coords to CONTAINER (screen) coords, accounting for
+  // the centered, scaled device frame. This lets the comment popovers live OUTSIDE
+  // the scaled frame (so they render full-size and aren't clipped) while staying
+  // aligned with the pin dots inside the iframe.
+  const toScreen = useCallback((x: number, y: number) => {
+    if (!ddW || !ddH) return { x, y }; // desktop: iframe fills the container 1:1
+    const frameLeft = deviceViewport.w / 2 - (ddW * deviceScale) / 2;
+    const frameTop = deviceViewport.h / 2 - (ddH * deviceScale) / 2;
+    return { x: frameLeft + x * deviceScale, y: frameTop + y * deviceScale };
+  }, [ddW, ddH, deviceViewport.w, deviceViewport.h, deviceScale]);
+  const screenPinPositions = useMemo(() => {
+    const out: Record<string, { x: number | null; y: number | null }> = {};
+    for (const [id, p] of Object.entries(pinPositions)) {
+      out[id] = p.x == null || p.y == null ? { x: null, y: null } : toScreen(p.x, p.y);
+    }
+    return out;
+  }, [pinPositions, toScreen]);
+  const screenCompose = useMemo(() => (composeAnchor ? { ...composeAnchor, ...toScreen(composeAnchor.x, composeAnchor.y) } : null), [composeAnchor, toScreen]);
 
   // Keep-warm heartbeat: while a preview is open, ping its status every few
   // minutes so the server-side idle sweep doesn't evict an actively-viewed
@@ -2059,6 +2089,8 @@ const persistProjectPreferences = useCallback(
     });
   };
 
+  runActRef.current = (m, i) => runAct(m, i);
+  currentRouteRef.current = currentRoute;
   async function runAct(messageOverride?: string, externalImages?: any[]) {
     let finalMessage = messageOverride || prompt;
     const imagesToUse = externalImages || uploadedImages;
@@ -2866,7 +2898,7 @@ const persistProjectPreferences = useCallback(
                         <button 
                           className="h-9 w-9 flex items-center justify-center bg-gray-100 text-gray-600 hover:text-gray-900 hover:bg-gray-200 rounded-lg transition-colors"
                           onClick={() => {
-                            const iframe = document.querySelector('iframe');
+                            const iframe = iframeRef.current;
                             if (iframe) {
                               iframe.src = iframe.src;
                             }
@@ -3047,21 +3079,6 @@ const persistProjectPreferences = useCallback(
                         }}
                       />
 
-                      {/* Comment pins overlay (dots render inside the iframe; threads here) */}
-                      {commentMode && (
-                        <CommentsLayer
-                          comments={comments}
-                          positions={pinPositions}
-                          activeId={activePinId}
-                          compose={composeAnchor}
-                          onSubmitNew={submitNewComment}
-                          onCancelCompose={() => setComposeAnchor(null)}
-                          onResolve={resolveCommentById}
-                          onDelete={deleteCommentById}
-                          onCloseThread={() => setActivePinId(null)}
-                        />
-                      )}
-
                       {/* Error overlay */}
                     <div 
                       id="iframe-error-overlay"
@@ -3079,7 +3096,7 @@ const persistProjectPreferences = useCallback(
                         <button
                           className="flex items-center gap-2 mx-auto px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg transition-colors"
                           onClick={() => {
-                            const iframe = document.querySelector('iframe');
+                            const iframe = iframeRef.current;
                             if (iframe) {
                               iframe.src = iframe.src;
                             }
@@ -3096,6 +3113,23 @@ const persistProjectPreferences = useCallback(
                       </div>
                     </div>
                     </div>
+
+                    {/* Comment threads/compose — OUTSIDE the scaled frame so they
+                        render full-size & unclipped; pins still render in the iframe. */}
+                    {commentMode && (
+                      <CommentsLayer
+                        comments={comments}
+                        positions={screenPinPositions}
+                        activeId={activePinId}
+                        compose={screenCompose}
+                        viewport={deviceViewport}
+                        onSubmitNew={submitNewComment}
+                        onCancelCompose={() => setComposeAnchor(null)}
+                        onResolve={resolveCommentById}
+                        onDelete={deleteCommentById}
+                        onCloseThread={() => setActivePinId(null)}
+                      />
+                    )}
                   </div>
                 ) : (
                   <div className="h-full w-full flex items-center justify-center bg-gray-50 relative">

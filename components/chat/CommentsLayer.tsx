@@ -28,11 +28,19 @@ interface CommentsLayerProps {
   positions: Record<string, { x: number | null; y: number | null }>;
   activeId: string | null;
   compose: ComposeAnchor | null;
+  viewport: { w: number; h: number };
   onSubmitNew: (body: string) => void;
   onCancelCompose: () => void;
   onResolve: (id: string, resolved: boolean) => void;
   onDelete: (id: string) => void;
   onCloseThread: () => void;
+}
+
+/** Keep a popover of size (w,h) fully inside the viewport, anchored near (x,y). */
+function clampPopover(x: number, y: number, w: number, h: number, vw: number, vh: number) {
+  const left = Math.max(8, Math.min(x - 12, (vw || w) - w - 8));
+  const top = Math.max(8, Math.min(y + 8, (vh || h) - h - 8));
+  return { left, top };
 }
 
 function timeAgo(iso: string): string {
@@ -56,7 +64,7 @@ function Avatar({ name, image }: { name: string; image: string | null }) {
 
 /** Absolute overlay sized to the iframe; pin coords are iframe-viewport coords. */
 export default function CommentsLayer({
-  comments, positions, activeId, compose, onSubmitNew, onCancelCompose, onResolve, onDelete, onCloseThread,
+  comments, positions, activeId, compose, viewport, onSubmitNew, onCancelCompose, onResolve, onDelete, onCloseThread,
 }: CommentsLayerProps) {
   const [draft, setDraft] = useState('');
   const composeRef = useRef<HTMLTextAreaElement>(null);
@@ -72,7 +80,7 @@ export default function CommentsLayer({
       {compose && (
         <div
           className="absolute pointer-events-auto w-64 bg-white rounded-lg shadow-xl border border-gray-200 p-2"
-          style={{ left: Math.min(compose.x, 9999), top: compose.y + 8, transform: 'translateX(-12px)' }}
+          style={clampPopover(compose.x, compose.y, 256, 130, viewport.w, viewport.h)}
         >
           <textarea
             ref={composeRef}
@@ -100,7 +108,7 @@ export default function CommentsLayer({
       {active && activePos && activePos.x !== null && activePos.y !== null && (
         <div
           className="absolute pointer-events-auto w-72 bg-white rounded-lg shadow-xl border border-gray-200"
-          style={{ left: activePos.x, top: activePos.y + 8, transform: 'translateX(-12px)' }}
+          style={clampPopover(activePos.x, activePos.y, 288, 150, viewport.w, viewport.h)}
         >
           <div className="flex items-start gap-2 p-3">
             <Avatar name={active.authorName} image={active.authorImage} />

@@ -32,6 +32,9 @@ async function clearAllPreviewState(): Promise<void> {
 // PROJECT (not the port), a port getting reused by another project can never make
 // one project's preview show another's — the definitive fix for the port-reuse leak.
 const PREVIEW_ROUTE_PREFIX = 'preview-';
+// Marker on the first line of every route file we manage, so the boot sweep never
+// deletes a non-Claudable file that happens to be named preview-*.yml.
+const PREVIEW_ROUTE_MARKER = '# claudable-managed-preview';
 
 function previewRouteDir(): string | null {
   const d = process.env.TRAEFIK_DYNAMIC_DIR?.trim();
@@ -49,10 +52,13 @@ function hashSlug(s: string): string {
   return h.toString(36);
 }
 
-/** projectId → a valid DNS label ('preview-' + slug must stay <= 63 chars). */
+/** projectId → a valid DNS label ('preview-' + slug must stay <= 63 chars).
+ * If sanitizing changed the id (two ids could collide) or it's too long, append a
+ * hash of the raw id so distinct projects never share a route file. */
 function previewSlug(projectId: string): string {
   const s = projectId.toLowerCase().replace(/[^a-z0-9-]/gu, '-').replace(/-+/gu, '-').replace(/^-|-$/gu, '');
-  return s.length <= 55 ? s : `${s.slice(0, 46)}-${hashSlug(projectId)}`;
+  const needsHash = s !== projectId.toLowerCase() || s.length > 55;
+  return needsHash ? `${s.slice(0, 46).replace(/-$/u, '')}-${hashSlug(projectId)}` : s;
 }
 
 function previewUrlFor(projectId: string, port: number): string {
@@ -74,7 +80,8 @@ async function writePreviewRoute(projectId: string, port: number): Promise<void>
   try { host = new URL(previewUrlFor(projectId, port)).host; } catch { return; }
   const gw = process.env.DEPLOY_HOST_GATEWAY || 'host.docker.internal';
   const name = `${PREVIEW_ROUTE_PREFIX}${previewSlug(projectId)}`;
-  const yaml = `# Auto-managed by Claudable (preview). Per-project route so a reused port can't cross projects.
+  const yaml = `${PREVIEW_ROUTE_MARKER}
+# Per-project route so a reused port can't cross projects.
 http:
   routers:
     ${name}:
@@ -97,7 +104,9 @@ async function removePreviewRoute(projectId: string): Promise<void> {
   await fs.unlink(previewRouteFile(projectId)).catch(() => {});
 }
 
-/** On boot, remove all stale per-project preview routes (their dev servers are dead). */
+/** On boot, remove stale per-project preview routes (their dev servers are dead).
+ * Only deletes files that carry OUR marker — never a legit app route that happens
+ * to be named preview-*.yml in the shared proxy dir. */
 async function sweepPreviewRoutes(): Promise<void> {
   const dir = previewRouteDir();
   if (!dir) return;
@@ -105,7 +114,11 @@ async function sweepPreviewRoutes(): Promise<void> {
   await Promise.all(
     files
       .filter((f) => f.startsWith(PREVIEW_ROUTE_PREFIX) && f.endsWith('.yml'))
-      .map((f) => fs.unlink(path.join(dir, f)).catch(() => {})),
+      .map(async (f) => {
+        const p = path.join(dir, f);
+        const content = await fs.readFile(p, 'utf8').catch(() => '');
+        if (content.startsWith(PREVIEW_ROUTE_MARKER)) await fs.unlink(p).catch(() => {});
+      }),
   );
 }
 import { scaffoldForStack } from '@/lib/utils/scaffold-dispatch';
@@ -132,6 +145,11 @@ async function ensurePreviewRouteReporter(projectPath: string): Promise<void> {
       .catch(() => false);
     if (!hasNuxtConfig) return;
 
+    // The exact Claudable origin, baked in so the plugin only ever posts to (and
+    // accepts commands from) the real parent — not whatever page frames it.
+    let claudableOrigin = '';
+    try { claudableOrigin = new URL(process.env.NEXT_PUBLIC_APP_URL || process.env.AUTH_URL || '').origin; } catch { claudableOrigin = ''; }
+
     const rel = 'plugins/claudable-preview.client.ts';
     const pluginPath = path.join(projectPath, rel);
     await fs.mkdir(path.dirname(pluginPath), { recursive: true });
@@ -142,10 +160,16 @@ async function ensurePreviewRouteReporter(projectPath: string): Promise<void> {
 // Inert outside the preview iframe; gitignored so it never ships to production.
 export default defineNuxtPlugin(() => {
   if (typeof window === 'undefined' || window.parent === window) return;
-  // Target the embedding (Claudable) origin rather than '*', so nothing is
-  // broadcast to an arbitrary parent if this preview is framed elsewhere.
-  let target = '*';
-  try { if (document.referrer) target = new URL(document.referrer).origin; } catch {}
+  // Known Claudable origin (baked in). Fall back to the referrer/ancestor origin,
+  // then '*' only as a last resort. Used to scope BOTH outgoing posts and to
+  // validate incoming commands, so a page that frames the preview can't drive it.
+  const CLAUDABLE_ORIGIN = ${JSON.stringify(claudableOrigin)};
+  let target = CLAUDABLE_ORIGIN || '*';
+  try {
+    if (!CLAUDABLE_ORIGIN && document.referrer) target = new URL(document.referrer).origin;
+    if (!CLAUDABLE_ORIGIN && target === '*' && window.location.ancestorOrigins && window.location.ancestorOrigins.length) target = window.location.ancestorOrigins[0];
+  } catch {}
+  const trusted = (ev) => target === '*' || ev.origin === target;
   const post = (msg) => { try { window.parent.postMessage(msg, target); } catch {} };
 
   // --- route reporter: keep the preview URL bar in sync with in-app navigation ---
@@ -241,7 +265,7 @@ export default defineNuxtPlugin(() => {
   };
   window.addEventListener('message', (ev) => {
     const d = ev.data;
-    if (!d || d.source !== 'claudable-editor-cmd') return;
+    if (!trusted(ev) || !d || d.source !== 'claudable-editor-cmd') return;
     if (d.type === 'enter') enter();
     else if (d.type === 'exit') exit();
     else if (d.type === 'applyStyle' && selected) { try { selected.style[d.prop] = d.value; drawBox(selected, selBox); } catch {} }
@@ -272,6 +296,7 @@ export default defineNuxtPlugin(() => {
     return { x: r.left + p.relX * r.width, y: r.top + p.relY * r.height };
   };
   const positionPins = () => {
+    if (!pins.length) return; // nothing to report — don't spam the parent on scroll
     const out = [];
     pins.forEach((p) => {
       const dot = pinEls.get(p.id);
@@ -316,7 +341,7 @@ export default defineNuxtPlugin(() => {
   };
   window.addEventListener('message', (ev) => {
     const d = ev.data;
-    if (!d || d.source !== 'claudable-comments-cmd') return;
+    if (!trusted(ev) || !d || d.source !== 'claudable-comments-cmd') return;
     if (d.type === 'enter') {
       if (!commenting) { commenting = true; document.addEventListener('click', onCommentClick, true); document.documentElement.style.cursor = 'crosshair'; }
     } else if (d.type === 'exit') {
@@ -1197,6 +1222,12 @@ class PreviewManager {
       await this.stop(victim).catch(() => {});
       preferredPort = await findAvailablePort(previewBounds.start, previewBounds.end, this.usedPorts());
     }
+    // Guard the async gap: another concurrent start (different project) may have
+    // reserved this port while findAvailablePort was probing. This check and the
+    // reservation below are synchronous, so nothing can interleave between them.
+    if (this.usedPorts().has(preferredPort)) {
+      throw new Error(`Preview port ${preferredPort} was just claimed by another start; please retry.`);
+    }
     // Reserve immediately (before the async spawn) so it's excluded from any
     // concurrent start until this project's process is registered below. Tracked
     // per-project so start()'s finally always releases it (success or failure).
@@ -1343,7 +1374,11 @@ class PreviewManager {
       // Pre-warm the LE cert in the background: the first HTTPS hit to a new
       // subdomain triggers DNS-01 issuance (~30-60s). Firing it now (non-blocking)
       // means the cert is usually ready by the time the user's browser loads.
-      void fetch(resolvedUrl, { method: 'HEAD', signal: AbortSignal.timeout(90_000) }).catch(() => {});
+      // Manual controller so the timer clears when the fetch settles (no lingering
+      // 90s timer on the common warm-cert path).
+      const warmCtrl = new AbortController();
+      const warmTimer = setTimeout(() => warmCtrl.abort(), 90_000);
+      void fetch(resolvedUrl, { method: 'HEAD', signal: warmCtrl.signal }).catch(() => {}).finally(() => clearTimeout(warmTimer));
     }
 
     // Bind to all interfaces when hosting remotely so the reverse proxy can
@@ -1399,6 +1434,9 @@ class PreviewManager {
     child.on('exit', (code, signal) => {
       previewProcess.status = code === 0 ? 'stopped' : 'error';
       this.processes.delete(projectId);
+      // Withdraw the per-project route — a crash must not leave it pointing at a
+      // now-dead port that another project can reuse (the cross-project leak).
+      void removePreviewRoute(projectId).catch(() => {});
       updateProject(projectId, {
         previewUrl: null,
         previewPort: null,
@@ -1424,6 +1462,7 @@ class PreviewManager {
       if (this.processes.get(projectId) === previewProcess) {
         this.processes.delete(projectId);
       }
+      void removePreviewRoute(projectId).catch(() => {});
       log(Buffer.from(`Preview process failed: ${error.message}`));
     });
 
