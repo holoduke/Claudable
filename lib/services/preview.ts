@@ -1340,6 +1340,10 @@ class PreviewManager {
     // so the stable subdomain always points at THIS project's dev server.
     if (perProjectPreview()) {
       await writePreviewRoute(projectId, effectivePort);
+      // Pre-warm the LE cert in the background: the first HTTPS hit to a new
+      // subdomain triggers DNS-01 issuance (~30-60s). Firing it now (non-blocking)
+      // means the cert is usually ready by the time the user's browser loads.
+      void fetch(resolvedUrl, { method: 'HEAD', signal: AbortSignal.timeout(90_000) }).catch(() => {});
     }
 
     // Bind to all interfaces when hosting remotely so the reverse proxy can
@@ -1423,7 +1427,13 @@ class PreviewManager {
       log(Buffer.from(`Preview process failed: ${error.message}`));
     });
 
-    const ready = await waitForPreviewReady(previewProcess.url, log).catch(
+    // Probe the LOCAL dev server for readiness — never the public URL. In
+    // per-project mode the public URL is a fresh subdomain whose Let's Encrypt
+    // cert issues on first access (DNS-01, ~30-60s); gating readiness on that
+    // made cold starts appear to hang. The dev server is "ready" once it answers
+    // locally; the cert/route warm up in parallel (pre-warmed below).
+    const readinessUrl = `http://127.0.0.1:${effectivePort}`;
+    const ready = await waitForPreviewReady(readinessUrl, log).catch(
       () => false
     );
 
