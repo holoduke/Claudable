@@ -105,19 +105,32 @@ export default function SharePage({ params }: { params: Promise<{ token: string 
     post({ type: 'renderPins', activeId, pins: comments.map((c) => ({ id: c.id, index: c.index, anchorSelector: c.anchorSelector, relX: c.relX, relY: c.relY, resolved: c.resolved })) });
   }, [comments, activeId, nameConfirmed, post]);
 
-  const submitNew = useCallback(async (bodyText: string) => {
-    if (!compose || !info) return;
+  const submitNew = useCallback(async (bodyText: string): Promise<boolean> => {
+    if (!compose || !info) return false;
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 15000);
     try {
       const res = await fetch(`${API_BASE}/api/projects/${info.projectId}/comments`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: ctrl.signal,
         body: JSON.stringify({ route: routeRef.current || '/', anchorSelector: compose.anchorSelector, relX: compose.relX, relY: compose.relY, body: bodyText, shareToken: token, authorName: guestName }),
       });
-      if ((await res.json()).success) { setCompose(null); await loadComments(routeRef.current || '/'); }
-    } catch { /* ignore */ }
+      const j = await res.json().catch(() => null);
+      if (j?.success) { setCompose(null); await loadComments(routeRef.current || '/'); return true; }
+      return false;
+    } catch {
+      return false;
+    } finally {
+      clearTimeout(timer);
+    }
   }, [compose, info, token, guestName, loadComments]);
 
   if (error) return <div className="h-screen flex items-center justify-center text-gray-500">{error}</div>;
-  if (!info) return <div className="h-screen flex items-center justify-center text-gray-400">Loading…</div>;
+  if (!info) return (
+    <div className="h-screen flex flex-col items-center justify-center gap-3 text-gray-400">
+      <svg className="animate-spin text-[#DE7356]" width="26" height="26" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" className="opacity-20" /><path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" strokeWidth="4" strokeLinecap="round" /></svg>
+      <p className="text-sm">Starting the preview… this can take up to a minute on first open.</p>
+    </div>
+  );
 
   if (!nameConfirmed) {
     return (
