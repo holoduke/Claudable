@@ -25,6 +25,40 @@
 </a>
 </p>
 
+---
+
+## 🍴 About this fork
+
+This is a **self-hosted fork** of [opactorai/Claudable](https://github.com/opactorai/Claudable),
+adapted to run entirely on **your own infrastructure** (no Vercel / GitHub / Supabase
+required) and extended into a **multi-user, team review** tool. Everything upstream still
+works; this fork adds:
+
+- **Self-hosting on your own box** — provider-aware Git (self-hosted **Gitea** as well as
+  GitHub), one-click publish + auto-deploy via **Gitea Actions**, and a shared **Traefik**
+  proxy. Each running preview gets a **stable per-project subdomain** with automatic HTTPS
+  (Let's Encrypt DNS-01), isolated so one project's preview can never show another's.
+- **Multi-user** — Google login with an auth gate, per-project access control, and
+  per-user Claude credentials (paste your own `claude setup-token`).
+- **Visual editor** — an *Edit* mode to click elements in the live preview and tweak text
+  & CSS, then apply the change to code through the agent.
+- **Preview comments** — Figma-style pinned, per-route review comments overlaid on the
+  preview (Claudable-only; never touches the app source), with author, resolve & clear-all.
+- **Device preview** — a device selector (iPhone/iPad/Pixel/Surface…) with portrait ⇄
+  landscape and always-fit scaling.
+- **it-ops broker** *(admin-opt-in, per user)* — scoped, audited infrastructure tools the
+  agent can use (Gitea repo/admin, Coolify apps & projects, Traefik routes); AWS/IAM stays
+  propose-only, and credentials never enter the agent's context.
+- **Agent sandboxing** — the agent's environment is scrubbed of Claudable's secrets and
+  guarded from escaping its own project.
+- **Quality-of-life** — a large **design-style catalog** (skills), chunked large-file
+  uploads with progress, and a project dashboard.
+
+Deployment specifics live in `.env.example` and `docker-compose.yml`; no infrastructure
+values or secrets are committed. It tracks upstream and is not intended for merge back.
+
+---
+
 ## What is Claudable?
 
 Claudable is a powerful Next.js-based web app builder that combines **C**laude Code's (Cursor CLI also supported!) advanced AI agent capabilities with **Lovable**'s simple and intuitive app building experience. Just describe your app idea - "I want a task management app with dark mode" - and watch as Claudable instantly generates the code and shows you a live preview of your working app. You can deploy your app to Vercel and integrate database with Supabase for free.
