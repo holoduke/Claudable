@@ -67,6 +67,7 @@ model Project {
   commits               Commit[]
   toolUsages            ToolUsage[]
   userRequests          UserRequest[]
+  comments              Comment[]
   organization          Organization?  @relation(fields: [orgId], references: [id])
   owner                 User?          @relation("OwnedProjects", fields: [ownerId], references: [id], onDelete: SetNull)
   members               ProjectMember[]
@@ -74,6 +75,29 @@ model Project {
 
   @@index([orgId])
   @@map("projects")
+}
+
+/// Review comments pinned to a spot on the previewed site. Claudable-only (never
+/// touches the app source), scoped per route, anchored to an element + offset.
+model Comment {
+  id             String   @id @default(cuid())
+  projectId      String   @map("project_id")
+  route          String
+  anchorSelector String   @map("anchor_selector")
+  relX           Float // 0..1 within the anchor element's box
+  relY           Float
+  body           String
+  resolved       Boolean  @default(false)
+  authorId       String?  @map("author_id")
+  authorName     String?  @map("author_name") // snapshot at create time (survives author deletion)
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  author  User?   @relation(fields: [authorId], references: [id], onDelete: SetNull)
+
+  @@index([projectId, route])
+  @@map("comments")
 }
 
 // ============================================================
@@ -110,6 +134,7 @@ model User {
   ownedProjects Project[]       @relation("OwnedProjects")
   memberships   ProjectMember[]
   claudeCredentials ClaudeCredential[]
+  comments      Comment[]
 
   @@index([orgId])
   @@map("users")

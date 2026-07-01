@@ -249,6 +249,84 @@ export default defineNuxtPlugin(() => {
   });
   window.addEventListener('scroll', () => { if (selected) drawBox(selected, selBox); }, true);
   window.addEventListener('resize', () => { if (selected) drawBox(selected, selBox); });
+
+  // --- comments bridge: pinned review annotations (Claudable-only overlay) -----
+  let commenting = false;
+  let pins = [];
+  const pinEls = new Map();
+  let rafPos = 0;
+  const pinLayer = () => {
+    let l = document.getElementById('__claudable_pins');
+    if (!l) {
+      l = document.createElement('div');
+      l.id = '__claudable_pins';
+      l.style.cssText = 'position:fixed;inset:0;pointer-events:none;z-index:2147483646;';
+      document.body.appendChild(l);
+    }
+    return l;
+  };
+  const anchorPos = (p) => {
+    let el; try { el = document.querySelector(p.anchorSelector); } catch { el = null; }
+    if (!el) return null;
+    const r = el.getBoundingClientRect();
+    return { x: r.left + p.relX * r.width, y: r.top + p.relY * r.height };
+  };
+  const positionPins = () => {
+    const out = [];
+    pins.forEach((p) => {
+      const dot = pinEls.get(p.id);
+      const pos = anchorPos(p);
+      if (dot) {
+        if (pos) { dot.style.display = 'block'; dot.style.left = pos.x + 'px'; dot.style.top = pos.y + 'px'; }
+        else { dot.style.display = 'none'; }
+      }
+      out.push({ id: p.id, x: pos ? pos.x : null, y: pos ? pos.y : null });
+    });
+    post({ source: 'claudable-comments', type: 'pinPositions', positions: out });
+  };
+  const schedulePos = () => { if (rafPos) return; rafPos = requestAnimationFrame(() => { rafPos = 0; positionPins(); }); };
+  const renderPins = (list, activeId) => {
+    pins = list || [];
+    const layer = pinLayer();
+    for (const [id, el] of pinEls) { if (!pins.find((p) => p.id === id)) { el.remove(); pinEls.delete(id); } }
+    pins.forEach((p) => {
+      let dot = pinEls.get(p.id);
+      if (!dot) {
+        dot = document.createElement('div');
+        dot.style.cssText = 'position:fixed;width:24px;height:24px;margin:-24px 0 0 0;border-radius:50% 50% 50% 2px;background:#DE7356;color:#fff;font:600 12px/22px system-ui;text-align:center;cursor:pointer;pointer-events:auto;box-shadow:0 2px 6px rgba(0,0,0,.35);border:2px solid #fff;';
+        dot.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); post({ source: 'claudable-comments', type: 'pinClicked', id: p.id }); });
+        layer.appendChild(dot);
+        pinEls.set(p.id, dot);
+      }
+      dot.textContent = String(p.index);
+      dot.style.opacity = p.resolved ? '0.4' : '1';
+      dot.style.outline = p.id === activeId ? '3px solid rgba(222,115,86,.4)' : 'none';
+    });
+    positionPins();
+  };
+  const onCommentClick = (e) => {
+    if (!commenting) return;
+    const t = e.target;
+    if (t && t.closest && t.closest('#__claudable_pins')) return;
+    e.preventDefault(); e.stopPropagation();
+    const r = t.getBoundingClientRect();
+    const relX = r.width ? Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)) : 0.5;
+    const relY = r.height ? Math.min(1, Math.max(0, (e.clientY - r.top) / r.height)) : 0.5;
+    post({ source: 'claudable-comments', type: 'placed', anchorSelector: cssPath(t), relX, relY, x: e.clientX, y: e.clientY });
+  };
+  window.addEventListener('message', (ev) => {
+    const d = ev.data;
+    if (!d || d.source !== 'claudable-comments-cmd') return;
+    if (d.type === 'enter') {
+      if (!commenting) { commenting = true; document.addEventListener('click', onCommentClick, true); document.documentElement.style.cursor = 'crosshair'; }
+    } else if (d.type === 'exit') {
+      commenting = false; document.removeEventListener('click', onCommentClick, true); document.documentElement.style.cursor = '';
+    } else if (d.type === 'renderPins') {
+      renderPins(d.pins, d.activeId);
+    }
+  });
+  window.addEventListener('scroll', schedulePos, true);
+  window.addEventListener('resize', schedulePos);
 });
 `,
       'utf8',
