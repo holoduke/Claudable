@@ -33,6 +33,15 @@ services:
       - DEPLOY_PORT_SPAN=200
       # NEXT_PUBLIC_APP_URL, PREVIEW_URL_TEMPLATE and DEPLOY_HOST_GATEWAY are
       # deployment-specific and supplied via .env.
+      #
+      # Project-environment isolation: when set, a `static` project that declares
+      # a Dockerfile in its .claudable/preview.json runs its backend in a hardened
+      # sibling container (via the docker-socket-proxy below) instead of a bare
+      # in-container process. Only affects projects that opt in — everything else
+      # is unchanged. Empty/unset = disabled.
+      - PREVIEW_ISOLATION=${PREVIEW_ISOLATION:-}
+      - DOCKER_HOST=tcp://127.0.0.1:2375
+      - DOCKER_BUILDKIT=0
     volumes:
       # Persist SQLite DB + all generated project repos across rebuilds.
       - ./data:/app/data
@@ -47,3 +56,39 @@ services:
       # path) AND TRAEFIK_DYNAMIC_DIR=/traefik-dynamic in .env. Default is a local
       # throwaway so deployments that don't use it mount nothing meaningful.
       - ${TRAEFIK_DYNAMIC_HOST_DIR:-./data/.no-traefik}:/traefik-dynamic
+
+  # Locked-down Docker API gateway for project-environment isolation. Claudable
+  # talks to THIS (DOCKER_HOST=tcp://127.0.0.1:2375), never the raw socket, so a
+  # Claudable/agent compromise is limited to container ops — not full host root.
+  # Only used when PREVIEW_ISOLATION is set; otherwise it just sits idle.
+  dockerproxy:
+    image: tecnativa/docker-socket-proxy:0.3.0
+    container_name: claudable-dockerproxy
+    restart: unless-stopped
+    environment:
+      # Allowed: build images + create/run/remove containers + read info.
+      - POST=1
+      - BUILD=1
+      - IMAGES=1
+      - CONTAINERS=1
+      - NETWORKS=1
+      - INFO=1
+      - VERSION=1
+      - PING=1
+      # Denied: everything that could escalate off the box.
+      - EXEC=0
+      - VOLUMES=0
+      - SWARM=0
+      - SYSTEM=0
+      - AUTH=0
+      - SECRETS=0
+      - CONFIGS=0
+      - SERVICES=0
+      - TASKS=0
+      - NODES=0
+      - PLUGINS=0
+    ports:
+      # Loopback only — Claudable (host network) reaches it at 127.0.0.1:2375.
+      - "127.0.0.1:2375:2375"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
