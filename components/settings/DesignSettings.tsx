@@ -76,10 +76,10 @@ export default function DesignSettings({ projectId }: Props) {
   return (
     <div className="p-6 space-y-5">
       <div>
-        <h3 className="text-lg font-medium text-gray-900 mb-1">Design</h3>
-        <p className="text-sm text-gray-600">
+        <h3 className="text-lg font-medium text-gray-900 dark:text-gray-50 mb-1">Design</h3>
+        <p className="text-sm text-gray-600 dark:text-gray-300">
           Pick one design system. The agent uses it to style this project. Switching replaces the
-          current design. {active ? <>Active: <span className="font-medium text-gray-900">{active.name}</span>.</> : 'No design selected.'}
+          current design. {active ? <>Active: <span className="font-medium text-gray-900 dark:text-gray-50">{active.name}</span>.</> : 'No design selected.'}
         </p>
       </div>
 
@@ -89,13 +89,13 @@ export default function DesignSettings({ projectId }: Props) {
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Search designs…"
-          className="flex-1 px-3 py-2 rounded-lg border border-gray-200 bg-white text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-200"
+          className="flex-1 px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-sm text-gray-800 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-200"
         />
         {activeId && (
           <button
             onClick={() => choose(null)}
             disabled={busy}
-            className="px-3 py-2 text-sm font-medium border border-gray-200 rounded-lg bg-white text-gray-600 hover:bg-gray-50 disabled:opacity-50 whitespace-nowrap"
+            className="px-3 py-2 text-sm font-medium border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-900 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50 whitespace-nowrap"
           >
             Clear design
           </button>
@@ -107,7 +107,7 @@ export default function DesignSettings({ projectId }: Props) {
       )}
 
       {loading ? (
-        <div className="py-10 text-center text-sm text-gray-500">Loading designs…</div>
+        <div className="py-10 text-center text-sm text-gray-500 dark:text-gray-400">Loading designs…</div>
       ) : (
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
           {filtered.map((d) => {
@@ -119,15 +119,15 @@ export default function DesignSettings({ projectId }: Props) {
                 disabled={busy}
                 title={d.description}
                 className={`group text-left rounded-xl border overflow-hidden transition-all disabled:opacity-60 ${
-                  selected ? 'border-blue-500 ring-2 ring-blue-200' : 'border-gray-200 hover:border-gray-300'
+                  selected ? 'border-blue-500 ring-2 ring-blue-200' : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
                 }`}
               >
-                <div className="aspect-[4/3] bg-gray-100 overflow-hidden relative">
+                <div className="aspect-[4/3] bg-gray-100 dark:bg-gray-800 overflow-hidden relative">
                   {d.preview ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img src={d.preview} alt={d.name} loading="lazy" className="w-full h-full object-cover" />
                   ) : (
-                    <div className="w-full h-full flex items-center justify-center text-gray-400 text-xs">No preview</div>
+                    <div className="w-full h-full flex items-center justify-center text-gray-400 dark:text-gray-500 text-xs">No preview</div>
                   )}
                   {selected && (
                     <span className="absolute top-2 right-2 text-[11px] font-semibold text-white bg-blue-600 px-2 py-0.5 rounded-full">
@@ -136,14 +136,14 @@ export default function DesignSettings({ projectId }: Props) {
                   )}
                 </div>
                 <div className="p-2.5">
-                  <p className="text-sm font-medium text-gray-900 truncate">{d.name}</p>
-                  <p className="text-xs text-gray-500 line-clamp-2">{d.description}</p>
+                  <p className="text-sm font-medium text-gray-900 dark:text-gray-50 truncate">{d.name}</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 line-clamp-2">{d.description}</p>
                 </div>
               </button>
             );
           })}
           {filtered.length === 0 && (
-            <div className="col-span-full py-8 text-center text-sm text-gray-400">No designs match “{query}”.</div>
+            <div className="col-span-full py-8 text-center text-sm text-gray-400 dark:text-gray-500">No designs match “{query}”.</div>
           )}
         </div>
       )}

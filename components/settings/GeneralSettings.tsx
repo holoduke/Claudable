@@ -138,16 +138,16 @@ export function GeneralSettings({
   return (
     <div className="p-6 space-y-6">
       <div>
-        <h3 className="text-lg font-medium text-gray-900 mb-4">General Settings</h3>
+        <h3 className="text-lg font-medium text-gray-900 dark:text-gray-50 mb-4">General Settings</h3>
 
         {!isProjectScoped ? (
-          <div className="rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-600">
+          <div className="rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 px-4 py-3 text-sm text-gray-600 dark:text-gray-300">
             Select a project to edit its general settings.
           </div>
         ) : (
           <div className="space-y-5">
             <div>
-              <label className="mb-2 block text-sm font-medium text-gray-700">Project Name</label>
+              <label className="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-200">Project Name</label>
               <input
                 type="text"
                 value={name}
@@ -155,7 +155,7 @@ export function GeneralSettings({
                   setName(event.target.value);
                   if (status?.type) setStatus(null);
                 }}
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full rounded-lg border border-gray-300 dark:border-gray-700 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
                 placeholder="Enter project name"
               />
               {nameError && (
@@ -166,17 +166,17 @@ export function GeneralSettings({
             </div>
 
             <div>
-              <label className="mb-2 block text-sm font-medium text-gray-700">Project ID</label>
+              <label className="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-200">Project ID</label>
               <input
                 type="text"
                 value={projectId}
                 disabled
-                className="w-full cursor-not-allowed rounded-lg border border-gray-300 bg-gray-50 px-3 py-2 text-gray-500"
+                className="w-full cursor-not-allowed rounded-lg border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 px-3 py-2 text-gray-500 dark:text-gray-400"
               />
             </div>
 
             <div>
-              <label className="mb-2 block text-sm font-medium text-gray-700">Description</label>
+              <label className="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-200">Description</label>
               <textarea
                 value={description}
                 onChange={event => {
@@ -184,7 +184,7 @@ export function GeneralSettings({
                   if (status?.type) setStatus(null);
                 }}
                 rows={4}
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full rounded-lg border border-gray-300 dark:border-gray-700 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
                 placeholder="Describe your project..."
               />
             </div>

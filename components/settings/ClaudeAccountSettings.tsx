@@ -91,8 +91,8 @@ export default function ClaudeAccountSettings({ onToast }: Props) {
   if (denied) {
     return (
       <div className="space-y-2">
-        <h3 className="text-lg font-medium text-gray-900">Claude account</h3>
-        <p className="text-sm text-gray-500">Sign in to connect your own Claude account.</p>
+        <h3 className="text-lg font-medium text-gray-900 dark:text-gray-50">Claude account</h3>
+        <p className="text-sm text-gray-500 dark:text-gray-400">Sign in to connect your own Claude account.</p>
       </div>
     );
   }
@@ -100,33 +100,33 @@ export default function ClaudeAccountSettings({ onToast }: Props) {
   return (
     <div className="space-y-5">
       <div>
-        <h3 className="text-lg font-medium text-gray-900 mb-1">Claude account</h3>
-        <p className="text-sm text-gray-600">
+        <h3 className="text-lg font-medium text-gray-900 dark:text-gray-50 mb-1">Claude account</h3>
+        <p className="text-sm text-gray-600 dark:text-gray-300">
           Connect your own Claude so projects can run on your subscription. On your machine run{' '}
-          <code className="px-1 py-0.5 rounded bg-gray-100 text-gray-800 font-mono text-xs">claude setup-token</code>{' '}
+          <code className="px-1 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-100 font-mono text-xs">claude setup-token</code>{' '}
           and paste the token below. Mark it shareable to let teammates pick it for a project.
         </p>
       </div>
 
       {/* Add form */}
-      <div className="p-4 bg-gray-50 rounded-xl border border-gray-200 space-y-3">
+      <div className="p-4 bg-gray-50 dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 space-y-3">
         <div className="flex flex-col gap-3 sm:flex-row">
           <input
             value={label}
             onChange={(e) => setLabel(e.target.value)}
             placeholder="Label (e.g. My Claude Max)"
-            className="flex-1 px-3 py-2 rounded-lg border border-gray-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-gray-200"
+            className="flex-1 px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-gray-200"
           />
           <input
             value={token}
             onChange={(e) => setToken(e.target.value)}
             type="password"
             placeholder="Paste token from `claude setup-token`"
-            className="flex-[2] px-3 py-2 rounded-lg border border-gray-200 bg-white text-sm font-mono focus:outline-none focus:ring-2 focus:ring-gray-200"
+            className="flex-[2] px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-gray-200"
           />
         </div>
         <div className="flex items-center justify-between">
-          <label className="flex items-center gap-2 text-sm text-gray-700">
+          <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-200">
             <input type="checkbox" checked={shareable} onChange={(e) => setShareable(e.target.checked)} />
             Let others in my org use this Claude
           </label>
@@ -141,25 +141,25 @@ export default function ClaudeAccountSettings({ onToast }: Props) {
       </div>
 
       {/* List */}
-      <div className="rounded-xl border border-gray-200 overflow-hidden">
+      <div className="rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
         {loading ? (
-          <div className="p-5 text-center text-sm text-gray-500">Loading…</div>
+          <div className="p-5 text-center text-sm text-gray-500 dark:text-gray-400">Loading…</div>
         ) : creds.length === 0 ? (
-          <div className="p-5 text-center text-sm text-gray-400">No Claude account connected yet.</div>
+          <div className="p-5 text-center text-sm text-gray-400 dark:text-gray-500">No Claude account connected yet.</div>
         ) : (
-          <ul className="divide-y divide-gray-100">
+          <ul className="divide-y divide-gray-100 dark:divide-gray-800">
             {creds.map((c) => (
               <li key={c.id} className="flex items-center gap-3 p-3">
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-gray-900 truncate">{c.label}</p>
-                  <p className="text-xs text-gray-500">
+                  <p className="text-sm font-medium text-gray-900 dark:text-gray-50 truncate">{c.label}</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">
                     {c.lastUsedAt ? `Last used ${new Date(c.lastUsedAt).toLocaleDateString()}` : 'Never used'}
                   </p>
                 </div>
                 <button
                   onClick={() => toggleShare(c)}
                   className={`px-2.5 py-1.5 text-xs font-medium rounded-full border ${
-                    c.shareable ? 'border-green-300 text-green-700 bg-green-50' : 'border-gray-200 text-gray-600 bg-white hover:bg-gray-50'
+                    c.shareable ? 'border-green-300 text-green-700 bg-green-50' : 'border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800'
                   }`}
                   title="Toggle sharing"
                 >
@@ -167,7 +167,7 @@ export default function ClaudeAccountSettings({ onToast }: Props) {
                 </button>
                 <button
                   onClick={() => remove(c)}
-                  className="px-2.5 py-1.5 text-xs font-medium border border-red-200 rounded-full bg-white text-red-600 hover:bg-red-50"
+                  className="px-2.5 py-1.5 text-xs font-medium border border-red-200 rounded-full bg-white dark:bg-gray-900 text-red-600 hover:bg-red-50"
                 >
                   Remove
                 </button>

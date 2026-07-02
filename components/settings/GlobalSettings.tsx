@@ -396,27 +396,27 @@ export default function GlobalSettings({ isOpen, onClose, initialTab = 'general'
         />
         
         <MotionDiv 
-          className="relative bg-white rounded-2xl shadow-2xl w-full max-w-5xl h-[700px] border border-gray-200 flex flex-col"
+          className="relative bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-5xl h-[700px] border border-gray-200 dark:border-gray-700 flex flex-col"
           initial={{ opacity: 0, scale: 0.95, y: 20 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.95, y: 20 }}
           transition={{ duration: 0.2 }}
         >
           {/* Header */}
-          <div className="p-5 border-b border-gray-200 ">
+          <div className="p-5 border-b border-gray-200 dark:border-gray-700 ">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <span className="text-gray-600 ">
+                <span className="text-gray-600 dark:text-gray-300 ">
                   <FaCog size={20} />
                 </span>
                 <div>
-                  <h2 className="text-xl font-semibold text-gray-900 ">Global Settings</h2>
-                  <p className="text-sm text-gray-600 ">Configure your Claudable preferences</p>
+                  <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-50 ">Global Settings</h2>
+                  <p className="text-sm text-gray-600 dark:text-gray-300 ">Configure your Claudable preferences</p>
                 </div>
               </div>
               <button
                 onClick={onClose}
-                className="text-gray-600 hover:text-gray-900 transition-colors p-1 hover:bg-gray-100 rounded-lg"
+                className="text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 transition-colors p-1 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg"
               >
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                   <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
@@ -426,7 +426,7 @@ export default function GlobalSettings({ isOpen, onClose, initialTab = 'general'
           </div>
 
           {/* Tab Navigation */}
-          <div className="border-b border-gray-200 ">
+          <div className="border-b border-gray-200 dark:border-gray-700 ">
             <nav className="flex px-5">
               {([
                 { id: 'general' as const, label: 'General' },
@@ -442,8 +442,8 @@ export default function GlobalSettings({ isOpen, onClose, initialTab = 'general'
                   onClick={() => setActiveTab(tab.id)}
                   className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-all ${
                     activeTab === tab.id
-                      ? 'border-[#DE7356] text-gray-900 '
-                      : 'border-transparent text-gray-600 hover:text-gray-700 hover:border-gray-300 '
+                      ? 'border-[#DE7356] text-gray-900 dark:text-gray-50 '
+                      : 'border-transparent text-gray-600 dark:text-gray-300 hover:text-gray-700 dark:hover:text-gray-200 hover:border-gray-300 dark:hover:border-gray-600 '
                   }`}
                 >
                   {tab.label}
@@ -457,27 +457,27 @@ export default function GlobalSettings({ isOpen, onClose, initialTab = 'general'
             {activeTab === 'general' && (
               <div className="space-y-6">
                 <div>
-                  <h3 className="text-lg font-medium text-gray-900 mb-4">Preferences</h3>
+                  <h3 className="text-lg font-medium text-gray-900 dark:text-gray-50 mb-4">Preferences</h3>
                   <div className="space-y-3">
-                    <div className="flex items-center justify-between p-4 bg-gray-50 rounded-xl border border-gray-200">
+                    <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700">
                       <div>
-                        <p className="font-medium text-gray-900">Auto-save projects</p>
-                        <p className="text-sm text-gray-600">Automatically save changes to projects</p>
+                        <p className="font-medium text-gray-900 dark:text-gray-50">Auto-save projects</p>
+                        <p className="text-sm text-gray-600 dark:text-gray-300">Automatically save changes to projects</p>
                       </div>
                       <label className="relative inline-flex items-center cursor-pointer">
                         <input type="checkbox" className="sr-only peer" defaultChecked />
-                        <div className="w-11 h-6 bg-white rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#DE7356]"></div>
+                        <div className="w-11 h-6 bg-white dark:bg-gray-900 rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#DE7356]"></div>
                       </label>
                     </div>
                     
-                    <div className="flex items-center justify-between p-4 bg-gray-50 rounded-xl border border-gray-200">
+                    <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700">
                       <div>
-                        <p className="font-medium text-gray-900 ">Show file extensions</p>
-                        <p className="text-sm text-gray-600 ">Display file extensions in code explorer</p>
+                        <p className="font-medium text-gray-900 dark:text-gray-50 ">Show file extensions</p>
+                        <p className="text-sm text-gray-600 dark:text-gray-300 ">Display file extensions in code explorer</p>
                       </div>
                       <label className="relative inline-flex items-center cursor-pointer">
                         <input type="checkbox" className="sr-only peer" defaultChecked />
-                        <div className="w-11 h-6 bg-white rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#DE7356]"></div>
+                        <div className="w-11 h-6 bg-white dark:bg-gray-900 rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#DE7356]"></div>
                       </label>
                     </div>
                   </div>
@@ -490,18 +490,18 @@ export default function GlobalSettings({ isOpen, onClose, initialTab = 'general'
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-4">
                     <div>
-                      <h3 className="text-lg font-medium text-gray-900 mb-1">CLI Agents</h3>
-                      <p className="text-sm text-gray-600 ">
+                      <h3 className="text-lg font-medium text-gray-900 dark:text-gray-50 mb-1">CLI Agents</h3>
+                      <p className="text-sm text-gray-600 dark:text-gray-300 ">
                         Manage your AI coding assistants
                       </p>
                     </div>
                     {/* Inline Default CLI Selector */}
-                    <div className="flex items-center gap-2 ml-6 pl-6 border-l border-gray-200 ">
-                      <span className="text-sm text-gray-600 ">Default:</span>
+                    <div className="flex items-center gap-2 ml-6 pl-6 border-l border-gray-200 dark:border-gray-700 ">
+                      <span className="text-sm text-gray-600 dark:text-gray-300 ">Default:</span>
                       <select
                         value={globalSettings.default_cli}
                         onChange={(e) => setDefaultCLI(e.target.value)}
-                        className="pl-3 pr-8 py-1.5 text-xs font-medium border border-gray-200/50 rounded-full bg-transparent hover:bg-gray-50 hover:border-gray-300/50 text-gray-700 focus:outline-none focus:ring-0 transition-colors cursor-pointer"
+                        className="pl-3 pr-8 py-1.5 text-xs font-medium border border-gray-200 dark:border-gray-700/50 rounded-full bg-transparent hover:bg-gray-50 dark:hover:bg-gray-800 hover:border-gray-300 dark:hover:border-gray-600/50 text-gray-700 dark:text-gray-200 focus:outline-none focus:ring-0 transition-colors cursor-pointer"
                       >
                         {CLI_OPTIONS.filter(cli => cliStatus[cli.id]?.installed && cli.enabled !== false).map(cli => (
                           <option key={cli.id} value={cli.id}>
@@ -533,7 +533,7 @@ export default function GlobalSettings({ isOpen, onClose, initialTab = 'general'
                     <div className="flex items-center gap-2">
                       <button
                         onClick={checkCLIStatus}
-                        className="px-3 py-1.5 text-xs font-medium border border-gray-200/50 rounded-full bg-transparent hover:bg-gray-50 hover:border-gray-300/50 text-gray-700 transition-colors"
+                        className="px-3 py-1.5 text-xs font-medium border border-gray-200 dark:border-gray-700/50 rounded-full bg-transparent hover:bg-gray-50 dark:hover:bg-gray-800 hover:border-gray-300 dark:hover:border-gray-600/50 text-gray-700 dark:text-gray-200 transition-colors"
                       >
                         Refresh Status
                       </button>
@@ -563,10 +563,10 @@ export default function GlobalSettings({ isOpen, onClose, initialTab = 'general'
                         onClick={() => isInstalled && setDefaultCLI(cli.id)}
                         className={`border rounded-xl pl-4 pr-8 py-4 transition-all ${
                           !isInstalled 
-                            ? 'border-gray-200/50 cursor-not-allowed bg-gray-50/50 ' 
+                            ? 'border-gray-200 dark:border-gray-700/50 cursor-not-allowed bg-gray-50 dark:bg-gray-900/50 ' 
                             : isDefault 
                               ? 'cursor-pointer' 
-                              : 'border-gray-200/50 hover:border-gray-300/50 hover:bg-gray-50 cursor-pointer'
+                              : 'border-gray-200 dark:border-gray-700/50 hover:border-gray-300 dark:hover:border-gray-600/50 hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer'
                         }`}
                         style={isDefault && isInstalled ? {
                           borderColor: cli.brandColor,
@@ -596,14 +596,14 @@ export default function GlobalSettings({ isOpen, onClose, initialTab = 'general'
                           </div>
                           <div className={`flex-1 min-w-0 ${!isInstalled ? 'opacity-40' : ''}`}>
                             <div className="flex items-center gap-2">
-                              <h4 className="font-medium text-gray-900 text-sm">{cli.name}</h4>
+                              <h4 className="font-medium text-gray-900 dark:text-gray-50 text-sm">{cli.name}</h4>
                               {isDefault && isInstalled && (
                                 <span className="text-xs font-medium" style={{ color: cli.brandColor }}>
                                   Default
                                 </span>
                               )}
                             </div>
-                            <p className="text-xs text-gray-600 mt-1 line-clamp-2">
+                            <p className="text-xs text-gray-600 dark:text-gray-300 mt-1 line-clamp-2">
                               {cli.description}
                             </p>
                           </div>
@@ -615,7 +615,7 @@ export default function GlobalSettings({ isOpen, onClose, initialTab = 'general'
                             <select
                               value={settings.model || ''}
                               onChange={(e) => setDefaultModel(cli.id, e.target.value)}
-                              className="w-full px-3 py-1.5 border border-gray-200/50 rounded-full bg-transparent hover:bg-gray-50 text-gray-700 text-xs font-medium transition-colors focus:outline-none focus:ring-0"
+                              className="w-full px-3 py-1.5 border border-gray-200 dark:border-gray-700/50 rounded-full bg-transparent hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-200 text-xs font-medium transition-colors focus:outline-none focus:ring-0"
                             >
                               <option value="">Select model</option>
                               {cli.models.map(model => (
@@ -627,7 +627,7 @@ export default function GlobalSettings({ isOpen, onClose, initialTab = 'general'
 
                             {cli.id === 'glm' && (
                               <div className="space-y-1.5">
-                                <label className="text-xs font-medium text-gray-600 ">
+                                <label className="text-xs font-medium text-gray-600 dark:text-gray-300 ">
                                   API Key
                                 </label>
                                 <div className="flex items-center gap-2">
@@ -636,7 +636,7 @@ export default function GlobalSettings({ isOpen, onClose, initialTab = 'general'
                                     value={settings.apiKey ?? ''}
                                     onChange={(e) => setCliApiKey(cli.id, e.target.value)}
                                     placeholder="Enter GLM API key"
-                                    className="flex-1 px-3 py-1.5 rounded-lg border border-gray-200 bg-white text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-200"
+                                    className="flex-1 px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-sm text-gray-700 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-gray-200"
                                   />
                                   <button
                                     type="button"
@@ -645,12 +645,12 @@ export default function GlobalSettings({ isOpen, onClose, initialTab = 'general'
                                       event.stopPropagation();
                                       toggleApiKeyVisibility(cli.id);
                                     }}
-                                    className="px-3 py-1.5 text-xs font-medium text-gray-600 hover:text-gray-900 border border-gray-200 rounded-lg bg-white transition-colors"
+                                    className="px-3 py-1.5 text-xs font-medium text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-900 transition-colors"
                                   >
                                     {apiKeyVisibility[cli.id] ? 'Hide' : 'Show'}
                                   </button>
                                 </div>
-                                <p className="text-[11px] text-gray-500 leading-snug">
+                                <p className="text-[11px] text-gray-500 dark:text-gray-400 leading-snug">
                                   Stored locally and injected as <code className="font-mono">ZHIPU_API_KEY</code> (and aliases) when running GLM.
                                   Leave blank to rely on server environment variables instead.
                                 </p>
@@ -658,7 +658,7 @@ export default function GlobalSettings({ isOpen, onClose, initialTab = 'general'
                             )}
                             {cli.id === 'cursor' && (
                               <div className="space-y-1.5">
-                                <label className="text-xs font-medium text-gray-600 ">
+                                <label className="text-xs font-medium text-gray-600 dark:text-gray-300 ">
                                   API Key (optional)
                                 </label>
                                 <div className="flex items-center gap-2">
@@ -667,7 +667,7 @@ export default function GlobalSettings({ isOpen, onClose, initialTab = 'general'
                                     value={settings.apiKey ?? ''}
                                     onChange={(e) => setCliApiKey(cli.id, e.target.value)}
                                     placeholder="Enter Cursor API key"
-                                    className="flex-1 px-3 py-1.5 rounded-lg border border-gray-200 bg-white text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-200"
+                                    className="flex-1 px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-sm text-gray-700 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-gray-200"
                                   />
                                   <button
                                     type="button"
@@ -676,12 +676,12 @@ export default function GlobalSettings({ isOpen, onClose, initialTab = 'general'
                                       event.stopPropagation();
                                       toggleApiKeyVisibility(cli.id);
                                     }}
-                                    className="px-3 py-1.5 text-xs font-medium text-gray-600 hover:text-gray-900 border border-gray-200 rounded-lg bg-white transition-colors"
+                                    className="px-3 py-1.5 text-xs font-medium text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-900 transition-colors"
                                   >
                                     {apiKeyVisibility[cli.id] ? 'Hide' : 'Show'}
                                   </button>
                                 </div>
-                                <p className="text-[11px] text-gray-500 leading-snug">
+                                <p className="text-[11px] text-gray-500 dark:text-gray-400 leading-snug">
                                   Injected as <code className="font-mono">CURSOR_API_KEY</code> and passed to <code className="font-mono">cursor-agent</code>.
                                   Leave blank to rely on the logged-in Cursor CLI session.
                                 </p>
@@ -712,21 +712,21 @@ export default function GlobalSettings({ isOpen, onClose, initialTab = 'general'
             {activeTab === 'services' && (
               <div className="space-y-6">
                 <div>
-                  <h3 className="text-lg font-medium text-gray-900 mb-4">Service Tokens</h3>
-                  <p className="text-sm text-gray-600 mb-6">
+                  <h3 className="text-lg font-medium text-gray-900 dark:text-gray-50 mb-4">Service Tokens</h3>
+                  <p className="text-sm text-gray-600 dark:text-gray-300 mb-6">
                     Configure your API tokens for external services. These tokens are stored encrypted and used across all projects.
                   </p>
                   
                   <div className="space-y-4">
                     {Object.entries(tokens).filter(([provider]) => isIntegrationVisible(provider)).map(([provider, token]) => (
-                      <div key={provider} className="flex items-center justify-between p-4 bg-gray-50 rounded-xl border border-gray-200 ">
+                      <div key={provider} className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 ">
                         <div className="flex items-center gap-3">
-                          <div className="text-gray-700 ">
+                          <div className="text-gray-700 dark:text-gray-200 ">
                             {getProviderIcon(provider)}
                           </div>
                           <div>
-                            <p className="font-medium text-gray-900 capitalize">{provider}</p>
-                            <p className="text-sm text-gray-600 ">
+                            <p className="font-medium text-gray-900 dark:text-gray-50 capitalize">{provider}</p>
+                            <p className="text-sm text-gray-600 dark:text-gray-300 ">
                               {token ? (
                                 <>
                                   Token configured • Added {new Date(token.created_at).toLocaleDateString()}
@@ -744,7 +744,7 @@ export default function GlobalSettings({ isOpen, onClose, initialTab = 'general'
                           )}
                           <button
                             onClick={() => handleServiceClick(provider as 'github' | 'supabase' | 'vercel')}
-                            className="px-3 py-1.5 text-sm bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg transition-all"
+                            className="px-3 py-1.5 text-sm bg-gray-200 dark:bg-gray-800 hover:bg-gray-300 text-gray-700 dark:text-gray-200 rounded-lg transition-all"
                           >
                             {token ? 'Update Token' : 'Add Token'}
                           </button>
@@ -753,7 +753,7 @@ export default function GlobalSettings({ isOpen, onClose, initialTab = 'general'
                     ))}
                   </div>
                   
-                  <div className="mt-6 p-4 bg-gray-50 rounded-xl border border-gray-200 ">
+                  <div className="mt-6 p-4 bg-gray-50 dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 ">
                     <div className="flex">
                       <div className="flex-shrink-0">
                         <svg className="h-5 w-5 text-[#DE7356]" viewBox="0 0 20 20" fill="currentColor">
@@ -761,10 +761,10 @@ export default function GlobalSettings({ isOpen, onClose, initialTab = 'general'
                         </svg>
                       </div>
                       <div className="ml-3">
-                        <h3 className="text-sm font-medium text-gray-900 ">
+                        <h3 className="text-sm font-medium text-gray-900 dark:text-gray-50 ">
                           Token Configuration
                         </h3>
-                        <div className="mt-2 text-sm text-gray-700 ">
+                        <div className="mt-2 text-sm text-gray-700 dark:text-gray-200 ">
                           <p>
                             Tokens configured here will be available for all projects. To connect a project to specific repositories 
                             and services, use the Project Settings in each individual project.
@@ -802,34 +802,34 @@ export default function GlobalSettings({ isOpen, onClose, initialTab = 'general'
                       className="relative z-10 w-full h-full object-contain rounded-2xl shadow-lg"
                     />
                   </div>
-                  <h3 className="text-2xl font-bold text-gray-900 ">Claudable</h3>
-                  <p className="text-gray-600 mt-2 font-medium">Version 1.0.0</p>
+                  <h3 className="text-2xl font-bold text-gray-900 dark:text-gray-50 ">Claudable</h3>
+                  <p className="text-gray-600 dark:text-gray-300 mt-2 font-medium">Version 1.0.0</p>
                 </div>
                 
-                <div className="bg-gray-50 rounded-xl border border-gray-200 p-6 space-y-4">
+                <div className="bg-gray-50 dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 p-6 space-y-4">
                   <div className="text-center">
-                    <p className="text-base text-gray-700 leading-relaxed max-w-2xl mx-auto">
+                    <p className="text-base text-gray-700 dark:text-gray-200 leading-relaxed max-w-2xl mx-auto">
                       Claudable is an AI-powered development platform that integrates with GitHub, Supabase, and Vercel 
                       to streamline your web development workflow.
                     </p>
                   </div>
                   
                   <div className="grid grid-cols-2 gap-4 text-center">
-                    <div className="p-3 rounded-xl border border-gray-200/50 bg-transparent">
+                    <div className="p-3 rounded-xl border border-gray-200 dark:border-gray-700/50 bg-transparent">
                       <div className="flex items-center justify-center mb-2">
                         <svg className="w-5 h-5 text-[#DE7356]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
                         </svg>
                       </div>
-                      <p className="text-xs font-medium text-gray-700 ">Fast Deploy</p>
+                      <p className="text-xs font-medium text-gray-700 dark:text-gray-200 ">Fast Deploy</p>
                     </div>
-                    <div className="p-3 rounded-xl border border-gray-200/50 bg-transparent">
+                    <div className="p-3 rounded-xl border border-gray-200 dark:border-gray-700/50 bg-transparent">
                       <div className="flex items-center justify-center mb-2">
                         <svg className="w-5 h-5 text-[#DE7356]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
                         </svg>
                       </div>
-                      <p className="text-xs font-medium text-gray-700 ">AI Powered</p>
+                      <p className="text-xs font-medium text-gray-700 dark:text-gray-200 ">AI Powered</p>
                     </div>
                   </div>
                 </div>
@@ -897,11 +897,11 @@ export default function GlobalSettings({ isOpen, onClose, initialTab = 'general'
           />
           
           <div 
-            className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg border border-gray-200 transform"
+            className="relative bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-lg border border-gray-200 dark:border-gray-700 transform"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Header */}
-            <div className="p-5 border-b border-gray-200 ">
+            <div className="p-5 border-b border-gray-200 dark:border-gray-700 ">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   {selectedCLI.id === 'claude' && (
@@ -914,10 +914,10 @@ export default function GlobalSettings({ isOpen, onClose, initialTab = 'general'
                     <Image src="/oai.png" alt="Codex" width={32} height={32} className="w-8 h-8" />
                   )}
                   <div>
-                    <h3 className="text-lg font-semibold text-gray-900 ">
+                    <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-50 ">
                       Install {selectedCLI.name}
                     </h3>
-                    <p className="text-sm text-gray-600 ">
+                    <p className="text-sm text-gray-600 dark:text-gray-300 ">
                       Follow these steps to get started
                     </p>
                   </div>
@@ -927,7 +927,7 @@ export default function GlobalSettings({ isOpen, onClose, initialTab = 'general'
                     setInstallModalOpen(false);
                     setSelectedCLI(null);
                   }}
-                  className="text-gray-600 hover:text-gray-900 transition-colors p-1 hover:bg-gray-100 rounded-lg"
+                  className="text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 transition-colors p-1 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg"
                 >
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                     <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
@@ -940,14 +940,14 @@ export default function GlobalSettings({ isOpen, onClose, initialTab = 'general'
             <div className="p-6 space-y-4">
               {/* Step 1: Install */}
               <div className="space-y-2">
-                <div className="flex items-center gap-2 text-sm font-medium text-gray-900 ">
+                <div className="flex items-center gap-2 text-sm font-medium text-gray-900 dark:text-gray-50 ">
                   <span className="flex items-center justify-center w-6 h-6 rounded-full text-white text-xs" style={{ backgroundColor: selectedCLI.brandColor }}>
                     1
                   </span>
                   Install CLI
                 </div>
-                <div className="ml-8 flex items-center gap-2 bg-gray-100 rounded-lg px-3 py-2">
-                  <code className="text-sm text-gray-800 flex-1">
+                <div className="ml-8 flex items-center gap-2 bg-gray-100 dark:bg-gray-800 rounded-lg px-3 py-2">
+                  <code className="text-sm text-gray-800 dark:text-gray-100 flex-1">
                     {selectedCLI.installCommand}
                   </code>
                   <button
@@ -958,7 +958,7 @@ export default function GlobalSettings({ isOpen, onClose, initialTab = 'general'
                       navigator.clipboard.writeText(selectedCLI.installCommand);
                       showToast('Command copied to clipboard', 'success');
                     }}
-                    className="text-gray-500 hover:text-gray-700 "
+                    className="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 "
                     title="Copy command"
                   >
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -970,7 +970,7 @@ export default function GlobalSettings({ isOpen, onClose, initialTab = 'general'
 
               {/* Step 2: Authenticate */}
               <div className="space-y-2">
-                <div className="flex items-center gap-2 text-sm font-medium text-gray-900 ">
+                <div className="flex items-center gap-2 text-sm font-medium text-gray-900 dark:text-gray-50 ">
                   <span className="flex items-center justify-center w-6 h-6 rounded-full text-white text-xs" style={{ backgroundColor: selectedCLI.brandColor }}>
                     2
                   </span>
@@ -981,8 +981,8 @@ export default function GlobalSettings({ isOpen, onClose, initialTab = 'general'
                   {selectedCLI.id === 'claude' && 'Start Claude and sign in'}
                   {selectedCLI.id === 'cursor' && 'Start Cursor CLI and sign in'}
                 </div>
-                <div className="ml-8 flex items-center gap-2 bg-gray-100 rounded-lg px-3 py-2">
-                  <code className="text-sm text-gray-800 flex-1">
+                <div className="ml-8 flex items-center gap-2 bg-gray-100 dark:bg-gray-800 rounded-lg px-3 py-2">
+                  <code className="text-sm text-gray-800 dark:text-gray-100 flex-1">
                     {selectedCLI.id === 'claude' ? 'claude' :
                      selectedCLI.id === 'cursor' ? 'cursor-agent' :
                      selectedCLI.id === 'codex' ? 'codex' :
@@ -1004,7 +1004,7 @@ export default function GlobalSettings({ isOpen, onClose, initialTab = 'general'
                       if (authCmd) navigator.clipboard.writeText(authCmd);
                       showToast('Command copied to clipboard', 'success');
                     }}
-                    className="text-gray-500 hover:text-gray-700 "
+                    className="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 "
                     title="Copy command"
                   >
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -1016,14 +1016,14 @@ export default function GlobalSettings({ isOpen, onClose, initialTab = 'general'
 
               {/* Step 3: Test */}
               <div className="space-y-2">
-                <div className="flex items-center gap-2 text-sm font-medium text-gray-900 ">
+                <div className="flex items-center gap-2 text-sm font-medium text-gray-900 dark:text-gray-50 ">
                   <span className="flex items-center justify-center w-6 h-6 rounded-full text-white text-xs" style={{ backgroundColor: selectedCLI.brandColor }}>
                     3
                   </span>
                   Test your installation
                 </div>
-                <div className="ml-8 flex items-center gap-2 bg-gray-100 rounded-lg px-3 py-2">
-                  <code className="text-sm text-gray-800 flex-1">
+                <div className="ml-8 flex items-center gap-2 bg-gray-100 dark:bg-gray-800 rounded-lg px-3 py-2">
+                  <code className="text-sm text-gray-800 dark:text-gray-100 flex-1">
                     {selectedCLI.id === 'claude' ? 'claude --version' :
                      selectedCLI.id === 'cursor' ? 'cursor-agent --version' :
                      selectedCLI.id === 'codex' ? 'codex --version' :
@@ -1045,7 +1045,7 @@ export default function GlobalSettings({ isOpen, onClose, initialTab = 'general'
                       if (versionCmd) navigator.clipboard.writeText(versionCmd);
                       showToast('Command copied to clipboard', 'success');
                     }}
-                    className="text-gray-500 hover:text-gray-700 "
+                    className="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 "
                     title="Copy command"
                   >
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -1059,10 +1059,10 @@ export default function GlobalSettings({ isOpen, onClose, initialTab = 'general'
             </div>
 
             {/* Footer */}
-            <div className="p-5 border-t border-gray-200 flex justify-between">
+            <div className="p-5 border-t border-gray-200 dark:border-gray-700 flex justify-between">
               <button
                 onClick={() => checkCLIStatus()}
-                className="px-4 py-2 text-sm text-gray-600 hover:text-gray-900 transition-colors"
+                className="px-4 py-2 text-sm text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 transition-colors"
               >
                 Refresh Status
               </button>

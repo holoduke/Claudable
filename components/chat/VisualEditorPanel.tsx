@@ -81,61 +81,61 @@ export default function VisualEditorPanel({
   );
 
   return (
-    <div className="h-full flex flex-col bg-white">
-      <div className="flex items-center justify-between px-4 h-[73px] border-b border-gray-200">
+    <div className="h-full flex flex-col bg-white dark:bg-gray-900">
+      <div className="flex items-center justify-between px-4 h-[73px] border-b border-gray-200 dark:border-gray-700">
         <div className="flex items-center gap-2">
           <span className="inline-block w-2 h-2 rounded-full bg-[#DE7356]" />
-          <span className="font-semibold text-gray-900">Visual editor</span>
+          <span className="font-semibold text-gray-900 dark:text-gray-50">Visual editor</span>
         </div>
-        <button onClick={onClose} className="text-sm text-gray-500 hover:text-gray-800 px-2 py-1 rounded hover:bg-gray-100">Done</button>
+        <button onClick={onClose} className="text-sm text-gray-500 dark:text-gray-400 hover:text-gray-800 px-2 py-1 rounded hover:bg-gray-100 dark:hover:bg-gray-800">Done</button>
       </div>
 
       {!element ? (
-        <div className="flex-1 flex flex-col items-center justify-center text-center px-6 text-gray-500">
+        <div className="flex-1 flex flex-col items-center justify-center text-center px-6 text-gray-500 dark:text-gray-400">
           <div className="text-4xl mb-3">🎯</div>
-          <p className="font-medium text-gray-700">Click any element in the preview</p>
+          <p className="font-medium text-gray-700 dark:text-gray-200">Click any element in the preview</p>
           <p className="text-sm mt-1">Then tweak its text, colors, spacing and more — changes apply live.</p>
         </div>
       ) : (
         <div className="flex-1 overflow-y-auto">
           {/* Selected element summary */}
-          <div className="px-4 py-3 border-b border-gray-100 bg-gray-50">
+          <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-900">
             <div className="flex items-center gap-2 flex-wrap">
               <span className="text-xs font-mono bg-[#DE7356]/10 text-[#DE7356] px-1.5 py-0.5 rounded">{element.tag}</span>
-              {element.id && <span className="text-xs font-mono text-gray-500">#{element.id}</span>}
+              {element.id && <span className="text-xs font-mono text-gray-500 dark:text-gray-400">#{element.id}</span>}
               {element.classes.slice(0, 4).map((c) => (
-                <span key={c} className="text-xs font-mono text-gray-400">.{c}</span>
+                <span key={c} className="text-xs font-mono text-gray-400 dark:text-gray-500">.{c}</span>
               ))}
             </div>
-            <div className="text-[11px] font-mono text-gray-400 mt-1 truncate" title={element.selector}>{element.selector}</div>
+            <div className="text-[11px] font-mono text-gray-400 dark:text-gray-500 mt-1 truncate" title={element.selector}>{element.selector}</div>
           </div>
 
           {/* Text content */}
           {element.editableText && (
-            <div className="px-4 py-3 border-b border-gray-100">
-              <label className="block text-xs font-medium text-gray-500 mb-1">Text</label>
+            <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-800">
+              <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Text</label>
               <textarea
                 value={textEdit !== null ? textEdit : element.text}
                 onChange={(e) => onApplyText(e.target.value)}
                 rows={2}
-                className="w-full text-sm border border-gray-200 rounded-md p-2 focus:outline-none focus:ring-2 focus:ring-[#DE7356]/30"
+                className="w-full text-sm border border-gray-200 dark:border-gray-700 rounded-md p-2 focus:outline-none focus:ring-2 focus:ring-[#DE7356]/30"
               />
             </div>
           )}
 
           {/* Style groups */}
           {GROUPS.map((g) => (
-            <div key={g.title} className="px-4 py-3 border-b border-gray-100">
-              <div className="text-xs font-medium text-gray-500 mb-2">{g.title}</div>
+            <div key={g.title} className="px-4 py-3 border-b border-gray-100 dark:border-gray-800">
+              <div className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-2">{g.title}</div>
               <div className="grid grid-cols-2 gap-2">
                 {g.fields.map((f) => (
                   <div key={f.prop} className="flex flex-col gap-1">
-                    <label className="text-[11px] text-gray-400">{f.label}</label>
+                    <label className="text-[11px] text-gray-400 dark:text-gray-500">{f.label}</label>
                     {f.kind === 'select' ? (
                       <select
                         value={val(f.prop)}
                         onChange={(e) => onApplyStyle(f.prop, e.target.value)}
-                        className="text-xs border border-gray-200 rounded px-1.5 py-1 bg-white focus:outline-none focus:ring-1 focus:ring-[#DE7356]/40"
+                        className="text-xs border border-gray-200 dark:border-gray-700 rounded px-1.5 py-1 bg-white dark:bg-gray-900 focus:outline-none focus:ring-1 focus:ring-[#DE7356]/40"
                       >
                         <option value="">—</option>
                         {f.options!.map((o) => <option key={o} value={o}>{o}</option>)}
@@ -146,13 +146,13 @@ export default function VisualEditorPanel({
                           type="color"
                           value={toHex(val(f.prop))}
                           onChange={(e) => onApplyStyle(f.prop, e.target.value)}
-                          className="w-7 h-7 rounded border border-gray-200 p-0 cursor-pointer shrink-0"
+                          className="w-7 h-7 rounded border border-gray-200 dark:border-gray-700 p-0 cursor-pointer shrink-0"
                         />
                         <input
                           type="text"
                           value={val(f.prop)}
                           onChange={(e) => onApplyStyle(f.prop, e.target.value)}
-                          className="min-w-0 flex-1 text-xs border border-gray-200 rounded px-1.5 py-1 font-mono focus:outline-none focus:ring-1 focus:ring-[#DE7356]/40"
+                          className="min-w-0 flex-1 text-xs border border-gray-200 dark:border-gray-700 rounded px-1.5 py-1 font-mono focus:outline-none focus:ring-1 focus:ring-[#DE7356]/40"
                         />
                       </div>
                     ) : (
@@ -160,7 +160,7 @@ export default function VisualEditorPanel({
                         type="text"
                         value={val(f.prop)}
                         onChange={(e) => onApplyStyle(f.prop, e.target.value)}
-                        className="text-xs border border-gray-200 rounded px-1.5 py-1 font-mono focus:outline-none focus:ring-1 focus:ring-[#DE7356]/40"
+                        className="text-xs border border-gray-200 dark:border-gray-700 rounded px-1.5 py-1 font-mono focus:outline-none focus:ring-1 focus:ring-[#DE7356]/40"
                       />
                     )}
                   </div>
@@ -172,7 +172,7 @@ export default function VisualEditorPanel({
       )}
 
       {/* Persist */}
-      <div className="border-t border-gray-200 p-3">
+      <div className="border-t border-gray-200 dark:border-gray-700 p-3">
         <button
           onClick={onPersist}
           disabled={!element || dirtyCount === 0 || persisting || busy}
@@ -181,7 +181,7 @@ export default function VisualEditorPanel({
         >
           {busy ? 'Agent busy…' : persisting ? 'Applying…' : dirtyCount === 0 ? 'No changes yet' : `Apply ${dirtyCount} change${dirtyCount > 1 ? 's' : ''} to code`}
         </button>
-        <p className="text-[11px] text-gray-400 mt-2 text-center">
+        <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-2 text-center">
           Live changes are preview-only until applied to code (via the agent).
         </p>
       </div>

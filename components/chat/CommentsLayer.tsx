@@ -113,7 +113,7 @@ export default function CommentsLayer({
       {/* New-comment compose card */}
       {compose && (
         <div
-          className="absolute pointer-events-auto w-64 bg-white rounded-lg shadow-xl border border-gray-200 p-2"
+          className="absolute pointer-events-auto w-64 bg-white dark:bg-gray-900 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 p-2"
           style={clampPopover(compose.x, compose.y, 256, 130, viewport.w, viewport.h)}
         >
           <textarea
@@ -124,11 +124,11 @@ export default function CommentsLayer({
             placeholder="Add a comment…"
             rows={3}
             disabled={submitting}
-            className="w-full text-sm border border-gray-200 rounded-md p-2 focus:outline-none focus:ring-2 focus:ring-[#DE7356]/30 resize-none disabled:opacity-60"
+            className="w-full text-sm border border-gray-200 dark:border-gray-700 rounded-md p-2 focus:outline-none focus:ring-2 focus:ring-[#DE7356]/30 resize-none disabled:opacity-60"
           />
           {submitError && <p className="text-[11px] text-red-600 mt-1 px-0.5">{submitError}</p>}
           <div className="flex items-center justify-end gap-2 mt-1">
-            <button onClick={onCancelCompose} disabled={submitting} className="text-xs text-gray-500 hover:text-gray-800 px-2 py-1 disabled:opacity-40">Cancel</button>
+            <button onClick={onCancelCompose} disabled={submitting} className="text-xs text-gray-500 dark:text-gray-400 hover:text-gray-800 px-2 py-1 disabled:opacity-40">Cancel</button>
             <button
               onClick={() => void doSubmit()}
               disabled={!draft.trim() || submitting}
@@ -146,23 +146,23 @@ export default function CommentsLayer({
       {/* Open thread for the active pin */}
       {active && activePos && activePos.x !== null && activePos.y !== null && (
         <div
-          className="absolute pointer-events-auto w-72 bg-white rounded-lg shadow-xl border border-gray-200"
+          className="absolute pointer-events-auto w-72 bg-white dark:bg-gray-900 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700"
           style={clampPopover(activePos.x, activePos.y, 288, 150, viewport.w, viewport.h)}
         >
           <div className="flex items-start gap-2 p-3">
             <Avatar name={active.authorName} image={active.authorImage} />
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2">
-                <span className="text-sm font-medium text-gray-900 truncate">{active.authorName}</span>
-                <span className="text-[11px] text-gray-400">{timeAgo(active.createdAt)}</span>
+                <span className="text-sm font-medium text-gray-900 dark:text-gray-50 truncate">{active.authorName}</span>
+                <span className="text-[11px] text-gray-400 dark:text-gray-500">{timeAgo(active.createdAt)}</span>
               </div>
-              <p className={`text-sm text-gray-700 mt-1 whitespace-pre-wrap break-words ${active.resolved ? 'line-through text-gray-400' : ''}`}>{active.body}</p>
+              <p className={`text-sm text-gray-700 dark:text-gray-200 mt-1 whitespace-pre-wrap break-words ${active.resolved ? 'line-through text-gray-400 dark:text-gray-500' : ''}`}>{active.body}</p>
             </div>
-            <button onClick={onCloseThread} className="text-gray-300 hover:text-gray-600 text-sm shrink-0" aria-label="Close">✕</button>
+            <button onClick={onCloseThread} className="text-gray-300 hover:text-gray-600 dark:hover:text-gray-300 text-sm shrink-0" aria-label="Close">✕</button>
           </div>
           {!readOnly && (
-            <div className="flex items-center justify-end gap-2 px-3 pb-2 border-t border-gray-100 pt-2">
-              <button onClick={() => onResolve(active.id, !active.resolved)} className="text-xs text-gray-600 hover:text-gray-900 px-2 py-1 rounded hover:bg-gray-100">
+            <div className="flex items-center justify-end gap-2 px-3 pb-2 border-t border-gray-100 dark:border-gray-800 pt-2">
+              <button onClick={() => onResolve(active.id, !active.resolved)} className="text-xs text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 px-2 py-1 rounded hover:bg-gray-100 dark:hover:bg-gray-800">
                 {active.resolved ? 'Reopen' : 'Resolve'}
               </button>
               <button onClick={() => onDelete(active.id)} className="text-xs text-red-500 hover:text-red-700 px-2 py-1 rounded hover:bg-red-50">Delete</button>

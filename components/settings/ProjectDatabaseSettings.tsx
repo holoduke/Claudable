@@ -58,17 +58,17 @@ export default function ProjectDatabaseSettings({ projectId }: { projectId: stri
   return (
     <div className="space-y-4">
       <div>
-        <h3 className="text-lg font-semibold text-gray-900">Database</h3>
-        <p className="text-sm text-gray-500 mt-1">A managed Postgres for this project, provisioned on your infrastructure.</p>
+        <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-50">Database</h3>
+        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">A managed Postgres for this project, provisioned on your infrastructure.</p>
       </div>
 
       {error && <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>}
 
       {!info?.provisioned ? (
-        <div className="rounded-xl border border-gray-200 p-5 text-center">
+        <div className="rounded-xl border border-gray-200 dark:border-gray-700 p-5 text-center">
           <div className="text-3xl mb-2">🗄️</div>
-          <p className="text-sm text-gray-600 mb-4 max-w-sm mx-auto">
-            Add a Postgres database. Its <code className="text-xs bg-gray-100 px-1 rounded">DATABASE_URL</code> is injected into the
+          <p className="text-sm text-gray-600 dark:text-gray-300 mb-4 max-w-sm mx-auto">
+            Add a Postgres database. Its <code className="text-xs bg-gray-100 dark:bg-gray-800 px-1 rounded">DATABASE_URL</code> is injected into the
             preview automatically — then ask the agent to add Prisma/Drizzle and build data-backed features.
           </p>
           <button
@@ -80,22 +80,22 @@ export default function ProjectDatabaseSettings({ projectId }: { projectId: stri
           </button>
         </div>
       ) : (
-        <div className="rounded-xl border border-gray-200 p-4 space-y-3">
+        <div className="rounded-xl border border-gray-200 dark:border-gray-700 p-4 space-y-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <span className="inline-block w-2 h-2 rounded-full bg-emerald-500" />
-              <span className="font-medium text-gray-900">Postgres</span>
-              {info.status && <span className="text-xs text-gray-400">{info.status}</span>}
+              <span className="font-medium text-gray-900 dark:text-gray-50">Postgres</span>
+              {info.status && <span className="text-xs text-gray-400 dark:text-gray-500">{info.status}</span>}
             </div>
             <button onClick={remove} disabled={busy} className="text-xs text-red-500 hover:text-red-700 disabled:opacity-50">Remove</button>
           </div>
-          <dl className="text-sm text-gray-600 grid grid-cols-[80px_1fr] gap-y-1">
-            <dt className="text-gray-400">Host</dt><dd className="font-mono">{info.host}</dd>
-            <dt className="text-gray-400">Port</dt><dd className="font-mono">{info.port}</dd>
-            <dt className="text-gray-400">Database</dt><dd className="font-mono">{info.database}</dd>
+          <dl className="text-sm text-gray-600 dark:text-gray-300 grid grid-cols-[80px_1fr] gap-y-1">
+            <dt className="text-gray-400 dark:text-gray-500">Host</dt><dd className="font-mono">{info.host}</dd>
+            <dt className="text-gray-400 dark:text-gray-500">Port</dt><dd className="font-mono">{info.port}</dd>
+            <dt className="text-gray-400 dark:text-gray-500">Database</dt><dd className="font-mono">{info.database}</dd>
           </dl>
-          <p className="text-xs text-gray-400">
-            <code className="bg-gray-100 px-1 rounded">DATABASE_URL</code> is available to the preview (and future deploys).
+          <p className="text-xs text-gray-400 dark:text-gray-500">
+            <code className="bg-gray-100 dark:bg-gray-800 px-1 rounded">DATABASE_URL</code> is available to the preview (and future deploys).
             The password is stored encrypted and isn&apos;t shown here.
           </p>
         </div>

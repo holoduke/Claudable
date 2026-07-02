@@ -105,35 +105,35 @@ export default function UsersSettings({ currentUserId, onToast }: UsersSettingsP
   return (
     <div className="space-y-6">
       <div>
-        <h3 className="text-lg font-medium text-gray-900 mb-1">Users</h3>
-        <p className="text-sm text-gray-600">
+        <h3 className="text-lg font-medium text-gray-900 dark:text-gray-50 mb-1">Users</h3>
+        <p className="text-sm text-gray-600 dark:text-gray-300">
           Anyone on an allowed company domain can sign in automatically. Invite external
           emails below, and promote teammates to admin.
         </p>
       </div>
 
       {/* Invite external user */}
-      <div className="flex flex-col gap-3 p-4 bg-gray-50 rounded-xl border border-gray-200 sm:flex-row sm:items-end">
+      <div className="flex flex-col gap-3 p-4 bg-gray-50 dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 sm:flex-row sm:items-end">
         <div className="flex-1">
-          <label className="block text-xs font-medium text-gray-600 mb-1">Email</label>
+          <label className="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">Email</label>
           <input
             type="email"
             value={newEmail}
             onChange={(e) => setNewEmail(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter') addUser(); }}
             placeholder="person@partner.com"
-            className="w-full px-3 py-2 rounded-lg border border-gray-200 bg-white text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-gray-200"
+            className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-sm text-gray-800 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-gray-200"
           />
         </div>
         <div className="flex-1">
-          <label className="block text-xs font-medium text-gray-600 mb-1">Name (optional)</label>
+          <label className="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">Name (optional)</label>
           <input
             type="text"
             value={newName}
             onChange={(e) => setNewName(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter') addUser(); }}
             placeholder="Jane Doe"
-            className="w-full px-3 py-2 rounded-lg border border-gray-200 bg-white text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-gray-200"
+            className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-sm text-gray-800 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-gray-200"
           />
         </div>
         <button
@@ -146,13 +146,13 @@ export default function UsersSettings({ currentUserId, onToast }: UsersSettingsP
       </div>
 
       {/* User list */}
-      <div className="rounded-xl border border-gray-200 overflow-hidden">
+      <div className="rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
         {loading ? (
-          <div className="p-6 text-center text-sm text-gray-500">Loading users…</div>
+          <div className="p-6 text-center text-sm text-gray-500 dark:text-gray-400">Loading users…</div>
         ) : users.length === 0 ? (
-          <div className="p-6 text-center text-sm text-gray-500">No users yet.</div>
+          <div className="p-6 text-center text-sm text-gray-500 dark:text-gray-400">No users yet.</div>
         ) : (
-          <ul className="divide-y divide-gray-200">
+          <ul className="divide-y divide-gray-200 dark:divide-gray-700">
             {users.map((u) => {
               const isSelf = u.id === currentUserId;
               const busy = busyId === u.id;
@@ -163,7 +163,7 @@ export default function UsersSettings({ currentUserId, onToast }: UsersSettingsP
                       // eslint-disable-next-line @next/next/no-img-element
                       <img src={u.image} alt="" className="w-9 h-9 rounded-full" />
                     ) : (
-                      <div className="w-9 h-9 rounded-full bg-gray-200 flex items-center justify-center text-sm font-medium text-gray-600">
+                      <div className="w-9 h-9 rounded-full bg-gray-200 dark:bg-gray-800 flex items-center justify-center text-sm font-medium text-gray-600 dark:text-gray-300">
                         {(u.name || u.email).charAt(0).toUpperCase()}
                       </div>
                     )}
@@ -171,10 +171,10 @@ export default function UsersSettings({ currentUserId, onToast }: UsersSettingsP
 
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
-                      <p className="text-sm font-medium text-gray-900 truncate">
+                      <p className="text-sm font-medium text-gray-900 dark:text-gray-50 truncate">
                         {u.name || u.email}
                       </p>
-                      {isSelf && <span className="text-[11px] text-gray-400">(you)</span>}
+                      {isSelf && <span className="text-[11px] text-gray-400 dark:text-gray-500">(you)</span>}
                       {!u.isActive && (
                         <span className="text-[11px] font-medium text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded">
                           deactivated
@@ -186,7 +186,7 @@ export default function UsersSettings({ currentUserId, onToast }: UsersSettingsP
                         </span>
                       )}
                     </div>
-                    {u.name && <p className="text-xs text-gray-500 truncate">{u.email}</p>}
+                    {u.name && <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{u.email}</p>}
                   </div>
 
                   {/* Role */}
@@ -194,7 +194,7 @@ export default function UsersSettings({ currentUserId, onToast }: UsersSettingsP
                     value={u.role}
                     disabled={busy || isSelf}
                     onChange={(e) => patchUser(u.id, { role: e.target.value })}
-                    className="px-2.5 py-1.5 text-xs font-medium border border-gray-200 rounded-full bg-white text-gray-700 focus:outline-none focus:ring-0 disabled:opacity-50 cursor-pointer"
+                    className="px-2.5 py-1.5 text-xs font-medium border border-gray-200 dark:border-gray-700 rounded-full bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-200 focus:outline-none focus:ring-0 disabled:opacity-50 cursor-pointer"
                     title={isSelf ? 'You cannot change your own role' : 'Change role'}
                   >
                     <option value="user">User</option>
@@ -205,7 +205,7 @@ export default function UsersSettings({ currentUserId, onToast }: UsersSettingsP
                   <button
                     onClick={() => patchUser(u.id, { isActive: !u.isActive })}
                     disabled={busy || isSelf}
-                    className="px-2.5 py-1.5 text-xs font-medium border border-gray-200 rounded-full bg-white text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-50"
+                    className="px-2.5 py-1.5 text-xs font-medium border border-gray-200 dark:border-gray-700 rounded-full bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors disabled:opacity-50"
                     title={isSelf ? 'You cannot deactivate yourself' : u.isActive ? 'Deactivate' : 'Activate'}
                   >
                     {u.isActive ? 'Deactivate' : 'Activate'}
@@ -218,7 +218,7 @@ export default function UsersSettings({ currentUserId, onToast }: UsersSettingsP
                     className={`px-2.5 py-1.5 text-xs font-medium border rounded-full transition-colors disabled:opacity-50 ${
                       u.itopsEnabled
                         ? 'border-amber-300 bg-amber-50 text-amber-700 hover:bg-amber-100'
-                        : 'border-gray-200 bg-white text-gray-700 hover:bg-gray-50'
+                        : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800'
                     }`}
                     title={u.itopsEnabled ? 'Disable it-ops tools for this user' : 'Enable it-ops tools for this user'}
                   >
@@ -229,7 +229,7 @@ export default function UsersSettings({ currentUserId, onToast }: UsersSettingsP
                   <button
                     onClick={() => removeUser(u.id, u.email)}
                     disabled={busy || isSelf}
-                    className="px-2.5 py-1.5 text-xs font-medium border border-red-200 rounded-full bg-white text-red-600 hover:bg-red-50 transition-colors disabled:opacity-40"
+                    className="px-2.5 py-1.5 text-xs font-medium border border-red-200 rounded-full bg-white dark:bg-gray-900 text-red-600 hover:bg-red-50 transition-colors disabled:opacity-40"
                     title={isSelf ? 'You cannot remove yourself' : 'Remove user'}
                   >
                     Remove

@@ -228,7 +228,7 @@ export default function GitHubRepoModal({
           </motion.div>
         </div>
         
-        <div className="relative bg-white rounded-xl shadow-2xl w-full max-w-2xl overflow-hidden border border-gray-200 ">
+        <div className="relative bg-white dark:bg-gray-900 rounded-xl shadow-2xl w-full max-w-2xl overflow-hidden border border-gray-200 dark:border-gray-700 ">
           <motion.div 
             initial={{ opacity: 0, scale: 0.95, y: 20 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
@@ -237,7 +237,7 @@ export default function GitHubRepoModal({
             data-testid="github-repo-modal"
           >
           {/* Header */}
-          <div className="px-6 py-4 border-b border-gray-200 bg-gray-50 ">
+          <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 ">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div className="w-8 h-8 bg-gray-900 text-white rounded-full flex items-center justify-center">
@@ -246,13 +246,13 @@ export default function GitHubRepoModal({
                   </svg>
                 </div>
                 <div>
-                  <h2 className="text-xl font-semibold text-gray-900 ">Create a new repository</h2>
-                  <p className="text-sm text-gray-600 ">A repository contains all project files, including revision history.</p>
+                  <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-50 ">Create a new repository</h2>
+                  <p className="text-sm text-gray-600 dark:text-gray-300 ">A repository contains all project files, including revision history.</p>
                 </div>
               </div>
               <button
                 onClick={onClose}
-                className="text-gray-400 hover:text-gray-600 p-1"
+                className="text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 p-1"
                 disabled={isLoading}
               >
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -267,7 +267,7 @@ export default function GitHubRepoModal({
             <div className="space-y-6">
               {/* Repository Name */}
               <div>
-                <label className="block text-sm font-medium text-gray-900 mb-2">
+                <label className="block text-sm font-medium text-gray-900 dark:text-gray-50 mb-2">
                   Repository name <span className="text-red-500">*</span>
                 </label>
                 <div className="relative">
@@ -275,10 +275,10 @@ export default function GitHubRepoModal({
                     type="text"
                     value={repoName}
                     onChange={(e) => handleRepoNameChange(e.target.value)}
-                    className={`w-full px-3 py-2 pr-10 border rounded-md bg-white text-gray-900 focus:ring-2 focus:border-transparent ${
+                    className={`w-full px-3 py-2 pr-10 border rounded-md bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-50 focus:ring-2 focus:border-transparent ${
                       nameError 
                         ? 'border-red-500 focus:ring-red-500' 
-                        : 'border-gray-300 focus:ring-blue-500'
+                        : 'border-gray-300 dark:border-gray-700 focus:ring-blue-500'
                     }`}
                     placeholder="my-awesome-project"
                     required
@@ -302,8 +302,8 @@ export default function GitHubRepoModal({
                   </p>
                 )}
                 {!nameError && !isCheckingAvailability && (
-                  <p className="mt-1 text-xs text-gray-500 ">
-                    Great repository names are short and memorable. Need inspiration? How about <button type="button" className="text-gray-900 hover:underline" onClick={() => {
+                  <p className="mt-1 text-xs text-gray-500 dark:text-gray-400 ">
+                    Great repository names are short and memorable. Need inspiration? How about <button type="button" className="text-gray-900 dark:text-gray-50 hover:underline" onClick={() => {
                       const suggestion = sanitizeRepoName(`${projectName || 'project'}-${Math.random().toString(36).substring(7)}`);
                       handleRepoNameChange(suggestion);
                     }}>
@@ -320,14 +320,14 @@ export default function GitHubRepoModal({
 
               {/* Description */}
               <div>
-                <label className="block text-sm font-medium text-gray-900 mb-2">
-                  Description <span className="text-gray-500">(optional)</span>
+                <label className="block text-sm font-medium text-gray-900 dark:text-gray-50 mb-2">
+                  Description <span className="text-gray-500 dark:text-gray-400">(optional)</span>
                 </label>
                 <input
                   type="text"
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md bg-white text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-md bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-50 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   placeholder="A short description of your repository"
                   disabled={isLoading}
                 />
@@ -335,17 +335,17 @@ export default function GitHubRepoModal({
 
               {/* Repository Visibility */}
               <div>
-                <label className="block text-sm font-medium text-gray-900 mb-3">
+                <label className="block text-sm font-medium text-gray-900 dark:text-gray-50 mb-3">
                   Repository visibility
                 </label>
                 <div className="space-y-3">
-                  <label className="flex items-start gap-3 p-3 border border-gray-200 rounded-md cursor-pointer hover:bg-gray-50 ">
+                  <label className="flex items-start gap-3 p-3 border border-gray-200 dark:border-gray-700 rounded-md cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800 ">
                     <input
                       type="radio"
                       name="visibility"
                       checked={!isPrivate}
                       onChange={() => setIsPrivate(false)}
-                      className="mt-1 text-gray-900 "
+                      className="mt-1 text-gray-900 dark:text-gray-50 "
                       disabled={isLoading}
                     />
                     <div>
@@ -354,21 +354,21 @@ export default function GitHubRepoModal({
                           <path d="M3 7v10a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2z" stroke="currentColor" strokeWidth="2"/>
                           <path d="M7 7V5a5 5 0 0 1 10 0v2" stroke="currentColor" strokeWidth="2"/>
                         </svg>
-                        <span className="font-medium text-gray-900 ">Public</span>
+                        <span className="font-medium text-gray-900 dark:text-gray-50 ">Public</span>
                       </div>
-                      <p className="text-sm text-gray-600 mt-1">
+                      <p className="text-sm text-gray-600 dark:text-gray-300 mt-1">
                         Anyone on the internet can see this repository. You choose who can commit.
                       </p>
                     </div>
                   </label>
                   
-                  <label className="flex items-start gap-3 p-3 border border-gray-200 rounded-md cursor-pointer hover:bg-gray-50 ">
+                  <label className="flex items-start gap-3 p-3 border border-gray-200 dark:border-gray-700 rounded-md cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800 ">
                     <input
                       type="radio"
                       name="visibility"
                       checked={isPrivate}
                       onChange={() => setIsPrivate(true)}
-                      className="mt-1 text-gray-900 "
+                      className="mt-1 text-gray-900 dark:text-gray-50 "
                       disabled={isLoading}
                     />
                     <div>
@@ -376,9 +376,9 @@ export default function GitHubRepoModal({
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                           <path d="M19 11H5m14 0a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-6a2 2 0 0 1 2-2m14 0V9a7 7 0 0 0-14 0v2" stroke="currentColor" strokeWidth="2"/>
                         </svg>
-                        <span className="font-medium text-gray-900 ">Private</span>
+                        <span className="font-medium text-gray-900 dark:text-gray-50 ">Private</span>
                       </div>
-                      <p className="text-sm text-gray-600 mt-1">
+                      <p className="text-sm text-gray-600 dark:text-gray-300 mt-1">
                         You choose who can see and commit to this repository.
                       </p>
                     </div>
@@ -389,11 +389,11 @@ export default function GitHubRepoModal({
             </div>
 
             {/* Actions */}
-            <div className="flex justify-end gap-3 mt-8 pt-6 border-t border-gray-200 ">
+            <div className="flex justify-end gap-3 mt-8 pt-6 border-t border-gray-200 dark:border-gray-700 ">
               <button
                 type="button"
                 onClick={onClose}
-                className="px-4 py-2 text-gray-700 border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
+                className="px-4 py-2 text-gray-700 dark:text-gray-200 border border-gray-300 dark:border-gray-700 rounded-md hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
                 disabled={isLoading}
               >
                 Cancel

@@ -36,7 +36,7 @@ function SkillCard({
   const [open, setOpen] = useState(false);
   const isGlobal = skill.scope === 'global';
   return (
-    <div className="group rounded-xl border border-gray-200 bg-white hover:border-gray-300 hover:shadow-sm transition-all">
+    <div className="group rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 hover:border-gray-300 dark:hover:border-gray-600 hover:shadow-sm transition-all">
       <div className="flex items-start gap-3 p-3.5">
         <div
           className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-sm ${
@@ -47,7 +47,7 @@ function SkillCard({
         </div>
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
-            <span className="font-mono text-sm font-medium text-gray-900 break-words">{skill.name}</span>
+            <span className="font-mono text-sm font-medium text-gray-900 dark:text-gray-50 break-words">{skill.name}</span>
             <span
               className={`rounded-full px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
                 isGlobal ? 'bg-violet-100 text-violet-700' : 'bg-blue-100 text-blue-700'
@@ -56,13 +56,13 @@ function SkillCard({
               {isGlobal ? 'Global' : 'Project'}
             </span>
           </div>
-          <p className="mt-0.5 line-clamp-2 text-xs text-gray-500">
+          <p className="mt-0.5 line-clamp-2 text-xs text-gray-500 dark:text-gray-400">
             {skill.description || 'No description'}
           </p>
           <div className="mt-2 flex items-center gap-3">
             <button
               onClick={() => setOpen((v) => !v)}
-              className="text-xs font-medium text-gray-500 hover:text-gray-800"
+              className="text-xs font-medium text-gray-500 dark:text-gray-400 hover:text-gray-800"
             >
               {open ? 'Hide' : 'View'} instructions
             </button>
@@ -78,7 +78,7 @@ function SkillCard({
             )}
           </div>
           {open && (
-            <pre className="mt-2 max-h-56 overflow-auto whitespace-pre-wrap rounded-lg bg-gray-50 p-3 text-[11px] leading-relaxed text-gray-700">
+            <pre className="mt-2 max-h-56 overflow-auto whitespace-pre-wrap rounded-lg bg-gray-50 dark:bg-gray-900 p-3 text-[11px] leading-relaxed text-gray-700 dark:text-gray-200">
               {skill.content || '(no body)'}
             </pre>
           )}
@@ -189,8 +189,8 @@ export function SkillsSettings({ projectId }: SkillsSettingsProps) {
   return (
     <div className="space-y-6 p-6">
       <div>
-        <h3 className="text-lg font-semibold text-gray-900">Skills</h3>
-        <p className="mt-1 text-sm text-gray-500">
+        <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-50">Skills</h3>
+        <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
           Reusable instructions the agent loads automatically. Project skills live in this project; global
           skills are shared across all projects.
         </p>
@@ -199,9 +199,9 @@ export function SkillsSettings({ projectId }: SkillsSettingsProps) {
       {/* Project skills */}
       <section className="space-y-3">
         <div className="flex items-center justify-between">
-          <h4 className="flex items-center gap-2 text-sm font-semibold text-gray-800">
+          <h4 className="flex items-center gap-2 text-sm font-semibold text-gray-800 dark:text-gray-100">
             Project skills
-            <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-600">
+            <span className="rounded-full bg-gray-100 dark:bg-gray-800 px-2 py-0.5 text-xs font-medium text-gray-600 dark:text-gray-300">
               {project.length}
             </span>
           </h4>
@@ -217,7 +217,7 @@ export function SkillsSettings({ projectId }: SkillsSettingsProps) {
 
         {editing !== null && (
           <div className="space-y-3 rounded-xl border border-blue-200 bg-blue-50/40 p-4">
-            <div className="text-sm font-medium text-gray-900">
+            <div className="text-sm font-medium text-gray-900 dark:text-gray-50">
               {editing === '__new__' ? 'New skill' : `Edit: ${editing}`}
             </div>
             <input
@@ -225,20 +225,20 @@ export function SkillsSettings({ projectId }: SkillsSettingsProps) {
               onChange={(e) => setName(e.target.value)}
               disabled={editing !== '__new__'}
               placeholder="skill-name (e.g. brand-voice)"
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:bg-gray-100"
+              className="w-full rounded-lg border border-gray-300 dark:border-gray-700 px-3 py-2 text-sm disabled:bg-gray-100"
             />
             <input
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               placeholder="Description — when should the agent use this?"
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+              className="w-full rounded-lg border border-gray-300 dark:border-gray-700 px-3 py-2 text-sm"
             />
             <textarea
               value={content}
               onChange={(e) => setContent(e.target.value)}
               rows={9}
               placeholder={EXAMPLE}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 font-mono text-xs"
+              className="w-full rounded-lg border border-gray-300 dark:border-gray-700 px-3 py-2 font-mono text-xs"
             />
             {error && <p className="text-xs text-red-600">{error}</p>}
             <div className="flex gap-2">
@@ -251,7 +251,7 @@ export function SkillsSettings({ projectId }: SkillsSettingsProps) {
               </button>
               <button
                 onClick={resetForm}
-                className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                className="rounded-lg border border-gray-300 dark:border-gray-700 px-3 py-1.5 text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800"
               >
                 Cancel
               </button>
@@ -260,7 +260,7 @@ export function SkillsSettings({ projectId }: SkillsSettingsProps) {
         )}
 
         {project.length === 0 && editing === null ? (
-          <div className="rounded-xl border border-dashed border-gray-300 p-6 text-center text-sm text-gray-400">
+          <div className="rounded-xl border border-dashed border-gray-300 dark:border-gray-700 p-6 text-center text-sm text-gray-400 dark:text-gray-500">
             No project skills yet. Add one to teach the agent project-specific conventions.
           </div>
         ) : (
@@ -275,7 +275,7 @@ export function SkillsSettings({ projectId }: SkillsSettingsProps) {
       {/* Global skills */}
       <section className="space-y-3">
         <div className="flex items-center justify-between gap-3">
-          <h4 className="flex items-center gap-2 text-sm font-semibold text-gray-800">
+          <h4 className="flex items-center gap-2 text-sm font-semibold text-gray-800 dark:text-gray-100">
             Available globally
             <span className="rounded-full bg-violet-100 px-2 py-0.5 text-xs font-medium text-violet-700">
               {global.length}
@@ -286,17 +286,17 @@ export function SkillsSettings({ projectId }: SkillsSettingsProps) {
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Search skills…"
-              className="w-44 rounded-lg border border-gray-300 px-3 py-1.5 text-sm focus:w-56 transition-all"
+              className="w-44 rounded-lg border border-gray-300 dark:border-gray-700 px-3 py-1.5 text-sm focus:w-56 transition-all"
             />
           )}
         </div>
-        <p className="text-xs text-gray-400">
+        <p className="text-xs text-gray-400 dark:text-gray-500">
           Installed for every project (e.g. SEO/GEO pack, Nuxt UI). Read-only here.
         </p>
         {isLoading ? (
-          <p className="text-sm text-gray-400">Loading…</p>
+          <p className="text-sm text-gray-400 dark:text-gray-500">Loading…</p>
         ) : filteredGlobal.length === 0 ? (
-          <div className="rounded-xl border border-dashed border-gray-300 p-6 text-center text-sm text-gray-400">
+          <div className="rounded-xl border border-dashed border-gray-300 dark:border-gray-700 p-6 text-center text-sm text-gray-400 dark:text-gray-500">
             {global.length === 0 ? 'No global skills installed.' : 'No skills match your search.'}
           </div>
         ) : (

@@ -151,9 +151,9 @@ export default function SharePage({ params }: { params: Promise<{ token: string 
     }
   }, [compose, info, token, guestName, loadComments]);
 
-  if (error) return <div className="h-screen flex items-center justify-center text-gray-500">{error}</div>;
+  if (error) return <div className="h-screen flex items-center justify-center text-gray-500 dark:text-gray-400">{error}</div>;
   if (!info) return (
-    <div className="h-screen flex flex-col items-center justify-center gap-3 text-gray-400">
+    <div className="h-screen flex flex-col items-center justify-center gap-3 text-gray-400 dark:text-gray-500">
       <svg className="animate-spin text-[#DE7356]" width="26" height="26" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" className="opacity-20" /><path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" strokeWidth="4" strokeLinecap="round" /></svg>
       <p className="text-sm">Starting the preview… this can take up to a minute on first open.</p>
     </div>
@@ -161,14 +161,14 @@ export default function SharePage({ params }: { params: Promise<{ token: string 
 
   if (!nameConfirmed) {
     return (
-      <div className="h-screen flex items-center justify-center bg-gray-50">
-        <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-6 w-80">
-          <h1 className="text-lg font-semibold text-gray-900 mb-1">Review “{info.projectName}”</h1>
-          <p className="text-sm text-gray-500 mb-4">Enter your name so your comments are attributed.</p>
+      <div className="h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
+        <div className="bg-white dark:bg-gray-900 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 p-6 w-80">
+          <h1 className="text-lg font-semibold text-gray-900 dark:text-gray-50 mb-1">Review “{info.projectName}”</h1>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">Enter your name so your comments are attributed.</p>
           <input
             autoFocus value={guestName} onChange={(e) => setGuestName(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter' && guestName.trim()) { try { localStorage.setItem('claudable-guest-name', guestName.trim()); } catch {} setNameConfirmed(true); } }}
-            placeholder="Your name" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm mb-3 focus:outline-none focus:ring-2 focus:ring-[#DE7356]/30"
+            placeholder="Your name" className="w-full border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 text-sm mb-3 focus:outline-none focus:ring-2 focus:ring-[#DE7356]/30"
           />
           <button
             onClick={() => { if (guestName.trim()) { try { localStorage.setItem('claudable-guest-name', guestName.trim()); } catch {} setNameConfirmed(true); } }}
@@ -181,22 +181,22 @@ export default function SharePage({ params }: { params: Promise<{ token: string 
   }
 
   return (
-    <div className="h-screen flex flex-col bg-gray-100">
-      <div className="h-12 shrink-0 bg-white border-b border-gray-200 flex items-center px-4 gap-3">
+    <div className="h-screen flex flex-col bg-gray-100 dark:bg-gray-800">
+      <div className="h-12 shrink-0 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 flex items-center px-4 gap-3">
         <span className="w-2 h-2 rounded-full bg-[#DE7356]" />
-        <span className="font-semibold text-gray-900 text-sm">{info.projectName}</span>
+        <span className="font-semibold text-gray-900 dark:text-gray-50 text-sm">{info.projectName}</span>
         <button
           onClick={() => setCommentMode((v) => !v)}
           title={commentMode ? 'Commenting on — click the page to leave a comment. Click to browse instead.' : 'Browsing — links work. Click to leave comments.'}
           className={`h-8 flex items-center gap-1.5 px-2.5 rounded-lg text-xs font-medium border transition-colors ${
-            commentMode ? 'bg-[#DE7356] text-white border-[#DE7356]' : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'
+            commentMode ? 'bg-[#DE7356] text-white border-[#DE7356]' : 'bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-200 border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800'
           }`}
         >
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2Z" /></svg>
           {commentMode ? 'Commenting' : 'Comment'}
         </button>
-        <span className="text-xs text-gray-400 hidden sm:inline">{commentMode ? 'click the page to comment' : 'browsing — links work'} · {route}</span>
-        <span className="ml-auto text-xs text-gray-500">You: {guestName}</span>
+        <span className="text-xs text-gray-400 dark:text-gray-500 hidden sm:inline">{commentMode ? 'click the page to comment' : 'browsing — links work'} · {route}</span>
+        <span className="ml-auto text-xs text-gray-500 dark:text-gray-400">You: {guestName}</span>
       </div>
       <div ref={paneRef} className="relative flex-1 min-h-0">
         {info.previewUrl ? (
@@ -204,7 +204,7 @@ export default function SharePage({ params }: { params: Promise<{ token: string 
             key={reloadKey}
             ref={iframeRef}
             src={info.previewUrl}
-            className="w-full h-full border-none bg-white"
+            className="w-full h-full border-none bg-white dark:bg-gray-900"
             onLoad={() => {
               // Fallback: on stacks without the injected plugin (Next/Angular) the
               // claudable-preview handshake never arrives. Dismiss the overlay a
@@ -214,10 +214,10 @@ export default function SharePage({ params }: { params: Promise<{ token: string 
             }}
           />
         ) : (
-          <div className="h-full flex items-center justify-center text-gray-400">Preview is starting… refresh in a moment.</div>
+          <div className="h-full flex items-center justify-center text-gray-400 dark:text-gray-500">Preview is starting… refresh in a moment.</div>
         )}
         {info.previewUrl && !previewLoaded && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-gray-50/95 text-gray-500 z-40 pointer-events-none">
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-gray-50 dark:bg-gray-900/95 text-gray-500 dark:text-gray-400 z-40 pointer-events-none">
             <svg className="animate-spin text-[#DE7356]" width="26" height="26" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" className="opacity-20" /><path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" strokeWidth="4" strokeLinecap="round" /></svg>
             <p className="text-sm">Starting the preview… this can take up to a minute on first open.</p>
           </div>
