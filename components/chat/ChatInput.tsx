@@ -128,16 +128,20 @@ export default function ChatInput({
       const el = textareaRef.current;
       if (!el) return;
       const r = el.getBoundingClientRect();
-      const W = 400, GAP = 10;
+      const W = 400, GAP = 10, M = 12;
       const roomRight = window.innerWidth - r.right;
+      const maxHeight = Math.min(460, window.innerHeight - 2 * M);
       if (roomRight >= W + GAP) {
-        // To the right, top-aligned with the input, growing down.
-        const maxHeight = Math.min(460, window.innerHeight - r.top - 16);
-        setMenuStyle({ position: 'fixed', left: r.right + GAP, top: r.top, width: W, maxHeight });
+        // To the right of the input (over the preview). Clamp `top` so the menu
+        // always stays fully on screen even when the input sits near the bottom.
+        let top = r.top;
+        if (top + maxHeight > window.innerHeight - M) top = window.innerHeight - maxHeight - M;
+        if (top < M) top = M;
+        setMenuStyle({ position: 'fixed', left: r.right + GAP, top, width: W, maxHeight });
       } else {
-        // Above the input, growing up.
+        // Narrow layout: open above the input, growing up.
         const width = Math.min(W, r.width);
-        setMenuStyle({ position: 'fixed', left: r.left, bottom: window.innerHeight - r.top + GAP, width, maxHeight: Math.min(360, r.top - 16) });
+        setMenuStyle({ position: 'fixed', left: r.left, bottom: window.innerHeight - r.top + GAP, width, maxHeight: Math.min(360, r.top - M) });
       }
     };
     place();
