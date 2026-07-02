@@ -248,3 +248,34 @@
   from { opacity: 0; transform: translateY(-6px) scale(0.98); }
   to { opacity: 1; transform: translateY(0) scale(1); }
 }
+
+/* Salsa Shop display + body fonts, reused on the login page. */
+@font-face {
+  font-family: 'Gill Sans Nova';
+  src: url('/fonts/GillSansNova-CnUltraBold.otf') format('opentype');
+  font-weight: 800; font-style: normal; font-display: swap;
+}
+@font-face {
+  font-family: 'Founders Grotesk';
+  src: url('/fonts/FoundersGrotesk-Regular.ttf') format('truetype');
+  font-weight: 400; font-style: normal; font-display: swap;
+}
+@font-face {
+  font-family: 'Founders Grotesk';
+  src: url('/fonts/FoundersGroteskSemibold.otf') format('opentype');
+  font-weight: 600; font-style: normal; font-display: swap;
+}
+@font-face {
+  font-family: 'Baystar Script';
+  src: url('/fonts/BaystarScript-Medium.otf') format('opentype');
+  font-weight: 500; font-style: normal; font-display: swap;
+}
+.font-display { font-family: 'Gill Sans Nova', 'Anton', sans-serif; }
+.font-grotesk { font-family: 'Founders Grotesk', 'Archivo', system-ui, sans-serif; }
+.font-script { font-family: 'Baystar Script', cursive; }
+
+/* Login page animations */
+@keyframes loginFadeUp { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes loginBlob { 0%,100% { transform: translate(0,0) scale(1); } 33% { transform: translate(3%, -4%) scale(1.08); } 66% { transform: translate(-3%, 3%) scale(0.96); } }
+@keyframes loginShimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+@keyframes loginMarquee { from { transform: translateX(0); } to { transform: translateX(-50%); } }
