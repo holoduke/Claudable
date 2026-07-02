@@ -13,6 +13,10 @@ import { createSuccessResponse, createErrorResponse, handleApiError } from '@/li
 import { getSessionUser, authEnabled } from '@/lib/auth/session';
 import { accessibleProjectIds } from '@/lib/services/project-access';
 import { isValidStack } from '@/lib/config/stacks';
+import { isValidBackend } from '@/lib/config/backend-stacks';
+import { isValidDatabase } from '@/lib/config/databases';
+import { prisma } from '@/lib/db/client';
+import path from 'path';
 
 /**
  * GET /api/projects
@@ -87,6 +91,29 @@ export async function POST(request: NextRequest) {
         await setActiveDesign(project.id, designId);
       } catch (e) {
         console.error('[API] Failed to apply design to new project:', e);
+      }
+    }
+
+    // Optional backend + database composition. Stored in the project's settings
+    // JSON (no schema change); the backend is scaffolded into the repo now, and
+    // the preview runs it as its own isolated service.
+    const backendId = typeof body.backendId === 'string' ? body.backendId : (typeof body.backend_id === 'string' ? body.backend_id : '');
+    const databaseId = typeof body.databaseId === 'string' ? body.databaseId : (typeof body.database_id === 'string' ? body.database_id : '');
+    if (isValidBackend(backendId) || isValidDatabase(databaseId)) {
+      try {
+        const prev = project.settings ? JSON.parse(project.settings) : {};
+        const nextSettings = {
+          ...prev,
+          ...(isValidBackend(backendId) ? { backendType: backendId } : {}),
+          ...(isValidDatabase(databaseId) ? { databaseType: databaseId } : {}),
+        };
+        await prisma.project.update({ where: { id: project.id }, data: { settings: JSON.stringify(nextSettings) } });
+        if (isValidBackend(backendId) && project.repoPath) {
+          const { scaffoldBackend } = await import('@/lib/utils/scaffold-backend');
+          await scaffoldBackend(path.resolve(project.repoPath), backendId);
+        }
+      } catch (e) {
+        console.error('[API] Failed to apply project composition:', e);
       }
     }
 

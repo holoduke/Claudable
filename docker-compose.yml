@@ -24,7 +24,7 @@ services:
       # generated-site deploy band and small so each preview subdomain's cert
       # stays under Let's Encrypt rate limits.
       - PREVIEW_PORT_START=3710
-      - PREVIEW_PORT_END=3719
+      - PREVIEW_PORT_END=3739
       - PREVIEW_BIND_HOST=0.0.0.0
       - DATABASE_URL=file:../data/cc.db
       - PROJECTS_DIR=./data/projects

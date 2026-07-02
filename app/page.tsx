@@ -6,6 +6,8 @@ import CreateProjectModal from '@/components/modals/CreateProjectModal';
 import DeleteProjectModal from '@/components/modals/DeleteProjectModal';
 import DesignPickerModal from '@/components/modals/DesignPickerModal';
 import { STACKS, DEFAULT_STACK } from '@/lib/config/stacks';
+import { BACKEND_STACKS } from '@/lib/config/backend-stacks';
+import { DATABASES } from '@/lib/config/databases';
 import GlobalSettings from '@/components/settings/GlobalSettings';
 import UserMenu from '@/components/layout/UserMenu';
 import ThemeToggle from '@/components/ui/ThemeToggle';
@@ -91,6 +93,10 @@ export default function HomePage() {
   const [selectedDesign, setSelectedDesign] = useState<{ id: string; name: string } | null>(null);
   const [showDesignPicker, setShowDesignPicker] = useState(false);
   const [selectedStack, setSelectedStack] = useState<string>(DEFAULT_STACK);
+  const [selectedBackend, setSelectedBackend] = useState<string>('');   // '' = none
+  const [selectedDatabase, setSelectedDatabase] = useState<string>(''); // '' = none
+  const [showBackendMenu, setShowBackendMenu] = useState(false);
+  const [showDatabaseMenu, setShowDatabaseMenu] = useState(false);
   const [showStackMenu, setShowStackMenu] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [cliStatus, setCLIStatus] = useState<CLIStatus>({});
@@ -505,7 +511,9 @@ export default function HomePage() {
           preferredCli: selectedAssistant,
           selectedModel,
           designId: selectedDesign?.id ?? null,
-          stackId: selectedStack
+          stackId: selectedStack,
+          backendId: selectedBackend || undefined,
+          databaseId: selectedDatabase || undefined,
         })
       });
       
@@ -1113,6 +1121,83 @@ export default function HomePage() {
                               {selectedStack === s.id && <span className="text-xs text-blue-600">✓</span>}
                             </div>
                             <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{s.description}</p>
+                          </button>
+                        ))}
+                      </div>
+                    </>
+                  )}
+                </div>
+                {/* Backend Selector (optional) */}
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={() => setShowBackendMenu(v => !v)}
+                    title="Add a backend"
+                    className="justify-center whitespace-nowrap text-sm font-medium transition-colors duration-100 ease-in-out border border-gray-200 dark:border-gray-700/50 bg-transparent shadow-sm hover:bg-gray-50 dark:hover:bg-gray-800 hover:border-gray-300 dark:hover:border-gray-600/50 px-3 py-2 flex h-8 items-center gap-1.5 rounded-full text-gray-700 dark:text-gray-200 hover:text-gray-900 dark:hover:text-gray-100"
+                  >
+                    <span aria-hidden className="text-sm leading-none">⚙️</span>
+                    <span className="hidden md:flex text-sm font-medium">
+                      {BACKEND_STACKS.find(b => b.id === selectedBackend)?.name ?? 'No backend'}
+                    </span>
+                  </button>
+                  {showBackendMenu && (
+                    <>
+                      <div className="fixed inset-0 z-[290]" onClick={() => setShowBackendMenu(false)} />
+                      <div className="absolute bottom-full mb-2 left-0 z-[300] w-72 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-lg p-1">
+                        <button type="button" onClick={() => { setSelectedBackend(''); setShowBackendMenu(false); }}
+                          className={`w-full text-left px-3 py-2 rounded-lg transition-colors ${!selectedBackend ? 'bg-gray-100 dark:bg-gray-800' : 'hover:bg-gray-50 dark:hover:bg-gray-800'}`}>
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm font-medium text-gray-900 dark:text-gray-50">No backend</span>
+                            {!selectedBackend && <span className="text-xs text-blue-600">✓</span>}
+                          </div>
+                          <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Frontend only.</p>
+                        </button>
+                        {BACKEND_STACKS.map(b => (
+                          <button key={b.id} type="button" onClick={() => { setSelectedBackend(b.id); setShowBackendMenu(false); }}
+                            className={`w-full text-left px-3 py-2 rounded-lg transition-colors ${selectedBackend === b.id ? 'bg-gray-100 dark:bg-gray-800' : 'hover:bg-gray-50 dark:hover:bg-gray-800'}`}>
+                            <div className="flex items-center justify-between">
+                              <span className="text-sm font-medium text-gray-900 dark:text-gray-50">{b.name}</span>
+                              {selectedBackend === b.id && <span className="text-xs text-blue-600">✓</span>}
+                            </div>
+                            <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{b.description}</p>
+                          </button>
+                        ))}
+                      </div>
+                    </>
+                  )}
+                </div>
+                {/* Database Selector (optional) */}
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={() => setShowDatabaseMenu(v => !v)}
+                    title="Add a database"
+                    className="justify-center whitespace-nowrap text-sm font-medium transition-colors duration-100 ease-in-out border border-gray-200 dark:border-gray-700/50 bg-transparent shadow-sm hover:bg-gray-50 dark:hover:bg-gray-800 hover:border-gray-300 dark:hover:border-gray-600/50 px-3 py-2 flex h-8 items-center gap-1.5 rounded-full text-gray-700 dark:text-gray-200 hover:text-gray-900 dark:hover:text-gray-100"
+                  >
+                    <span aria-hidden className="text-sm leading-none">🗄️</span>
+                    <span className="hidden md:flex text-sm font-medium">
+                      {DATABASES.find(d => d.id === selectedDatabase)?.name ?? 'No database'}
+                    </span>
+                  </button>
+                  {showDatabaseMenu && (
+                    <>
+                      <div className="fixed inset-0 z-[290]" onClick={() => setShowDatabaseMenu(false)} />
+                      <div className="absolute bottom-full mb-2 left-0 z-[300] w-72 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-lg p-1">
+                        <button type="button" onClick={() => { setSelectedDatabase(''); setShowDatabaseMenu(false); }}
+                          className={`w-full text-left px-3 py-2 rounded-lg transition-colors ${!selectedDatabase ? 'bg-gray-100 dark:bg-gray-800' : 'hover:bg-gray-50 dark:hover:bg-gray-800'}`}>
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm font-medium text-gray-900 dark:text-gray-50">No database</span>
+                            {!selectedDatabase && <span className="text-xs text-blue-600">✓</span>}
+                          </div>
+                        </button>
+                        {DATABASES.map(d => (
+                          <button key={d.id} type="button" onClick={() => { setSelectedDatabase(d.id); setShowDatabaseMenu(false); }}
+                            className={`w-full text-left px-3 py-2 rounded-lg transition-colors ${selectedDatabase === d.id ? 'bg-gray-100 dark:bg-gray-800' : 'hover:bg-gray-50 dark:hover:bg-gray-800'}`}>
+                            <div className="flex items-center justify-between">
+                              <span className="text-sm font-medium text-gray-900 dark:text-gray-50">{d.name}</span>
+                              {selectedDatabase === d.id && <span className="text-xs text-blue-600">✓</span>}
+                            </div>
+                            <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{d.description}</p>
                           </button>
                         ))}
                       </div>
