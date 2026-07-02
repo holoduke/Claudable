@@ -7,6 +7,7 @@
  *   DELETE ?kind=backend|database
  */
 import { NextRequest } from 'next/server';
+import { promises as fs } from 'fs';
 import path from 'path';
 import { getSessionUser, authEnabled } from '@/lib/auth/session';
 import { prisma } from '@/lib/db/client';
@@ -61,17 +62,30 @@ export async function GET(_req: NextRequest, { params }: RouteContext) {
       removable: false,
     });
 
+    // A backend can come from the composition (settings.backendType) OR from an
+    // imported project's .claudable/preview.json (e.g. Farmer Gracy, set up at
+    // import before the composition feature). Detect either.
     const backendType = typeof settings.backendType === 'string' ? settings.backendType : null;
-    if (backendType) {
+    let importedBackend = false;
+    if (!backendType && project!.repoPath) {
+      try {
+        const raw = await fs.readFile(path.join(path.resolve(project!.repoPath), '.claudable', 'preview.json'), 'utf8');
+        importedBackend = !!JSON.parse(raw)?.backend?.container;
+      } catch { /* none */ }
+    }
+    if (backendType || importedBackend) {
       const b = getBackendStack(backendType);
+      const isStaticProj = project!.templateType === 'static';
       containers.push({
         kind: 'backend',
         name: 'Backend',
-        type: `${b?.name ?? backendType} · container`,
+        type: `${b?.name ?? 'container'} · container`,
         status: running ? 'running' : 'stopped',
-        url: apiUrlFrom(project!.previewUrl),
-        description: `${b?.description ?? 'API service'} Runs in its own isolated container; reachable under /api.`,
-        removable: true,
+        // Composed (framework) backends get their own -api URL; an imported
+        // static-site backend is proxied at /api on the frontend's URL.
+        url: isStaticProj ? (project!.previewUrl ? `${project!.previewUrl}/api` : null) : apiUrlFrom(project!.previewUrl),
+        description: `${b?.description ?? 'API service.'} Runs in its own isolated container; reachable under /api.`,
+        removable: !!backendType, // only composition-added backends are removable here
       });
     }
 
