@@ -18,6 +18,13 @@ ENV PATH="/usr/local/go/bin:${PATH}" \
     GOTOOLCHAIN=local \
     GOFLAGS=-buildvcs=false
 
+# Docker CLI ONLY (not the daemon) — for project-environment isolation, Claudable
+# builds/runs hardened sibling containers via the socket-proxy (DOCKER_HOST). Just
+# the static client binary; talks to a remote daemon, runs nothing locally.
+RUN curl -fsSL https://download.docker.com/linux/static/stable/x86_64/docker-27.5.1.tgz \
+    | tar -xz -C /usr/local/bin --strip-components=1 docker/docker \
+  && docker --version
+
 # Claude Code CLI on PATH so the Agent SDK can spawn `claude` headless.
 RUN npm install -g @anthropic-ai/claude-code
 

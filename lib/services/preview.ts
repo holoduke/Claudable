@@ -204,9 +204,21 @@ async function ensureStaticServer(): Promise<string> {
 interface PreviewBackendConfig {
   cwd?: string;       // dir to build/run in, relative to the project (e.g. "backend")
   build?: string;     // shell build command (optional)
-  run: string;        // shell run command
+  run: string;        // shell run command (in-process/spawn mode)
   healthPath?: string;// path to probe for readiness (default "/")
   env?: Record<string, string>;
+  // Isolation (used only when PREVIEW_ISOLATION is set): run the backend in a
+  // hardened sibling container built from the project's own Dockerfile instead
+  // of a bare in-container process.
+  container?: {
+    dockerfile: string;               // path relative to the project (e.g. "deploy/Dockerfile.backend")
+    context?: string;                 // build context relative to the project (default ".")
+    port: number;                     // port the backend LISTENS on inside the container
+    memory?: string;                  // e.g. "512m"
+    cpus?: string;                    // e.g. "1.0"
+    pidsLimit?: number;               // default 256
+    env?: Record<string, string>;     // container-side env (container paths, not host {PROJECT})
+  };
 }
 interface PreviewConfig {
   backend?: PreviewBackendConfig;
@@ -247,6 +259,68 @@ function buildBackendBaseEnv(): Record<string, string> {
     if (v != null && BACKEND_ENV_ALLOW.has(k)) env[k] = v;
   }
   return env;
+}
+
+/** Whether isolated (containerised) backends are enabled for this deployment. */
+function isolationEnabled(): boolean {
+  return !!(process.env.PREVIEW_ISOLATION && process.env.PREVIEW_ISOLATION.trim());
+}
+function backendContainerName(projectId: string): string {
+  return `claudable-preview-${previewSlug(projectId)}`;
+}
+/** Fire-and-forget removal of an isolated backend container. */
+function removeBackendContainer(name: string | null | undefined): void {
+  if (!name) return;
+  try {
+    const p = spawn('sh', ['-c', `docker rm -f ${name} 2>/dev/null || true`], { env: process.env, stdio: 'ignore', detached: true });
+    p.unref();
+  } catch { /* best-effort */ }
+}
+/**
+ * Build the project's own Dockerfile and run the backend in a HARDENED sibling
+ * container (non-root by the image's own USER, cap-drop ALL, no-new-privileges,
+ * memory/cpu/pid limits, isolated network with only the backend port published
+ * to loopback, and NONE of Claudable's env). Returns the container name.
+ * Talks to Docker via DOCKER_HOST (the locked-down socket-proxy), never the raw
+ * socket. `containerEnv` is the ONLY env the container gets.
+ */
+async function runBackendContainer(
+  projectId: string,
+  projectPath: string,
+  c: NonNullable<PreviewBackendConfig['container']>,
+  hostPort: number,
+  containerEnv: Record<string, string>,
+  log: (chunk: string | Buffer) => void,
+): Promise<string> {
+  const name = backendContainerName(projectId);
+  const dockerEnv = process.env; // the CLI needs DOCKER_HOST + PATH
+
+  log(Buffer.from(`[PreviewManager] [backend] building image ${name} from ${c.dockerfile}…`));
+  await appendCommandLogs('docker', ['build', '-f', c.dockerfile, '-t', name, c.context || '.'], projectPath, dockerEnv, log);
+
+  // Clear any stale container from a previous start (ignore "no such container").
+  await new Promise<void>((res) => {
+    const p = spawn('sh', ['-c', `docker rm -f ${name} 2>/dev/null || true`], { cwd: projectPath, env: dockerEnv, stdio: 'ignore' });
+    p.on('exit', () => res());
+    p.on('error', () => res());
+  });
+
+  const runArgs = [
+    'run', '-d', '--name', name,
+    '-p', `127.0.0.1:${hostPort}:${c.port}`,
+    '--memory', c.memory || '512m',
+    '--cpus', String(c.cpus || '1.0'),
+    '--pids-limit', String(c.pidsLimit ?? 256),
+    '--cap-drop', 'ALL',
+    '--security-opt', 'no-new-privileges',
+    '--restart', 'no',
+  ];
+  for (const [k, v] of Object.entries(containerEnv)) runArgs.push('-e', `${k}=${v}`);
+  runArgs.push(name); // image tag == container name
+
+  log(Buffer.from(`[PreviewManager] [backend] starting container on 127.0.0.1:${hostPort} (mem ${c.memory || '512m'}, cpus ${c.cpus || '1.0'}, cap-drop ALL)`));
+  await appendCommandLogs('docker', runArgs, projectPath, dockerEnv, log);
+  return name;
 }
 
 /**
@@ -681,6 +755,8 @@ interface PreviewProcess {
   process: ChildProcess | null;
   // Optional backend sidecar (e.g. a Go service) proxied by the static server.
   backendProcess?: ChildProcess | null;
+  // Name of the isolated backend container (when PREVIEW_ISOLATION is on).
+  backendContainer?: string | null;
   port: number;
   url: string;
   status: PreviewStatus;
@@ -1645,6 +1721,7 @@ class PreviewManager {
     let args = devArgs;
     const spawnEnv: NodeJS.ProcessEnv = { ...env };
     let backendChild: ChildProcess | null = null;
+    let backendContainer: string | null = null;
     if (isStatic) {
       const serverPath = await ensureStaticServer();
       command = process.execPath; // the node binary
@@ -1655,40 +1732,59 @@ class PreviewManager {
       const cfg = await readPreviewConfig(projectPath);
       if (cfg?.backend) {
         const backendPort = effectivePort + 5000; // deterministic, per running preview
-        const vars = { PROJECT: projectPath, PORT: String(backendPort) };
-        const bcwd = cfg.backend.cwd ? path.join(projectPath, cfg.backend.cwd) : projectPath;
+        const useContainer = isolationEnabled() && !!cfg.backend.container;
 
-        // Backend env = a SECRET-FREE base (buildBackendBaseEnv — no Claudable
-        // credentials), then the config env (with {PROJECT}/{PORT} substituted),
-        // then the project's own EnvVars (Envs tab) override — that's how the user
-        // supplies real secrets (MASTER_KEY, SETTINGS_USER/PASS, …) without the
-        // backend ever seeing Claudable's own tokens.
-        const backendEnv: Record<string, string> = buildBackendBaseEnv();
-        for (const [k, v] of Object.entries(cfg.backend.env ?? {})) backendEnv[k] = substVars(String(v), vars);
-        try {
-          for (const ev of await listEnvVars(projectId)) backendEnv[ev.key] = ev.value;
-        } catch { /* env vars are best-effort */ }
+        if (useContainer) {
+          // ISOLATED: build + run the backend in a hardened sibling container.
+          const c = cfg.backend.container!;
+          // Container-side env: config env ({PORT} = the port it LISTENS on inside
+          // the container) + the project's own EnvVars. No Claudable env at all.
+          const cvars = { PROJECT: projectPath, PORT: String(c.port) };
+          const cenv: Record<string, string> = {};
+          for (const [k, v] of Object.entries(c.env ?? {})) cenv[k] = substVars(String(v), cvars);
+          try {
+            for (const ev of await listEnvVars(projectId)) cenv[ev.key] = ev.value;
+          } catch { /* env vars are best-effort */ }
+          try {
+            backendContainer = await runBackendContainer(projectId, projectPath, c, backendPort, cenv, log);
+          } catch (e) {
+            log(Buffer.from(`[backend] container start failed: ${(e as Error).message}`));
+          }
+        } else {
+          // IN-PROCESS: build + run the backend as a child process (no isolation).
+          const vars = { PROJECT: projectPath, PORT: String(backendPort) };
+          const bcwd = cfg.backend.cwd ? path.join(projectPath, cfg.backend.cwd) : projectPath;
 
-        await fs.mkdir(path.join(projectPath, '.claudable', 'backend-data'), { recursive: true });
+          // Backend env = a SECRET-FREE base (buildBackendBaseEnv — no Claudable
+          // credentials), then the config env (with {PROJECT}/{PORT} substituted),
+          // then the project's own EnvVars (Envs tab) override.
+          const backendEnv: Record<string, string> = buildBackendBaseEnv();
+          for (const [k, v] of Object.entries(cfg.backend.env ?? {})) backendEnv[k] = substVars(String(v), vars);
+          try {
+            for (const ev of await listEnvVars(projectId)) backendEnv[ev.key] = ev.value;
+          } catch { /* env vars are best-effort */ }
 
-        if (cfg.backend.build) {
-          log(Buffer.from('[PreviewManager] [backend] building…'));
-          await appendCommandLogs('sh', ['-c', substVars(cfg.backend.build, vars)], bcwd, backendEnv as NodeJS.ProcessEnv, log);
+          await fs.mkdir(path.join(projectPath, '.claudable', 'backend-data'), { recursive: true });
+
+          if (cfg.backend.build) {
+            log(Buffer.from('[PreviewManager] [backend] building…'));
+            await appendCommandLogs('sh', ['-c', substVars(cfg.backend.build, vars)], bcwd, backendEnv as NodeJS.ProcessEnv, log);
+          }
+
+          log(Buffer.from(`[PreviewManager] [backend] starting on 127.0.0.1:${backendPort}`));
+          const bc = spawn('sh', ['-c', substVars(cfg.backend.run, vars)], {
+            cwd: bcwd,
+            env: backendEnv as NodeJS.ProcessEnv,
+            stdio: ['ignore', 'pipe', 'pipe'],
+            detached: process.platform !== 'win32',
+          });
+          backendChild = bc;
+          bc.stdout?.on('data', (c) => { log(Buffer.from('[backend] ' + c.toString())); try { recordBackendChunk(projectId, c, 'stdout'); } catch { /* best-effort */ } });
+          bc.stderr?.on('data', (c) => { log(Buffer.from('[backend] ' + c.toString())); try { recordBackendChunk(projectId, c, 'stderr'); } catch { /* best-effort */ } });
+          bc.on('error', (e) => log(Buffer.from(`[backend] failed: ${e.message}`)));
         }
 
-        log(Buffer.from(`[PreviewManager] [backend] starting on 127.0.0.1:${backendPort}`));
-        const bc = spawn('sh', ['-c', substVars(cfg.backend.run, vars)], {
-          cwd: bcwd,
-          env: backendEnv as NodeJS.ProcessEnv,
-          stdio: ['ignore', 'pipe', 'pipe'],
-          detached: process.platform !== 'win32',
-        });
-        backendChild = bc;
-        bc.stdout?.on('data', (c) => { log(Buffer.from('[backend] ' + c.toString())); try { recordBackendChunk(projectId, c, 'stdout'); } catch { /* best-effort */ } });
-        bc.stderr?.on('data', (c) => { log(Buffer.from('[backend] ' + c.toString())); try { recordBackendChunk(projectId, c, 'stderr'); } catch { /* best-effort */ } });
-        bc.on('error', (e) => log(Buffer.from(`[backend] failed: ${e.message}`)));
-
-        // Wait for it to listen before the frontend can proxy to it.
+        // Wait for the backend (container OR process) to listen, then proxy to it.
         const healthUrl = `http://127.0.0.1:${backendPort}${cfg.backend.healthPath || '/'}`;
         await waitForPreviewReady(healthUrl, log).catch(() => false);
 
@@ -1714,6 +1810,7 @@ class PreviewManager {
 
     previewProcess.process = child;
     previewProcess.backendProcess = backendChild;
+    previewProcess.backendContainer = backendContainer;
     this.processes.set(projectId, previewProcess);
     // Now tracked via `processes` — free the in-flight reservation.
     this.reservedPorts.delete(preferredPort);
@@ -1735,7 +1832,9 @@ class PreviewManager {
       previewProcess.status = code === 0 ? 'stopped' : 'error';
       // Tear down the backend sidecar too — it must not outlive the frontend.
       killProcessTree(previewProcess.backendProcess);
+      removeBackendContainer(previewProcess.backendContainer);
       previewProcess.backendProcess = null;
+      previewProcess.backendContainer = null;
       this.processes.delete(projectId);
       // Withdraw the per-project route — a crash must not leave it pointing at a
       // now-dead port that another project can reuse (the cross-project leak).
@@ -1763,7 +1862,9 @@ class PreviewManager {
       // Drop the dead entry so a subsequent start() isn't blocked by the
       // "already running" check at the top of start().
       killProcessTree(previewProcess.backendProcess);
+      removeBackendContainer(previewProcess.backendContainer);
       previewProcess.backendProcess = null;
+      previewProcess.backendContainer = null;
       if (this.processes.get(projectId) === previewProcess) {
         this.processes.delete(projectId);
       }
@@ -1845,6 +1946,7 @@ class PreviewManager {
     try {
       killProcessTree(processInfo.process);
       killProcessTree(processInfo.backendProcess);
+      removeBackendContainer(processInfo.backendContainer);
     } catch (error) {
       console.error('[PreviewManager] Failed to stop preview process:', error);
     }
