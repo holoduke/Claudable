@@ -21,6 +21,7 @@ export default function ArchitectureModal({
   useEffect(() => {
     if (!open || !projectId) return;
     let cancelled = false;
+    setContent(''); // avoid flashing the previous project's content on reopen
     setLoading(true);
     fetch(`${API_BASE}/api/projects/${projectId}/architecture`)
       .then((r) => (r.ok ? r.json() : null))

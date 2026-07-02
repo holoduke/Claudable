@@ -2,8 +2,6 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { useRouter } from 'next/navigation';
-import CreateProjectModal from '@/components/modals/CreateProjectModal';
-import DeleteProjectModal from '@/components/modals/DeleteProjectModal';
 import DesignPickerModal from '@/components/modals/DesignPickerModal';
 import { STACKS, DEFAULT_STACK } from '@/lib/config/stacks';
 import { BACKEND_STACKS } from '@/lib/config/backend-stacks';

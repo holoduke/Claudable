@@ -107,11 +107,22 @@ export async function POST(request: NextRequest) {
           ...(isValidBackend(backendId) ? { backendType: backendId } : {}),
           ...(isValidDatabase(databaseId) ? { databaseType: databaseId } : {}),
         };
-        await prisma.project.update({ where: { id: project.id }, data: { settings: JSON.stringify(nextSettings) } });
+        // Scaffold the backend BEFORE persisting, so settings never claim a
+        // backend the repo doesn't actually have (mirrors the containers route).
         if (isValidBackend(backendId) && project.repoPath) {
           const { scaffoldBackend } = await import('@/lib/utils/scaffold-backend');
           await scaffoldBackend(path.resolve(project.repoPath), backendId);
         }
+        // Actually provision a managed Postgres (was recorded but never created).
+        if (databaseId === 'postgres') {
+          try {
+            const { provisionPostgres } = await import('@/lib/services/database');
+            await provisionPostgres(project.id);
+          } catch (e) { console.error('[API] provisionPostgres failed:', e); }
+        }
+        await prisma.project.update({ where: { id: project.id }, data: { settings: JSON.stringify(nextSettings) } });
+        (project as { settings?: string | null }).settings = JSON.stringify(nextSettings);
+        return createSuccessResponse(serializeProject(project), 201); // re-serialize with the new settings
       } catch (e) {
         console.error('[API] Failed to apply project composition:', e);
       }
