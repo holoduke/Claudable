@@ -131,6 +131,50 @@ const npmCommand = process.platform === 'win32' ? 'npm.cmd' : 'npm';
 const pnpmCommand = process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm';
 
 /**
+ * Dependency-free static file server for imported `static` projects (a single
+ * index.html + assets). Reads: argv[2]=port, argv[3]=host, argv[4]=root dir.
+ * Serves the root dir, defaults directories to index.html, and falls back to
+ * the root index.html for unknown paths (SPA-friendly). Lives OUTSIDE the
+ * project so the repo stays pristine (the root comes in via argv, not __dirname).
+ */
+const STATIC_SERVER_SRC = `const http = require('http');
+const fs = require('fs');
+const path = require('path');
+const PORT = parseInt(process.argv[2], 10) || 3000;
+const HOST = process.argv[3] || '0.0.0.0';
+const ROOT = path.resolve(process.argv[4] || '.');
+const TYPES = { '.html':'text/html; charset=utf-8', '.js':'text/javascript', '.mjs':'text/javascript', '.css':'text/css', '.json':'application/json', '.png':'image/png', '.jpg':'image/jpeg', '.jpeg':'image/jpeg', '.gif':'image/gif', '.svg':'image/svg+xml', '.ico':'image/x-icon', '.webp':'image/webp', '.avif':'image/avif', '.woff':'font/woff', '.woff2':'font/woff2', '.ttf':'font/ttf', '.otf':'font/otf', '.eot':'application/vnd.ms-fontobject', '.map':'application/json', '.txt':'text/plain', '.xml':'application/xml', '.wasm':'application/wasm', '.mp4':'video/mp4', '.webm':'video/webm', '.pdf':'application/pdf' };
+function type(fp){ return TYPES[path.extname(fp).toLowerCase()] || 'application/octet-stream'; }
+function serve(res, fp, status){
+  fs.readFile(fp, function(e, data){
+    if (e) { res.writeHead(404, {'Content-Type':'text/plain'}); res.end('Not found'); return; }
+    res.writeHead(status || 200, {'Content-Type': type(fp), 'Cache-Control':'no-store'});
+    res.end(data);
+  });
+}
+const server = http.createServer(function(req, res){
+  var urlPath;
+  try { urlPath = decodeURIComponent((req.url || '/').split('?')[0]); } catch (e) { urlPath = '/'; }
+  if (urlPath.endsWith('/')) urlPath += 'index.html';
+  var filePath = path.normalize(path.join(ROOT, urlPath));
+  if (filePath !== ROOT && !filePath.startsWith(ROOT + path.sep)) { res.writeHead(403); res.end('Forbidden'); return; }
+  fs.stat(filePath, function(err, st){
+    if (!err && st.isDirectory()) return serve(res, path.join(filePath, 'index.html'));
+    if (!err && st.isFile()) return serve(res, filePath);
+    return serve(res, path.join(ROOT, 'index.html'));
+  });
+});
+server.listen(PORT, HOST, function(){ console.log('[static] ready on ' + HOST + ':' + PORT + ' serving ' + ROOT); });
+`;
+
+const STATIC_SERVER_PATH = path.join(process.cwd(), 'data', 'static-preview-server.cjs');
+async function ensureStaticServer(): Promise<string> {
+  await fs.mkdir(path.dirname(STATIC_SERVER_PATH), { recursive: true });
+  await fs.writeFile(STATIC_SERVER_PATH, STATIC_SERVER_SRC, 'utf8');
+  return STATIC_SERVER_PATH;
+}
+
+/**
  * Inject a tiny Nuxt client plugin that reports the current route to the
  * Claudable parent window via postMessage, so the preview URL bar follows
  * in-app (client-side) navigation. The preview is a cross-origin iframe, so the
@@ -1161,6 +1205,11 @@ class PreviewManager {
       throw new Error('Project not found');
     }
 
+    // Static imports have no npm deps and are never scaffolded.
+    if (stackKind(project.templateType) === 'static') {
+      return { logs: ['[PreviewManager] static project — no dependencies to install'] };
+    }
+
     const projectPath = project.repoPath
       ? path.resolve(project.repoPath)
       : path.join(process.cwd(), 'projects', projectId);
@@ -1285,6 +1334,11 @@ class PreviewManager {
 
     await fs.mkdir(projectPath, { recursive: true });
 
+    // `static` = an imported existing site (e.g. a single index.html). It is
+    // never scaffolded, has no npm deps, and is served by a plain static file
+    // server instead of a framework dev server.
+    const isStatic = stackKind(project.templateType) === 'static';
+
     const pendingLogs: string[] = [];
     const queueLog = (message: string) => {
       const formatted = `[PreviewManager] ${message}`;
@@ -1294,18 +1348,20 @@ class PreviewManager {
 
     await ensureProjectRootStructure(projectPath, queueLog);
 
-    try {
-      await fs.access(path.join(projectPath, 'package.json'));
-    } catch {
-      const proj = await getProjectById(projectId).catch(() => null);
-      console.log(
-        `[PreviewManager] Bootstrapping ${stackKind(proj?.templateType)} app for project ${projectId}`
-      );
-      await scaffoldForStack(projectPath, projectId, proj?.templateType);
-    }
+    if (!isStatic) {
+      try {
+        await fs.access(path.join(projectPath, 'package.json'));
+      } catch {
+        const proj = await getProjectById(projectId).catch(() => null);
+        console.log(
+          `[PreviewManager] Bootstrapping ${stackKind(proj?.templateType)} app for project ${projectId}`
+        );
+        await scaffoldForStack(projectPath, projectId, proj?.templateType);
+      }
 
-    // Make the preview report its route to the URL bar (cross-origin iframe).
-    await ensurePreviewRouteReporter(projectPath, projectId);
+      // Make the preview report its route to the URL bar (cross-origin iframe).
+      await ensurePreviewRouteReporter(projectPath, projectId);
+    }
 
     const previewBounds = resolvePreviewBounds();
     let preferredPort: number;
@@ -1405,9 +1461,9 @@ class PreviewManager {
       await installPromise;
     };
 
-    await ensureWithLock();
+    if (!isStatic) await ensureWithLock();
 
-    const packageJson = await readPackageJson(projectPath);
+    const packageJson = isStatic ? null : await readPackageJson(projectPath);
     const hasPredev = Boolean(packageJson?.scripts?.predev);
 
     if (hasPredev) {
@@ -1507,9 +1563,18 @@ class PreviewManager {
       devArgs.push('--hostname', bindHost.trim());
     }
 
+    // Static imports run our dependency-free node server instead of `npm run dev`.
+    let command = npmCommand;
+    let args = devArgs;
+    if (isStatic) {
+      const serverPath = await ensureStaticServer();
+      command = process.execPath; // the node binary
+      args = [serverPath, String(effectivePort), (bindHost && bindHost.trim()) || '0.0.0.0', projectPath];
+    }
+
     const child = spawn(
-      npmCommand,
-      devArgs,
+      command,
+      args,
       {
         cwd: projectPath,
         env,

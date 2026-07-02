@@ -8,7 +8,7 @@
  *   next    -> Next.js (React)      — scaffold-next.ts
  *   angular -> Angular (standalone) — scaffold-angular.ts
  */
-export type StackKind = 'nuxt' | 'next' | 'angular';
+export type StackKind = 'nuxt' | 'next' | 'angular' | 'static';
 
 export interface StackOption {
   id: string;
@@ -30,8 +30,11 @@ export function isValidStack(id: string): boolean {
   return STACKS.some((s) => s.id === id);
 }
 
-/** Framework family for a stored stack id (defaults to nuxt for legacy projects). */
+/** Framework family for a stored stack id (defaults to nuxt for legacy projects).
+ *  `static` is an import-only kind (no scaffold, no npm) for existing static
+ *  sites brought in from a repo — served by a plain static file server. */
 export function stackKind(templateType: string | null | undefined): StackKind {
+  if (templateType === 'static') return 'static';
   return STACKS.find((s) => s.id === templateType)?.kind ?? 'nuxt';
 }
 

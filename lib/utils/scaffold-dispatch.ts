@@ -12,6 +12,8 @@ export async function scaffoldForStack(
   templateType: string | null | undefined,
 ): Promise<void> {
   switch (stackKind(templateType)) {
+    case 'static':
+      return; // imported existing site — never scaffolded
     case 'next':
       return scaffoldNextApp(projectPath, projectId);
     case 'angular':
