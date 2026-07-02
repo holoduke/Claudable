@@ -10,6 +10,7 @@ import { getProjectById, updateProject, updateProjectStatus } from './project';
 import { prisma } from '@/lib/db/client';
 import { getDatabaseUrl } from '@/lib/services/database';
 import { recordBackendChunk } from '@/lib/services/diagnostics';
+import { listEnvVars } from '@/lib/services/env';
 
 /**
  * Clear persisted preview URLs/ports for ALL projects. Called once on boot: after
@@ -143,6 +144,9 @@ const path = require('path');
 const PORT = parseInt(process.argv[2], 10) || 3000;
 const HOST = process.argv[3] || '0.0.0.0';
 const ROOT = path.resolve(process.argv[4] || '.');
+// Optional backend sidecar: proxy these path prefixes to 127.0.0.1:PROXY_PORT.
+const PROXY_PORT = parseInt(process.env.CLAUDABLE_PROXY_PORT || '', 10);
+const PROXY_PREFIXES = (process.env.CLAUDABLE_PROXY_PREFIXES || '').split(',').map(function(s){ return s.trim(); }).filter(Boolean);
 const TYPES = { '.html':'text/html; charset=utf-8', '.js':'text/javascript', '.mjs':'text/javascript', '.css':'text/css', '.json':'application/json', '.png':'image/png', '.jpg':'image/jpeg', '.jpeg':'image/jpeg', '.gif':'image/gif', '.svg':'image/svg+xml', '.ico':'image/x-icon', '.webp':'image/webp', '.avif':'image/avif', '.woff':'font/woff', '.woff2':'font/woff2', '.ttf':'font/ttf', '.otf':'font/otf', '.eot':'application/vnd.ms-fontobject', '.map':'application/json', '.txt':'text/plain', '.xml':'application/xml', '.wasm':'application/wasm', '.mp4':'video/mp4', '.webm':'video/webm', '.pdf':'application/pdf' };
 function type(fp){ return TYPES[path.extname(fp).toLowerCase()] || 'application/octet-stream'; }
 function serve(res, fp, status){
@@ -152,9 +156,25 @@ function serve(res, fp, status){
     res.end(data);
   });
 }
+function shouldProxy(p){
+  if (!PROXY_PORT) return false;
+  for (var i=0;i<PROXY_PREFIXES.length;i++){
+    var pre = PROXY_PREFIXES[i];
+    if (p === pre) return true;               // exact, e.g. /settings
+    if (p.indexOf(pre + '/') === 0) return true; // under prefix, e.g. /api/...
+  }
+  return false;
+}
+function proxy(req, res){
+  var opts = { host: '127.0.0.1', port: PROXY_PORT, method: req.method, path: req.url, headers: req.headers };
+  var up = http.request(opts, function(pres){ res.writeHead(pres.statusCode || 502, pres.headers); pres.pipe(res); });
+  up.on('error', function(){ if (!res.headersSent) res.writeHead(502, {'Content-Type':'text/plain'}); res.end('Bad gateway (backend not ready)'); });
+  req.pipe(up);
+}
 const server = http.createServer(function(req, res){
   var urlPath;
   try { urlPath = decodeURIComponent((req.url || '/').split('?')[0]); } catch (e) { urlPath = '/'; }
+  if (shouldProxy(urlPath)) return proxy(req, res);
   if (urlPath.endsWith('/')) urlPath += 'index.html';
   var filePath = path.normalize(path.join(ROOT, urlPath));
   if (filePath !== ROOT && !filePath.startsWith(ROOT + path.sep)) { res.writeHead(403); res.end('Forbidden'); return; }
@@ -164,7 +184,7 @@ const server = http.createServer(function(req, res){
     return serve(res, path.join(ROOT, 'index.html'));
   });
 });
-server.listen(PORT, HOST, function(){ console.log('[static] ready on ' + HOST + ':' + PORT + ' serving ' + ROOT); });
+server.listen(PORT, HOST, function(){ console.log('[static] ready on ' + HOST + ':' + PORT + ' serving ' + ROOT + (PROXY_PORT ? ' (proxy ' + PROXY_PREFIXES.join(',') + ' -> :' + PROXY_PORT + ')' : '')); });
 `;
 
 const STATIC_SERVER_PATH = path.join(process.cwd(), 'data', 'static-preview-server.cjs');
@@ -172,6 +192,37 @@ async function ensureStaticServer(): Promise<string> {
   await fs.mkdir(path.dirname(STATIC_SERVER_PATH), { recursive: true });
   await fs.writeFile(STATIC_SERVER_PATH, STATIC_SERVER_SRC, 'utf8');
   return STATIC_SERVER_PATH;
+}
+
+/**
+ * Optional per-project preview config at `.claudable/preview.json`. Lets a
+ * `static` import declare a backend sidecar (e.g. a Go service) that the preview
+ * builds + runs, with the static server reverse-proxying `proxy` path prefixes
+ * to it. `{PROJECT}` (abs project dir) and `{PORT}` (assigned backend port) are
+ * substituted in build/run/env values.
+ */
+interface PreviewBackendConfig {
+  cwd?: string;       // dir to build/run in, relative to the project (e.g. "backend")
+  build?: string;     // shell build command (optional)
+  run: string;        // shell run command
+  healthPath?: string;// path to probe for readiness (default "/")
+  env?: Record<string, string>;
+}
+interface PreviewConfig {
+  backend?: PreviewBackendConfig;
+  proxy?: string[];   // path prefixes proxied to the backend (e.g. ["/api","/d"])
+}
+async function readPreviewConfig(projectPath: string): Promise<PreviewConfig | null> {
+  try {
+    const raw = await fs.readFile(path.join(projectPath, '.claudable', 'preview.json'), 'utf8');
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === 'object' ? (parsed as PreviewConfig) : null;
+  } catch {
+    return null;
+  }
+}
+function substVars(value: string, vars: Record<string, string>): string {
+  return value.replace(/\{(\w+)\}/g, (_m, k) => (k in vars ? vars[k] : `{${k}}`));
 }
 
 /**
@@ -604,6 +655,8 @@ type PreviewStatus = 'starting' | 'running' | 'stopped' | 'error';
 
 interface PreviewProcess {
   process: ChildProcess | null;
+  // Optional backend sidecar (e.g. a Go service) proxied by the static server.
+  backendProcess?: ChildProcess | null;
   port: number;
   url: string;
   status: PreviewStatus;
@@ -1566,10 +1619,55 @@ class PreviewManager {
     // Static imports run our dependency-free node server instead of `npm run dev`.
     let command = npmCommand;
     let args = devArgs;
+    const spawnEnv: NodeJS.ProcessEnv = { ...env };
+    let backendChild: ChildProcess | null = null;
     if (isStatic) {
       const serverPath = await ensureStaticServer();
       command = process.execPath; // the node binary
       args = [serverPath, String(effectivePort), (bindHost && bindHost.trim()) || '0.0.0.0', projectPath];
+
+      // Optional backend sidecar (e.g. a Go service). Build it, run it on an
+      // internal loopback port, and tell the static server to proxy to it.
+      const cfg = await readPreviewConfig(projectPath);
+      if (cfg?.backend) {
+        const backendPort = effectivePort + 5000; // deterministic, per running preview
+        const vars = { PROJECT: projectPath, PORT: String(backendPort) };
+        const bcwd = cfg.backend.cwd ? path.join(projectPath, cfg.backend.cwd) : projectPath;
+
+        // Backend env = config env (with {PROJECT}/{PORT} substituted), then the
+        // project's own EnvVars (Envs tab) override — that's how the user supplies
+        // real secrets (MASTER_KEY, SETTINGS_USER/PASS, …) without hardcoding.
+        const backendEnv: NodeJS.ProcessEnv = { ...process.env };
+        for (const [k, v] of Object.entries(cfg.backend.env ?? {})) backendEnv[k] = substVars(String(v), vars);
+        try {
+          for (const ev of await listEnvVars(projectId)) backendEnv[ev.key] = ev.value;
+        } catch { /* env vars are best-effort */ }
+
+        await fs.mkdir(path.join(projectPath, '.claudable', 'backend-data'), { recursive: true });
+
+        if (cfg.backend.build) {
+          log(Buffer.from('[PreviewManager] [backend] building…'));
+          await appendCommandLogs('sh', ['-c', substVars(cfg.backend.build, vars)], bcwd, backendEnv, log);
+        }
+
+        log(Buffer.from(`[PreviewManager] [backend] starting on 127.0.0.1:${backendPort}`));
+        backendChild = spawn('sh', ['-c', substVars(cfg.backend.run, vars)], {
+          cwd: bcwd,
+          env: backendEnv,
+          stdio: ['ignore', 'pipe', 'pipe'],
+          detached: process.platform !== 'win32',
+        });
+        backendChild.stdout?.on('data', (c) => { log(Buffer.from('[backend] ' + c.toString())); try { recordBackendChunk(projectId, c, 'stdout'); } catch { /* best-effort */ } });
+        backendChild.stderr?.on('data', (c) => { log(Buffer.from('[backend] ' + c.toString())); try { recordBackendChunk(projectId, c, 'stderr'); } catch { /* best-effort */ } });
+        backendChild.on('error', (e) => log(Buffer.from(`[backend] failed: ${e.message}`)));
+
+        // Wait for it to listen before the frontend can proxy to it.
+        const healthUrl = `http://127.0.0.1:${backendPort}${cfg.backend.healthPath || '/'}`;
+        await waitForPreviewReady(healthUrl, log).catch(() => false);
+
+        spawnEnv.CLAUDABLE_PROXY_PORT = String(backendPort);
+        spawnEnv.CLAUDABLE_PROXY_PREFIXES = (cfg.proxy && cfg.proxy.length ? cfg.proxy : ['/api']).join(',');
+      }
     }
 
     const child = spawn(
@@ -1577,7 +1675,7 @@ class PreviewManager {
       args,
       {
         cwd: projectPath,
-        env,
+        env: spawnEnv,
         shell: process.platform === 'win32',
         stdio: ['ignore', 'pipe', 'pipe'],
         // Own process group so we can kill the WHOLE tree (npm -> sh -> nuxt).
@@ -1588,6 +1686,7 @@ class PreviewManager {
     );
 
     previewProcess.process = child;
+    previewProcess.backendProcess = backendChild;
     this.processes.set(projectId, previewProcess);
     // Now tracked via `processes` — free the in-flight reservation.
     this.reservedPorts.delete(preferredPort);
@@ -1607,6 +1706,9 @@ class PreviewManager {
 
     child.on('exit', (code, signal) => {
       previewProcess.status = code === 0 ? 'stopped' : 'error';
+      // Tear down the backend sidecar too — it must not outlive the frontend.
+      killProcessTree(previewProcess.backendProcess);
+      previewProcess.backendProcess = null;
       this.processes.delete(projectId);
       // Withdraw the per-project route — a crash must not leave it pointing at a
       // now-dead port that another project can reuse (the cross-project leak).
@@ -1633,6 +1735,8 @@ class PreviewManager {
       previewProcess.status = 'error';
       // Drop the dead entry so a subsequent start() isn't blocked by the
       // "already running" check at the top of start().
+      killProcessTree(previewProcess.backendProcess);
+      previewProcess.backendProcess = null;
       if (this.processes.get(projectId) === previewProcess) {
         this.processes.delete(projectId);
       }
@@ -1713,6 +1817,7 @@ class PreviewManager {
 
     try {
       killProcessTree(processInfo.process);
+      killProcessTree(processInfo.backendProcess);
     } catch (error) {
       console.error('[PreviewManager] Failed to stop preview process:', error);
     }

@@ -11,6 +11,13 @@ RUN apt-get update \
 # Path to the headless browser used for thumbnail capture (lib/services/thumbnail.ts).
 ENV CHROMIUM_PATH=/usr/bin/chromium
 
+# Go toolchain — lets the preview build+run a project's Go backend (the `static`
+# import mode's backend sidecar). Pinned; copied from the official image.
+COPY --from=golang:1.25-bookworm /usr/local/go /usr/local/go
+ENV PATH="/usr/local/go/bin:${PATH}" \
+    GOTOOLCHAIN=local \
+    GOFLAGS=-buildvcs=false
+
 # Claude Code CLI on PATH so the Agent SDK can spawn `claude` headless.
 RUN npm install -g @anthropic-ai/claude-code
 
