@@ -107,6 +107,49 @@ async function removePreviewRoute(projectId: string): Promise<void> {
   await fs.unlink(previewRouteFile(projectId)).catch(() => {});
 }
 
+// --- Composed backend (model B): its own `preview-<slug>-api` subdomain ---
+function backendSlug(projectId: string): string {
+  return `${previewSlug(projectId)}-api`;
+}
+function backendPreviewUrl(projectId: string, port: number): string {
+  const tmpl = process.env.PREVIEW_URL_TEMPLATE || '';
+  if (tmpl.includes('{project}') && previewRouteDir()) return tmpl.replace('{project}', backendSlug(projectId));
+  if (tmpl.includes('{port}')) return tmpl.replace('{port}', String(port));
+  return `http://localhost:${port}`;
+}
+function backendRouteFile(projectId: string): string {
+  return path.join(previewRouteDir()!, `${PREVIEW_ROUTE_PREFIX}${backendSlug(projectId)}.yml`);
+}
+async function writeBackendRoute(projectId: string, port: number): Promise<void> {
+  const dir = previewRouteDir();
+  if (!dir) return;
+  let host: string;
+  try { host = new URL(backendPreviewUrl(projectId, port)).host; } catch { return; }
+  const gw = process.env.DEPLOY_HOST_GATEWAY || 'host.docker.internal';
+  const name = `${PREVIEW_ROUTE_PREFIX}${backendSlug(projectId)}`;
+  const yaml = `${PREVIEW_ROUTE_MARKER}
+# Composed-backend route (model B): the project's backend service.
+http:
+  routers:
+    ${name}:
+      rule: "Host(\`${host}\`)"
+      entryPoints: [https]
+      service: ${name}
+      tls:
+        certResolver: letsencrypt
+  services:
+    ${name}:
+      loadBalancer:
+        servers:
+          - url: "http://${gw}:${port}"
+`;
+  await fs.writeFile(backendRouteFile(projectId), yaml, 'utf8').catch(() => {});
+}
+async function removeBackendRoute(projectId: string): Promise<void> {
+  if (!previewRouteDir()) return;
+  await fs.unlink(backendRouteFile(projectId)).catch(() => {});
+}
+
 /** On boot, remove stale per-project preview routes (their dev servers are dead).
  * Only deletes files that carry OUR marker — never a legit app route that happens
  * to be named preview-*.yml in the shared proxy dir. */
@@ -372,6 +415,7 @@ async function runBackendContainer(
   hostPort: number,
   containerEnv: Record<string, string>,
   log: (chunk: string | Buffer) => void,
+  publishHost: string = '127.0.0.1',
 ): Promise<string> {
   const name = backendContainerName(projectId);
   const dockerEnv = process.env; // the CLI needs DOCKER_HOST + PATH
@@ -388,7 +432,7 @@ async function runBackendContainer(
 
   const runArgs = [
     'run', '-d', '--name', name,
-    '-p', `127.0.0.1:${hostPort}:${c.port}`,
+    '-p', `${publishHost}:${hostPort}:${c.port}`,
     '--memory', c.memory || '512m',
     '--cpus', String(c.cpus || '1.0'),
     '--pids-limit', String(c.pidsLimit ?? 256),
@@ -1829,6 +1873,34 @@ class PreviewManager {
       (feKind === 'nuxt' || feKind === 'next' || feKind === 'angular') &&
       cfg?.frontend?.isolate !== false;
 
+    // Composed backend (model B): a framework project with a backend runs the
+    // backend as its OWN isolated service on preview-<slug>-api (published on all
+    // interfaces for Traefik), and the frontend calls it via an injected API base
+    // URL. The backend port is derived (frontend port + 5000) so it needs no
+    // second pool slot. CORS on the backend allows the frontend origin.
+    let composedBackendUrl: string | null = null;
+    if (!isStatic && isolationEnabled() && cfg?.backend?.container) {
+      const c = cfg.backend.container;
+      const backendPort = effectivePort + 5000;
+      const cvars = { PROJECT: projectPath, PORT: String(c.port) };
+      const cenv: Record<string, string> = {};
+      for (const [k, v] of Object.entries(c.env ?? {})) cenv[k] = substVars(String(v), cvars);
+      cenv.CORS_ORIGIN = resolvedUrl; // allow the frontend's origin
+      try { for (const ev of await listEnvVars(projectId)) cenv[ev.key] = ev.value; } catch { /* best-effort */ }
+      try {
+        backendContainer = await runBackendContainer(projectId, projectPath, c, backendPort, cenv, log, '0.0.0.0');
+        await writeBackendRoute(projectId, backendPort);
+        composedBackendUrl = backendPreviewUrl(projectId, backendPort);
+        log(Buffer.from(`[PreviewManager] [backend] composed backend service on ${composedBackendUrl}`));
+        // Pre-warm the -api subdomain's LE cert.
+        const bwCtrl = new AbortController();
+        const bwTimer = setTimeout(() => bwCtrl.abort(), 90_000);
+        void fetch(composedBackendUrl, { method: 'HEAD', signal: bwCtrl.signal }).catch(() => {}).finally(() => clearTimeout(bwTimer));
+      } catch (e) {
+        log(Buffer.from(`[backend] composed backend failed: ${(e as Error).message}`));
+      }
+    }
+
     if (isStatic) {
       const serverPath = await ensureStaticServer();
       command = process.execPath; // the node binary
@@ -1929,6 +2001,10 @@ class PreviewManager {
         '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges', '--user', 'node',
         ...(sandboxNet ? ['--network', sandboxNet] : []),
         '-e', 'NODE_ENV=development', '-e', `PORT=${effectivePort}`, '-e', 'HOST=0.0.0.0',
+        // Composed backend URL (model B) — the frontend calls the backend here.
+        ...(composedBackendUrl
+          ? ['-e', `NUXT_PUBLIC_API_BASE=${composedBackendUrl}`, '-e', `NEXT_PUBLIC_API_BASE=${composedBackendUrl}`, '-e', `API_BASE_URL=${composedBackendUrl}`]
+          : []),
         image, 'sh', '-c', devScript,
       ];
       // The docker CLI needs DOCKER_HOST (already in spawnEnv via process.env).
@@ -1992,6 +2068,7 @@ class PreviewManager {
       // Withdraw the per-project route — a crash must not leave it pointing at a
       // now-dead port that another project can reuse (the cross-project leak).
       void removePreviewRoute(projectId).catch(() => {});
+      void removeBackendRoute(projectId).catch(() => {});
       updateProject(projectId, {
         previewUrl: null,
         previewPort: null,
@@ -2024,6 +2101,7 @@ class PreviewManager {
         this.processes.delete(projectId);
       }
       void removePreviewRoute(projectId).catch(() => {});
+      void removeBackendRoute(projectId).catch(() => {});
       log(Buffer.from(`Preview process failed: ${error.message}`));
     });
 
@@ -2080,6 +2158,7 @@ class PreviewManager {
     // Withdraw the project's preview route so its subdomain stops resolving to a
     // now-dead port (leaving it would 502; worse, the port could be reused).
     await removePreviewRoute(projectId);
+    await removeBackendRoute(projectId).catch(() => {});
     const processInfo = this.processes.get(projectId);
     if (!processInfo) {
       const project = await getProjectById(projectId);
