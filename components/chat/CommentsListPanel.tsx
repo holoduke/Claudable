@@ -47,25 +47,25 @@ export default function CommentsListPanel({ comments, currentRoute, activeId, on
   const resolved = comments.length - open;
 
   return (
-    <div className="h-full flex flex-col bg-white">
-      <div className="border-b border-gray-200 p-4 h-[73px] flex items-center justify-between shrink-0">
+    <div className="h-full flex flex-col bg-white dark:bg-gray-900">
+      <div className="border-b border-gray-200 dark:border-gray-700 p-4 h-[73px] flex items-center justify-between shrink-0">
         <div>
-          <h2 className="text-lg font-semibold text-gray-900">Comments</h2>
-          <p className="text-xs text-gray-500">{comments.length} total · {open} open</p>
+          <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-50">Comments</h2>
+          <p className="text-xs text-gray-500 dark:text-gray-400">{comments.length} total · {open} open</p>
         </div>
-        <button onClick={onClose} title="Close list" className="w-8 h-8 flex items-center justify-center text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-full">
+        <button onClick={onClose} title="Close list" className="w-8 h-8 flex items-center justify-center text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
         </button>
       </div>
 
       {comments.length > 0 && (
-        <div className="flex items-center gap-1.5 px-4 py-2 border-b border-gray-100 shrink-0">
+        <div className="flex items-center gap-1.5 px-4 py-2 border-b border-gray-100 dark:border-gray-800 shrink-0">
           {([['all', `All ${comments.length}`], ['open', `Open ${open}`], ['resolved', `Resolved ${resolved}`]] as const).map(([key, label]) => (
             <button
               key={key}
               onClick={() => setFilter(key)}
               className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${
-                filter === key ? 'bg-[#DE7356] text-white border-[#DE7356]' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
+                filter === key ? 'bg-[#DE7356] text-white border-[#DE7356]' : 'bg-white dark:bg-gray-900 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800'
               }`}
             >{label}</button>
           ))}
@@ -74,7 +74,7 @@ export default function CommentsListPanel({ comments, currentRoute, activeId, on
 
       <div className="flex-1 min-h-0 overflow-y-auto">
         {groups.length === 0 ? (
-          <div className="h-full flex flex-col items-center justify-center text-center px-6 text-gray-400">
+          <div className="h-full flex flex-col items-center justify-center text-center px-6 text-gray-400 dark:text-gray-500">
             <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" className="mb-2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2Z" /></svg>
             {comments.length === 0 ? (
               <>
@@ -88,25 +88,25 @@ export default function CommentsListPanel({ comments, currentRoute, activeId, on
         ) : (
           groups.map((g) => (
             <div key={g.route}>
-              <div className="sticky top-0 z-10 bg-gray-50/95 backdrop-blur px-4 py-1.5 text-[11px] font-medium text-gray-500 border-b border-gray-100 flex items-center gap-2">
+              <div className="sticky top-0 z-10 bg-gray-50 dark:bg-gray-900/95 backdrop-blur px-4 py-1.5 text-[11px] font-medium text-gray-500 dark:text-gray-400 border-b border-gray-100 dark:border-gray-800 flex items-center gap-2">
                 <span className="truncate">{g.route}</span>
                 {g.route === (currentRoute || '/') && <span className="text-[9px] uppercase tracking-wide text-[#DE7356] bg-[#DE7356]/10 px-1.5 py-0.5 rounded">current</span>}
-                <span className="ml-auto text-gray-400">{g.items.length}</span>
+                <span className="ml-auto text-gray-400 dark:text-gray-500">{g.items.length}</span>
               </div>
               {g.items.map((c) => (
                 <button
                   key={c.id}
                   onClick={() => onSelect(c)}
-                  className={`w-full text-left px-4 py-3 border-b border-gray-100 hover:bg-gray-50 transition-colors flex gap-3 ${activeId === c.id ? 'bg-[#DE7356]/5' : ''}`}
+                  className={`w-full text-left px-4 py-3 border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors flex gap-3 ${activeId === c.id ? 'bg-[#DE7356]/5' : ''}`}
                 >
-                  <span className={`shrink-0 w-6 h-6 rounded-full text-[11px] font-semibold flex items-center justify-center ${c.resolved ? 'bg-gray-100 text-gray-400' : 'bg-[#DE7356] text-white'}`}>{c.index}</span>
+                  <span className={`shrink-0 w-6 h-6 rounded-full text-[11px] font-semibold flex items-center justify-center ${c.resolved ? 'bg-gray-100 dark:bg-gray-800 text-gray-400 dark:text-gray-500' : 'bg-[#DE7356] text-white'}`}>{c.index}</span>
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
-                      <span className="text-xs font-medium text-gray-800 truncate">{c.authorName || 'Anonymous'}</span>
-                      <span className="text-[11px] text-gray-400 shrink-0">{timeAgo(c.createdAt)}</span>
+                      <span className="text-xs font-medium text-gray-800 dark:text-gray-100 truncate">{c.authorName || 'Anonymous'}</span>
+                      <span className="text-[11px] text-gray-400 dark:text-gray-500 shrink-0">{timeAgo(c.createdAt)}</span>
                       {c.resolved && <span className="text-[9px] uppercase tracking-wide text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded shrink-0">resolved</span>}
                     </div>
-                    <p className={`text-sm mt-0.5 line-clamp-2 break-words ${c.resolved ? 'text-gray-400 line-through' : 'text-gray-700'}`}>{c.body}</p>
+                    <p className={`text-sm mt-0.5 line-clamp-2 break-words ${c.resolved ? 'text-gray-400 dark:text-gray-500 line-through' : 'text-gray-700 dark:text-gray-200'}`}>{c.body}</p>
                   </div>
                 </button>
               ))}

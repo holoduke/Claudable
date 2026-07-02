@@ -153,14 +153,14 @@ export default function DesignImportModal({
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/50" onClick={handleClose} />
-      <div className="relative bg-white rounded-2xl shadow-2xl border border-gray-200 w-full max-w-lg max-h-[90vh] overflow-y-auto">
+      <div className="relative bg-white dark:bg-gray-900 rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-700 w-full max-w-lg max-h-[90vh] overflow-y-auto">
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 dark:border-gray-800">
           <div className="flex items-center gap-2.5">
-            <FaFileImport className="text-gray-700" size={16} />
-            <h3 className="text-base font-semibold text-gray-900">Import from Claude Design</h3>
+            <FaFileImport className="text-gray-700 dark:text-gray-200" size={16} />
+            <h3 className="text-base font-semibold text-gray-900 dark:text-gray-50">Import from Claude Design</h3>
           </div>
-          <button onClick={handleClose} className="text-gray-400 hover:text-gray-600" aria-label="Close">
+          <button onClick={handleClose} className="text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300" aria-label="Close">
             <FaTimes size={16} />
           </button>
         </div>
@@ -169,10 +169,10 @@ export default function DesignImportModal({
           {/* Idle / dropzone */}
           {phase === 'idle' && (
             <>
-              <p className="text-sm text-gray-600 mb-4">
+              <p className="text-sm text-gray-600 dark:text-gray-300 mb-4">
                 Upload a <span className="font-medium">.zip</span> export from{' '}
                 <span className="font-medium">claude.ai/design</span>. The screens, fonts and
-                assets are staged into <code className="px-1 py-0.5 bg-gray-100 rounded text-xs">design-reference/</code>,
+                assets are staged into <code className="px-1 py-0.5 bg-gray-100 dark:bg-gray-800 rounded text-xs">design-reference/</code>,
                 then the AI ports them into this app — keeping your current framework and structure.
               </p>
               <div
@@ -184,12 +184,12 @@ export default function DesignImportModal({
                 onDragLeave={() => setDragOver(false)}
                 onDrop={onDrop}
                 className={`cursor-pointer rounded-xl border-2 border-dashed px-6 py-10 text-center transition-colors ${
-                  dragOver ? 'border-blue-400 bg-blue-50' : 'border-gray-300 hover:border-gray-400 bg-gray-50'
+                  dragOver ? 'border-blue-400 bg-blue-50' : 'border-gray-300 dark:border-gray-700 hover:border-gray-400 bg-gray-50 dark:bg-gray-900'
                 }`}
               >
-                <FaFileImport className="mx-auto text-gray-400 mb-3" size={26} />
-                <p className="text-sm font-medium text-gray-700">Drop the zip here, or click to choose</p>
-                <p className="text-xs text-gray-400 mt-1">Design-process noise (screenshots, raw uploads) is skipped automatically.</p>
+                <FaFileImport className="mx-auto text-gray-400 dark:text-gray-500 mb-3" size={26} />
+                <p className="text-sm font-medium text-gray-700 dark:text-gray-200">Drop the zip here, or click to choose</p>
+                <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">Design-process noise (screenshots, raw uploads) is skipped automatically.</p>
               </div>
               <input ref={inputRef} type="file" accept=".zip,application/zip" className="hidden" onChange={onPick} />
             </>
@@ -198,19 +198,19 @@ export default function DesignImportModal({
           {/* Uploading */}
           {phase === 'preparing' && (
             <div className="py-8 text-center">
-              <div className="mx-auto mb-3 h-6 w-6 animate-spin rounded-full border-2 border-gray-300 border-t-blue-500" />
-              <p className="text-sm text-gray-700 truncate">Preparing {fileName}…</p>
-              <p className="text-xs text-gray-400 mt-1">Extracting just the design files (skipping screenshots &amp; raw uploads)</p>
+              <div className="mx-auto mb-3 h-6 w-6 animate-spin rounded-full border-2 border-gray-300 dark:border-gray-700 border-t-blue-500" />
+              <p className="text-sm text-gray-700 dark:text-gray-200 truncate">Preparing {fileName}…</p>
+              <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">Extracting just the design files (skipping screenshots &amp; raw uploads)</p>
             </div>
           )}
 
           {phase === 'uploading' && (
             <div className="py-6">
-              <p className="text-sm text-gray-700 mb-3 truncate">Uploading {fileName}…</p>
-              <div className="h-2 w-full bg-gray-100 rounded-full overflow-hidden">
+              <p className="text-sm text-gray-700 dark:text-gray-200 mb-3 truncate">Uploading {fileName}…</p>
+              <div className="h-2 w-full bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden">
                 <div className="h-full bg-blue-500 transition-all" style={{ width: `${progress}%` }} />
               </div>
-              <p className="text-xs text-gray-400 mt-2">{progress}%{progress === 100 ? ' · extracting…' : ''}</p>
+              <p className="text-xs text-gray-400 dark:text-gray-500 mt-2">{progress}%{progress === 100 ? ' · extracting…' : ''}</p>
             </div>
           )}
 
@@ -220,7 +220,7 @@ export default function DesignImportModal({
               <p className="text-sm text-red-600 mb-4">{error}</p>
               <button
                 onClick={reset}
-                className="h-9 px-4 bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-lg text-sm font-medium"
+                className="h-9 px-4 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-800 dark:text-gray-100 rounded-lg text-sm font-medium"
               >
                 Try again
               </button>
@@ -245,7 +245,7 @@ export default function DesignImportModal({
                     className={`text-xs px-2 py-1 rounded-md border ${
                       /design\s*system/i.test(s)
                         ? 'bg-amber-50 border-amber-200 text-amber-800 font-medium'
-                        : 'bg-gray-50 border-gray-200 text-gray-700'
+                        : 'bg-gray-50 dark:bg-gray-900 border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-200'
                     }`}
                   >
                     {s}
@@ -253,20 +253,20 @@ export default function DesignImportModal({
                 ))}
               </div>
 
-              <label className="block text-xs font-medium text-gray-500 uppercase tracking-wide mb-1.5">
+              <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1.5">
                 Instruction for the AI
               </label>
               <textarea
                 value={prompt}
                 onChange={(e) => setPrompt(e.target.value)}
                 rows={7}
-                className="w-full text-sm border border-gray-200 rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-blue-200 resize-y"
+                className="w-full text-sm border border-gray-200 dark:border-gray-700 rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-blue-200 resize-y"
               />
 
               <div className="flex items-center justify-between gap-3 mt-4">
                 <button
                   onClick={handleClose}
-                  className="h-9 px-4 text-gray-600 hover:text-gray-900 text-sm font-medium"
+                  className="h-9 px-4 text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 text-sm font-medium"
                 >
                   Keep staged for later
                 </button>
@@ -276,7 +276,7 @@ export default function DesignImportModal({
                     handleClose();
                   }}
                   disabled={!prompt.trim()}
-                  className="h-9 px-4 bg-black text-white rounded-lg text-sm font-medium hover:bg-gray-900 disabled:opacity-40 flex items-center gap-2"
+                  className="h-9 px-4 bg-black text-white rounded-lg text-sm font-medium hover:bg-gray-900 dark:hover:bg-gray-200 disabled:opacity-40 flex items-center gap-2"
                 >
                   <FaMagic size={13} />
                   Send to AI

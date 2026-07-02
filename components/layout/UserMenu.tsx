@@ -30,7 +30,7 @@ export default function UserMenu() {
         onClick={() => setOpen(true)}
         title="My account"
         aria-label="My account"
-        className="flex items-center justify-center w-9 h-9 rounded-full bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors overflow-hidden ring-1 ring-gray-200"
+        className="flex items-center justify-center w-9 h-9 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors overflow-hidden ring-1 ring-gray-200 dark:ring-gray-700"
       >
         {me?.image ? (
           // eslint-disable-next-line @next/next/no-img-element

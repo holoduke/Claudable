@@ -14,6 +14,7 @@ import VisualEditorPanel, { type SelectedElement } from '@/components/chat/Visua
 import CommentsLayer, { type CommentPin, type ComposeAnchor } from '@/components/chat/CommentsLayer';
 import CommentsListPanel from '@/components/chat/CommentsListPanel';
 import { useToast } from '@/components/ui/Toast';
+import ThemeToggle from '@/components/ui/ThemeToggle';
 import ChatInput from '@/components/chat/ChatInput';
 import DesignImportModal from '@/components/chat/DesignImportModal';
 import SkillsModal from '@/components/chat/SkillsModal';
@@ -149,7 +150,7 @@ function TreeView({ entries, selectedFile, expandedFolders, folderContents, onTo
               className={`group flex items-center h-[22px] px-2 cursor-pointer ${
                 selectedFile === fullPath 
                   ? 'bg-blue-100 ' 
-                  : 'hover:bg-gray-100 '
+                  : 'hover:bg-gray-100 dark:hover:bg-gray-800 '
               }`}
               style={{ paddingLeft: `${8 + indent}px` }}
               onClick={async () => {
@@ -168,8 +169,8 @@ function TreeView({ entries, selectedFile, expandedFolders, folderContents, onTo
               <div className="w-4 flex items-center justify-center mr-0.5">
                 {entry.type === 'dir' && (
                   isExpanded ? 
-                    <span className="w-2.5 h-2.5 text-gray-600 flex items-center justify-center"><FaChevronDown size={10} /></span> : 
-                    <span className="w-2.5 h-2.5 text-gray-600 flex items-center justify-center"><FaChevronRight size={10} /></span>
+                    <span className="w-2.5 h-2.5 text-gray-600 dark:text-gray-300 flex items-center justify-center"><FaChevronDown size={10} /></span> : 
+                    <span className="w-2.5 h-2.5 text-gray-600 dark:text-gray-300 flex items-center justify-center"><FaChevronRight size={10} /></span>
                 )}
               </div>
               
@@ -186,7 +187,7 @@ function TreeView({ entries, selectedFile, expandedFolders, folderContents, onTo
               
               {/* File/Folder name */}
               <span className={`text-[13px] leading-[22px] ${
-                selectedFile === fullPath ? 'text-blue-700 ' : 'text-gray-700 '
+                selectedFile === fullPath ? 'text-blue-700 ' : 'text-gray-700 dark:text-gray-200 '
               }`} style={{ fontFamily: "'Segoe UI', Tahoma, sans-serif" }}>
                 {level === 0 ? (entry.path.split('/').pop() || entry.path) : (entry.path.split('/').pop() || entry.path)}
               </span>
@@ -1918,8 +1919,8 @@ const persistProjectPreferences = useCallback(
     if (filename === 'package.json') return <span className="text-green-600"><VscJson size={16} /></span>;
     if (filename === 'dockerfile') return <span className="text-blue-400"><FaDocker size={16} /></span>;
     if (filename?.startsWith('.env')) return <span className="text-yellow-500"><FaLock size={16} /></span>;
-    if (filename === 'readme.md') return <span className="text-gray-600"><FaMarkdown size={16} /></span>;
-    if (filename?.includes('config')) return <span className="text-gray-500"><FaCog size={16} /></span>;
+    if (filename === 'readme.md') return <span className="text-gray-600 dark:text-gray-300"><FaMarkdown size={16} /></span>;
+    if (filename?.includes('config')) return <span className="text-gray-500 dark:text-gray-400"><FaCog size={16} /></span>;
     
     switch (ext) {
       case 'tsx':
@@ -1943,7 +1944,7 @@ const persistProjectPreferences = useCallback(
         return <span className="text-yellow-600"><VscJson size={16} /></span>;
       case 'md':
       case 'markdown':
-        return <span className="text-gray-600"><FaMarkdown size={16} /></span>;
+        return <span className="text-gray-600 dark:text-gray-300"><FaMarkdown size={16} /></span>;
       case 'py':
         return <span className="text-blue-400"><FaPython size={16} /></span>;
       case 'sh':
@@ -1982,9 +1983,9 @@ const persistProjectPreferences = useCallback(
       case 'ini':
       case 'conf':
       case 'config':
-        return <span className="text-gray-500"><FaCog size={16} /></span>;
+        return <span className="text-gray-500 dark:text-gray-400"><FaCog size={16} /></span>;
       default:
-        return <span className="text-gray-400"><FaFile size={16} /></span>;
+        return <span className="text-gray-400 dark:text-gray-500"><FaFile size={16} /></span>;
     }
   }
 
@@ -2869,7 +2870,7 @@ const persistProjectPreferences = useCallback(
           mouseup register anywhere on screen. */}
       {isResizing && <div className="fixed inset-0 z-[100] cursor-col-resize select-none" />}
 
-      <div className="h-screen bg-white flex relative overflow-hidden">
+      <div className="h-screen bg-white dark:bg-gray-900 flex relative overflow-hidden">
         <div className="h-full w-full flex" ref={splitContainerRef}>
           {/* Left: Visual editor inspector (edit mode) or Chat window */}
           <div
@@ -2899,11 +2900,11 @@ const persistProjectPreferences = useCallback(
             ) : (
             <>
             {/* Chat header */}
-            <div className="bg-white border-b border-gray-200 p-4 h-[73px] flex items-center">
+            <div className="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 p-4 h-[73px] flex items-center">
               <div className="flex items-center gap-3">
                 <button 
                   onClick={() => router.push('/')}
-                  className="flex items-center justify-center w-8 h-8 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-full transition-colors"
+                  className="flex items-center justify-center w-8 h-8 text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full transition-colors"
                   title="Back to home"
                 >
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -2911,9 +2912,9 @@ const persistProjectPreferences = useCallback(
                   </svg>
                 </button>
                 <div>
-                  <h1 className="text-lg font-semibold text-gray-900 ">{projectName || 'Loading...'}</h1>
+                  <h1 className="text-lg font-semibold text-gray-900 dark:text-gray-50 ">{projectName || 'Loading...'}</h1>
                   {projectDescription && (
-                    <p className="text-sm text-gray-500 ">
+                    <p className="text-sm text-gray-500 dark:text-gray-400 ">
                       {projectDescription}
                     </p>
                   )}
@@ -3000,12 +3001,12 @@ const persistProjectPreferences = useCallback(
             role="separator"
             aria-orientation="vertical"
             title="Drag to resize"
-            className="group relative h-full w-px shrink-0 cursor-col-resize bg-gray-200 hover:bg-[#DE7356] transition-colors"
+            className="group relative h-full w-px shrink-0 cursor-col-resize bg-gray-200 dark:bg-gray-800 hover:bg-[#DE7356] transition-colors"
           >
             {/* wider invisible hit area for easier grabbing */}
             <div className="absolute inset-y-0 -left-1.5 -right-1.5" />
             {/* visible grip so the divider is discoverable */}
-            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 h-8 w-3 rounded-full bg-gray-200 group-hover:bg-[#DE7356] flex flex-col items-center justify-center gap-0.5 transition-colors">
+            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 h-8 w-3 rounded-full bg-gray-200 dark:bg-gray-800 group-hover:bg-[#DE7356] flex flex-col items-center justify-center gap-0.5 transition-colors">
               <span className="w-0.5 h-0.5 rounded-full bg-gray-400 group-hover:bg-white" />
               <span className="w-0.5 h-0.5 rounded-full bg-gray-400 group-hover:bg-white" />
               <span className="w-0.5 h-0.5 rounded-full bg-gray-400 group-hover:bg-white" />
@@ -3017,15 +3018,15 @@ const persistProjectPreferences = useCallback(
             {/* Content area */}
             <div className="flex-1 min-h-0 flex flex-col">
               {/* Controls Bar */}
-              <div className="bg-white border-b border-gray-200 px-4 h-[73px] flex items-center justify-between">
+              <div className="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 px-4 h-[73px] flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   {/* Toggle switch */}
-                  <div className="flex items-center bg-gray-100 rounded-lg p-1">
+                  <div className="flex items-center bg-gray-100 dark:bg-gray-800 rounded-lg p-1">
                     <button
                       className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
                         showPreview 
-                          ? 'bg-white text-gray-900 ' 
-                          : 'text-gray-600 hover:text-gray-900 '
+                          ? 'bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-50 ' 
+                          : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 '
                       }`}
                       onClick={() => setShowPreview(true)}
                       title="Preview"
@@ -3037,8 +3038,8 @@ const persistProjectPreferences = useCallback(
                     <button
                       className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
                         !showPreview 
-                          ? 'bg-white text-gray-900 ' 
-                          : 'text-gray-600 hover:text-gray-900 '
+                          ? 'bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-50 ' 
+                          : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 '
                       }`}
                       onClick={() => setShowPreview(false)}
                       title="Code"
@@ -3058,7 +3059,7 @@ const persistProjectPreferences = useCallback(
                       className={`h-9 w-9 flex items-center justify-center rounded-lg border transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
                         editMode
                           ? 'bg-[#DE7356] text-white border-[#DE7356]'
-                          : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'
+                          : 'bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-200 border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800'
                       }`}
                     >
                       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9" /><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" /></svg>
@@ -3074,12 +3075,12 @@ const persistProjectPreferences = useCallback(
                       className={`relative h-9 w-9 flex items-center justify-center rounded-lg border transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
                         commentMode
                           ? 'bg-[#DE7356] text-white border-[#DE7356]'
-                          : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'
+                          : 'bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-200 border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800'
                       }`}
                     >
                       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2Z" /></svg>
                       {comments.length > 0 && (
-                        <span className={`absolute -top-1.5 -right-1.5 min-w-[17px] h-[17px] px-1 rounded-full text-[10px] font-semibold flex items-center justify-center ring-2 ring-white ${commentMode ? 'bg-white text-[#DE7356]' : 'bg-[#DE7356] text-white'}`}>{comments.length}</span>
+                        <span className={`absolute -top-1.5 -right-1.5 min-w-[17px] h-[17px] px-1 rounded-full text-[10px] font-semibold flex items-center justify-center ring-2 ring-white ${commentMode ? 'bg-white dark:bg-gray-900 text-[#DE7356]' : 'bg-[#DE7356] text-white'}`}>{comments.length}</span>
                       )}
                     </button>
                   )}
@@ -3092,7 +3093,7 @@ const persistProjectPreferences = useCallback(
                       aria-label="List all comments"
                       aria-pressed={showCommentsList}
                       className={`h-9 w-9 flex items-center justify-center rounded-lg border transition-colors ${
-                        showCommentsList ? 'bg-[#DE7356] text-white border-[#DE7356]' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
+                        showCommentsList ? 'bg-[#DE7356] text-white border-[#DE7356]' : 'bg-white dark:bg-gray-900 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800'
                       }`}
                     >
                       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="8" y1="6" x2="21" y2="6" /><line x1="8" y1="12" x2="21" y2="12" /><line x1="8" y1="18" x2="21" y2="18" /><line x1="3" y1="6" x2="3.01" y2="6" /><line x1="3" y1="12" x2="3.01" y2="12" /><line x1="3" y1="18" x2="3.01" y2="18" /></svg>
@@ -3104,7 +3105,7 @@ const persistProjectPreferences = useCallback(
                     <button
                       onClick={clearAllComments}
                       title="Delete all comments in this project"
-                      className="h-9 w-9 flex items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-600 hover:text-red-600 hover:border-red-200 hover:bg-red-50 transition-colors"
+                      className="h-9 w-9 flex items-center justify-center rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-600 dark:text-gray-300 hover:text-red-600 hover:border-red-200 hover:bg-red-50 transition-colors"
                     >
                       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /><line x1="10" y1="11" x2="10" y2="17" /><line x1="14" y1="11" x2="14" y2="17" /></svg>
                     </button>
@@ -3114,11 +3115,11 @@ const persistProjectPreferences = useCallback(
                   {showPreview && !editMode && !commentMode && previewUrl && (
                     <div className="flex items-center gap-3">
                       {/* Route Navigation */}
-                      <div className="h-9 flex items-center bg-gray-100 rounded-lg px-3 border border-gray-200 ">
-                        <span className="text-gray-400 mr-2">
+                      <div className="h-9 flex items-center bg-gray-100 dark:bg-gray-800 rounded-lg px-3 border border-gray-200 dark:border-gray-700 ">
+                        <span className="text-gray-400 dark:text-gray-500 mr-2">
                           <FaHome size={12} />
                         </span>
-                        <span className="text-sm text-gray-500 mr-1">/</span>
+                        <span className="text-sm text-gray-500 dark:text-gray-400 mr-1">/</span>
                         <input
                           type="text"
                           value={currentRoute.startsWith('/') ? currentRoute.slice(1) : currentRoute}
@@ -3131,12 +3132,12 @@ const persistProjectPreferences = useCallback(
                               navigateToRoute(currentRoute);
                             }
                           }}
-                          className="bg-transparent text-sm text-gray-700 outline-none w-40"
+                          className="bg-transparent text-sm text-gray-700 dark:text-gray-200 outline-none w-40"
                           placeholder="route"
                         />
                         <button
                           onClick={() => navigateToRoute(currentRoute)}
-                          className="ml-2 text-gray-500 hover:text-gray-700 "
+                          className="ml-2 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 "
                         >
                           <FaArrowRight size={12} />
                         </button>
@@ -3145,7 +3146,7 @@ const persistProjectPreferences = useCallback(
                       {/* Action Buttons Group */}
                       <div className="flex items-center gap-1.5">
                         <button 
-                          className="h-9 w-9 flex items-center justify-center bg-gray-100 text-gray-600 hover:text-gray-900 hover:bg-gray-200 rounded-lg transition-colors"
+                          className="h-9 w-9 flex items-center justify-center bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg transition-colors"
                           onClick={() => {
                             const iframe = iframeRef.current;
                             if (iframe) {
@@ -3160,7 +3161,7 @@ const persistProjectPreferences = useCallback(
 
                         {/* Open preview in a new tab */}
                         <button
-                          className="h-9 w-9 flex items-center justify-center bg-gray-100 text-gray-700 hover:text-gray-900 hover:bg-gray-200 rounded-lg transition-colors"
+                          className="h-9 w-9 flex items-center justify-center bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-200 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg transition-colors"
                           onClick={() => {
                             if (!previewUrl) return;
                             const suffix = currentRoute && currentRoute !== '/' ? currentRoute : '';
@@ -3178,10 +3179,10 @@ const persistProjectPreferences = useCallback(
 
                         {/* Device selector dropdown */}
                         <div className="relative">
-                          <div className="h-9 flex items-center bg-gray-100 rounded-lg border border-gray-200">
+                          <div className="h-9 flex items-center bg-gray-100 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
                             <button
                               onClick={() => setDeviceMenuOpen((v) => !v)}
-                              className="h-full flex items-center gap-1 px-2.5 text-sm text-gray-700 hover:text-gray-900 rounded-l-lg"
+                              className="h-full flex items-center gap-1 px-2.5 text-sm text-gray-700 dark:text-gray-200 hover:text-gray-900 dark:hover:text-gray-100 rounded-l-lg"
                               title={`Device: ${currentDevice.name}`}
                             >
                               {currentDevice.desktop ? <FaDesktop size={14} /> : <FaMobileAlt size={14} />}
@@ -3192,7 +3193,7 @@ const persistProjectPreferences = useCallback(
                                 aria-label="Rotate orientation"
                                 onClick={() => setOrientation((o) => (o === 'portrait' ? 'landscape' : 'portrait'))}
                                 title={orientation === 'portrait' ? 'Rotate to landscape' : 'Rotate to portrait'}
-                                className="h-7 w-7 mr-0.5 flex items-center justify-center rounded text-gray-400 hover:text-gray-700 hover:bg-white transition-colors border-l border-gray-200"
+                                className="h-7 w-7 mr-0.5 flex items-center justify-center rounded text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-white transition-colors border-l border-gray-200 dark:border-gray-700"
                               >
                                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2 12a10 10 0 0 1 10-10c2.76 0 5.26 1.12 7.07 2.93M22 12a10 10 0 0 1-10 10c-2.76 0-5.26-1.12-7.07-2.93" /><polyline points="19 2 19 5 16 5" /><polyline points="5 22 5 19 8 19" /></svg>
                               </button>
@@ -3201,18 +3202,18 @@ const persistProjectPreferences = useCallback(
                           {deviceMenuOpen && (
                             <>
                               <div className="fixed inset-0 z-40" onClick={() => setDeviceMenuOpen(false)} />
-                              <div className="absolute left-0 top-full mt-1 z-50 w-56 max-h-80 overflow-y-auto bg-white rounded-lg shadow-xl border border-gray-200 py-1">
+                              <div className="absolute left-0 top-full mt-1 z-50 w-56 max-h-80 overflow-y-auto bg-white dark:bg-gray-900 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 py-1">
                                 {DEVICE_PRESETS.map((d) => (
                                   <button
                                     key={d.id}
                                     onClick={() => { setDeviceId(d.id); setDeviceMenuOpen(false); }}
-                                    className={`w-full flex items-center justify-between gap-2 px-3 py-1.5 text-sm text-left hover:bg-gray-50 ${d.id === deviceId ? 'text-[#DE7356] font-medium' : 'text-gray-700'}`}
+                                    className={`w-full flex items-center justify-between gap-2 px-3 py-1.5 text-sm text-left hover:bg-gray-50 dark:hover:bg-gray-800 ${d.id === deviceId ? 'text-[#DE7356] font-medium' : 'text-gray-700 dark:text-gray-200'}`}
                                   >
                                     <span className="flex items-center gap-2 min-w-0">
-                                      {d.desktop ? <FaDesktop size={12} className="shrink-0 text-gray-400" /> : <FaMobileAlt size={12} className="shrink-0 text-gray-400" />}
+                                      {d.desktop ? <FaDesktop size={12} className="shrink-0 text-gray-400 dark:text-gray-500" /> : <FaMobileAlt size={12} className="shrink-0 text-gray-400 dark:text-gray-500" />}
                                       <span className="truncate">{d.name}</span>
                                     </span>
-                                    {!d.desktop && <span className="text-[11px] text-gray-400 shrink-0">{d.w}×{d.h}</span>}
+                                    {!d.desktop && <span className="text-[11px] text-gray-400 dark:text-gray-500 shrink-0">{d.w}×{d.h}</span>}
                                   </button>
                                 ))}
                               </div>
@@ -3225,10 +3226,11 @@ const persistProjectPreferences = useCallback(
                 </div>
                 
                 <div className="flex items-center gap-2">
+                  <ThemeToggle />
                   {/* Settings Button */}
-                  <button 
+                  <button
                     onClick={() => setShowGlobalSettings(true)}
-                    className="h-9 w-9 flex items-center justify-center bg-gray-100 text-gray-600 hover:text-gray-900 hover:bg-gray-200 rounded-lg transition-colors"
+                    className="h-9 w-9 flex items-center justify-center bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg transition-colors"
                     title="Settings"
                     aria-label="Settings"
                   >
@@ -3238,7 +3240,7 @@ const persistProjectPreferences = useCallback(
                   {/* Skills */}
                   <button
                     onClick={() => setShowSkills(true)}
-                    className="h-9 w-9 flex items-center justify-center bg-gray-100 text-gray-600 hover:text-gray-900 hover:bg-gray-200 rounded-lg transition-colors"
+                    className="h-9 w-9 flex items-center justify-center bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg transition-colors"
                     title="Manage skills"
                     aria-label="Manage skills"
                   >
@@ -3248,7 +3250,7 @@ const persistProjectPreferences = useCallback(
                   {/* Import from Claude Design */}
                   <button
                     onClick={() => setShowDesignImport(true)}
-                    className="h-9 w-9 flex items-center justify-center bg-gray-100 text-gray-600 hover:text-gray-900 hover:bg-gray-200 rounded-lg transition-colors"
+                    className="h-9 w-9 flex items-center justify-center bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg transition-colors"
                     title="Import from Claude Design"
                     aria-label="Import from Claude Design"
                   >
@@ -3272,7 +3274,7 @@ const persistProjectPreferences = useCallback(
                       onClick={shareReviewLink}
                       title={shareCopied ? 'Review link copied to clipboard' : 'Get a public link for stakeholders to review + comment'}
                       className={`h-9 w-9 flex items-center justify-center rounded-lg border transition-colors ${
-                        shareCopied ? 'bg-emerald-50 text-emerald-600 border-emerald-200' : 'border-gray-200 bg-white text-gray-700 hover:bg-gray-50'
+                        shareCopied ? 'bg-emerald-50 text-emerald-600 border-emerald-200' : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800'
                       }`}
                     >
                       {shareCopied ? (
@@ -3287,7 +3289,7 @@ const persistProjectPreferences = useCallback(
                   {showPreview && previewUrl && (
                     <div className="relative">
                     <button
-                      className="relative h-9 w-9 flex items-center justify-center bg-black text-white rounded-lg transition-colors hover:bg-gray-900 border border-black/10 shadow-sm"
+                      className="relative h-9 w-9 flex items-center justify-center bg-black text-white rounded-lg transition-colors hover:bg-gray-900 dark:hover:bg-gray-200 border border-black/10 shadow-sm"
                       onClick={() => setShowPublishPanel(true)}
                       title="Publish this project"
                     >
@@ -3319,9 +3321,9 @@ const persistProjectPreferences = useCallback(
                     style={{ height: '100%' }}
                   >
                 {previewUrl ? (
-                  <div ref={deviceViewportRef} className="relative w-full h-full bg-gray-100 flex items-center justify-center overflow-hidden">
+                  <div ref={deviceViewportRef} className="relative w-full h-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center overflow-hidden">
                     <div
-                      className={`relative bg-white overflow-hidden shrink-0 ${
+                      className={`relative bg-white dark:bg-gray-900 overflow-hidden shrink-0 ${
                         !deviceDims
                           ? 'w-full h-full'
                           : `border-gray-800 shadow-2xl ${(currentDevice.w ?? 0) < 500 ? 'rounded-[28px] border-8' : 'rounded-[18px] border-[12px]'}`
@@ -3334,7 +3336,7 @@ const persistProjectPreferences = useCallback(
                     >
                       <iframe
                         ref={iframeRef}
-                        className="w-full h-full border-none bg-white "
+                        className="w-full h-full border-none bg-white dark:bg-gray-900 "
                         src={previewUrl}
                         onError={() => {
                           // Show error overlay
@@ -3357,15 +3359,15 @@ const persistProjectPreferences = useCallback(
                       {/* Error overlay */}
                     <div 
                       id="iframe-error-overlay"
-                      className="absolute inset-0 bg-gray-50 flex items-center justify-center z-10"
+                      className="absolute inset-0 bg-gray-50 dark:bg-gray-900 flex items-center justify-center z-10"
                       style={{ display: 'none' }}
                     >
                       <div className="text-center max-w-md mx-auto p-6">
                         <div className="text-4xl mb-4">🔄</div>
-                        <h3 className="text-lg font-semibold text-gray-800 mb-2">
+                        <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-100 mb-2">
                           Connection Issue
                         </h3>
-                        <p className="text-gray-600 mb-4">
+                        <p className="text-gray-600 dark:text-gray-300 mb-4">
                           The preview couldn&apos;t load properly. Try clicking the refresh button to reload the page.
                         </p>
                         <button
@@ -3414,17 +3416,17 @@ const persistProjectPreferences = useCallback(
                           <span className="text-sm truncate" title={previewErrors[previewErrors.length - 1]?.message}>
                             {previewErrors.length} runtime error{previewErrors.length > 1 ? 's' : ''} — {previewErrors[previewErrors.length - 1]?.message}
                           </span>
-                          <button onClick={fixPreviewErrors} className="shrink-0 text-xs font-semibold bg-white text-red-600 rounded-lg px-3 py-1.5 hover:bg-red-50">Fix with AI</button>
+                          <button onClick={fixPreviewErrors} className="shrink-0 text-xs font-semibold bg-white dark:bg-gray-900 text-red-600 rounded-lg px-3 py-1.5 hover:bg-red-50">Fix with AI</button>
                           <button onClick={() => setPreviewErrors([])} className="shrink-0 text-white/80 hover:text-white text-sm px-1" aria-label="Dismiss">✕</button>
                         </div>
                       </div>
                     )}
                   </div>
                 ) : (
-                  <div className="h-full w-full flex items-center justify-center bg-gray-50 relative">
+                  <div className="h-full w-full flex items-center justify-center bg-gray-50 dark:bg-gray-900 relative">
                     {/* Gradient background similar to main page */}
                     <div className="absolute inset-0">
-                      <div className="absolute inset-0 bg-white " />
+                      <div className="absolute inset-0 bg-white dark:bg-gray-900 " />
                       <div 
                         className="absolute inset-0 hidden transition-all duration-1000 ease-in-out"
                         style={{
@@ -3482,11 +3484,11 @@ const persistProjectPreferences = useCallback(
                         </div>
                         
                         {/* Content */}
-                        <h3 className="text-xl font-semibold text-gray-900 mb-3">
+                        <h3 className="text-xl font-semibold text-gray-900 dark:text-gray-50 mb-3">
                           Starting Preview Server
                         </h3>
                         
-                        <div className="flex items-center justify-center gap-1 text-gray-600 ">
+                        <div className="flex items-center justify-center gap-1 text-gray-600 dark:text-gray-300 ">
                           <span>{previewInitializationMessage}</span>
                           <MotionDiv
                             className="flex gap-1 ml-2"
@@ -3620,11 +3622,11 @@ const persistProjectPreferences = useCallback(
                               </div>
                             </div>
                             
-                            <h3 className="text-2xl font-bold text-gray-900 mb-3">
+                            <h3 className="text-2xl font-bold text-gray-900 dark:text-gray-50 mb-3">
                               Preview Not Running
                             </h3>
                             
-                            <p className="text-gray-600 max-w-lg mx-auto">
+                            <p className="text-gray-600 dark:text-gray-300 max-w-lg mx-auto">
                               Start your development server to see live changes
                             </p>
                           </>
@@ -3642,14 +3644,14 @@ const persistProjectPreferences = useCallback(
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
-                className="h-full flex bg-white "
+                className="h-full flex bg-white dark:bg-gray-900 "
               >
                 {/* Left Sidebar - File Explorer (VS Code style) */}
-                <div className="w-64 flex-shrink-0 bg-gray-50 border-r border-gray-200 flex flex-col">
+                <div className="w-64 flex-shrink-0 bg-gray-50 dark:bg-gray-900 border-r border-gray-200 dark:border-gray-700 flex flex-col">
                   {/* File Tree */}
-                  <div className="flex-1 overflow-y-auto bg-gray-50 custom-scrollbar">
+                  <div className="flex-1 overflow-y-auto bg-gray-50 dark:bg-gray-900 custom-scrollbar">
                     {!tree || tree.length === 0 ? (
-                      <div className="px-3 py-8 text-center text-[11px] text-gray-600 select-none">
+                      <div className="px-3 py-8 text-center text-[11px] text-gray-600 dark:text-gray-300 select-none">
                         No files found
                       </div>
                     ) : (
@@ -3670,17 +3672,17 @@ const persistProjectPreferences = useCallback(
                 </div>
 
                 {/* Right Editor Area */}
-                <div className="flex-1 flex flex-col bg-white min-w-0">
+                <div className="flex-1 flex flex-col bg-white dark:bg-gray-900 min-w-0">
                   {selectedFile ? (
                     <>
                       {/* File Tab */}
-                      <div className="flex-shrink-0 bg-gray-100 ">
-                        <div className="flex items-center gap-3 bg-white px-3 py-1.5 border-t-2 border-t-blue-500 ">
+                      <div className="flex-shrink-0 bg-gray-100 dark:bg-gray-800 ">
+                        <div className="flex items-center gap-3 bg-white dark:bg-gray-900 px-3 py-1.5 border-t-2 border-t-blue-500 ">
                           <div className="flex items-center gap-2 min-w-0">
                             <span className="w-4 h-4 flex items-center justify-center">
                               {getFileIcon(tree.find(e => e.path === selectedFile) || { path: selectedFile, type: 'file' })}
                             </span>
-                            <span className="truncate text-[13px] text-gray-700 " style={{ fontFamily: "'Segoe UI', Tahoma, sans-serif" }}>
+                            <span className="truncate text-[13px] text-gray-700 dark:text-gray-200 " style={{ fontFamily: "'Segoe UI', Tahoma, sans-serif" }}>
                               {selectedFile.split('/').pop()}
                             </span>
                           </div>
@@ -3717,7 +3719,7 @@ const persistProjectPreferences = useCallback(
                               {isSavingFile ? 'Saving…' : 'Save'}
                             </button>
                             <button
-                              className="text-gray-700 hover:bg-gray-200 px-1 rounded"
+                              className="text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-700 px-1 rounded"
                               onClick={() => {
                                 if (hasUnsavedChanges) {
                                   const confirmClose =
@@ -3746,14 +3748,14 @@ const persistProjectPreferences = useCallback(
 
                       {/* Code Editor */}
                       <div className="flex-1 overflow-hidden">
-                        <div className="w-full h-full flex bg-white overflow-hidden">
+                        <div className="w-full h-full flex bg-white dark:bg-gray-900 overflow-hidden">
                           {/* Line Numbers */}
                           <div
                             ref={lineNumberRef}
-                            className="bg-gray-50 px-3 py-4 select-none flex-shrink-0 overflow-y-auto overflow-x-hidden custom-scrollbar pointer-events-none"
+                            className="bg-gray-50 dark:bg-gray-900 px-3 py-4 select-none flex-shrink-0 overflow-y-auto overflow-x-hidden custom-scrollbar pointer-events-none"
                             aria-hidden="true"
                           >
-                            <div className="text-[13px] font-mono text-gray-500 leading-[19px]">
+                            <div className="text-[13px] font-mono text-gray-500 dark:text-gray-400 leading-[19px]">
                               {(editedContent || '').split('\n').map((_, index) => (
                                 <div key={index} className="text-right pr-2">
                                   {index + 1}
@@ -3766,7 +3768,7 @@ const persistProjectPreferences = useCallback(
                             <pre
                               ref={highlightRef}
                               aria-hidden="true"
-                              className="absolute inset-0 m-0 p-4 overflow-hidden text-[13px] leading-[19px] font-mono text-gray-800 whitespace-pre pointer-events-none"
+                              className="absolute inset-0 m-0 p-4 overflow-hidden text-[13px] leading-[19px] font-mono text-gray-800 dark:text-gray-100 whitespace-pre pointer-events-none"
                               style={{ fontFamily: "'Fira Code', 'Consolas', 'Monaco', monospace" }}
                             >
                               <code
@@ -3796,13 +3798,13 @@ const persistProjectPreferences = useCallback(
                     </>
                   ) : (
                     /* Welcome Screen */
-                    <div className="flex-1 flex items-center justify-center bg-white ">
+                    <div className="flex-1 flex items-center justify-center bg-white dark:bg-gray-900 ">
                       <div className="text-center">
-                        <span className="w-16 h-16 mb-4 opacity-10 text-gray-400 mx-auto flex items-center justify-center"><FaCode size={64} /></span>
-                        <h3 className="text-lg font-medium text-gray-700 mb-2">
+                        <span className="w-16 h-16 mb-4 opacity-10 text-gray-400 dark:text-gray-500 mx-auto flex items-center justify-center"><FaCode size={64} /></span>
+                        <h3 className="text-lg font-medium text-gray-700 dark:text-gray-200 mb-2">
                           Welcome to Code Editor
                         </h3>
-                        <p className="text-sm text-gray-500 ">
+                        <p className="text-sm text-gray-500 dark:text-gray-400 ">
                           Select a file from the explorer to start viewing code
                         </p>
                       </div>
@@ -3836,18 +3838,18 @@ const persistProjectPreferences = useCallback(
       {showPublishPanel && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/50" onClick={() => setShowPublishPanel(false)} />
-          <div className="relative w-full max-w-lg bg-white border border-gray-200 rounded-2xl shadow-2xl overflow-hidden">
-              <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between bg-gray-50/60 ">
+          <div className="relative w-full max-w-lg bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-2xl shadow-2xl overflow-hidden">
+              <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between bg-gray-50 dark:bg-gray-900/60 ">
               <div className="flex items-center gap-3">
                 <div className="w-8 h-8 rounded-lg flex items-center justify-center text-white bg-black border border-black/10 ">
                   <FaRocket size={14} />
                 </div>
                 <div>
-                  <h3 className="text-base font-semibold text-gray-900 ">Publish Project</h3>
-                  <p className="text-xs text-gray-600 ">{isGitea ? 'Pushes your code to Git — auto-deploys via CI' : 'Deploy with Vercel, linked to your GitHub repo'}</p>
+                  <h3 className="text-base font-semibold text-gray-900 dark:text-gray-50 ">Publish Project</h3>
+                  <p className="text-xs text-gray-600 dark:text-gray-300 ">{isGitea ? 'Pushes your code to Git — auto-deploys via CI' : 'Deploy with Vercel, linked to your GitHub repo'}</p>
                 </div>
               </div>
-              <button onClick={() => setShowPublishPanel(false)} className="text-gray-400 hover:text-gray-600 ">
+              <button onClick={() => setShowPublishPanel(false)} className="text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 ">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M18 6L6 18M6 6l12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>
               </button>
             </div>
@@ -3884,28 +3886,28 @@ const persistProjectPreferences = useCallback(
               {/* Neutral "currently live" state shown when the popup opens for an
                   already-deployed project (before the user clicks Update). */}
               {deploymentStatus !== 'deploying' && deploymentStatus !== 'ready' && deploymentStatus !== 'error' && isGitea && publishedUrl && (
-                <div className="p-4 rounded-xl border border-gray-200 bg-gray-50 ">
-                  <p className="text-sm font-medium text-gray-700 mb-2">Currently live at:</p>
+                <div className="p-4 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 ">
+                  <p className="text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">Currently live at:</p>
                   <div className="flex items-center gap-2">
-                    <a href={publishedUrl} target="_blank" rel="noopener noreferrer" className="text-sm font-mono text-gray-700 underline break-all flex-1">
+                    <a href={publishedUrl} target="_blank" rel="noopener noreferrer" className="text-sm font-mono text-gray-700 dark:text-gray-200 underline break-all flex-1">
                       {publishedUrl}
                     </a>
                     <button
                       onClick={() => navigator.clipboard?.writeText(publishedUrl)}
-                      className="px-2 py-1 text-xs rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-100 "
+                      className="px-2 py-1 text-xs rounded-lg border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 "
                     >
                       Copy
                     </button>
                   </div>
                   {deployRun?.state === 'success' && (deployRun?.title || deployRun?.updatedAt) && (
-                    <p className="text-xs text-gray-500 mt-2">
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
                       Last deployed{formatTimeAgo(deployRun.updatedAt) ? ` ${formatTimeAgo(deployRun.updatedAt)}` : ''}
                       {deployRun.title ? ` · ${deployRun.title}` : ''}
                       {deployRun.sha ? ` (${deployRun.sha})` : ''}
                       {deployRun.url ? <> · <a href={deployRun.url} target="_blank" rel="noopener noreferrer" className="underline">log</a></> : null}
                     </p>
                   )}
-                  <p className="text-xs text-gray-400 mt-2">Click Update to deploy your latest changes.</p>
+                  <p className="text-xs text-gray-400 dark:text-gray-500 mt-2">Click Update to deploy your latest changes.</p>
                 </div>
               )}
 
@@ -3943,13 +3945,13 @@ const persistProjectPreferences = useCallback(
 
               {!githubConnected || (!isGitea && !vercelConnected) ? (
                 <div className="p-4 rounded-xl border border-amber-200 bg-amber-50 ">
-                  <p className="text-sm font-medium text-gray-900 mb-2">Connect the following services:</p>
+                  <p className="text-sm font-medium text-gray-900 dark:text-gray-50 mb-2">Connect the following services:</p>
                   <div className="space-y-1 text-amber-700 text-sm">
                     {!githubConnected && (<div className="flex items-center gap-2"><span className="w-1.5 h-1.5 rounded-full bg-amber-500"/>Git repository not connected</div>)}
                     {!isGitea && !vercelConnected && (<div className="flex items-center gap-2"><span className="w-1.5 h-1.5 rounded-full bg-amber-500"/>Vercel project not connected</div>)}
                   </div>
                   <button
-                    className="mt-3 w-full px-4 py-2 rounded-xl border border-gray-200 text-gray-800 hover:bg-gray-50 "
+                    className="mt-3 w-full px-4 py-2 rounded-xl border border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-100 hover:bg-gray-50 dark:hover:bg-gray-800 "
                     onClick={() => { setShowPublishPanel(false); setShowGlobalSettings(true); }}
                   >
                     Open Settings → Services
@@ -4053,7 +4055,7 @@ const persistProjectPreferences = useCallback(
                 className={`w-full px-4 py-3 rounded-xl font-medium text-white transition ${
                   publishLoading || deploymentStatus === 'deploying' || !githubConnected || (!isGitea && !vercelConnected)
                     ? 'bg-gray-400 cursor-not-allowed'
-                    : 'bg-black hover:bg-gray-900'
+                    : 'bg-black hover:bg-gray-900 dark:hover:bg-gray-200'
                 }`}
               >
                 {publishLoading ? 'Publishing…' : deploymentStatus === 'deploying' ? 'Deploying…' : (!githubConnected || (!isGitea && !vercelConnected)) ? 'Connect Services First' : (publishedUrl ? 'Update' : 'Publish')}

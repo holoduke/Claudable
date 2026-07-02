@@ -8,6 +8,7 @@ import DesignPickerModal from '@/components/modals/DesignPickerModal';
 import { STACKS, DEFAULT_STACK } from '@/lib/config/stacks';
 import GlobalSettings from '@/components/settings/GlobalSettings';
 import UserMenu from '@/components/layout/UserMenu';
+import ThemeToggle from '@/components/ui/ThemeToggle';
 import { useGlobalSettings } from '@/contexts/GlobalSettingsContext';
 import { getDefaultModelForCli, getModelDisplayName } from '@/lib/constants/cliModels';
 import Image from 'next/image';
@@ -702,12 +703,12 @@ export default function HomePage() {
 
 
   return (
-    <div className="flex h-screen relative overflow-hidden bg-white ">
+    <div className="flex h-screen relative overflow-hidden bg-white dark:bg-gray-900 ">
       {/* My account (always top-right) */}
-      <div className="fixed top-3 right-4 z-50"><UserMenu /></div>
+      <div className="fixed top-3 right-4 z-50 flex items-center gap-2"><ThemeToggle /><UserMenu /></div>
       {/* Radial gradient background from bottom center */}
       <div className="absolute inset-0">
-        <div className="absolute inset-0 bg-white " />
+        <div className="absolute inset-0 bg-white dark:bg-gray-900 " />
         <div 
           className="absolute inset-0 hidden transition-all duration-1000 ease-in-out"
           style={{
@@ -733,10 +734,10 @@ export default function HomePage() {
       {/* Content wrapper */}
       <div className="relative z-10 flex h-full w-full">
         {/* Thin sidebar bar when closed */}
-        <div className={`${sidebarOpen ? 'w-0' : 'w-12'} fixed inset-y-0 left-0 z-40 bg-transparent border-r border-gray-200/20 transition-all duration-300 flex flex-col`}>
+        <div className={`${sidebarOpen ? 'w-0' : 'w-12'} fixed inset-y-0 left-0 z-40 bg-transparent border-r border-gray-200 dark:border-gray-700/20 transition-all duration-300 flex flex-col`}>
           <button
             onClick={() => setSidebarOpen(true)}
-            className="w-full h-12 flex items-center justify-center text-gray-600 hover:text-gray-900 hover:bg-gray-100 transition-colors"
+            className="w-full h-12 flex items-center justify-center text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
             title="Open sidebar"
           >
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -748,7 +749,7 @@ export default function HomePage() {
           <div className="mt-auto mb-2">
             <button
               onClick={() => setShowGlobalSettings(true)}
-              className="w-full h-12 flex items-center justify-center text-gray-600 hover:text-gray-900 hover:bg-gray-100 transition-colors"
+              className="w-full h-12 flex items-center justify-center text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
               title="Settings"
             >
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -760,17 +761,17 @@ export default function HomePage() {
         </div>
         
         {/* Sidebar - Overlay style */}
-        <div className={`${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} fixed inset-y-0 left-0 z-40 w-64 bg-white/95 backdrop-blur-2xl border-r border-gray-200 transition-transform duration-300`}>
+        <div className={`${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} fixed inset-y-0 left-0 z-40 w-64 bg-white dark:bg-gray-900/95 backdrop-blur-2xl border-r border-gray-200 dark:border-gray-700 transition-transform duration-300`}>
         <div className="flex flex-col h-full">
           {/* History header with close button */}
-          <div className="p-3 border-b border-gray-200 ">
+          <div className="p-3 border-b border-gray-200 dark:border-gray-700 ">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2 px-2 py-1">
-                <h2 className="text-gray-900 font-medium text-lg">History</h2>
+                <h2 className="text-gray-900 dark:text-gray-50 font-medium text-lg">History</h2>
               </div>
               <button
                 onClick={() => setSidebarOpen(false)}
-                className="p-1 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded transition-colors"
+                className="p-1 text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-800 rounded transition-colors"
                 title="Close sidebar"
               >
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -784,7 +785,7 @@ export default function HomePage() {
             <div className="space-y-1">
               {projects.length === 0 ? (
                 <div className="text-center py-8">
-                  <p className="text-gray-500 text-sm">No conversations yet</p>
+                  <p className="text-gray-500 dark:text-gray-400 text-sm">No conversations yet</p>
                 </div>
               ) : (
                 projects.map((project) => {
@@ -817,7 +818,7 @@ export default function HomePage() {
                         <input
                           name="name"
                           defaultValue={project.name}
-                          className="w-full px-2 py-1 text-sm bg-white border border-gray-300 rounded text-gray-900 focus:outline-none focus:ring-2 focus:ring-orange-500"
+                          className="w-full px-2 py-1 text-sm bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded text-gray-900 dark:text-gray-50 focus:outline-none focus:ring-2 focus:ring-orange-500"
                           autoFocus
                           onBlur={() => setEditingProject(null)}
                         />
@@ -855,7 +856,7 @@ export default function HomePage() {
                           }}
                         >
                           <h3 
-                            className="text-gray-900 text-sm transition-colors truncate"
+                            className="text-gray-900 dark:text-gray-50 text-sm transition-colors truncate"
                             style={{
                               '--hover-color': projectColor || '#DE7356'
                             } as React.CSSProperties}
@@ -873,12 +874,12 @@ export default function HomePage() {
                             </span>
                           </h3>
                           <div className="flex items-center gap-2 mt-1">
-                            <div className="text-gray-500 text-xs">
+                            <div className="text-gray-500 dark:text-gray-400 text-xs">
                               {formatTime(project.lastMessageAt || project.createdAt)}
                             </div>
                             {project.preferredCli && (
                               <div className="flex items-center gap-1">
-                                <span className="text-gray-400 text-xs">•</span>
+                                <span className="text-gray-400 dark:text-gray-500 text-xs">•</span>
                                 <span
                                   className="text-xs transition-colors"
                                   style={{
@@ -897,7 +898,7 @@ export default function HomePage() {
                               e.stopPropagation();
                               setEditingProject(project);
                             }}
-                            className="p-1 text-gray-400 hover:text-orange-500 transition-colors"
+                            className="p-1 text-gray-400 dark:text-gray-500 hover:text-orange-500 transition-colors"
                             title="Edit project name"
                           >
                             <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -909,7 +910,7 @@ export default function HomePage() {
                               e.stopPropagation();
                               openDeleteModal(project);
                             }}
-                            className="p-1 text-gray-400 hover:text-red-500 transition-colors"
+                            className="p-1 text-gray-400 dark:text-gray-500 hover:text-red-500 transition-colors"
                             title="Delete project"
                           >
                             <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -926,10 +927,10 @@ export default function HomePage() {
             </div>
           </div>
           
-          <div className="p-2 border-t border-gray-200 ">
+          <div className="p-2 border-t border-gray-200 dark:border-gray-700 ">
             <button 
               onClick={() => setShowGlobalSettings(true)}
-              className="w-full flex items-center gap-2 p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-all text-sm"
+              className="w-full flex items-center gap-2 p-2 text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-all text-sm"
             >
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
@@ -961,7 +962,7 @@ export default function HomePage() {
                   Claudable
                 </h1>
               </div>
-              <p className="text-xl text-gray-700 font-light tracking-tight">
+              <p className="text-xl text-gray-700 dark:text-gray-200 font-light tracking-tight">
                 Connect CLI Agent • Build what you want • Deploy instantly
               </p>
             </div>
@@ -972,11 +973,11 @@ export default function HomePage() {
                 {uploadedImages.map((image) => (
                   <div key={image.id} className="relative group">
                     {image.isImage === false ? (
-                      <div className="w-20 h-20 rounded-lg border border-gray-200 bg-gray-50 flex flex-col items-center justify-center p-1.5 text-center">
-                        <svg className="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <div className="w-20 h-20 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 flex flex-col items-center justify-center p-1.5 text-center">
+                        <svg className="w-6 h-6 text-gray-400 dark:text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                         </svg>
-                        <span className="text-[10px] leading-tight text-gray-600 mt-1 line-clamp-2 break-all">{image.name}</span>
+                        <span className="text-[10px] leading-tight text-gray-600 dark:text-gray-300 mt-1 line-clamp-2 break-all">{image.name}</span>
                       </div>
                     ) : (
                       <>
@@ -984,7 +985,7 @@ export default function HomePage() {
                         <img
                           src={image.url}
                           alt={image.name}
-                          className="w-20 h-20 object-cover rounded-lg border border-gray-200 "
+                          className="w-20 h-20 object-cover rounded-lg border border-gray-200 dark:border-gray-700 "
                         />
                         <div className="absolute bottom-0 left-0 right-0 bg-black bg-opacity-50 text-white text-xs px-1 py-0.5 rounded-b-lg truncate">
                           {image.name}
@@ -1013,7 +1014,7 @@ export default function HomePage() {
               className={`group flex flex-col gap-4 p-4 w-full rounded-[28px] border backdrop-blur-xl text-base shadow-xl transition-all duration-150 ease-in-out mb-6 relative overflow-visible ${
                 isDragOver 
                   ? 'border-[#DE7356] bg-[#DE7356]/10 ' 
-                  : 'border-gray-200 bg-white '
+                  : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 '
               }`}
             >
               <div className="relative flex flex-1 items-center">
@@ -1022,7 +1023,7 @@ export default function HomePage() {
                   onChange={(e) => setPrompt(e.target.value)}
                   placeholder="Ask Claudable to create a blog about..."
                   disabled={isCreatingProject}
-                  className="flex w-full rounded-md px-2 py-2 placeholder:text-gray-400 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50 resize-none text-[16px] leading-snug md:text-base focus-visible:ring-0 focus-visible:ring-offset-0 bg-transparent focus:bg-transparent flex-1 text-gray-900 overflow-y-auto"
+                  className="flex w-full rounded-md px-2 py-2 placeholder:text-gray-400 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50 resize-none text-[16px] leading-snug md:text-base focus-visible:ring-0 focus-visible:ring-offset-0 bg-transparent focus:bg-transparent flex-1 text-gray-900 dark:text-gray-50 overflow-y-auto"
                   style={{ height: '120px' }}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter') {
@@ -1057,7 +1058,7 @@ export default function HomePage() {
                 {/* Image Upload Button */}
                 <div className="flex items-center gap-2">
                   <label
-                    className="flex items-center justify-center w-8 h-8 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-full transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="flex items-center justify-center w-8 h-8 text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                     title="Upload images or files"
                   >
                     <ImageIcon className="h-4 w-4" />
@@ -1076,7 +1077,7 @@ export default function HomePage() {
                   type="button"
                   onClick={() => setShowDesignPicker(true)}
                   title="Pick a design style"
-                  className="justify-center whitespace-nowrap text-sm font-medium transition-colors duration-100 ease-in-out border border-gray-200/50 bg-transparent shadow-sm hover:bg-gray-50 hover:border-gray-300/50 px-3 py-2 flex h-8 items-center gap-1.5 rounded-full text-gray-700 hover:text-gray-900"
+                  className="justify-center whitespace-nowrap text-sm font-medium transition-colors duration-100 ease-in-out border border-gray-200 dark:border-gray-700/50 bg-transparent shadow-sm hover:bg-gray-50 dark:hover:bg-gray-800 hover:border-gray-300 dark:hover:border-gray-600/50 px-3 py-2 flex h-8 items-center gap-1.5 rounded-full text-gray-700 dark:text-gray-200 hover:text-gray-900 dark:hover:text-gray-100"
                 >
                   <span aria-hidden className="text-sm leading-none">🎨</span>
                   <span className="hidden md:flex text-sm font-medium">
@@ -1089,7 +1090,7 @@ export default function HomePage() {
                     type="button"
                     onClick={() => setShowStackMenu(v => !v)}
                     title="Pick a tech stack"
-                    className="justify-center whitespace-nowrap text-sm font-medium transition-colors duration-100 ease-in-out border border-gray-200/50 bg-transparent shadow-sm hover:bg-gray-50 hover:border-gray-300/50 px-3 py-2 flex h-8 items-center gap-1.5 rounded-full text-gray-700 hover:text-gray-900"
+                    className="justify-center whitespace-nowrap text-sm font-medium transition-colors duration-100 ease-in-out border border-gray-200 dark:border-gray-700/50 bg-transparent shadow-sm hover:bg-gray-50 dark:hover:bg-gray-800 hover:border-gray-300 dark:hover:border-gray-600/50 px-3 py-2 flex h-8 items-center gap-1.5 rounded-full text-gray-700 dark:text-gray-200 hover:text-gray-900 dark:hover:text-gray-100"
                   >
                     <span aria-hidden className="text-sm leading-none">🧱</span>
                     <span className="hidden md:flex text-sm font-medium">
@@ -1099,19 +1100,19 @@ export default function HomePage() {
                   {showStackMenu && (
                     <>
                       <div className="fixed inset-0 z-[290]" onClick={() => setShowStackMenu(false)} />
-                      <div className="absolute bottom-full mb-2 left-0 z-[300] w-72 rounded-xl border border-gray-200 bg-white shadow-lg p-1">
+                      <div className="absolute bottom-full mb-2 left-0 z-[300] w-72 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-lg p-1">
                         {STACKS.map(s => (
                           <button
                             key={s.id}
                             type="button"
                             onClick={() => { setSelectedStack(s.id); setShowStackMenu(false); }}
-                            className={`w-full text-left px-3 py-2 rounded-lg transition-colors ${selectedStack === s.id ? 'bg-gray-100' : 'hover:bg-gray-50'}`}
+                            className={`w-full text-left px-3 py-2 rounded-lg transition-colors ${selectedStack === s.id ? 'bg-gray-100 dark:bg-gray-800' : 'hover:bg-gray-50 dark:hover:bg-gray-800'}`}
                           >
                             <div className="flex items-center justify-between">
-                              <span className="text-sm font-medium text-gray-900">{s.name}</span>
+                              <span className="text-sm font-medium text-gray-900 dark:text-gray-50">{s.name}</span>
                               {selectedStack === s.id && <span className="text-xs text-blue-600">✓</span>}
                             </div>
-                            <p className="text-xs text-gray-500 mt-0.5">{s.description}</p>
+                            <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{s.description}</p>
                           </button>
                         ))}
                       </div>
@@ -1126,7 +1127,7 @@ export default function HomePage() {
                       setShowAssistantDropdown(!showAssistantDropdown);
                       setShowModelDropdown(false);
                     }}
-                    className="justify-center whitespace-nowrap text-sm font-medium transition-colors duration-100 ease-in-out focus-visible:outline-none disabled:pointer-events-none disabled:opacity-50 border border-gray-200/50 bg-transparent shadow-sm hover:bg-gray-50 hover:border-gray-300/50 px-3 py-2 flex h-8 items-center gap-1 rounded-full text-gray-700 hover:text-gray-900 focus-visible:ring-0"
+                    className="justify-center whitespace-nowrap text-sm font-medium transition-colors duration-100 ease-in-out focus-visible:outline-none disabled:pointer-events-none disabled:opacity-50 border border-gray-200 dark:border-gray-700/50 bg-transparent shadow-sm hover:bg-gray-50 dark:hover:bg-gray-800 hover:border-gray-300 dark:hover:border-gray-600/50 px-3 py-2 flex h-8 items-center gap-1 rounded-full text-gray-700 dark:text-gray-200 hover:text-gray-900 dark:hover:text-gray-100 focus-visible:ring-0"
                   >
                     <div className="w-4 h-4 rounded overflow-hidden">
                       <Image
@@ -1146,7 +1147,7 @@ export default function HomePage() {
                   </button>
                   
                   {showAssistantDropdown && (
-                    <div className="absolute top-full mt-1 left-0 z-[300] min-w-full whitespace-nowrap rounded-2xl border border-gray-200 bg-white backdrop-blur-xl shadow-lg">
+                    <div className="absolute top-full mt-1 left-0 z-[300] min-w-full whitespace-nowrap rounded-2xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 backdrop-blur-xl shadow-lg">
                       {ASSISTANT_OPTIONS.map((option) => (
                         <button
                           key={option.id}
@@ -1154,10 +1155,10 @@ export default function HomePage() {
                           disabled={!cliStatus[option.id]?.installed}
                           className={`w-full flex items-center gap-2 px-3 py-2 text-left first:rounded-t-2xl last:rounded-b-2xl transition-colors ${
                             !cliStatus[option.id]?.installed
-                              ? 'opacity-50 cursor-not-allowed text-gray-400 '
+                              ? 'opacity-50 cursor-not-allowed text-gray-400 dark:text-gray-500 '
                               : selectedAssistant === option.id 
-                              ? 'bg-gray-100 text-black font-semibold' 
-                              : 'text-gray-800 hover:text-black hover:bg-gray-100 '
+                              ? 'bg-gray-100 dark:bg-gray-800 text-black font-semibold' 
+                              : 'text-gray-800 dark:text-gray-100 hover:text-black hover:bg-gray-100 dark:hover:bg-gray-800 '
                           }`}
                         >
                           <div className="w-4 h-4 rounded overflow-hidden">
@@ -1184,7 +1185,7 @@ export default function HomePage() {
                       setShowModelDropdown((current) => !current);
                       setShowAssistantDropdown(false);
                     }}
-                    className="justify-center whitespace-nowrap text-sm font-medium transition-colors duration-100 ease-in-out focus-visible:outline-none disabled:pointer-events-none disabled:opacity-50 border border-gray-200/50 bg-transparent shadow-sm hover:bg-gray-50 hover:border-gray-300/50 px-3 py-2 flex h-8 items-center gap-1 rounded-full text-gray-700 hover:text-gray-900 focus-visible:ring-0 min-w-[140px]"
+                    className="justify-center whitespace-nowrap text-sm font-medium transition-colors duration-100 ease-in-out focus-visible:outline-none disabled:pointer-events-none disabled:opacity-50 border border-gray-200 dark:border-gray-700/50 bg-transparent shadow-sm hover:bg-gray-50 dark:hover:bg-gray-800 hover:border-gray-300 dark:hover:border-gray-600/50 px-3 py-2 flex h-8 items-center gap-1 rounded-full text-gray-700 dark:text-gray-200 hover:text-gray-900 dark:hover:text-gray-100 focus-visible:ring-0 min-w-[140px]"
                   >
                     <span className="text-sm font-medium whitespace-nowrap">
                       {availableModels.find(m => m.id === selectedModel)?.name ?? getModelDisplayName(selectedAssistant, selectedModel)}
@@ -1195,15 +1196,15 @@ export default function HomePage() {
                   </button>
                   
                   {showModelDropdown && (
-                    <div className="absolute top-full mt-1 left-0 z-[300] min-w-full max-h-[300px] overflow-y-auto rounded-2xl border border-gray-200 bg-white backdrop-blur-xl shadow-lg">
+                    <div className="absolute top-full mt-1 left-0 z-[300] min-w-full max-h-[300px] overflow-y-auto rounded-2xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 backdrop-blur-xl shadow-lg">
                       {availableModels.map((model) => (
                           <button
                             key={model.id}
                             onClick={() => handleModelChange(model.id)}
                             className={`w-full px-3 py-2 text-left first:rounded-t-2xl last:rounded-b-2xl transition-colors ${
                               selectedModel === model.id 
-                                ? 'bg-gray-100 text-black font-semibold' 
-                                : 'text-gray-800 hover:text-black hover:bg-gray-100 '
+                                ? 'bg-gray-100 dark:bg-gray-800 text-black font-semibold' 
+                                : 'text-gray-800 dark:text-gray-100 hover:text-black hover:bg-gray-100 dark:hover:bg-gray-800 '
                             }`}
                           >
                             <span className="text-sm font-medium">{model.name}</span>
@@ -1263,7 +1264,7 @@ export default function HomePage() {
                   key={example.text}
                   onClick={() => setPrompt(example.prompt)}
                   disabled={isCreatingProject}
-                  className="px-4 py-2 text-sm font-medium text-gray-500 bg-transparent border border-[#DE7356]/10 rounded-full hover:bg-gray-50 hover:border-[#DE7356]/15 hover:text-gray-700 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="px-4 py-2 text-sm font-medium text-gray-500 dark:text-gray-400 bg-transparent border border-[#DE7356]/10 rounded-full hover:bg-gray-50 dark:hover:bg-gray-800 hover:border-[#DE7356]/15 hover:text-gray-700 dark:hover:text-gray-200 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {example.text}
                 </button>
@@ -1275,7 +1276,7 @@ export default function HomePage() {
                 user may access when the auth gate is on. */}
             {projects.length > 0 && (
               <div className="mt-12 w-full max-w-3xl mx-auto text-left">
-                <h2 className="text-sm font-medium text-gray-500 mb-3 px-1">Your projects</h2>
+                <h2 className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-3 px-1">Your projects</h2>
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                   {projects.map((project) => {
                     const projectCli = sanitizeAssistant(project.preferredCli);
@@ -1289,7 +1290,7 @@ export default function HomePage() {
                           if (selectedModel) params.set('model', selectedModel);
                           router.push(`/${project.id}/chat${params.toString() ? '?' + params.toString() : ''}`);
                         }}
-                        className="group text-left rounded-xl border border-gray-200 bg-white hover:border-gray-300 hover:shadow-sm transition-all overflow-hidden"
+                        className="group text-left rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 hover:border-gray-300 dark:hover:border-gray-600 hover:shadow-sm transition-all overflow-hidden"
                       >
                         {/* Site thumbnail (headless screenshot of the preview). The
                             gradient shows until/unless a thumbnail exists; the img
@@ -1307,9 +1308,9 @@ export default function HomePage() {
                         <div className="p-3">
                           <div className="flex items-center gap-2 mb-1">
                             <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: projectColor }} />
-                            <span className="text-sm font-medium text-gray-900 truncate">{project.name}</span>
+                            <span className="text-sm font-medium text-gray-900 dark:text-gray-50 truncate">{project.name}</span>
                           </div>
-                          <p className="text-xs text-gray-400 group-hover:text-gray-600 transition-colors">Open project →</p>
+                          <p className="text-xs text-gray-400 dark:text-gray-500 group-hover:text-gray-600 transition-colors">Open project →</p>
                         </div>
                       </button>
                     );
@@ -1359,12 +1360,12 @@ export default function HomePage() {
                 </svg>
               </div>
               <div>
-                <h3 className="text-lg font-semibold text-gray-900 ">Delete Project</h3>
-                <p className="text-sm text-gray-500 ">This action cannot be undone</p>
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-50 ">Delete Project</h3>
+                <p className="text-sm text-gray-500 dark:text-gray-400 ">This action cannot be undone</p>
               </div>
             </div>
             
-            <p className="text-gray-700 mb-6">
+            <p className="text-gray-700 dark:text-gray-200 mb-6">
               Are you sure you want to delete <strong>&quot;{deleteModal.project.name}&quot;</strong>? 
               This will permanently delete all project files and chat history.
             </p>
@@ -1373,7 +1374,7 @@ export default function HomePage() {
               <button
                 onClick={closeDeleteModal}
                 disabled={isDeleting}
-                className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors disabled:opacity-50"
+                className="px-4 py-2 text-gray-700 dark:text-gray-200 bg-gray-100 dark:bg-gray-800 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors disabled:opacity-50"
               >
                 Cancel
               </button>

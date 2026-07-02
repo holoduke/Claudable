@@ -134,7 +134,7 @@ export function ProjectSettings({
     >
         <div className="flex h-full">
           {/* Sidebar Tabs */}
-          <div className="w-56 bg-white border-r border-gray-200 ">
+          <div className="w-56 bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-700 ">
           <nav className="p-4 space-y-1">
             {availableTabs.map(tab => (
               <button
@@ -143,10 +143,10 @@ export function ProjectSettings({
                 className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-left transition-all duration-200 ${
                   activeTab === tab.id
                     ? 'bg-gradient-to-r from-blue-50 to-indigo-50 text-blue-600 shadow-sm border border-blue-200 '
-                    : 'hover:bg-gray-50 text-gray-600 hover:text-gray-900 '
+                    : 'hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 '
                 }`}
               >
-                <span className={activeTab === tab.id ? 'text-blue-600 ' : 'text-gray-500 '}>
+                <span className={activeTab === tab.id ? 'text-blue-600 ' : 'text-gray-500 dark:text-gray-400 '}>
                   {tab.icon}
                 </span>
                 <span className="text-sm font-medium">{tab.label}</span>
@@ -156,7 +156,7 @@ export function ProjectSettings({
         </div>
 
         {/* Content Area */}
-        <div className="flex-1 overflow-y-auto bg-white ">
+        <div className="flex-1 overflow-y-auto bg-white dark:bg-gray-900 ">
           {activeTab === 'general' && isProjectScoped && (
             <GeneralSettings
               projectId={projectId}

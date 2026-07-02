@@ -44,7 +44,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
             className={`pointer-events-auto cursor-pointer max-w-sm rounded-lg border px-3.5 py-2.5 text-sm shadow-lg flex items-start gap-2 animate-[toastin_.15s_ease-out] ${
               t.kind === 'success' ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
               : t.kind === 'error' ? 'bg-red-50 border-red-200 text-red-800'
-              : 'bg-white border-gray-200 text-gray-800'
+              : 'bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-100'
             }`}
           >
             <span className="mt-0.5 shrink-0">

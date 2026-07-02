@@ -2134,8 +2134,8 @@ const ToolResultMessage = ({
                 p: ({children}) => <p className="mb-2 last:mb-0 break-words">{children}</p>,
                 strong: ({children}) => <strong className="font-medium">{children}</strong>,
                 em: ({children}) => <em className="italic">{children}</em>,
-                code: ({children}) => <code className="bg-gray-100 px-2 py-1 rounded text-xs font-mono">{children}</code>,
-                pre: ({children}) => <pre className="bg-gray-100 p-3 rounded-lg my-2 overflow-x-auto text-xs break-words">{children}</pre>,
+                code: ({children}) => <code className="bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded text-xs font-mono">{children}</code>,
+                pre: ({children}) => <pre className="bg-gray-100 dark:bg-gray-800 p-3 rounded-lg my-2 overflow-x-auto text-xs break-words">{children}</pre>,
                 ul: ({children}) => <ul className="list-disc list-inside mb-2 space-y-1">{children}</ul>,
                 ol: ({children}) => <ol className="list-decimal list-inside mb-2 space-y-1">{children}</ol>,
                 li: ({children}) => <li className="mb-1 break-words">{children}</li>
@@ -2180,7 +2180,7 @@ const ToolResultMessage = ({
                 });
                 if (hasPlanning) {
                   return <p className="mb-2 last:mb-0 break-words">
-                    <code className="bg-gray-100 px-2 py-1 rounded text-xs font-mono">
+                    <code className="bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded text-xs font-mono">
                       Planning for next moves...
                     </code>
                   </p>;
@@ -2189,8 +2189,8 @@ const ToolResultMessage = ({
               },
               strong: ({children}) => <strong className="font-medium">{children}</strong>,
               em: ({children}) => <em className="italic">{children}</em>,
-              code: ({children}) => <code className="bg-gray-100 px-2 py-1 rounded text-xs font-mono">{children}</code>,
-              pre: ({children}) => <pre className="bg-gray-100 p-3 rounded-lg my-2 overflow-x-auto text-xs break-words">{children}</pre>,
+              code: ({children}) => <code className="bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded text-xs font-mono">{children}</code>,
+              pre: ({children}) => <pre className="bg-gray-100 dark:bg-gray-800 p-3 rounded-lg my-2 overflow-x-auto text-xs break-words">{children}</pre>,
               ul: ({children}) => <ul className="list-disc list-inside mb-2 space-y-1">{children}</ul>,
               ol: ({children}) => <ol className="list-decimal list-inside mb-2 space-y-1">{children}</ol>,
               li: ({children}) => <li className="mb-1 break-words">{children}</li>
@@ -2220,7 +2220,7 @@ const ToolResultMessage = ({
               });
               if (hasPlanning) {
                 return <p className="mb-2 last:mb-0 break-words">
-                  <code className="bg-gray-100 px-2 py-1 rounded text-xs font-mono">
+                  <code className="bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded text-xs font-mono">
                     Planning for next moves...
                   </code>
                 </p>;
@@ -2229,8 +2229,8 @@ const ToolResultMessage = ({
             },
             strong: ({children}) => <strong className="font-medium">{children}</strong>,
             em: ({children}) => <em className="italic">{children}</em>,
-            code: ({children}) => <code className="bg-gray-100 px-2 py-1 rounded text-xs font-mono">{children}</code>,
-            pre: ({children}) => <pre className="bg-gray-100 p-3 rounded-lg my-2 overflow-x-auto text-xs break-words">{children}</pre>,
+            code: ({children}) => <code className="bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded text-xs font-mono">{children}</code>,
+            pre: ({children}) => <pre className="bg-gray-100 dark:bg-gray-800 p-3 rounded-lg my-2 overflow-x-auto text-xs break-words">{children}</pre>,
             ul: ({children}) => <ul className="list-disc list-inside mb-2 space-y-1">{children}</ul>,
             ol: ({children}) => <ol className="list-decimal list-inside mb-2 space-y-1">{children}</ol>,
             li: ({children}) => <li className="mb-1 break-words">{children}</li>
@@ -2279,9 +2279,9 @@ const ToolResultMessage = ({
         switch (role) {
           case 'user':
             return {
-              bgClass: 'bg-white border border-gray-200 ',
-              textColor: 'text-gray-900 ',
-              labelColor: 'text-gray-600 '
+              bgClass: 'bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 ',
+              textColor: 'text-gray-900 dark:text-gray-50 ',
+              labelColor: 'text-gray-600 dark:text-gray-300 '
             };
           case 'system':
             return {
@@ -2298,9 +2298,9 @@ const ToolResultMessage = ({
           case 'assistant':
           default:
             return {
-              bgClass: 'bg-white border border-gray-200 ',
-              textColor: 'text-gray-900 ',
-              labelColor: 'text-gray-600 '
+              bgClass: 'bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 ',
+              textColor: 'text-gray-900 dark:text-gray-50 ',
+              labelColor: 'text-gray-600 dark:text-gray-300 '
             };
         }
     }
@@ -2423,8 +2423,8 @@ const ToolResultMessage = ({
                 p: ({children}) => <p className="mb-2 last:mb-0 break-words">{children}</p>,
                 strong: ({children}) => <strong className="font-medium">{children}</strong>,
                 em: ({children}) => <em className="italic">{children}</em>,
-                code: ({children}) => <code className="bg-gray-100 px-2 py-1 rounded text-xs font-mono break-all">{children}</code>,
-                pre: ({children}) => <pre className="bg-gray-100 p-3 rounded-lg my-2 overflow-x-auto text-xs break-words">{children}</pre>,
+                code: ({children}) => <code className="bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded text-xs font-mono break-all">{children}</code>,
+                pre: ({children}) => <pre className="bg-gray-100 dark:bg-gray-800 p-3 rounded-lg my-2 overflow-x-auto text-xs break-words">{children}</pre>,
                 ul: ({children}) => <ul className="list-disc list-inside mb-2 space-y-1">{children}</ul>,
                 ol: ({children}) => <ol className="list-decimal list-inside mb-2 space-y-1">{children}</ol>,
                 li: ({children}) => <li className="mb-1 break-words">{children}</li>
@@ -2508,37 +2508,37 @@ const ToolResultMessage = ({
           animate={{ opacity: 1, scale: 1 }}
           exit={{ opacity: 0, scale: 0.9 }}
         >
-          <div className="bg-white rounded-lg p-6 max-w-4xl max-h-[80vh] overflow-auto border border-gray-200 ">
+          <div className="bg-white dark:bg-gray-900 rounded-lg p-6 max-w-4xl max-h-[80vh] overflow-auto border border-gray-200 dark:border-gray-700 ">
           <div className="flex justify-between items-center mb-4">
-            <h3 className="text-lg font-semibold text-gray-900 ">Log Details</h3>
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-50 ">Log Details</h3>
             <button
               onClick={closeDetailModal}
-              className="text-gray-500 hover:text-gray-700 text-xl"
+              className="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 text-xl"
             >
               ✕
             </button>
           </div>
 
           <div className="space-y-4">
-            <div className="text-gray-900 ">
-              <strong className="text-gray-700 ">Type:</strong> {type}
+            <div className="text-gray-900 dark:text-gray-50 ">
+              <strong className="text-gray-700 dark:text-gray-200 ">Type:</strong> {type}
             </div>
-            <div className="text-gray-900 ">
-              <strong className="text-gray-700 ">Time:</strong> {formatTime(selectedLog.timestamp)}
+            <div className="text-gray-900 dark:text-gray-50 ">
+              <strong className="text-gray-700 dark:text-gray-200 ">Time:</strong> {formatTime(selectedLog.timestamp)}
             </div>
 
             {type === 'tool_result' && data.diff_info && (
               <div>
-                <strong className="text-gray-700 ">Changes:</strong>
-                <pre className="bg-gray-100 p-3 rounded-lg overflow-x-auto text-xs font-mono">
+                <strong className="text-gray-700 dark:text-gray-200 ">Changes:</strong>
+                <pre className="bg-gray-100 dark:bg-gray-800 p-3 rounded-lg overflow-x-auto text-xs font-mono">
                   {data.diff_info}
                 </pre>
               </div>
             )}
 
             <div>
-              <strong className="text-gray-700 ">Detailed Data:</strong>
-              <pre className="bg-gray-100 p-3 rounded-lg overflow-x-auto text-xs font-mono">
+              <strong className="text-gray-700 dark:text-gray-200 ">Detailed Data:</strong>
+              <pre className="bg-gray-100 dark:bg-gray-800 p-3 rounded-lg overflow-x-auto text-xs font-mono">
                 {JSON.stringify(data, null, 2)}
               </pre>
             </div>
@@ -2610,7 +2610,7 @@ const ToolResultMessage = ({
   }, [onAddUserMessage]);
 
   return (
-    <div className="flex flex-col h-full bg-white ">
+    <div className="flex flex-col h-full bg-white dark:bg-gray-900 ">
 
       {/* Error Display */}
       {hasError && (
@@ -2651,7 +2651,7 @@ const ToolResultMessage = ({
       {/* Display messages and logs together */}
       <div className="flex-1 overflow-y-auto px-8 py-3 space-y-2 custom-scrollbar ">
         {isLoading && !hasLoadedOnce && !hasError && (
-          <div className="flex items-center justify-center h-32 text-gray-400 text-sm">
+          <div className="flex items-center justify-center h-32 text-gray-400 dark:text-gray-500 text-sm">
             <div className="flex flex-col items-center">
               <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-gray-900 mb-2 mx-auto"></div>
               <p>Loading chat history...</p>
@@ -2660,7 +2660,7 @@ const ToolResultMessage = ({
         )}
         
         {!isLoading && messages.length === 0 && logs.length === 0 && (
-          <div className="flex items-center justify-center h-32 text-gray-400 text-sm">
+          <div className="flex items-center justify-center h-32 text-gray-400 dark:text-gray-500 text-sm">
             <div className="text-center">
               <div className="text-2xl mb-2">💬</div>
               <p>Start a conversation with your agent</p>
@@ -2673,7 +2673,7 @@ const ToolResultMessage = ({
           <div className="mb-4 flex justify-center">
             <button
               onClick={loadOlderMessages}
-              className="px-4 py-2 text-sm text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-md transition-colors"
+              className="px-4 py-2 text-sm text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-md transition-colors"
               disabled={isLoading}
             >
               {isLoading ? 'Loading...' : `Load older messages (${totalMessageCount - messages.length} remaining)`}
@@ -2702,8 +2702,8 @@ const ToolResultMessage = ({
                 {message.role === 'user' ? (
                   // User message - boxed on the right
                   <div className="flex justify-end">
-                    <div className="max-w-[80%] bg-gray-100 rounded-lg px-4 py-3">
-                      <div className="text-sm text-gray-900 break-words">
+                    <div className="max-w-[80%] bg-gray-100 dark:bg-gray-800 rounded-lg px-4 py-3">
+                      <div className="text-sm text-gray-900 dark:text-gray-50 break-words">
                         {(() => {
                           const cleanedMessage = cleanUserMessage(messageText);
                           
@@ -2790,11 +2790,11 @@ const ToolResultMessage = ({
 
                                         return (
                                           <div key={idx} className="relative group">
-                                            <div className="w-40 h-40 bg-gray-200 rounded-lg overflow-hidden border border-gray-300 ">
+                                            <div className="w-40 h-40 bg-gray-200 dark:bg-gray-800 rounded-lg overflow-hidden border border-gray-300 dark:border-gray-700 ">
                                               {allCandidatesFailed ? (
                                                 // Show an icon when loading fails
                                                 <div className="w-full h-full flex items-center justify-center">
-                                                  <svg className="w-16 h-16 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                  <svg className="w-16 h-16 text-gray-400 dark:text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
                                                   </svg>
                                                 </div>
@@ -2831,8 +2831,8 @@ const ToolResultMessage = ({
                                         const filename = path.split('/').pop() || 'image';
                                         return (
                                           <div key={idx} className="relative group">
-                                            <div className="w-40 h-40 bg-gray-200 rounded-lg overflow-hidden border border-gray-300 flex items-center justify-center">
-                                              <svg className="w-16 h-16 text-gray-400 " fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <div className="w-40 h-40 bg-gray-200 dark:bg-gray-800 rounded-lg overflow-hidden border border-gray-300 dark:border-gray-700 flex items-center justify-center">
+                                              <svg className="w-16 h-16 text-gray-400 dark:text-gray-500 " fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
                                               </svg>
                                             </div>
@@ -2879,7 +2879,7 @@ const ToolResultMessage = ({
                       />
                     ) : (
                       // Regular agent message - plain text
-                      <div className="text-sm text-gray-900 leading-relaxed">
+                      <div className="text-sm text-gray-900 dark:text-gray-50 leading-relaxed">
                         {renderContentWithThinking(shortenPath(messageText))}
                       </div>
                     )}
@@ -2891,7 +2891,7 @@ const ToolResultMessage = ({
                     {messageText && (
                       <button
                         onClick={() => copyMessage(message.id, messageText)}
-                        className="text-[11px] text-gray-400 hover:text-gray-700 inline-flex items-center gap-1"
+                        className="text-[11px] text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-200 inline-flex items-center gap-1"
                         title="Copy this message"
                       >
                         {copiedId === message.id ? (
@@ -2905,7 +2905,7 @@ const ToolResultMessage = ({
                       <button
                         onClick={() => handleRevert((message as any).commitSha)}
                         disabled={!!revertingSha || serverBusy}
-                        className="text-[11px] text-gray-400 hover:text-[#DE7356] inline-flex items-center gap-1 disabled:opacity-50 disabled:hover:text-gray-400"
+                        className="text-[11px] text-gray-400 dark:text-gray-500 hover:text-[#DE7356] inline-flex items-center gap-1 disabled:opacity-50 disabled:hover:text-gray-400"
                         title={serverBusy ? 'Wait for the agent to finish before reverting' : 'Restore the project to how it was after this step'}
                       >
                         <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 7v6h6"/><path d="M3 13a9 9 0 1 0 3-7.7L3 8"/></svg>
@@ -2929,7 +2929,7 @@ const ToolResultMessage = ({
             className="mb-4 w-full cursor-pointer"
             onClick={() => openDetailModal(log)}
           >
-            <div className="text-sm text-gray-900 leading-relaxed">
+            <div className="text-sm text-gray-900 dark:text-gray-50 leading-relaxed">
               {renderLogEntry(log)}
             </div>
           </div>
@@ -2939,7 +2939,7 @@ const ToolResultMessage = ({
             the authoritative server-side active-request flag (so it still shows
             after a reconnect/late join, not just when the start event is caught). */}
         {(isWaitingForResponse || serverBusy) && (
-          <div className="mb-4 w-full flex items-center gap-2 text-gray-600">
+          <div className="mb-4 w-full flex items-center gap-2 text-gray-600 dark:text-gray-300">
             <span className="flex items-center gap-1" aria-hidden="true">
               <span className="w-1.5 h-1.5 rounded-full bg-gray-500 animate-bounce" style={{ animationDelay: '0ms' }} />
               <span className="w-1.5 h-1.5 rounded-full bg-gray-500 animate-bounce" style={{ animationDelay: '150ms' }} />
@@ -2947,7 +2947,7 @@ const ToolResultMessage = ({
             </span>
             <span className="text-sm font-medium">Claude is working</span>
             {busyDetail && (
-              <span className="text-sm text-gray-400 truncate max-w-[60%]">· {busyDetail}</span>
+              <span className="text-sm text-gray-400 dark:text-gray-500 truncate max-w-[60%]">· {busyDetail}</span>
             )}
           </div>
         )}

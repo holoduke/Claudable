@@ -305,14 +305,14 @@ export default function SupabaseModal({ isOpen, onClose, projectId, projectName,
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/50" onClick={onClose} />
       
-      <div className="relative bg-white rounded-lg shadow-xl w-full max-w-md mx-4">
+      <div className="relative bg-white dark:bg-gray-900 rounded-lg shadow-xl w-full max-w-md mx-4">
         <motion.div
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
           exit={{ opacity: 0, scale: 0.95 }}
         >
         {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-gray-200 ">
+        <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700 ">
           <div className="flex items-center gap-3">
             <svg width="24" height="24" viewBox="0 0 109 113" fill="none" xmlns="http://www.w3.org/2000/svg">
               <path d="M63.7076 110.284C60.8481 113.885 55.0502 111.912 54.9813 107.314L53.9738 40.0627L99.1935 40.0627C107.384 40.0627 111.952 49.5228 106.859 55.9374L63.7076 110.284Z" fill="url(#paint0_linear)"/>
@@ -324,13 +324,13 @@ export default function SupabaseModal({ isOpen, onClose, projectId, projectName,
                 </linearGradient>
               </defs>
             </svg>
-            <h2 className="text-lg font-semibold text-gray-900 ">
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-50 ">
               Connect Supabase
             </h2>
           </div>
           <button
             onClick={onClose}
-            className="text-gray-400 hover:text-gray-600 "
+            className="text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 "
           >
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M18 6L6 18M6 6L18 18"/>
@@ -355,10 +355,10 @@ export default function SupabaseModal({ isOpen, onClose, projectId, projectName,
                   exit={{ opacity: 0, x: -20 }}
                   className="space-y-3"
                 >
-                  <p className="text-sm text-gray-600 ">
+                  <p className="text-sm text-gray-600 dark:text-gray-300 ">
                     Supabase Personal Access Token is not configured. Open Global Settings → Service Integrations and add your Supabase token. After saving, click the button below to retry.
                   </p>
-                  <div className="flex items-center justify-between text-xs text-gray-500 ">
+                  <div className="flex items-center justify-between text-xs text-gray-500 dark:text-gray-400 ">
                     <span>Need a token?</span>
                     <a
                       href="https://supabase.com/dashboard/account/tokens"
@@ -388,13 +388,13 @@ export default function SupabaseModal({ isOpen, onClose, projectId, projectName,
                   exit={{ opacity: 0, x: -20 }}
                 >
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">
                     Organization
                   </label>
                   <select
                     value={selectedOrgId}
                     onChange={(e) => setSelectedOrgId(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
                   >
                     {organizations.map(org => (
                       <option key={org.id} value={org.id}>
@@ -405,7 +405,7 @@ export default function SupabaseModal({ isOpen, onClose, projectId, projectName,
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">
                     Project Name
                   </label>
                   <input
@@ -413,18 +413,18 @@ export default function SupabaseModal({ isOpen, onClose, projectId, projectName,
                     value={supabaseProjectName}
                     onChange={(e) => setSupabaseProjectName(e.target.value)}
                     placeholder="Enter project name"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">
                     Region
                   </label>
                   <select
                     value={selectedRegion}
                     onChange={(e) => setSelectedRegion(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
                   >
                     {regions.map(region => (
                       <option key={region.id} value={region.id}>
@@ -435,7 +435,7 @@ export default function SupabaseModal({ isOpen, onClose, projectId, projectName,
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">
                     Database Password
                   </label>
                   <input
@@ -443,7 +443,7 @@ export default function SupabaseModal({ isOpen, onClose, projectId, projectName,
                     value={dbPassword}
                     onChange={(e) => setDbPassword(e.target.value)}
                     placeholder="Secure password for your database"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
                   <button
                     type="button"
@@ -457,7 +457,7 @@ export default function SupabaseModal({ isOpen, onClose, projectId, projectName,
                 <div className="flex gap-3">
                   <button
                     onClick={() => setStep('token')}
-                    className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                    className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
                   >
                     Back
                   </button>
@@ -481,14 +481,14 @@ export default function SupabaseModal({ isOpen, onClose, projectId, projectName,
                   exit={{ opacity: 0, x: -20 }}
                 >
                 <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600 mx-auto mb-4"></div>
-                <h3 className="text-lg font-medium text-gray-900 mb-2">
+                <h3 className="text-lg font-medium text-gray-900 dark:text-gray-50 mb-2">
                   Creating Supabase Project
                 </h3>
-                <p className="text-sm text-gray-500 ">
+                <p className="text-sm text-gray-500 dark:text-gray-400 ">
                   This may take a few minutes...
                 </p>
                 {createdProject && (
-                  <div className="mt-4 text-xs text-gray-600 ">
+                  <div className="mt-4 text-xs text-gray-600 dark:text-gray-300 ">
                     <p>✅ Project created: {createdProject.name}</p>
                     <p>⏳ Waiting for activation...</p>
                     <p>🔑 Fetching API keys...</p>
@@ -511,10 +511,10 @@ export default function SupabaseModal({ isOpen, onClose, projectId, projectName,
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"></path>
                   </svg>
                 </div>
-                <h3 className="text-lg font-medium text-gray-900 mb-2">
+                <h3 className="text-lg font-medium text-gray-900 dark:text-gray-50 mb-2">
                   Supabase Connected!
                 </h3>
-                <p className="text-sm text-gray-500 ">
+                <p className="text-sm text-gray-500 dark:text-gray-400 ">
                   Your Supabase project has been created and configured successfully.
                 </p>
                 </motion.div>

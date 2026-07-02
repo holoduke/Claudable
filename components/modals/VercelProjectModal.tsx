@@ -151,14 +151,14 @@ export default function VercelProjectModal({
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg p-6 w-full max-w-md mx-4">
+      <div className="bg-white dark:bg-gray-900 rounded-lg p-6 w-full max-w-md mx-4">
         <div className="flex justify-between items-center mb-4">
-          <h2 className="text-xl font-semibold text-gray-900 ">
+          <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-50 ">
             Connect to Vercel
           </h2>
           <button
             onClick={handleClose}
-            className="text-gray-400 hover:text-gray-600 "
+            className="text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 "
           >
             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -174,7 +174,7 @@ export default function VercelProjectModal({
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">
               Project Name
             </label>
             <input
@@ -182,7 +182,7 @@ export default function VercelProjectModal({
               value={vercelProjectName}
               onChange={(e) => setVercelProjectName(e.target.value)}
               placeholder="my-awesome-project"
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white text-gray-900 "
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-50 "
               required
               disabled={isLoading}
             />
@@ -192,13 +192,13 @@ export default function VercelProjectModal({
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">
               Framework
             </label>
             <select
               value={framework}
               onChange={(e) => setFramework(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white text-gray-900 "
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-50 "
               disabled={isLoading}
             >
               <option value="nextjs">Next.js</option>
@@ -213,7 +213,7 @@ export default function VercelProjectModal({
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">
               Team ID (Optional)
             </label>
             <input
@@ -221,10 +221,10 @@ export default function VercelProjectModal({
               value={teamId}
               onChange={(e) => setTeamId(e.target.value)}
               placeholder="team_xxxxxxxxx"
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white text-gray-900 "
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-50 "
               disabled={isLoading}
             />
-            <p className="text-xs text-gray-500 mt-1">
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
               Leave empty for personal projects
             </p>
           </div>
@@ -239,7 +239,7 @@ export default function VercelProjectModal({
             <button
               type="button"
               onClick={handleClose}
-              className="flex-1 px-4 py-2 text-gray-700 border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
+              className="flex-1 px-4 py-2 text-gray-700 dark:text-gray-200 border border-gray-300 dark:border-gray-700 rounded-md hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
               disabled={isLoading}
             >
               Cancel

@@ -97,11 +97,11 @@ const ToolResultItem: React.FC<ToolResultItemProps> = ({
         <div className="mb-px mr-1 flex shrink-0 items-center">
           {getIcon()}
         </div>
-        <span className="flex-shrink-0 font-normal text-gray-600 ">
+        <span className="flex-shrink-0 font-normal text-gray-600 dark:text-gray-300 ">
           {action}
         </span>
         <span
-          className="relative w-fit max-w-xs truncate rounded-md bg-gray-100 px-2 py-0 text-start text-xs font-normal text-gray-600 transition-colors hover:bg-gray-200 "
+          className="relative w-fit max-w-xs truncate rounded-md bg-gray-100 dark:bg-gray-800 px-2 py-0 text-start text-xs font-normal text-gray-600 dark:text-gray-300 transition-colors hover:bg-gray-200 dark:hover:bg-gray-700 "
           title={displayPath}
         >
           <span className="truncate">
@@ -119,7 +119,7 @@ const ToolResultItem: React.FC<ToolResultItemProps> = ({
             strokeWidth="2"
             strokeLinecap="round"
             strokeLinejoin="round"
-            className={`ml-1 text-gray-400 transition-transform ${isExpanded ? 'rotate-90' : ''}`}
+            className={`ml-1 text-gray-400 dark:text-gray-500 transition-transform ${isExpanded ? 'rotate-90' : ''}`}
           >
             <polyline points="9 18 15 12 9 6"></polyline>
           </svg>
@@ -136,8 +136,8 @@ const ToolResultItem: React.FC<ToolResultItemProps> = ({
           aria-hidden={!isExpanded}
           id={contentId}
         >
-          <div className="mt-2 ml-6 p-3 bg-gray-50 rounded-lg">
-            <pre className="text-xs text-gray-700 font-mono whitespace-pre-wrap break-words">
+          <div className="mt-2 ml-6 p-3 bg-gray-50 dark:bg-gray-900 rounded-lg">
+            <pre className="text-xs text-gray-700 dark:text-gray-200 font-mono whitespace-pre-wrap break-words">
               {content}
             </pre>
           </div>
