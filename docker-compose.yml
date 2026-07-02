@@ -43,6 +43,9 @@ services:
       # Egress-locked Docker network isolated backends attach to (create it +
       # its firewall rules on the host; see docs). Empty = default bridge.
       - PREVIEW_SANDBOX_NETWORK=${PREVIEW_SANDBOX_NETWORK:-}
+      # Host path that the ./data volume maps to — needed to translate container
+      # project paths to host paths for Docker bind mounts (isolated frontends).
+      - DATA_HOST_DIR=${DATA_HOST_DIR:-}
       - DOCKER_HOST=tcp://127.0.0.1:2375
       - DOCKER_BUILDKIT=0
     volumes:

@@ -223,6 +223,17 @@ interface PreviewBackendConfig {
 interface PreviewConfig {
   backend?: PreviewBackendConfig;
   proxy?: string[];   // path prefixes proxied to the backend (e.g. ["/api","/d"])
+  // Phase 2 (opt-in): run this project's FRONTEND dev server in an isolated
+  // container instead of a bare in-container process. Only honored when
+  // PREVIEW_ISOLATION is set and the project has no database (the egress lock
+  // would block a box-hosted DB). Bind-mounts the project dir into a node image.
+  frontend?: {
+    isolate?: boolean;
+    image?: string;    // default "node:22-bookworm-slim"
+    dev?: string;      // dev command, {PORT} substituted (default derived per stack)
+    memory?: string;   // default "1g"
+    cpus?: string;     // default "2.0"
+  };
 }
 async function readPreviewConfig(projectPath: string): Promise<PreviewConfig | null> {
   try {
@@ -268,13 +279,31 @@ function isolationEnabled(): boolean {
 function backendContainerName(projectId: string): string {
   return `claudable-preview-${previewSlug(projectId)}`;
 }
-/** Fire-and-forget removal of an isolated backend container. */
+/** Fire-and-forget removal of an isolated container (backend or frontend). */
 function removeBackendContainer(name: string | null | undefined): void {
   if (!name) return;
   try {
     const p = spawn('sh', ['-c', `docker rm -f ${name} 2>/dev/null || true`], { env: process.env, stdio: 'ignore', detached: true });
     p.unref();
   } catch { /* best-effort */ }
+}
+/** Blocking container removal — used before (re)creating a container by name. */
+async function dockerRmSync(name: string): Promise<void> {
+  await new Promise<void>((res) => {
+    const p = spawn('sh', ['-c', `docker rm -f ${name} 2>/dev/null || true`], { env: process.env, stdio: 'ignore' });
+    p.on('exit', () => res());
+    p.on('error', () => res());
+  });
+}
+/** Translate a container path under /app/data to its real host path (for Docker
+ *  bind mounts, which the daemon resolves on the HOST). DATA_HOST_DIR is the host
+ *  path that the compose mounts at /app/data. */
+function toHostPath(p: string): string {
+  const hostData = process.env.DATA_HOST_DIR;
+  if (hostData && hostData.trim() && p.startsWith('/app/data')) {
+    return path.join(hostData.trim(), path.relative('/app/data', p));
+  }
+  return p;
 }
 /**
  * Build the project's own Dockerfile and run the backend in a HARDENED sibling
@@ -762,6 +791,8 @@ interface PreviewProcess {
   backendProcess?: ChildProcess | null;
   // Name of the isolated backend container (when PREVIEW_ISOLATION is on).
   backendContainer?: string | null;
+  // Name of the isolated frontend dev-server container (Phase 2 opt-in).
+  frontendContainer?: string | null;
   port: number;
   url: string;
   status: PreviewStatus;
@@ -1727,6 +1758,18 @@ class PreviewManager {
     const spawnEnv: NodeJS.ProcessEnv = { ...env };
     let backendChild: ChildProcess | null = null;
     let backendContainer: string | null = null;
+    let frontendContainer: string | null = null;
+    const cfg = await readPreviewConfig(projectPath);
+    const sandboxNet = process.env.PREVIEW_SANDBOX_NETWORK?.trim();
+
+    // Phase 2 (opt-in): run a framework project's dev server in an isolated
+    // container. Gated on PREVIEW_ISOLATION + a per-project `frontend.isolate`
+    // opt-in, and skipped when the project has a DB (the egress lock would block
+    // a box-hosted Postgres). Uses a FOREGROUND `docker run` so it reuses the
+    // existing spawn/readiness/log machinery below unchanged.
+    const useFrontendContainer =
+      !isStatic && isolationEnabled() && !!cfg?.frontend?.isolate && !env.DATABASE_URL;
+
     if (isStatic) {
       const serverPath = await ensureStaticServer();
       command = process.execPath; // the node binary
@@ -1734,7 +1777,6 @@ class PreviewManager {
 
       // Optional backend sidecar (e.g. a Go service). Build it, run it on an
       // internal loopback port, and tell the static server to proxy to it.
-      const cfg = await readPreviewConfig(projectPath);
       if (cfg?.backend) {
         const backendPort = effectivePort + 5000; // deterministic, per running preview
         const useContainer = isolationEnabled() && !!cfg.backend.container;
@@ -1796,6 +1838,35 @@ class PreviewManager {
         spawnEnv.CLAUDABLE_PROXY_PORT = String(backendPort);
         spawnEnv.CLAUDABLE_PROXY_PREFIXES = (cfg.proxy && cfg.proxy.length ? cfg.proxy : ['/api']).join(',');
       }
+    } else if (useFrontendContainer) {
+      // Run the framework dev server inside an isolated, egress-locked container.
+      // Foreground `docker run` == the child process, so stdout/readiness/status
+      // teardown below all work unchanged; the container is `docker rm -f`'d too.
+      const fe = cfg!.frontend!;
+      const feName = `claudable-preview-${previewSlug(projectId)}`;
+      frontendContainer = feName;
+      await dockerRmSync(feName); // clear any stale container before re-creating
+      const hostProject = toHostPath(projectPath);
+      const image = fe.image || 'node:22-bookworm-slim';
+      const inner = fe.dev
+        ? substVars(fe.dev, { PORT: String(effectivePort) })
+        : `npm run dev -- --port ${effectivePort} --host 0.0.0.0`;
+      const devScript = `[ -d node_modules ] || npm install --no-audit --no-fund; exec ${inner}`;
+      command = 'docker';
+      args = [
+        'run', '--rm', '--name', feName,
+        '-w', '/app', '-v', `${hostProject}:/app`,
+        '-p', `127.0.0.1:${effectivePort}:${effectivePort}`,
+        '--memory', fe.memory || '1g',
+        '--cpus', String(fe.cpus || '2.0'),
+        '--pids-limit', '512',
+        '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges', '--user', 'node',
+        ...(sandboxNet ? ['--network', sandboxNet] : []),
+        '-e', 'NODE_ENV=development', '-e', `PORT=${effectivePort}`, '-e', 'HOST=0.0.0.0',
+        image, 'sh', '-c', devScript,
+      ];
+      // The docker CLI needs DOCKER_HOST (already in spawnEnv via process.env).
+      log(Buffer.from(`[PreviewManager] [frontend] running dev server in isolated container ${feName} (mem ${fe.memory || '1g'}, cap-drop ALL, egress-locked)`));
     }
 
     const child = spawn(
@@ -1816,6 +1887,7 @@ class PreviewManager {
     previewProcess.process = child;
     previewProcess.backendProcess = backendChild;
     previewProcess.backendContainer = backendContainer;
+    previewProcess.frontendContainer = frontendContainer;
     this.processes.set(projectId, previewProcess);
     // Now tracked via `processes` — free the in-flight reservation.
     this.reservedPorts.delete(preferredPort);
@@ -1838,8 +1910,10 @@ class PreviewManager {
       // Tear down the backend sidecar too — it must not outlive the frontend.
       killProcessTree(previewProcess.backendProcess);
       removeBackendContainer(previewProcess.backendContainer);
+      removeBackendContainer(previewProcess.frontendContainer);
       previewProcess.backendProcess = null;
       previewProcess.backendContainer = null;
+      previewProcess.frontendContainer = null;
       this.processes.delete(projectId);
       // Withdraw the per-project route — a crash must not leave it pointing at a
       // now-dead port that another project can reuse (the cross-project leak).
@@ -1868,8 +1942,10 @@ class PreviewManager {
       // "already running" check at the top of start().
       killProcessTree(previewProcess.backendProcess);
       removeBackendContainer(previewProcess.backendContainer);
+      removeBackendContainer(previewProcess.frontendContainer);
       previewProcess.backendProcess = null;
       previewProcess.backendContainer = null;
+      previewProcess.frontendContainer = null;
       if (this.processes.get(projectId) === previewProcess) {
         this.processes.delete(projectId);
       }
@@ -1952,6 +2028,7 @@ class PreviewManager {
       killProcessTree(processInfo.process);
       killProcessTree(processInfo.backendProcess);
       removeBackendContainer(processInfo.backendContainer);
+      removeBackendContainer(processInfo.frontendContainer);
     } catch (error) {
       console.error('[PreviewManager] Failed to stop preview process:', error);
     }
