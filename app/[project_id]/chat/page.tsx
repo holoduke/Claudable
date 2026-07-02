@@ -4,7 +4,7 @@ import { AnimatePresence } from 'framer-motion';
 import { MotionDiv, MotionH3, MotionP, MotionButton } from '@/lib/motion';
 import { useRouter, useSearchParams, useParams } from 'next/navigation';
 import dynamic from 'next/dynamic';
-import { FaCode, FaDesktop, FaMobileAlt, FaPlay, FaStop, FaSync, FaCog, FaRocket, FaFolder, FaFolderOpen, FaFile, FaFileCode, FaCss3Alt, FaHtml5, FaJs, FaReact, FaPython, FaDocker, FaGitAlt, FaMarkdown, FaDatabase, FaPhp, FaJava, FaRust, FaVuejs, FaLock, FaHome, FaChevronUp, FaChevronRight, FaChevronDown, FaArrowLeft, FaArrowRight, FaRedo, FaFileImport, FaPuzzlePiece } from 'react-icons/fa';
+import { FaCode, FaDesktop, FaMobileAlt, FaPlay, FaStop, FaSync, FaCog, FaRocket, FaFolder, FaFolderOpen, FaFile, FaFileCode, FaCss3Alt, FaHtml5, FaJs, FaReact, FaPython, FaDocker, FaGitAlt, FaMarkdown, FaDatabase, FaPhp, FaJava, FaRust, FaVuejs, FaLock, FaHome, FaChevronUp, FaChevronRight, FaChevronDown, FaArrowLeft, FaArrowRight, FaRedo, FaFileImport, FaPuzzlePiece, FaInfoCircle } from 'react-icons/fa';
 import { SiTypescript, SiGo, SiRuby, SiSvelte, SiJson, SiYaml, SiCplusplus } from 'react-icons/si';
 import { VscJson } from 'react-icons/vsc';
 import ChatLog from '@/components/chat/ChatLog';
@@ -15,6 +15,7 @@ import CommentsLayer, { type CommentPin, type ComposeAnchor } from '@/components
 import CommentsListPanel from '@/components/chat/CommentsListPanel';
 import { useToast } from '@/components/ui/Toast';
 import ThemeToggle from '@/components/ui/ThemeToggle';
+import ArchitectureModal from '@/components/chat/ArchitectureModal';
 import ChatInput from '@/components/chat/ChatInput';
 import DesignImportModal from '@/components/chat/DesignImportModal';
 import SkillsModal from '@/components/chat/SkillsModal';
@@ -331,6 +332,7 @@ export default function ChatPage() {
   const [showPublishPanel, setShowPublishPanel] = useState(false);
   const [showDesignImport, setShowDesignImport] = useState(false);
   const [showSkills, setShowSkills] = useState(false);
+  const [showArchitecture, setShowArchitecture] = useState(false);
 
   // Resizable chat/preview split. Width of the left chat panel as a % of the
   // window; drag the divider to resize, persisted to localStorage.
@@ -3227,6 +3229,15 @@ const persistProjectPreferences = useCallback(
                 
                 <div className="flex items-center gap-2">
                   <ThemeToggle />
+                  {/* Architecture info */}
+                  <button
+                    onClick={() => setShowArchitecture(true)}
+                    className="h-9 w-9 flex items-center justify-center bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg transition-colors"
+                    title="Project architecture"
+                    aria-label="Project architecture"
+                  >
+                    <FaInfoCircle size={15} />
+                  </button>
                   {/* Settings Button */}
                   <button
                     onClick={() => setShowGlobalSettings(true)}
@@ -4077,6 +4088,11 @@ const persistProjectPreferences = useCallback(
           setProjectName(name);
           setProjectDescription(description ?? '');
         }}
+      />
+      <ArchitectureModal
+        projectId={projectId}
+        open={showArchitecture}
+        onClose={() => setShowArchitecture(false)}
       />
     </>
   );
