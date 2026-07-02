@@ -49,6 +49,6 @@ export async function GET(_request: NextRequest, { params }: RouteContext) {
 
     return createSuccessResponse({ content });
   } catch (error) {
-    return handleApiError(error);
+    return handleApiError(error, 'API', 'Failed to load architecture');
   }
 }
