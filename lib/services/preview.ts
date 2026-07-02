@@ -315,6 +315,11 @@ async function runBackendContainer(
     '--security-opt', 'no-new-privileges',
     '--restart', 'no',
   ];
+  // Egress-locked sandbox network: reaches the public internet (for the app's own
+  // API calls) but NOT the box's private ranges — host, Claudable, DBs, other
+  // previews, cloud metadata (enforced by DOCKER-USER + INPUT firewall rules).
+  const sandboxNet = process.env.PREVIEW_SANDBOX_NETWORK;
+  if (sandboxNet && sandboxNet.trim()) runArgs.push('--network', sandboxNet.trim());
   for (const [k, v] of Object.entries(containerEnv)) runArgs.push('-e', `${k}=${v}`);
   runArgs.push(name); // image tag == container name
 
