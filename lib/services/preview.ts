@@ -226,6 +226,30 @@ function substVars(value: string, vars: Record<string, string>): string {
 }
 
 /**
+ * A minimal, SECRET-FREE base env for a project's backend sidecar. Same
+ * principle as the agent's buildAgentEnv allowlist: an imported/agent-edited
+ * backend must NOT inherit Claudable's own credentials (CLAUDE_CODE_OAUTH_TOKEN,
+ * GIT_TOKEN, COOLIFY_API_TOKEN, GOOGLE_CLIENT_SECRET, AUTH_SECRET, DATABASE_URL,
+ * …). Only base runtime vars + the Go toolchain vars pass through; the backend's
+ * real config/secrets come from its preview.json env + the project's Env vars.
+ * NOTE: explicit names only — no `startsWith('GO')` (that would leak GOOGLE_*).
+ */
+const BACKEND_ENV_ALLOW = new Set([
+  'PATH', 'HOME', 'USER', 'LOGNAME', 'SHELL', 'PWD', 'LANG', 'LANGUAGE',
+  'LC_ALL', 'LC_CTYPE', 'TERM', 'TZ', 'TMPDIR', 'TMP', 'TEMP', 'HOSTNAME',
+  'SSL_CERT_FILE', 'SSL_CERT_DIR', 'NODE_EXTRA_CA_CERTS',
+  'GOTOOLCHAIN', 'GOFLAGS', 'GOPATH', 'GOCACHE', 'GOMODCACHE', 'GOROOT',
+  'GOPROXY', 'GOSUMDB', 'GO111MODULE', 'GOMAXPROCS',
+]);
+function buildBackendBaseEnv(): Record<string, string> {
+  const env: Record<string, string> = {};
+  for (const [k, v] of Object.entries(process.env)) {
+    if (v != null && BACKEND_ENV_ALLOW.has(k)) env[k] = v;
+  }
+  return env;
+}
+
+/**
  * Inject a tiny Nuxt client plugin that reports the current route to the
  * Claudable parent window via postMessage, so the preview URL bar follows
  * in-app (client-side) navigation. The preview is a cross-origin iframe, so the
@@ -1634,10 +1658,12 @@ class PreviewManager {
         const vars = { PROJECT: projectPath, PORT: String(backendPort) };
         const bcwd = cfg.backend.cwd ? path.join(projectPath, cfg.backend.cwd) : projectPath;
 
-        // Backend env = config env (with {PROJECT}/{PORT} substituted), then the
-        // project's own EnvVars (Envs tab) override — that's how the user supplies
-        // real secrets (MASTER_KEY, SETTINGS_USER/PASS, …) without hardcoding.
-        const backendEnv: NodeJS.ProcessEnv = { ...process.env };
+        // Backend env = a SECRET-FREE base (buildBackendBaseEnv — no Claudable
+        // credentials), then the config env (with {PROJECT}/{PORT} substituted),
+        // then the project's own EnvVars (Envs tab) override — that's how the user
+        // supplies real secrets (MASTER_KEY, SETTINGS_USER/PASS, …) without the
+        // backend ever seeing Claudable's own tokens.
+        const backendEnv: Record<string, string> = buildBackendBaseEnv();
         for (const [k, v] of Object.entries(cfg.backend.env ?? {})) backendEnv[k] = substVars(String(v), vars);
         try {
           for (const ev of await listEnvVars(projectId)) backendEnv[ev.key] = ev.value;
@@ -1647,19 +1673,20 @@ class PreviewManager {
 
         if (cfg.backend.build) {
           log(Buffer.from('[PreviewManager] [backend] building…'));
-          await appendCommandLogs('sh', ['-c', substVars(cfg.backend.build, vars)], bcwd, backendEnv, log);
+          await appendCommandLogs('sh', ['-c', substVars(cfg.backend.build, vars)], bcwd, backendEnv as NodeJS.ProcessEnv, log);
         }
 
         log(Buffer.from(`[PreviewManager] [backend] starting on 127.0.0.1:${backendPort}`));
-        backendChild = spawn('sh', ['-c', substVars(cfg.backend.run, vars)], {
+        const bc = spawn('sh', ['-c', substVars(cfg.backend.run, vars)], {
           cwd: bcwd,
-          env: backendEnv,
+          env: backendEnv as NodeJS.ProcessEnv,
           stdio: ['ignore', 'pipe', 'pipe'],
           detached: process.platform !== 'win32',
         });
-        backendChild.stdout?.on('data', (c) => { log(Buffer.from('[backend] ' + c.toString())); try { recordBackendChunk(projectId, c, 'stdout'); } catch { /* best-effort */ } });
-        backendChild.stderr?.on('data', (c) => { log(Buffer.from('[backend] ' + c.toString())); try { recordBackendChunk(projectId, c, 'stderr'); } catch { /* best-effort */ } });
-        backendChild.on('error', (e) => log(Buffer.from(`[backend] failed: ${e.message}`)));
+        backendChild = bc;
+        bc.stdout?.on('data', (c) => { log(Buffer.from('[backend] ' + c.toString())); try { recordBackendChunk(projectId, c, 'stdout'); } catch { /* best-effort */ } });
+        bc.stderr?.on('data', (c) => { log(Buffer.from('[backend] ' + c.toString())); try { recordBackendChunk(projectId, c, 'stderr'); } catch { /* best-effort */ } });
+        bc.on('error', (e) => log(Buffer.from(`[backend] failed: ${e.message}`)));
 
         // Wait for it to listen before the frontend can proxy to it.
         const healthUrl = `http://127.0.0.1:${backendPort}${cfg.backend.healthPath || '/'}`;
