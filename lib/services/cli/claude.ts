@@ -18,6 +18,7 @@ import { stackKind } from '@/lib/config/stacks';
 import { resolveProjectClaudeToken } from '../claude-credentials';
 import { buildItopsMcpServer } from '../itops/itops-mcp';
 import { buildDiagnosticsMcpServer } from '../diagnostics-mcp';
+import { buildImagesMcpServer, imagesEnabledFor } from '../images-mcp';
 import { getProjectService } from '../project-services';
 import { createMessage } from '../message';
 import { CLAUDE_DEFAULT_MODEL, normalizeClaudeModelId, getClaudeModelDisplayName } from '@/lib/constants/claudeModels';
@@ -605,6 +606,8 @@ export async function executeClaude(
 
     // Pick the system prompt for the project's tech stack (Nuxt | Next.js | Angular).
     const stackProject = await getProjectById(projectId).catch(() => null);
+    // Image generation available when the project (or Claudable) has an xAI key.
+    const imagesOn = await imagesEnabledFor(projectId).catch(() => false);
     let systemPromptForStack = selectSystemPrompt(stackProject?.templateType);
 
     // Tell the agent which model it's running as — otherwise it guesses its own
@@ -614,6 +617,10 @@ export async function executeClaude(
     // Tell the agent about the live diagnostics tool so it verifies its own work
     // and can act on real runtime errors instead of guessing.
     systemPromptForStack += `\n\n## Checking the running app\nYou have a tool \`mcp__appdiag__check_app_health\` that returns the CURRENTLY RUNNING preview's uncaught browser errors, console errors/warnings, and Nuxt backend (server) errors. Use it to:\n- verify a change actually works after you edit (check for new errors before saying you're done),\n- investigate when the user reports something is broken,\n- find real bugs to fix proactively.\nAn empty result means nothing has been reported since the preview last started — it is not proof the app is bug-free; exercise the feature in the preview, then check again.`;
+
+    if (imagesOn) {
+      systemPromptForStack += `\n\n## Generating images\nYou have a tool \`mcp__images__generate_image\` that generates an image from a text prompt and saves it into the project's public/generated/, returning a path like \`/generated/hero.png\`. Use it whenever the app needs a REAL image (hero, illustration, avatar, texture, background) instead of a placeholder or an external stock URL, then reference the returned path directly in the markup. Write vivid, specific prompts.`;
+    }
 
     // If a Postgres was provisioned for this project, tell the agent so it builds
     // data-backed features against DATABASE_URL (set in the preview + deploy env).
@@ -710,6 +717,7 @@ export async function executeClaude(
         mcpServers: {
           appdiag: buildDiagnosticsMcpServer(projectId),
           ...(itopsEnabled ? { itops: buildItopsMcpServer() } : {}),
+          ...(imagesOn ? { images: buildImagesMcpServer(projectId, absoluteProjectPath) } : {}),
         },
         // See skillSettingSources above: ['project','user'] by default (auto-load
         // all skills), or ['project'] once any skill is disabled (load only the
