@@ -1599,9 +1599,12 @@ class PreviewManager {
 
     // If a Postgres was provisioned for this project, expose DATABASE_URL to the
     // dev server so the generated app can talk to its database in the preview.
+    // NOTE: this is the PROJECT's DB, distinct from Claudable's own DATABASE_URL
+    // (which is always in process.env) — frontend isolation keys off THIS.
+    let projectDbUrl: string | null = null;
     try {
-      const dbUrl = await getDatabaseUrl(projectId);
-      if (dbUrl) env.DATABASE_URL = dbUrl;
+      projectDbUrl = await getDatabaseUrl(projectId);
+      if (projectDbUrl) env.DATABASE_URL = projectDbUrl;
     } catch { /* non-fatal */ }
 
     const previewProcess: PreviewProcess = {
@@ -1768,7 +1771,7 @@ class PreviewManager {
     // a box-hosted Postgres). Uses a FOREGROUND `docker run` so it reuses the
     // existing spawn/readiness/log machinery below unchanged.
     const useFrontendContainer =
-      !isStatic && isolationEnabled() && !!cfg?.frontend?.isolate && !env.DATABASE_URL;
+      !isStatic && isolationEnabled() && !!cfg?.frontend?.isolate && !projectDbUrl;
 
     if (isStatic) {
       const serverPath = await ensureStaticServer();
