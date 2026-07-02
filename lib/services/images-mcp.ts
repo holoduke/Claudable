@@ -16,7 +16,7 @@ import { listEnvVars } from './env';
 const text = (s: string) => ({ content: [{ type: 'text' as const, text: s }] });
 
 const XAI_IMAGE_URL = 'https://api.x.ai/v1/images/generations';
-const XAI_IMAGE_MODEL = 'grok-2-image';
+const XAI_IMAGE_MODEL = 'grok-imagine-image'; // xAI's current image model (returns JPEG)
 
 /** Resolve the image API key: the project's own Env var wins, else the global one. */
 async function resolveKey(projectId: string): Promise<string | null> {
@@ -87,7 +87,9 @@ export function buildImagesMcpServer(projectId: string, projectPath: string) {
               try { bytes = Buffer.from(await (await fetch(it.url)).arrayBuffer()); } catch { /* skip */ }
             }
             if (!bytes) continue;
-            const file = `${base}-${stamp}${items.length > 1 ? `-${i + 1}` : ''}.png`;
+            // Detect PNG vs JPEG from the magic bytes (grok-imagine returns JPEG).
+            const ext = bytes[0] === 0x89 && bytes[1] === 0x50 ? 'png' : 'jpg';
+            const file = `${base}-${stamp}${items.length > 1 ? `-${i + 1}` : ''}.${ext}`;
             await fs.writeFile(path.join(outDir, file), bytes);
             saved.push(`/generated/${file}`);
           }
