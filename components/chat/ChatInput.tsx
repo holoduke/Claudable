@@ -77,6 +77,46 @@ export default function ChatInput({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // --- Skill autocomplete: typing "/" surfaces the available skills ---
+  interface SkillOption { name: string; description: string; scope: string }
+  const [skills, setSkills] = useState<SkillOption[]>([]);
+  const [skillActiveIdx, setSkillActiveIdx] = useState(0);
+  useEffect(() => {
+    if (!projectId) return;
+    let cancelled = false;
+    fetch(`${API_BASE}/api/projects/${projectId}/skills`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => {
+        if (cancelled || !j?.success) return;
+        const all = [...(j.data?.project ?? []), ...(j.data?.global ?? [])] as any[];
+        const list = all
+          .filter((s) => String(s.enabled) !== 'False' && s.enabled !== false)
+          .map((s) => ({ name: String(s.name), description: String(s.description ?? ''), scope: String(s.scope ?? 'project') }));
+        setSkills(list);
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [projectId]);
+
+  // The menu opens only while the whole message is a bare "/token" (a command
+  // being typed) — never mid-sentence. Query = the text after the slash.
+  const skillQuery = /^\/[\w-]*$/.test(message) ? message.slice(1).toLowerCase() : null;
+  const skillMatches = useMemo(() => {
+    if (skillQuery === null) return [];
+    return skills
+      .filter((s) => s.name.toLowerCase().includes(skillQuery))
+      .sort((a, b) => Number(b.name.toLowerCase().startsWith(skillQuery)) - Number(a.name.toLowerCase().startsWith(skillQuery)))
+      .slice(0, 8);
+  }, [skills, skillQuery]);
+  const [dismissedQuery, setDismissedQuery] = useState<string | null>(null);
+  const skillMenuOpen = skillQuery !== null && skillMatches.length > 0 && skillQuery !== dismissedQuery;
+  useEffect(() => { setSkillActiveIdx(0); }, [skillQuery]);
+
+  const chooseSkill = (name: string) => {
+    setMessage(`/${name} `);
+    setTimeout(() => { textareaRef.current?.focus(); adjustTextareaHeight(); }, 0);
+  };
   const submissionLockRef = useRef(false);
   const supportsImageUpload = preferredCli !== 'cursor' && preferredCli !== 'qwen' && preferredCli !== 'glm';
   // Client-side cap mirrors the server's MAX_UPLOAD_BYTES so oversized files fail
@@ -184,6 +224,13 @@ export default function ChatInput({
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    // Skill autocomplete navigation takes precedence over send/newline.
+    if (skillMenuOpen) {
+      if (e.key === 'ArrowDown') { e.preventDefault(); setSkillActiveIdx((i) => (i + 1) % skillMatches.length); return; }
+      if (e.key === 'ArrowUp') { e.preventDefault(); setSkillActiveIdx((i) => (i - 1 + skillMatches.length) % skillMatches.length); return; }
+      if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); const s = skillMatches[skillActiveIdx]; if (s) chooseSkill(s.name); return; }
+      if (e.key === 'Escape') { e.preventDefault(); setDismissedQuery(skillQuery); return; }
+    }
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       // Check all locks before submitting
@@ -592,6 +639,27 @@ export default function ChatInput({
         </div>
 
         <div className="relative">
+          {skillMenuOpen && (
+            <div className="absolute bottom-full mb-2 left-0 z-30 w-full max-w-md max-h-72 overflow-y-auto rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-xl py-1">
+              <div className="px-3 py-1.5 text-[11px] font-medium text-gray-400 dark:text-gray-500 border-b border-gray-100 dark:border-gray-800">Skills · ↑↓ to navigate · ↵ to insert</div>
+              {skillMatches.map((s, i) => (
+                <button
+                  type="button"
+                  key={s.name}
+                  // onMouseDown (not onClick) so we select before the textarea blurs.
+                  onMouseDown={(e) => { e.preventDefault(); chooseSkill(s.name); }}
+                  onMouseEnter={() => setSkillActiveIdx(i)}
+                  className={`w-full text-left px-3 py-2 flex flex-col gap-0.5 ${i === skillActiveIdx ? 'bg-[#DE7356]/10' : 'hover:bg-gray-50 dark:hover:bg-gray-800'}`}
+                >
+                  <span className="flex items-center gap-2">
+                    <span className="text-sm font-medium text-[#DE7356]">/{s.name}</span>
+                    <span className="text-[9px] uppercase tracking-wide text-gray-400 dark:text-gray-500 bg-gray-100 dark:bg-gray-800 px-1.5 py-0.5 rounded">{s.scope}</span>
+                  </span>
+                  {s.description && <span className="text-xs text-gray-500 dark:text-gray-400 line-clamp-2">{s.description}</span>}
+                </button>
+              ))}
+            </div>
+          )}
           <textarea
             ref={textareaRef}
             value={message}
