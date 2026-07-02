@@ -88,6 +88,13 @@ function pathIsInside(childAbs: string, parentAbs: string): boolean {
   return rel === '' || (rel !== '..' && !rel.startsWith('..' + path.sep) && !path.isAbsolute(rel));
 }
 
+// Container-runtime / docker-proxy access, denied in the agent's Bash. Matches a
+// runtime invoked as a command, the DOCKER_HOST env, the docker socket, or the
+// proxy's TCP port. Heuristic (consistent with bashEscape) — raises the bar
+// against the host-escape the preview socket-proxy would otherwise enable.
+const CONTAINER_RUNTIME =
+  /(?:^|[\s;&|(`$])(?:docker|docker-compose|podman|nerdctl|ctr|crictl)(?:\s|$)|DOCKER_HOST|docker\.sock|\/var\/run\/docker|:237[56]\b/i;
+
 function buildProjectGuardHook(projectAbsPath: string) {
   const projectsRoot = path.dirname(projectAbsPath); // e.g. /app/data/projects
   const appRoot = process.cwd();                     // Claudable app root (/app)
@@ -127,6 +134,13 @@ function buildProjectGuardHook(projectAbsPath: string) {
     });
 
     if (name === 'Bash' && typeof ti.command === 'string') {
+      // Container-runtime access is a host-escape vector: Claudable can reach a
+      // docker socket-proxy (for preview isolation), and `docker run -v /:/host`
+      // from here would mount the host root. The agent never needs Docker — deny
+      // any container-runtime command, the proxy endpoint, or the docker socket.
+      if (CONTAINER_RUNTIME.test(ti.command)) {
+        return deny('Container-runtime / Docker access is not available to the agent. Edit the project files; the preview runs them in an isolated environment.');
+      }
       const bad = bashEscape(ti.command);
       if (bad) return deny(`Access outside this project is not allowed (path: ${bad}). Work only within the current project.`);
       return { continue: true };
