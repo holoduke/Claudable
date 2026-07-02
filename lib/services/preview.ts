@@ -416,8 +416,9 @@ async function runBackendContainer(
   containerEnv: Record<string, string>,
   log: (chunk: string | Buffer) => void,
   publishHost: string = '127.0.0.1',
+  containerName?: string,
 ): Promise<string> {
-  const name = backendContainerName(projectId);
+  const name = containerName || backendContainerName(projectId);
   const dockerEnv = process.env; // the CLI needs DOCKER_HOST + PATH
 
   log(Buffer.from(`[PreviewManager] [backend] building image ${name} from ${c.dockerfile}…`));
@@ -1888,7 +1889,9 @@ class PreviewManager {
       cenv.CORS_ORIGIN = resolvedUrl; // allow the frontend's origin
       try { for (const ev of await listEnvVars(projectId)) cenv[ev.key] = ev.value; } catch { /* best-effort */ }
       try {
-        backendContainer = await runBackendContainer(projectId, projectPath, c, backendPort, cenv, log, '0.0.0.0');
+        // Distinct name from the frontend container (which is claudable-preview-<slug>).
+        const beName = `${backendContainerName(projectId)}-api`;
+        backendContainer = await runBackendContainer(projectId, projectPath, c, backendPort, cenv, log, '0.0.0.0', beName);
         await writeBackendRoute(projectId, backendPort);
         composedBackendUrl = backendPreviewUrl(projectId, backendPort);
         log(Buffer.from(`[PreviewManager] [backend] composed backend service on ${composedBackendUrl}`));
