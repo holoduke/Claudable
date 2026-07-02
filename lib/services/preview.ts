@@ -1765,13 +1765,17 @@ class PreviewManager {
     const cfg = await readPreviewConfig(projectPath);
     const sandboxNet = process.env.PREVIEW_SANDBOX_NETWORK?.trim();
 
-    // Phase 2 (opt-in): run a framework project's dev server in an isolated
-    // container. Gated on PREVIEW_ISOLATION + a per-project `frontend.isolate`
-    // opt-in, and skipped when the project has a DB (the egress lock would block
-    // a box-hosted Postgres). Uses a FOREGROUND `docker run` so it reuses the
-    // existing spawn/readiness/log machinery below unchanged.
+    // Phase 2: run a framework project's dev server in an isolated container.
+    // AGNOSTIC — auto-applies to ANY nuxt/next/angular project when
+    // PREVIEW_ISOLATION is on; a project can opt OUT with `frontend.isolate:false`
+    // in preview.json. Skipped when the project has a DB (the egress lock would
+    // block a box-hosted Postgres). Uses a FOREGROUND `docker run` so it reuses
+    // the existing spawn/readiness/log machinery below unchanged.
+    const feKind = stackKind(project.templateType);
     const useFrontendContainer =
-      !isStatic && isolationEnabled() && !!cfg?.frontend?.isolate && !projectDbUrl;
+      !isStatic && isolationEnabled() && !projectDbUrl &&
+      (feKind === 'nuxt' || feKind === 'next' || feKind === 'angular') &&
+      cfg?.frontend?.isolate !== false;
 
     if (isStatic) {
       const serverPath = await ensureStaticServer();
@@ -1845,15 +1849,18 @@ class PreviewManager {
       // Run the framework dev server inside an isolated, egress-locked container.
       // Foreground `docker run` == the child process, so stdout/readiness/status
       // teardown below all work unchanged; the container is `docker rm -f`'d too.
-      const fe = cfg!.frontend!;
+      const fe = cfg?.frontend ?? {}; // config optional — isolation is agnostic
       const feName = `claudable-preview-${previewSlug(projectId)}`;
       frontendContainer = feName;
       await dockerRmSync(feName); // clear any stale container before re-creating
       const hostProject = toHostPath(projectPath);
       const image = fe.image || 'node:22-bookworm-slim';
+      // Reuse the SAME per-stack dev command the in-process path builds (devArgs
+      // already carries --port + the stack's host/allowed-hosts flags), so this
+      // works for nuxt/next/angular without per-project config.
       const inner = fe.dev
         ? substVars(fe.dev, { PORT: String(effectivePort) })
-        : `npm run dev -- --port ${effectivePort} --host 0.0.0.0`;
+        : `npm ${devArgs.join(' ')}`;
       const devScript = `[ -d node_modules ] || npm install --no-audit --no-fund; exec ${inner}`;
       command = 'docker';
       args = [
