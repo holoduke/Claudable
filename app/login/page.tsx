@@ -24,18 +24,20 @@ export default async function LoginPage({
       </div>
 
       {/* Content */}
-      <div className="relative z-10 w-full max-w-md text-center">
+      <div className="relative z-10 w-full flex flex-col items-center text-center">
         <p className="font-script text-3xl text-[#E8A87C] mb-1" style={{ animation: 'loginFadeUp .7s ease-out both', animationDelay: '.05s' }}>
           welcome to
         </p>
 
-        <h1 className="font-display leading-[0.82] tracking-tight select-none"
+        <h1 className="font-display leading-[0.82] tracking-tight select-none whitespace-nowrap px-4"
             style={{ animation: 'loginFadeUp .8s ease-out both', animationDelay: '.12s' }}>
-          <span className="block text-[5.5rem] sm:text-[7rem] bg-gradient-to-b from-white via-[#f4c9b3] to-[#DE7356] bg-clip-text text-transparent drop-shadow-[0_2px_30px_rgba(222,115,86,0.35)]">
+          <span className="block bg-gradient-to-b from-white via-[#f4c9b3] to-[#DE7356] bg-clip-text text-transparent drop-shadow-[0_2px_30px_rgba(222,115,86,0.35)]"
+                style={{ fontSize: 'clamp(3rem, 13vw, 8rem)' }}>
             CLAUDABLE
           </span>
         </h1>
 
+        <div className="w-full max-w-md">
         <p className="mt-4 text-base text-white/60"
            style={{ animation: 'loginFadeUp .8s ease-out both', animationDelay: '.22s' }}>
           Describe it. Watch it build. Ship it.
@@ -74,6 +76,7 @@ export default async function LoginPage({
           </button>
           <p className="mt-4 text-xs text-white/35">Access is restricted to your organization.</p>
         </form>
+        </div>
       </div>
 
       {/* Bottom marquee strip */}
