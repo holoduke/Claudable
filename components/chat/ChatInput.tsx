@@ -117,6 +117,34 @@ export default function ChatInput({
     setMessage(`/${name} `);
     setTimeout(() => { textareaRef.current?.focus(); adjustTextareaHeight(); }, 0);
   };
+
+  // Position the skill menu with FIXED coords anchored to the input, so it can't
+  // be clipped by the composer card. Prefer opening to the RIGHT (over the
+  // preview) where there's room; fall back to above the input on narrow layouts.
+  const [menuStyle, setMenuStyle] = useState<React.CSSProperties>({});
+  useEffect(() => {
+    if (!skillMenuOpen) return;
+    const place = () => {
+      const el = textareaRef.current;
+      if (!el) return;
+      const r = el.getBoundingClientRect();
+      const W = 400, GAP = 10;
+      const roomRight = window.innerWidth - r.right;
+      if (roomRight >= W + GAP) {
+        // To the right, top-aligned with the input, growing down.
+        const maxHeight = Math.min(460, window.innerHeight - r.top - 16);
+        setMenuStyle({ position: 'fixed', left: r.right + GAP, top: r.top, width: W, maxHeight });
+      } else {
+        // Above the input, growing up.
+        const width = Math.min(W, r.width);
+        setMenuStyle({ position: 'fixed', left: r.left, bottom: window.innerHeight - r.top + GAP, width, maxHeight: Math.min(360, r.top - 16) });
+      }
+    };
+    place();
+    window.addEventListener('resize', place);
+    window.addEventListener('scroll', place, true);
+    return () => { window.removeEventListener('resize', place); window.removeEventListener('scroll', place, true); };
+  }, [skillMenuOpen, skillMatches.length]);
   const submissionLockRef = useRef(false);
   const supportsImageUpload = preferredCli !== 'cursor' && preferredCli !== 'qwen' && preferredCli !== 'glm';
   // Client-side cap mirrors the server's MAX_UPLOAD_BYTES so oversized files fail
@@ -640,7 +668,7 @@ export default function ChatInput({
 
         <div className="relative">
           {skillMenuOpen && (
-            <div className="absolute bottom-full mb-2 left-0 z-30 w-full max-w-md max-h-72 overflow-y-auto rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-xl py-1">
+            <div style={menuStyle} className="z-[200] overflow-y-auto rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-2xl py-1">
               <div className="px-3 py-1.5 text-[11px] font-medium text-gray-400 dark:text-gray-500 border-b border-gray-100 dark:border-gray-800">Skills · ↑↓ to navigate · ↵ to insert</div>
               {skillMatches.map((s, i) => (
                 <button
