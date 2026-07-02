@@ -2,7 +2,7 @@ import { getPlainServiceToken } from '@/lib/services/tokens';
 import { upsertProjectServiceConnection, updateProjectServiceData, getProjectService } from '@/lib/services/project-services';
 import { getProjectById } from '@/lib/services/project';
 import { listEnvVars } from '@/lib/services/env';
-import { validateProjectExists, getProjectGitHubRepo } from '@/lib/services/service-integration';
+import { getProjectGitHubRepo } from '@/lib/services/service-integration';
 import type {
   CheckResult,
   VercelProjectResponse,

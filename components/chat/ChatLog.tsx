@@ -3,7 +3,6 @@ import React, { useEffect, useState, useRef, ReactElement, useCallback } from 'r
 import { motion, AnimatePresence } from 'framer-motion';
 import ReactMarkdown from 'react-markdown';
 import { useWebSocket } from '@/hooks/useWebSocket';
-import { Brain } from 'lucide-react';
 import ToolResultItem from './ToolResultItem';
 import ThinkingSection from './ThinkingSection';
 import type { ChatMessage, RealtimeEvent, RealtimeStatus } from '@/types';

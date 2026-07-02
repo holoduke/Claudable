@@ -1387,21 +1387,6 @@ async function appendCommandLogs(
   });
 }
 
-async function ensureDependencies(
-  projectPath: string,
-  env: NodeJS.ProcessEnv,
-  logger: (chunk: Buffer | string) => void
-) {
-  try {
-    await fs.access(path.join(projectPath, 'node_modules'));
-    return;
-  } catch {
-    // node_modules missing, fall back to npm install
-  }
-
-  await runInstallWithPreferredManager(projectPath, env, logger);
-}
-
 export interface PreviewInfo {
   port: number | null;
   url: string | null;
@@ -1855,7 +1840,7 @@ class PreviewManager {
     // Static imports run our dependency-free node server instead of `npm run dev`.
     let command = npmCommand;
     let args = devArgs;
-    const spawnEnv: NodeJS.ProcessEnv = { ...env };
+    let spawnEnv: NodeJS.ProcessEnv = { ...env };
     let backendChild: ChildProcess | null = null;
     let backendContainer: string | null = null;
     let frontendContainer: string | null = null;
@@ -1931,10 +1916,23 @@ class PreviewManager {
           } catch (e) {
             log(Buffer.from(`[backend] container start failed: ${(e as Error).message}`));
           }
+        } else if (isolationEnabled()) {
+          // SECURITY: isolation is on but this backend declares no `container`.
+          // We must NOT run its `preview.json` build/run commands on the HOST via
+          // `sh -c` (that bypasses the sandbox and can read Claudable's files /
+          // other projects). Refuse — the backend needs a `container` config.
+          log(Buffer.from('[backend] skipped: isolation is on but this backend has no "container" config, so it will not run on the host. Add backend.container to run it isolated.'));
         } else {
-          // IN-PROCESS: build + run the backend as a child process (no isolation).
+          // IN-PROCESS (local dev only — PREVIEW_ISOLATION off): run the backend
+          // as a child process. Never reached on the isolated (box) deployment.
           const vars = { PROJECT: projectPath, PORT: String(backendPort) };
-          const bcwd = cfg.backend.cwd ? path.join(projectPath, cfg.backend.cwd) : projectPath;
+          const bcwd = cfg.backend.cwd ? path.resolve(projectPath, cfg.backend.cwd) : projectPath;
+          // Constrain cwd to the project (a `cwd: "../.."` must not escape).
+          const projAbs = path.resolve(projectPath);
+          if (bcwd !== projAbs && !bcwd.startsWith(projAbs + path.sep)) {
+            log(Buffer.from('[backend] skipped: backend.cwd escapes the project directory.'));
+            throw new Error('backend.cwd escapes project');
+          }
 
           // Backend env = a SECRET-FREE base (buildBackendBaseEnv — no Claudable
           // credentials), then the config env (with {PROJECT}/{PORT} substituted),
@@ -2012,6 +2010,28 @@ class PreviewManager {
       ];
       // The docker CLI needs DOCKER_HOST (already in spawnEnv via process.env).
       log(Buffer.from(`[PreviewManager] [frontend] running dev server in isolated container ${feName} (mem ${fe.memory || '1g'}, cap-drop ALL, egress-locked)`));
+    }
+
+    // SECURITY: the IN-PROCESS framework dev server runs the PROJECT's own server
+    // code (Next API routes, Nuxt server routes), so it must NOT inherit
+    // Claudable's secrets. Rebuild its env from the secret-free allowlist + only
+    // the project-specific vars. (The container path is safe — secrets stay in the
+    // docker CLI and never enter the container; the static server is Claudable's
+    // own trusted code and keeps its CLAUDABLE_PROXY_* vars.)
+    if (!isStatic && !useFrontendContainer && command === npmCommand) {
+      const scrubbed: Record<string, string> = buildBackendBaseEnv();
+      scrubbed.NODE_ENV = 'development';
+      scrubbed.PORT = String(effectivePort);
+      scrubbed.WEB_PORT = String(effectivePort);
+      if (env.NEXT_PUBLIC_APP_URL) scrubbed.NEXT_PUBLIC_APP_URL = String(env.NEXT_PUBLIC_APP_URL);
+      if (projectDbUrl) scrubbed.DATABASE_URL = projectDbUrl;
+      if (composedBackendUrl) {
+        scrubbed.NUXT_PUBLIC_API_BASE = scrubbed.NEXT_PUBLIC_API_BASE = scrubbed.API_BASE_URL = composedBackendUrl;
+      }
+      const bindHostTrim = process.env.PREVIEW_BIND_HOST?.trim();
+      if (bindHostTrim) scrubbed.PREVIEW_BIND_HOST = bindHostTrim;
+      try { for (const ev of await listEnvVars(projectId)) scrubbed[ev.key] = ev.value; } catch { /* best-effort */ }
+      spawnEnv = scrubbed as NodeJS.ProcessEnv;
     }
 
     const child = spawn(
