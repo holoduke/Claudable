@@ -1,5 +1,6 @@
 "use client";
 import { useState } from 'react';
+import { signOutAction } from '@/app/actions/auth';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? '';
 
@@ -45,12 +46,24 @@ export default function MyAccountSettings({ user, onToast, onChanged }: MyAccoun
 
   return (
     <div className="space-y-6">
-      <div>
-        <h3 className="text-lg font-semibold text-gray-900">My Account</h3>
-        <div className="mt-2 text-sm text-gray-600">
-          <div><span className="text-gray-400">Email:</span> {user.email}</div>
-          <div><span className="text-gray-400">Role:</span> {user.role}</div>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h3 className="text-lg font-semibold text-gray-900">My Account</h3>
+          <div className="mt-2 text-sm text-gray-600">
+            <div><span className="text-gray-400">Email:</span> {user.email}</div>
+            <div><span className="text-gray-400">Role:</span> {user.role}</div>
+          </div>
         </div>
+        <form action={signOutAction}>
+          <button
+            type="submit"
+            className="h-9 flex items-center gap-2 px-3 rounded-lg text-sm font-medium border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 hover:text-red-600 hover:border-red-200 transition-colors"
+            title="Sign out of Claudable"
+          >
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><polyline points="16 17 21 12 16 7" /><line x1="21" y1="12" x2="9" y2="12" /></svg>
+            Sign out
+          </button>
+        </form>
       </div>
 
       <div className="rounded-xl border border-gray-200 p-4">
