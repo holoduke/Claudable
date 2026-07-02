@@ -21,7 +21,7 @@ export function SettingsModal({ isOpen, onClose, title, icon, children }: Settin
       
       <div className="absolute inset-y-0 right-0 max-w-3xl w-full bg-white dark:bg-gray-900 shadow-2xl flex flex-col">
         {/* Header */}
-        <div className="px-6 py-5 bg-gradient-to-r from-gray-50 to-gray-100 border-b border-gray-200 dark:border-gray-700 ">
+        <div className="px-6 py-5 bg-gradient-to-r from-gray-50 to-gray-100 dark:from-gray-800 dark:to-gray-900 border-b border-gray-200 dark:border-gray-700 ">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               {icon && (

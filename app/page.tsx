@@ -1295,7 +1295,7 @@ export default function HomePage() {
                         {/* Site thumbnail (headless screenshot of the preview). The
                             gradient shows until/unless a thumbnail exists; the img
                             hides itself on 404 to reveal it. */}
-                        <div className="aspect-video w-full bg-gradient-to-br from-gray-100 to-gray-200 relative">
+                        <div className="aspect-video w-full bg-gradient-to-br from-gray-100 to-gray-200 dark:from-gray-800 dark:to-gray-900 relative">
                           {/* eslint-disable-next-line @next/next/no-img-element */}
                           <img
                             src={`${API_BASE}/api/projects/${project.id}/thumbnail`}
