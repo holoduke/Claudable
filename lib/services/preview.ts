@@ -1859,7 +1859,11 @@ class PreviewManager {
       args = [
         'run', '--rm', '--name', feName,
         '-w', '/app', '-v', `${hostProject}:/app`,
-        '-p', `127.0.0.1:${effectivePort}:${effectivePort}`,
+        // Publish on all host interfaces (not just loopback): the frontend is
+        // reached by the reverse proxy at the host GATEWAY IP, not via 127.0.0.1
+        // (unlike the backend sidecar, which Claudable's own static server
+        // proxies to on loopback). Parity with the in-process 0.0.0.0 bind.
+        '-p', `${effectivePort}:${effectivePort}`,
         '--memory', fe.memory || '1g',
         '--cpus', String(fe.cpus || '2.0'),
         '--pids-limit', '512',
