@@ -13,6 +13,7 @@ import { syncProjectSkills, hasDisabledSkills } from '../skills';
 import { CLAUDE_SYSTEM_PROMPT } from './prompts/claude-system-prompt';
 import { NEXT_SYSTEM_PROMPT } from './prompts/next-system-prompt';
 import { ANGULAR_SYSTEM_PROMPT } from './prompts/angular-system-prompt';
+import { STATIC_SYSTEM_PROMPT } from './prompts/static-system-prompt';
 import { stackKind } from '@/lib/config/stacks';
 import { resolveProjectClaudeToken } from '../claude-credentials';
 import { buildItopsMcpServer } from '../itops/itops-mcp';
@@ -47,6 +48,8 @@ const AGENT_ENV_ALLOW = new Set([
 /** The system prompt for a project's tech stack (Nuxt | Next.js | Angular). */
 function selectSystemPrompt(templateType: string | null | undefined): string {
   switch (stackKind(templateType)) {
+    case 'static':
+      return STATIC_SYSTEM_PROMPT;
     case 'next':
       return NEXT_SYSTEM_PROMPT;
     case 'angular':
