@@ -13,6 +13,7 @@ import UserMenu from '@/components/layout/UserMenu';
 import VisualEditorPanel, { type SelectedElement } from '@/components/chat/VisualEditorPanel';
 import CommentsLayer, { type CommentPin, type ComposeAnchor } from '@/components/chat/CommentsLayer';
 import CommentsListPanel from '@/components/chat/CommentsListPanel';
+import { useToast } from '@/components/ui/Toast';
 import ChatInput from '@/components/chat/ChatInput';
 import DesignImportModal from '@/components/chat/DesignImportModal';
 import SkillsModal from '@/components/chat/SkillsModal';
@@ -265,6 +266,7 @@ export default function ChatPage() {
   const [isRunning, setIsRunning] = useState(false);
   const [isSseFallbackActive, setIsSseFallbackActive] = useState(false);
   const [showPreview, setShowPreview] = useState(true);
+  const toast = useToast();
   // --- Visual editor (inline edit mode) ---
   const [editMode, setEditMode] = useState(false);
   const [selectedEl, setSelectedEl] = useState<SelectedElement | null>(null);
@@ -1047,15 +1049,37 @@ const persistProjectPreferences = useCallback(
       }
 
       setIsStartingPreview(true);
-      setPreviewInitializationMessage('Starting development server...');
+      setPreviewInitializationMessage('Starting development server…');
 
-      // Only relevant on a genuine cold start; cleared as soon as start returns.
-      const t1 = setTimeout(() => setPreviewInitializationMessage('Installing dependencies...'), 3000);
-      const t2 = setTimeout(() => setPreviewInitializationMessage('Building your application...'), 9000);
+      // Heuristic fallback messages for the install phase (before the dev-server
+      // process registers, its logs aren't queryable yet).
+      const t1 = setTimeout(() => setPreviewInitializationMessage('Installing dependencies…'), 3000);
+      const t2 = setTimeout(() => setPreviewInitializationMessage('Building your application…'), 9000);
+
+      // Live progress: poll the preview status and surface the REAL latest
+      // dev-server line (e.g. "Nuxt … ready", "Local: …") once it appears, so the
+      // 20-30s cold start shows genuine activity instead of a blind spinner.
+      const cleanLine = (s: string) => s.replace(/\x1b\[[0-9;]*[A-Za-z]/gu, '').replace(/[│─╭╮╰╯]/gu, '').trim();
+      const poll = setInterval(async () => {
+        try {
+          const sr = await fetch(`${API_BASE}/api/projects/${projectId}/preview/status`, { cache: 'no-store' });
+          const sj = await sr.json();
+          const logs: string[] = sj?.data?.logs ?? [];
+          for (let i = logs.length - 1; i >= 0 && i > logs.length - 8; i--) {
+            const line = cleanLine(String(logs[i] || ''));
+            if (line && /ready|local:|listening|compiled|nuxt|vite|localhost|building|routes|warming/i.test(line)) {
+              clearTimeout(t1); clearTimeout(t2);
+              setPreviewInitializationMessage(line.slice(0, 90));
+              break;
+            }
+          }
+        } catch { /* ignore poll errors */ }
+      }, 1500);
 
       const r = await fetch(`${API_BASE}/api/projects/${projectId}/preview/start`, { method: 'POST' });
       clearTimeout(t1);
       clearTimeout(t2);
+      clearInterval(poll);
       if (!r.ok) {
         console.error('Failed to start preview:', r.statusText);
         setPreviewInitializationMessage('Failed to start preview');
@@ -1374,13 +1398,18 @@ const persistProjectPreferences = useCallback(
       const j = await res.json();
       if (!j.success || !j.data?.token) throw new Error(j.message || 'Could not create share link');
       const link = `${window.location.origin}/share/${j.data.token}`;
-      try { await navigator.clipboard.writeText(link); } catch { window.prompt('Copy this review link:', link); }
+      try {
+        await navigator.clipboard.writeText(link);
+        toast.success('Review link copied to clipboard');
+      } catch {
+        toast.info(`Review link: ${link}`);
+      }
       setShareCopied(true);
       setTimeout(() => setShareCopied(false), 2000);
     } catch (e) {
-      window.alert(e instanceof Error ? e.message : 'Could not create share link');
+      toast.error(e instanceof Error ? e.message : 'Could not create share link');
     }
-  }, [projectId]);
+  }, [projectId, toast]);
 
   // --- Device frame fit-scaling: keep any device frame inside the pane ---
   const currentDevice = DEVICE_PRESETS.find((d) => d.id === deviceId) ?? DEVICE_PRESETS[0];
@@ -2971,10 +3000,16 @@ const persistProjectPreferences = useCallback(
             role="separator"
             aria-orientation="vertical"
             title="Drag to resize"
-            className="relative h-full w-px shrink-0 cursor-col-resize bg-gray-200 hover:bg-blue-400 transition-colors"
+            className="group relative h-full w-px shrink-0 cursor-col-resize bg-gray-200 hover:bg-[#DE7356] transition-colors"
           >
             {/* wider invisible hit area for easier grabbing */}
             <div className="absolute inset-y-0 -left-1.5 -right-1.5" />
+            {/* visible grip so the divider is discoverable */}
+            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 h-8 w-3 rounded-full bg-gray-200 group-hover:bg-[#DE7356] flex flex-col items-center justify-center gap-0.5 transition-colors">
+              <span className="w-0.5 h-0.5 rounded-full bg-gray-400 group-hover:bg-white" />
+              <span className="w-0.5 h-0.5 rounded-full bg-gray-400 group-hover:bg-white" />
+              <span className="w-0.5 h-0.5 rounded-full bg-gray-400 group-hover:bg-white" />
+            </div>
           </div>
 
           {/* Right: Preview/Code area */}

@@ -828,6 +828,10 @@ interface ChatLogProps {
 
 export default function ChatLog({ projectId, onSessionStatusChange, onProjectStatusUpdate, onSseFallbackActive, startRequest, completeRequest, onAddUserMessage, serverBusy = false, onReverted }: ChatLogProps) {
   const [revertingSha, setRevertingSha] = useState<string | null>(null);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+  const copyMessage = useCallback(async (id: string, text: string) => {
+    try { await navigator.clipboard.writeText(text); setCopiedId(id); setTimeout(() => setCopiedId((c) => (c === id ? null : c)), 1500); } catch { /* clipboard blocked */ }
+  }, []);
   const handleRevert = useCallback(async (sha: string) => {
     if (typeof window !== 'undefined' && !window.confirm('Revert the project to how it was after this step? Later changes will be rolled back (you can re-run to move forward again).')) return;
     setRevertingSha(sha);
@@ -2882,17 +2886,32 @@ const ToolResultMessage = ({
                   </div>
                 )}
 
-                {message.role === 'assistant' && message.isFinal && (message as any).commitSha && (
-                  <div className="mt-1.5">
-                    <button
-                      onClick={() => handleRevert((message as any).commitSha)}
-                      disabled={!!revertingSha || serverBusy}
-                      className="text-[11px] text-gray-400 hover:text-[#DE7356] inline-flex items-center gap-1 disabled:opacity-50 disabled:hover:text-gray-400"
-                      title={serverBusy ? 'Wait for the agent to finish before reverting' : 'Restore the project to how it was after this step'}
-                    >
-                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 7v6h6"/><path d="M3 13a9 9 0 1 0 3-7.7L3 8"/></svg>
-                      {revertingSha === (message as any).commitSha ? 'Reverting…' : 'Revert to here'}
-                    </button>
+                {message.role === 'assistant' && message.isFinal && (messageText || (message as any).commitSha) && (
+                  <div className="mt-1.5 flex items-center gap-3">
+                    {messageText && (
+                      <button
+                        onClick={() => copyMessage(message.id, messageText)}
+                        className="text-[11px] text-gray-400 hover:text-gray-700 inline-flex items-center gap-1"
+                        title="Copy this message"
+                      >
+                        {copiedId === message.id ? (
+                          <><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>Copied</>
+                        ) : (
+                          <><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" /></svg>Copy</>
+                        )}
+                      </button>
+                    )}
+                    {(message as any).commitSha && (
+                      <button
+                        onClick={() => handleRevert((message as any).commitSha)}
+                        disabled={!!revertingSha || serverBusy}
+                        className="text-[11px] text-gray-400 hover:text-[#DE7356] inline-flex items-center gap-1 disabled:opacity-50 disabled:hover:text-gray-400"
+                        title={serverBusy ? 'Wait for the agent to finish before reverting' : 'Restore the project to how it was after this step'}
+                      >
+                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 7v6h6"/><path d="M3 13a9 9 0 1 0 3-7.7L3 8"/></svg>
+                        {revertingSha === (message as any).commitSha ? 'Reverting…' : 'Revert to here'}
+                      </button>
+                    )}
                   </div>
                 )}
             </div>

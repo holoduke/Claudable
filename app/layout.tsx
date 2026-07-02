@@ -3,6 +3,7 @@ import 'highlight.js/styles/github-dark.css'
 import GlobalSettingsProvider from '@/contexts/GlobalSettingsContext'
 import { AuthProvider } from '@/contexts/AuthContext'
 import AppShell from '@/components/layout/AppShell'
+import { ToastProvider } from '@/components/ui/Toast'
 import { Metadata } from 'next'
 
 export const metadata: Metadata = {
@@ -20,7 +21,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body className="bg-gray-50 text-gray-900 min-h-screen">
         <AuthProvider>
           <GlobalSettingsProvider>
-            <AppShell>{children}</AppShell>
+            <ToastProvider>
+              <AppShell>{children}</AppShell>
+            </ToastProvider>
           </GlobalSettingsProvider>
         </AuthProvider>
       </body>

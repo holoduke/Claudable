@@ -1,5 +1,5 @@
 "use client";
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import type { CommentPin } from './CommentsLayer';
 
 interface Props {
@@ -21,9 +21,11 @@ function timeAgo(iso: string): string {
 /** Left-pane overview of every comment across the site, grouped by route.
  *  Clicking one asks the parent to jump the preview there and scroll to it. */
 export default function CommentsListPanel({ comments, currentRoute, activeId, onSelect, onClose }: Props) {
+  const [filter, setFilter] = useState<'all' | 'open' | 'resolved'>('all');
   const groups = useMemo(() => {
     const byRoute = new Map<string, (CommentPin & { route: string })[]>();
-    for (const c of comments) {
+    const filtered = comments.filter((c) => filter === 'all' || (filter === 'open' ? !c.resolved : c.resolved));
+    for (const c of filtered) {
       const r = c.route || '/';
       const arr = byRoute.get(r) ?? [];
       arr.push(c);
@@ -39,9 +41,10 @@ export default function CommentsListPanel({ comments, currentRoute, activeId, on
           .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
           .map((c, i) => ({ ...c, index: i + 1 })),
       }));
-  }, [comments]);
+  }, [comments, filter]);
 
   const open = comments.filter((c) => !c.resolved).length;
+  const resolved = comments.length - open;
 
   return (
     <div className="h-full flex flex-col bg-white">
@@ -55,12 +58,32 @@ export default function CommentsListPanel({ comments, currentRoute, activeId, on
         </button>
       </div>
 
+      {comments.length > 0 && (
+        <div className="flex items-center gap-1.5 px-4 py-2 border-b border-gray-100 shrink-0">
+          {([['all', `All ${comments.length}`], ['open', `Open ${open}`], ['resolved', `Resolved ${resolved}`]] as const).map(([key, label]) => (
+            <button
+              key={key}
+              onClick={() => setFilter(key)}
+              className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${
+                filter === key ? 'bg-[#DE7356] text-white border-[#DE7356]' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
+              }`}
+            >{label}</button>
+          ))}
+        </div>
+      )}
+
       <div className="flex-1 min-h-0 overflow-y-auto">
-        {comments.length === 0 ? (
+        {groups.length === 0 ? (
           <div className="h-full flex flex-col items-center justify-center text-center px-6 text-gray-400">
             <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" className="mb-2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2Z" /></svg>
-            <p className="text-sm">No comments yet.</p>
-            <p className="text-xs mt-1">Click anywhere on the preview to add one.</p>
+            {comments.length === 0 ? (
+              <>
+                <p className="text-sm">No comments yet.</p>
+                <p className="text-xs mt-1">Click anywhere on the preview to add one.</p>
+              </>
+            ) : (
+              <p className="text-sm">No {filter} comments.</p>
+            )}
           </div>
         ) : (
           groups.map((g) => (

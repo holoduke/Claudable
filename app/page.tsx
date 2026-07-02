@@ -118,7 +118,14 @@ export default function HomePage() {
 
       if (storedModelRaw) {
         const storedAssistant = sanitizeAssistant(storedAssistantRaw);
-        const storedModel = normalizeModelForAssistant(storedAssistant, storedModelRaw);
+        let storedModel = normalizeModelForAssistant(storedAssistant, storedModelRaw);
+        // If the remembered model is no longer offered (e.g. after a model/CLI
+        // change), fall back to the current default so the picker never shows a
+        // stale/unavailable option.
+        const avail = MODEL_OPTIONS_BY_ASSISTANT[storedAssistant] || [];
+        if (avail.length && !avail.some((m) => m.id === storedModel)) {
+          storedModel = getDefaultModelForCli(storedAssistant);
+        }
         setSelectedAssistant(storedAssistant);
         setSelectedModel(storedModel);
         setUsingGlobalDefaults(false);
