@@ -123,7 +123,7 @@ export const CLAUDE_MODEL_DEFINITIONS: ClaudeModelDefinition[] = [
   },
 ];
 
-export const CLAUDE_DEFAULT_MODEL: ClaudeModelId = 'claude-opus-4-8';
+export const CLAUDE_DEFAULT_MODEL: ClaudeModelId = 'claude-fable-5';
 
 const CLAUDE_MODEL_ALIAS_MAP: Record<string, ClaudeModelId> = CLAUDE_MODEL_DEFINITIONS.reduce(
   (map, definition) => {
