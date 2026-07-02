@@ -67,26 +67,52 @@ export async function GET(_req: NextRequest, { params }: RouteContext) {
     // import before the composition feature). Detect either.
     const backendType = typeof settings.backendType === 'string' ? settings.backendType : null;
     let importedBackend = false;
+    let importedBackendEnv: Record<string, unknown> = {};
+    let importedLang = '';
     if (!backendType && project!.repoPath) {
+      const root = path.resolve(project!.repoPath);
       try {
-        const raw = await fs.readFile(path.join(path.resolve(project!.repoPath), '.claudable', 'preview.json'), 'utf8');
-        importedBackend = !!JSON.parse(raw)?.backend?.container;
+        const cfg = JSON.parse(await fs.readFile(path.join(root, '.claudable', 'preview.json'), 'utf8'));
+        importedBackend = !!cfg?.backend?.container;
+        importedBackendEnv = cfg?.backend?.container?.env ?? {};
       } catch { /* none */ }
+      if (importedBackend) {
+        // Detect the language from the backend dir for a nicer label.
+        const has = async (f: string) => fs.access(path.join(root, 'backend', f)).then(() => true).catch(() => false);
+        if (await has('go.mod')) importedLang = 'Go';
+        else if (await has('package.json')) importedLang = 'Node.js';
+        else if (await has('requirements.txt')) importedLang = 'Python';
+      }
     }
     if (backendType || importedBackend) {
       const b = getBackendStack(backendType);
       const isStaticProj = project!.templateType === 'static';
+      const label = b?.name ?? importedLang ?? '';
       containers.push({
         kind: 'backend',
         name: 'Backend',
-        type: `${b?.name ?? 'container'} · container`,
+        type: label ? `${label} · container` : 'container',
         status: running ? 'running' : 'stopped',
         // Composed (framework) backends get their own -api URL; an imported
         // static-site backend is proxied at /api on the frontend's URL.
         url: isStaticProj ? (project!.previewUrl ? `${project!.previewUrl}/api` : null) : apiUrlFrom(project!.previewUrl),
         description: `${b?.description ?? 'API service.'} Runs in its own isolated container; reachable under /api.`,
-        removable: !!backendType, // only composition-added backends are removable here
+        removable: !!backendType,
       });
+      // An imported backend that keeps its data in a file (DATA_DIR) has an
+      // embedded SQLite-style store — surface it, but be clear it lives IN the
+      // backend rather than as a separate managed service.
+      if (importedBackend && !settings.databaseType && typeof importedBackendEnv.DATA_DIR === 'string') {
+        containers.push({
+          kind: 'database',
+          name: 'Database',
+          type: 'file · in backend',
+          status: 'embedded',
+          url: null,
+          description: `Embedded data store inside the backend (${importedBackendEnv.DATA_DIR}). Not a separate service.`,
+          removable: false,
+        });
+      }
     }
 
     const databaseType = typeof settings.databaseType === 'string' ? settings.databaseType : null;
