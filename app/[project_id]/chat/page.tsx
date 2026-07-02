@@ -3153,6 +3153,7 @@ const persistProjectPreferences = useCallback(
                             }
                           }}
                           title="Refresh preview"
+                          aria-label="Refresh preview"
                         >
                           <FaRedo size={14} />
                         </button>
@@ -3166,6 +3167,7 @@ const persistProjectPreferences = useCallback(
                             window.open(`${previewUrl}${suffix}`, '_blank', 'noopener');
                           }}
                           title="Open preview in new tab"
+                          aria-label="Open preview in new tab"
                         >
                           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
                             <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
@@ -3228,6 +3230,7 @@ const persistProjectPreferences = useCallback(
                     onClick={() => setShowGlobalSettings(true)}
                     className="h-9 w-9 flex items-center justify-center bg-gray-100 text-gray-600 hover:text-gray-900 hover:bg-gray-200 rounded-lg transition-colors"
                     title="Settings"
+                    aria-label="Settings"
                   >
                     <FaCog size={16} />
                   </button>
@@ -3237,6 +3240,7 @@ const persistProjectPreferences = useCallback(
                     onClick={() => setShowSkills(true)}
                     className="h-9 w-9 flex items-center justify-center bg-gray-100 text-gray-600 hover:text-gray-900 hover:bg-gray-200 rounded-lg transition-colors"
                     title="Manage skills"
+                    aria-label="Manage skills"
                   >
                     <FaPuzzlePiece size={15} />
                   </button>
@@ -3246,6 +3250,7 @@ const persistProjectPreferences = useCallback(
                     onClick={() => setShowDesignImport(true)}
                     className="h-9 w-9 flex items-center justify-center bg-gray-100 text-gray-600 hover:text-gray-900 hover:bg-gray-200 rounded-lg transition-colors"
                     title="Import from Claude Design"
+                    aria-label="Import from Claude Design"
                   >
                     <FaFileImport size={15} />
                   </button>
