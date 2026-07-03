@@ -275,6 +275,26 @@ export async function injectDeployScaffolding(repoPath: string, options: Scaffol
     return;
   }
 
+  // Respect projects that manage their own build/deploy. An imported project
+  // defines how it runs via `.claudable/preview.json` and ships its OWN
+  // Dockerfile(s) + Gitea Actions workflows. Overwriting its Dockerfile and
+  // `.gitea/workflows/deploy.yml` here would clobber a working CI/CD pipeline
+  // (e.g. StoryLoop's Gitea Actions). Only projects Claudable scaffolded itself
+  // (no preview.json) get Claudable-managed deploy infra.
+  try {
+    await fs.access(path.join(repoPath, '.claudable', 'preview.json'));
+    return; // imported / self-managed — leave its deploy files untouched
+  } catch { /* no preview.json → a Claudable-scaffolded project; proceed */ }
+  // Belt-and-suspenders: if the repo already ships its own workflows (anything
+  // other than a Claudable-managed deploy.yml), don't touch them.
+  try {
+    const wf = (await fs.readdir(path.join(repoPath, '.gitea', 'workflows')))
+      .filter((f) => f.endsWith('.yml') || f.endsWith('.yaml'));
+    if (wf.length > 0 && !wf.every((f) => f === 'deploy.yml')) {
+      return;
+    }
+  } catch { /* no existing workflows dir */ }
+
   const site = options.repoName.toLowerCase().replace(/[^a-z0-9-]/gu, '-').replace(/-+/gu, '-').replace(/^-|-$/gu, '');
   const port = deployPortFor(site);
   const kind = stackKind(options.templateType);
