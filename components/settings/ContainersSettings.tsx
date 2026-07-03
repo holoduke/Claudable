@@ -62,6 +62,34 @@ export default function ContainersSettings({ projectId }: { projectId: string })
   const hasBackend = containers.some((c) => c.kind === 'backend');
   const hasDatabase = containers.some((c) => c.kind === 'database');
 
+  // Image-generation capability (per-project connection).
+  const [img, setImg] = useState<{ connected: boolean; hasOwnKey: boolean; usesGlobalKey: boolean; globalAvailable: boolean } | null>(null);
+  const [imgKey, setImgKey] = useState('');
+  const [imgBusy, setImgBusy] = useState(false);
+  const loadImg = useCallback(async () => {
+    try {
+      const r = await fetch(`${API_BASE}/api/projects/${projectId}/image-capability`);
+      const j = await r.json();
+      setImg((j?.data ?? j) as typeof img);
+    } catch { /* ignore */ }
+  }, [projectId]);
+  useEffect(() => { loadImg(); }, [loadImg]);
+  const connectImg = async () => {
+    setImgBusy(true);
+    try {
+      await fetch(`${API_BASE}/api/projects/${projectId}/image-capability`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(imgKey.trim() ? { apiKey: imgKey.trim() } : {}),
+      });
+      setImgKey(''); await loadImg();
+    } finally { setImgBusy(false); }
+  };
+  const disconnectImg = async () => {
+    setImgBusy(true);
+    try { await fetch(`${API_BASE}/api/projects/${projectId}/image-capability`, { method: 'DELETE' }); await loadImg(); }
+    finally { setImgBusy(false); }
+  };
+
   return (
     <div>
       <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Containers</h3>
@@ -142,6 +170,46 @@ export default function ContainersSettings({ projectId }: { projectId: string })
               </div>
             )}
           </div>
+          {/* Capabilities — shared services a project connects to */}
+          <div className="pt-4 mt-2 border-t border-gray-100 dark:border-gray-800">
+            <h4 className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-2">Capabilities</h4>
+            <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex items-start gap-3 min-w-0">
+                  <span className="text-xl leading-none mt-0.5" aria-hidden>🎨</span>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">Image generation</span>
+                      {img?.connected ? (
+                        <span className="inline-flex items-center gap-1.5 text-[11px] text-emerald-600 dark:text-emerald-400"><span className="w-2 h-2 rounded-full bg-emerald-500" />connected</span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1.5 text-[11px] text-gray-400"><span className="w-2 h-2 rounded-full bg-gray-400" />not connected</span>
+                      )}
+                    </div>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                      Lets the agent generate images (xAI / Grok) into this project.
+                      {img?.connected && (img.hasOwnKey ? ' Using this project’s own key.' : img.usesGlobalKey ? ' Using the shared key.' : ' No key available — add one below.')}
+                    </p>
+                  </div>
+                </div>
+                {img?.connected && (
+                  <button onClick={disconnectImg} disabled={imgBusy} className="text-xs text-red-500 hover:text-red-600 disabled:opacity-50 shrink-0">Disconnect</button>
+                )}
+              </div>
+              {!img?.connected && (
+                <div className="mt-3 flex flex-col sm:flex-row gap-2">
+                  <input
+                    type="password" value={imgKey} onChange={(e) => setImgKey(e.target.value)}
+                    placeholder={img?.globalAvailable ? 'Optional: this project’s own key (else uses the shared key)' : 'xAI API key (xai-…)'}
+                    className="flex-1 text-sm px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-transparent text-gray-900 dark:text-gray-100"
+                  />
+                  <button onClick={connectImg} disabled={imgBusy || (!img?.globalAvailable && !imgKey.trim())}
+                    className="text-sm px-4 py-2 rounded-lg bg-[#DE7356] text-white disabled:opacity-50 whitespace-nowrap">Connect</button>
+                </div>
+              )}
+            </div>
+          </div>
+
           <p className="text-xs text-gray-400 dark:text-gray-500 pt-2">
             Changes apply on the next preview start. A custom-container option is coming.
           </p>
