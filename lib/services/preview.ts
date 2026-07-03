@@ -2203,7 +2203,14 @@ class PreviewManager {
     // cert issues on first access (DNS-01, ~30-60s); gating readiness on that
     // made cold starts appear to hang. The dev server is "ready" once it answers
     // locally; the cert/route warm up in parallel (pre-warmed below).
-    const readinessUrl = `http://127.0.0.1:${effectivePort}`;
+    // Probe the interface the port is actually published on. The in-process /
+    // static dev server runs on Claudable's loopback (127.0.0.1); the ISOLATED
+    // frontend container publishes on previewPublishHost (the gateway IP, 10.0.1.1)
+    // — probing 127.0.0.1 there would always "fetch failed" even though the server
+    // is up. Claudable is host-networked, so the gateway IP is reachable.
+    const readinessHost = (useFrontendContainer && previewPublishHost !== '0.0.0.0')
+      ? previewPublishHost : '127.0.0.1';
+    const readinessUrl = `http://${readinessHost}:${effectivePort}`;
     const ready = await waitForPreviewReady(readinessUrl, log).catch(
       () => false
     );
