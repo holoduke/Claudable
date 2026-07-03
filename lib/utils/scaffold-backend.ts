@@ -41,6 +41,8 @@ export async function scaffoldBackend(projectPath: string, backendId: BackendKin
       context: '.',
       port: stack.port,
       env: { PORT: String(stack.port) },
+      dev: true,          // hot-reload: mount backend/ + run the watcher (air / node --watch / uvicorn --reload)
+      watchDir: 'backend',
     },
   };
   if (!Array.isArray(cfg.proxy)) cfg.proxy = ['/api'];
