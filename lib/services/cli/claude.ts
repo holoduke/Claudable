@@ -24,6 +24,7 @@ import { createMessage } from '../message';
 import { CLAUDE_DEFAULT_MODEL, normalizeClaudeModelId, getClaudeModelDisplayName } from '@/lib/constants/claudeModels';
 import path from 'path';
 import os from 'os';
+import { realpathSync } from 'fs';
 
 /**
  * The environment handed to the agent subprocess. The SDK REPLACES the child
@@ -102,9 +103,33 @@ function buildProjectGuardHook(projectAbsPath: string) {
   const tmpDir = os.tmpdir();
   const FILE_TOOLS = new Set(['Read', 'Write', 'Edit', 'MultiEdit', 'NotebookEdit', 'Glob', 'Grep']);
 
+  // Resolve symlinks so a symlinked ANCESTOR can't smuggle a path out of the
+  // project (agent does `ln -s /app link` then reads `link/.env`). The target may
+  // not exist yet (Write to a new file), so realpath the nearest existing
+  // ancestor and re-append the rest.
+  const realResolve = (abs: string): string => {
+    let cur = abs;
+    const tail: string[] = [];
+    for (let i = 0; i < 64; i++) {
+      try {
+        const real = realpathSync.native(cur);
+        return tail.length ? path.join(real, ...tail.slice().reverse()) : real;
+      } catch {
+        const parent = path.dirname(cur);
+        if (parent === cur) break; // hit the filesystem root
+        tail.push(path.basename(cur));
+        cur = parent;
+      }
+    }
+    return abs;
+  };
+  const realProject = realResolve(projectAbsPath);
+  const realTmp = realResolve(tmpDir);
+
   const pathAllowed = (p: string): boolean => {
     const abs = path.isAbsolute(p) ? path.resolve(p) : path.resolve(projectAbsPath, p);
-    return pathIsInside(abs, projectAbsPath) || pathIsInside(abs, tmpDir);
+    const real = realResolve(abs);
+    return pathIsInside(real, realProject) || pathIsInside(real, realTmp);
   };
 
   // Returns the offending token if a bash command reaches outside the project.
