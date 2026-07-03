@@ -3487,8 +3487,8 @@ const persistProjectPreferences = useCallback(
                     
                     {/* Content with z-index to be above gradient */}
                     <div className="relative z-10 w-full h-full flex items-center justify-center">
-                    {isStartingPreview ? (
-                      <MotionDiv 
+                    {(isStartingPreview || isInitializing) ? (
+                      <MotionDiv
                         initial={{ opacity: 0, scale: 0.9 }}
                         animate={{ opacity: 1, scale: 1 }}
                         className="text-center"
@@ -3521,7 +3521,7 @@ const persistProjectPreferences = useCallback(
                         
                         {/* Content */}
                         <h3 className="text-xl font-semibold text-gray-900 dark:text-gray-50 mb-3">
-                          Starting Preview Server
+                          {isStartingPreview ? 'Starting Preview Server' : 'Loading project…'}
                         </h3>
                         
                         <div className="flex items-center justify-center gap-1 text-gray-600 dark:text-gray-300 ">
