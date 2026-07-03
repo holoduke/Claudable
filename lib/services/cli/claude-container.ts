@@ -1,0 +1,139 @@
+/**
+ * Phase 2 (control/data split): run a Claude agent turn inside a HARDENED,
+ * ISOLATED container instead of in-process. The container has NO docker socket /
+ * DOCKER_HOST (so a compromised/prompt-injected agent can't self-provision — the
+ * hard boundary #5 demands), non-root, egress-locked to the sandbox net (internet
+ * for the Anthropic API, but not the host/DBs/other projects), and only the
+ * project bind-mounted at /work.
+ *
+ * Proven feasible on box1 (2026-07-03): `claude` CLI runs headless here and edits
+ * the mounted project. This module packages that as a streaming runner.
+ *
+ * NOT YET WIRED into executeClaude — that swap (streaming → SSE, network-MCP for
+ * the 3 tools, session resume) is the guarded next step. This module is dormant
+ * (nothing imports it) so it carries zero risk to the live in-process agent path.
+ */
+import { spawn, type ChildProcess } from 'child_process';
+import path from 'path';
+
+/** A parsed stream-json event from the CLI (system/assistant/tool_use/result …). */
+export interface AgentStreamEvent {
+  type: string;
+  [k: string]: unknown;
+}
+
+export interface ContainerTurnOptions {
+  projectHostPath: string;              // HOST path of the project (bind-mounted at /work)
+  prompt: string;
+  oauthToken: string;                   // CLAUDE_CODE_OAUTH_TOKEN (never persisted)
+  model?: string;
+  sessionId?: string;                   // resume a prior turn
+  image?: string;                       // agent image (has the claude CLI)
+  sandboxNet?: string;                  // egress-locked network name
+  mcpConfigPath?: string;               // path (in-container) to a --mcp-config json of NETWORK tools
+  env?: Record<string, string>;         // extra project env (already secret-free)
+  memory?: string;                      // e.g. "2g"
+  cpus?: string;                        // e.g. "2.0"
+}
+
+const CLI_IN_IMAGE = '/app/node_modules/@anthropic-ai/claude-agent-sdk/cli.js';
+
+/** Build the `docker run` argv for one isolated agent turn. Hardened + no docker access. */
+export function buildAgentContainerArgs(o: ContainerTurnOptions): string[] {
+  const image = o.image || process.env.AGENT_IMAGE || 'claudable-claudable';
+  const args = [
+    'run', '--rm', '-i',
+    '--user', '1000:1000',                       // non-root, matches the mounted project owner
+    '--cap-drop', 'ALL',
+    '--security-opt', 'no-new-privileges',
+    '--memory', o.memory || '2g',
+    '--cpus', String(o.cpus || '2.0'),
+    '--pids-limit', '512',
+    '-w', '/work',
+    '-v', `${o.projectHostPath}:/work`,
+    // HARD BOUNDARY: no docker socket, no DOCKER_HOST — the agent cannot reach the
+    // control plane's Docker (can't self-provision). Egress-locked sandbox net only.
+    '-e', 'HOME=/tmp',
+    '-e', `CLAUDE_CODE_OAUTH_TOKEN=${o.oauthToken}`,
+  ];
+  for (const [k, v] of Object.entries(o.env ?? {})) args.push('-e', `${k}=${v}`);
+  if (o.sandboxNet && o.sandboxNet.trim()) args.push('--network', o.sandboxNet.trim());
+  args.push(image, 'node', CLI_IN_IMAGE,
+    '-p', o.prompt,
+    '--output-format', 'stream-json', '--verbose',
+    '--permission-mode', 'bypassPermissions');
+  if (o.model) args.push('--model', o.model);
+  if (o.sessionId) args.push('--resume', o.sessionId);
+  if (o.mcpConfigPath) args.push('--mcp-config', o.mcpConfigPath);
+  return args;
+}
+
+export interface ContainerTurnResult {
+  ok: boolean;
+  code: number | null;
+  sessionId?: string;   // for resume
+  error?: string;
+}
+
+/**
+ * Run one agent turn in a container, streaming each stream-json event to `onEvent`.
+ * Resolves when the turn ends. `abort` kills the container.
+ */
+export function runAgentTurnContainerized(
+  o: ContainerTurnOptions,
+  onEvent: (e: AgentStreamEvent) => void,
+): { done: Promise<ContainerTurnResult>; abort: () => void } {
+  const child: ChildProcess = spawn('docker', buildAgentContainerArgs(o), { env: process.env });
+  let sessionId: string | undefined;
+  let stderr = '';
+  let buf = '';
+
+  const handleLine = (line: string) => {
+    const t = line.trim();
+    if (!t) return;
+    try {
+      const evt = JSON.parse(t) as AgentStreamEvent;
+      // The CLI emits the session id on the init/system event and the final result.
+      const sid = (evt as Record<string, unknown>).session_id;
+      if (typeof sid === 'string') sessionId = sid;
+      onEvent(evt);
+    } catch {
+      // Non-JSON diagnostic line — surface as a raw log event so nothing is lost.
+      onEvent({ type: 'raw', text: t });
+    }
+  };
+
+  child.stdout?.on('data', (c: Buffer) => {
+    buf += c.toString();
+    let nl: number;
+    while ((nl = buf.indexOf('\n')) >= 0) {
+      handleLine(buf.slice(0, nl));
+      buf = buf.slice(nl + 1);
+    }
+  });
+  child.stderr?.on('data', (c: Buffer) => { stderr += c.toString(); });
+
+  const done = new Promise<ContainerTurnResult>((resolve) => {
+    child.on('error', (e) => resolve({ ok: false, code: null, error: e.message }));
+    child.on('exit', (code) => {
+      if (buf.trim()) handleLine(buf); // flush any trailing partial line
+      resolve({ ok: code === 0, code, sessionId, error: code === 0 ? undefined : stderr.slice(-500) });
+    });
+  });
+
+  return { done, abort: () => { try { child.kill('SIGTERM'); } catch { /* already gone */ } } };
+}
+
+/** Convenience: the sandbox-net default + the host path helper live here so callers
+ *  don't reimplement them. */
+export function defaultAgentSandboxNet(): string | undefined {
+  return process.env.PREVIEW_SANDBOX_NETWORK?.trim() || undefined;
+}
+/** Translate an in-container /app/data path to the real host path for bind mounts. */
+export function agentHostPath(p: string): string {
+  const hostData = process.env.DATA_HOST_DIR;
+  if (hostData && hostData.trim() && p.startsWith('/app/data')) {
+    return path.join(hostData.trim(), path.relative('/app/data', p));
+  }
+  return p;
+}
