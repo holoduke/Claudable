@@ -1996,6 +1996,15 @@ class PreviewManager {
         ? substVars(fe.dev, { PORT: String(effectivePort) })
         : `npm ${devArgs.join(' ')}`;
       const devScript = `[ -d node_modules ] || npm install --no-audit --no-fund; exec ${inner}`;
+      // Inject the project's OWN Env vars (Envs tab) into the container so the
+      // app's server-side code — Next API routes, Nuxt server routes, SSR data
+      // loaders (e.g. a DB connection like SIMPLICATE_DB_*) — can read them.
+      // These are the PROJECT's secrets, meant for its own code; Claudable's own
+      // secrets are never passed (only NODE_ENV/PORT/HOST + these below).
+      const feEnvArgs: string[] = [];
+      try {
+        for (const ev of await listEnvVars(projectId)) feEnvArgs.push('-e', `${ev.key}=${ev.value}`);
+      } catch { /* env vars are best-effort */ }
       command = 'docker';
       args = [
         'run', '--rm', '--name', feName,
@@ -2015,6 +2024,7 @@ class PreviewManager {
         ...(composedBackendUrl
           ? ['-e', `NUXT_PUBLIC_API_BASE=${composedBackendUrl}`, '-e', `NEXT_PUBLIC_API_BASE=${composedBackendUrl}`, '-e', `API_BASE_URL=${composedBackendUrl}`]
           : []),
+        ...feEnvArgs,
         image, 'sh', '-c', devScript,
       ];
       // The docker CLI needs DOCKER_HOST (already in spawnEnv via process.env).
