@@ -400,6 +400,9 @@ export default function ChatPage() {
   const giteaPollRef = useRef<NodeJS.Timeout | null>(null);
   const [isStartingPreview, setIsStartingPreview] = useState(false);
   const [previewInitializationMessage, setPreviewInitializationMessage] = useState('Starting development server...');
+  // Live build/start log lines, streamed into the loading panel so the wait is
+  // informative (installing deps → compiling → starting server) not opaque.
+  const [previewLogs, setPreviewLogs] = useState<string[]>([]);
   const [cliStatuses, setCliStatuses] = useState<Record<string, CliStatusSnapshot>>({});
   const [conversationId, setConversationId] = useState<string>(() => {
     if (typeof window !== 'undefined' && window.crypto?.randomUUID) {
@@ -1069,6 +1072,7 @@ const persistProjectPreferences = useCallback(
 
       setIsStartingPreview(true);
       setPreviewInitializationMessage('Starting development server…');
+      setPreviewLogs([]);
 
       // Heuristic fallback messages for the install phase (before the dev-server
       // process registers, its logs aren't queryable yet).
@@ -1084,6 +1088,9 @@ const persistProjectPreferences = useCallback(
           const sr = await fetch(`${API_BASE}/api/projects/${projectId}/preview/status`, { cache: 'no-store' });
           const sj = await sr.json();
           const logs: string[] = sj?.data?.logs ?? [];
+          // Stream the recent build/start lines into the loading panel.
+          const recent = logs.slice(-14).map((l) => cleanLine(String(l || ''))).filter(Boolean);
+          if (recent.length) setPreviewLogs(recent);
           for (let i = logs.length - 1; i >= 0 && i > logs.length - 8; i--) {
             const line = cleanLine(String(logs[i] || ''));
             if (line && /ready|local:|listening|compiled|nuxt|vite|localhost|building|routes|warming/i.test(line)) {
@@ -3548,6 +3555,13 @@ const persistProjectPreferences = useCallback(
                             />
                           </MotionDiv>
                         </div>
+                        {previewLogs.length > 0 && (
+                          <div className="mt-6 mx-auto w-full max-w-lg text-left bg-gray-900/90 border border-gray-800 rounded-lg p-3 max-h-44 overflow-y-auto font-mono text-[11px] leading-relaxed text-gray-300 shadow-inner">
+                            {previewLogs.map((l, i) => (
+                              <div key={i} className="whitespace-pre-wrap break-all opacity-90">{l}</div>
+                            ))}
+                          </div>
+                        )}
                       </MotionDiv>
                     ) : (
                     <div className="text-center">
