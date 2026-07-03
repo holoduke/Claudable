@@ -5,6 +5,7 @@ import { AnimatePresence } from 'framer-motion';
 import { MotionDiv } from '@/lib/motion';
 import ServiceConnectionModal from '@/components/modals/ServiceConnectionModal';
 import UsersSettings from '@/components/settings/UsersSettings';
+import SystemOverviewSettings from '@/components/settings/SystemOverviewSettings';
 import ClaudeAccountSettings from '@/components/settings/ClaudeAccountSettings';
 import MyAccountSettings from '@/components/settings/MyAccountSettings';
 import { isIntegrationVisible } from '@/lib/config/integrations';
@@ -16,7 +17,7 @@ import type { CLIStatus } from '@/types/cli';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? '';
 
-type SettingsTab = 'general' | 'ai-agents' | 'services' | 'claude' | 'account' | 'users' | 'about';
+type SettingsTab = 'general' | 'ai-agents' | 'services' | 'claude' | 'account' | 'users' | 'system' | 'about';
 
 interface GlobalSettingsProps {
   isOpen: boolean;
@@ -435,6 +436,7 @@ export default function GlobalSettings({ isOpen, onClose, initialTab = 'general'
                 ...(currentUser ? [{ id: 'claude' as const, label: 'Claude' }] : []),
                 ...(currentUser ? [{ id: 'account' as const, label: 'My Account' }] : []),
                 ...(isAdmin ? [{ id: 'users' as const, label: 'Users' }] : []),
+                ...(isAdmin ? [{ id: 'system' as const, label: 'System' }] : []),
                 { id: 'about' as const, label: 'About' }
               ] as { id: SettingsTab; label: string }[]).map(tab => (
                 <button
@@ -785,6 +787,7 @@ export default function GlobalSettings({ isOpen, onClose, initialTab = 'general'
               <MyAccountSettings user={currentUser} onToast={showToast} onChanged={loadCurrentUser} />
             )}
 
+            {activeTab === 'system' && isAdmin && <SystemOverviewSettings />}
             {activeTab === 'users' && isAdmin && currentUser && (
               <UsersSettings currentUserId={currentUser.id} onToast={showToast} />
             )}
