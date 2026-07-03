@@ -18,6 +18,7 @@ import { stackKind } from '@/lib/config/stacks';
 import { resolveProjectClaudeToken } from '../claude-credentials';
 import { buildItopsMcpServer } from '../itops/itops-mcp';
 import { buildDiagnosticsMcpServer } from '../diagnostics-mcp';
+import { runAgentTurnContainerized, agentHostPath, defaultAgentSandboxNet, type AgentStreamEvent } from './claude-container';
 import { buildImagesMcpServer, imagesEnabledFor } from '../images-mcp';
 import { getProjectService } from '../project-services';
 import { createMessage } from '../message';
@@ -514,6 +515,52 @@ function buildThinkingOptions(mode: ThinkingMode | undefined): {
   }
 }
 
+/**
+ * Phase 2 (control/data split): run the turn in a HARDENED ISOLATED CONTAINER
+ * (no docker socket → the agent can't self-provision) instead of in-process.
+ * Gated by AGENT_CONTAINERIZED (default off → the in-process path below is used,
+ * unchanged). First cut: streams assistant text via the same createMessage +
+ * streamManager pipeline the in-process loop uses. TODO(next): reuse the full
+ * message handling (thinking/tool cards) via a shared processAgentMessage, plus
+ * network-MCP for the 3 tools. Proven feasible on box1.
+ */
+async function runContainerizedTurn(
+  projectId: string,
+  projectPath: string,
+  instruction: string,
+  resolvedModel: string,
+  sessionId?: string,
+  requestId?: string,
+): Promise<void> {
+  const oauthToken = process.env.CLAUDE_CODE_OAUTH_TOKEN || '';
+  const projectHostPath = agentHostPath(path.resolve(projectPath));
+
+  const onEvent = (e: AgentStreamEvent) => {
+    if (e.type !== 'assistant') return;
+    const msg = (e as { message?: { content?: unknown } }).message;
+    let text = '';
+    if (typeof msg?.content === 'string') text = msg.content;
+    else if (Array.isArray(msg?.content)) {
+      for (const b of msg.content as Array<{ type?: string; text?: string }>) {
+        if (b?.type === 'text' && typeof b.text === 'string') text += b.text;
+      }
+    }
+    if (!text.trim()) return;
+    void createMessage({ projectId, role: 'assistant', messageType: 'chat', content: text, cliSource: 'claude' })
+      .then((saved) => streamManager.publish(projectId, { type: 'message', data: serializeMessage(saved, { requestId }) }))
+      .catch((err) => console.error('[ClaudeContainer] persist failed:', err));
+  };
+
+  const { done } = runAgentTurnContainerized(
+    { projectHostPath, prompt: instruction, oauthToken, model: resolvedModel, sessionId, sandboxNet: defaultAgentSandboxNet() },
+    onEvent,
+  );
+  const result = await done;
+  if (!result.ok) {
+    console.error('[ClaudeContainer] turn failed:', result.error);
+  }
+}
+
 export async function executeClaude(
   projectId: string,
   projectPath: string,
@@ -533,6 +580,14 @@ export async function executeClaude(
   console.log(`[ClaudeService] Session ID: ${sessionId || 'new session'}`);
   console.log(`[ClaudeService] Instruction: ${instruction.substring(0, 100)}...`);
   console.log(`========================================\n`);
+
+  // Phase 2 (control/data split): when enabled, run the turn in a HARDENED ISOLATED
+  // container (no docker access → can't self-provision). Default OFF → the in-process
+  // path below runs UNCHANGED. Flag-gated so the live agent is untouched until verified.
+  if (process.env.AGENT_CONTAINERIZED === 'true') {
+    await runContainerizedTurn(projectId, projectPath, instruction, resolvedModel, sessionId, requestId);
+    return;
+  }
 
   const configuredMaxTokens = Number(process.env.CLAUDE_CODE_MAX_OUTPUT_TOKENS);
   const maxOutputTokens = Number.isFinite(configuredMaxTokens) && configuredMaxTokens > 0
