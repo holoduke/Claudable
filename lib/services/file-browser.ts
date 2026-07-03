@@ -51,12 +51,36 @@ async function resolveSafePath(base: string, target: string): Promise<string> {
     throw new FileBrowserError('Base path does not exist', 400);
   }
 
-  // Validate path is within base directory
+  // Validate path is within base directory (lexical)
   if (
     resolvedTarget !== normalizedBase &&
     !resolvedTarget.startsWith(normalizedBase + path.sep)
   ) {
     throw new FileBrowserError('Path traversal not allowed', 400);
+  }
+
+  // Symlink containment: the lexical check above passes for `up/opt/claudable/.env`
+  // where `up` is a symlink escaping the repo. Resolve symlinks (walking to the
+  // nearest existing ancestor for not-yet-created files) and re-assert the REAL
+  // target stays under the REAL base — otherwise a symlink reads Claudable secrets.
+  const realBase = await fs.realpath(normalizedBase).catch(() => normalizedBase);
+  let probe = resolvedTarget;
+  const tail: string[] = [];
+  for (let i = 0; i < 64; i++) {
+    try {
+      const real = await fs.realpath(probe);
+      const full = tail.length ? path.join(real, ...tail.slice().reverse()) : real;
+      if (full !== realBase && !full.startsWith(realBase + path.sep)) {
+        throw new FileBrowserError('Path traversal not allowed', 400);
+      }
+      break;
+    } catch (e) {
+      if (e instanceof FileBrowserError) throw e;
+      const parent = path.dirname(probe);
+      if (parent === probe) break;
+      tail.push(path.basename(probe));
+      probe = parent;
+    }
   }
 
   return resolvedTarget;

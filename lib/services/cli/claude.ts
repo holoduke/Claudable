@@ -145,6 +145,14 @@ function buildProjectGuardHook(projectAbsPath: string) {
     // Relative cross-project reference like ../<other> or data/projects/<other>.
     const rel = command.match(/data\/projects\/([\w.-]+)/);
     if (rel && rel[1] !== path.basename(projectAbsPath)) return rel[0];
+    // Relative traversal: the absolute-token regex above DROPS leading `..`, so a
+    // token like `../other-project/.env` slipped through (it read `/other/.env`,
+    // outside all roots → allowed) while the shell (cwd=project) actually reached
+    // a sibling. Catch any `../`-containing token that escapes the project — this
+    // also blocks `ln -s ../../.. up` style symlink-escape setup.
+    for (const tok of command.match(/(?:\.\.\/)+[\w./+-]*/gu) || []) {
+      if (!pathIsInside(path.resolve(projectAbsPath, tok), projectAbsPath)) return tok;
+    }
     return null;
   };
 
