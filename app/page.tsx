@@ -950,8 +950,8 @@ export default function HomePage() {
       
       {/* Main Content - Not affected by sidebar */}
       <div className="flex-1 flex flex-col min-w-0">
-        <div className="flex-1 flex items-center justify-center p-8">
-          <div className="w-full max-w-4xl">
+        <div className="flex-1 flex flex-col overflow-y-auto p-8">
+          <div className="w-full max-w-4xl mx-auto my-auto">
             <div className="text-center mb-12">
               <div className="flex justify-center mb-6">
                 <h1 
