@@ -29,6 +29,24 @@ async function clearAllPreviewState(): Promise<void> {
   }
 }
 
+// Remove orphaned preview containers on boot. Claudable's process tracking is
+// in-memory (reset on every restart/redeploy), so after a recreate each running
+// claudable-preview-* container is an orphan still holding its host port. A fresh
+// start would then collide on the port and the dev server "exits before reachable".
+// Sweep them so boot starts from a clean slate. (storyloop-api/db etc. are named
+// differently and are never matched.)
+async function sweepOrphanedPreviewContainers(): Promise<void> {
+  try {
+    await new Promise<void>((res) => {
+      const p = spawn('sh', ['-c',
+        'ids=$(docker ps -aq --filter name=claudable-preview-); [ -n "$ids" ] && docker rm -f $ids >/dev/null 2>&1 || true'],
+        { env: process.env, stdio: 'ignore' });
+      p.on('exit', () => res());
+      p.on('error', () => res());
+    });
+  } catch { /* best-effort */ }
+}
+
 // --- Per-project preview routing --------------------------------------------
 // A stable per-project subdomain (preview-<slug>.<domain>) whose Traefik route we
 // rewrite to the current port on every start. Because the hostname is keyed to the
@@ -1446,6 +1464,7 @@ class PreviewManager {
     // and remove all stale per-project preview routes (dev servers are all dead).
     void clearAllPreviewState();
     void sweepPreviewRoutes();
+    void sweepOrphanedPreviewContainers(); // free ports held by containers from before the restart
   }
 
   /** Ports currently held (live processes) or reserved in-flight. */
