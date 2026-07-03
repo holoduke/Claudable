@@ -225,8 +225,10 @@ export default function ChatInput({
       e.preventDefault();
     }
 
-    // Prevent multiple submissions with both state and ref locks
-    if (isSubmitting || disabled || isUploading || isRunning || submissionLockRef.current) {
+    // Prevent multiple submissions with both state and ref locks. NOTE: no longer
+    // blocked by isRunning — a turn in progress is fine (the parent queues the
+    // message, CLI-style). Only the double-submit lock + upload guard apply.
+    if (isSubmitting || disabled || isUploading || submissionLockRef.current) {
       return;
     }
 
@@ -265,8 +267,8 @@ export default function ChatInput({
     }
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
-      // Check all locks before submitting
-      if (!isSubmitting && !disabled && !isUploading && !isRunning && !submissionLockRef.current && (message.trim() || uploadedImages.length > 0)) {
+      // Check locks before submitting (isRunning is fine — the parent queues it).
+      if (!isSubmitting && !disabled && !isUploading && !submissionLockRef.current && (message.trim() || uploadedImages.length > 0)) {
         handleSubmit();
       }
     }
@@ -752,7 +754,7 @@ export default function ChatInput({
             id="chatinput-send-message-button"
             type="submit"
             className="flex size-8 items-center justify-center rounded-full bg-gray-900 text-white transition-all duration-150 ease-out disabled:cursor-not-allowed disabled:opacity-50 hover:scale-110 disabled:hover:scale-100"
-            disabled={disabled || isSubmitting || isUploading || (!message.trim() && uploadedImages.length === 0) || isRunning}
+            disabled={disabled || isSubmitting || isUploading || (!message.trim() && uploadedImages.length === 0)}
           >
             <SendHorizontal className="h-4 w-4" />
           </button>
