@@ -11,27 +11,15 @@ import { createSdkMcpServer, tool } from '@anthropic-ai/claude-agent-sdk';
 import { z } from 'zod';
 import { promises as fs } from 'fs';
 import path from 'path';
-import { listEnvVars } from './env';
+import { resolveImagesKey } from './capabilities/images';
+
+// Re-exported so callers keep a single import surface.
+export { imagesEnabledFor } from './capabilities/images';
 
 const text = (s: string) => ({ content: [{ type: 'text' as const, text: s }] });
 
 const XAI_IMAGE_URL = 'https://api.x.ai/v1/images/generations';
 const XAI_IMAGE_MODEL = 'grok-imagine-image'; // xAI's current image model (returns JPEG)
-
-/** Resolve the image API key: the project's own Env var wins, else the global one. */
-async function resolveKey(projectId: string): Promise<string | null> {
-  try {
-    for (const ev of await listEnvVars(projectId)) {
-      if ((ev.key === 'XAI_API_KEY' || ev.key === 'IMAGE_API_KEY') && ev.value) return ev.value;
-    }
-  } catch { /* fall through to global */ }
-  return process.env.XAI_API_KEY || null;
-}
-
-/** Whether image generation is available for this project (a key exists). */
-export async function imagesEnabledFor(projectId: string): Promise<boolean> {
-  return !!(await resolveKey(projectId));
-}
 
 function slugify(s: string): string {
   return s.toLowerCase().replace(/[^a-z0-9]+/gu, '-').replace(/^-+|-+$/gu, '').slice(0, 40) || 'image';
@@ -51,9 +39,9 @@ export function buildImagesMcpServer(projectId: string, projectPath: string) {
           count: z.number().int().min(1).max(4).optional().describe('How many images to generate (default 1).'),
         },
         async (args) => {
-          const key = await resolveKey(projectId);
+          const key = await resolveImagesKey(projectId);
           if (!key) {
-            return text('Image generation is not configured for this project. Set an `XAI_API_KEY` in the project Env vars (Settings → Envs), then try again.');
+            return text('Image generation is not connected for this project. Connect it in Settings → Containers → Image generation, then try again.');
           }
           const n = args.count ?? 1;
           let resp: Response;
