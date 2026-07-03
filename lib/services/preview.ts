@@ -39,7 +39,9 @@ async function sweepOrphanedPreviewContainers(): Promise<void> {
   try {
     await new Promise<void>((res) => {
       const p = spawn('sh', ['-c',
-        'ids=$(docker ps -aq --filter name=claudable-preview-); [ -n "$ids" ] && docker rm -f $ids >/dev/null 2>&1 || true'],
+        'ids=$(docker ps -aq --filter name=claudable-preview-); [ -n "$ids" ] && docker rm -f $ids >/dev/null 2>&1; ' +
+        // Phase 1: also drop orphaned per-project networks (safe once their containers are gone).
+        'for n in $(docker network ls --filter name=claudable-proj- --format "{{.Name}}"); do docker network rm "$n" >/dev/null 2>&1; done; true'],
         { env: process.env, stdio: 'ignore' });
       p.on('exit', () => res());
       p.on('error', () => res());
@@ -369,6 +371,40 @@ async function dockerRmSync(name: string): Promise<void> {
     p.on('exit', () => res());
     p.on('error', () => res());
   });
+}
+
+// --- Per-project INTERNAL network (Phase 1: direct fe↔be comms) -------------
+// Each composed project gets a `docker --internal` network (no gateway → no egress
+// via it; icc on). Service containers stay on the egress-locked SANDBOX net (for
+// firewalled internet) AND join this net, so they reach each other DIRECTLY by an
+// internal-only ALIAS (e.g. http://api:8080) while egress stays locked — no
+// egress-firewall changes needed (proven on box1). The public URL is still injected
+// for browser calls; the internal URL is for server-side/SSR/proxy hops.
+function projectNetworkName(projectId: string): string {
+  return `claudable-proj-${previewSlug(projectId)}`;
+}
+async function dockerCli(args: string[]): Promise<boolean> {
+  return new Promise<boolean>((res) => {
+    const p = spawn('docker', args, { env: process.env, stdio: 'ignore' });
+    p.on('exit', (code) => res(code === 0));
+    p.on('error', () => res(false));
+  });
+}
+async function ensureProjectNetwork(projectId: string): Promise<string> {
+  const name = projectNetworkName(projectId);
+  await dockerCli(['network', 'create', '--internal', name]); // no-op if it already exists
+  return name;
+}
+/** Join a container to the project net (container may not be running yet → retry). */
+async function connectToProjectNet(net: string, container: string, alias?: string): Promise<void> {
+  for (let i = 0; i < 12; i++) {
+    const args = ['network', 'connect', ...(alias ? ['--alias', alias] : []), net, container];
+    if (await dockerCli(args)) return;
+    await new Promise((r) => setTimeout(r, 500));
+  }
+}
+async function removeProjectNetwork(projectId: string): Promise<void> {
+  await dockerCli(['network', 'rm', projectNetworkName(projectId)]);
 }
 /** Translate a container path under /app/data to its real host path (for Docker
  *  bind mounts, which the daemon resolves on the HOST). DATA_HOST_DIR is the host
@@ -1935,6 +1971,7 @@ class PreviewManager {
     // URL. The backend port is derived (frontend port + 5000) so it needs no
     // second pool slot. CORS on the backend allows the frontend origin.
     let composedBackendUrl: string | null = null;
+    let composedInternalUrl: string | null = null; // Phase 1: direct http://api:<port> over the project net
     const composedBackendPort = (!isStatic && isolationEnabled() && cfg?.backend?.container)
       ? deriveBackendPort(effectivePort) : null;
     if (!isStatic && isolationEnabled() && cfg?.backend?.container && composedBackendPort === null) {
@@ -1952,6 +1989,13 @@ class PreviewManager {
         // Distinct name from the frontend container (which is claudable-preview-<slug>).
         const beName = `${backendContainerName(projectId)}-api`;
         backendContainer = await runBackendContainer(projectId, projectPath, c, backendPort, cenv, log, previewPublishHost, beName);
+        // Phase 1: join the backend to the project's INTERNAL net with alias `api` so
+        // the frontend reaches it DIRECTLY at http://api:<c.port> (server-side/SSR/proxy),
+        // no public round-trip. Egress stays on the sandbox net (firewalled).
+        const projNet = await ensureProjectNetwork(projectId);
+        await connectToProjectNet(projNet, beName, 'api');
+        composedInternalUrl = `http://api:${c.port}`;
+        log(Buffer.from(`[PreviewManager] [backend] direct internal path ${composedInternalUrl} (project net ${projNet})`));
         await writeBackendRoute(projectId, backendPort);
         composedBackendUrl = backendPreviewUrl(projectId, backendPort);
         log(Buffer.from(`[PreviewManager] [backend] composed backend service on ${composedBackendUrl}`));
@@ -2089,9 +2133,14 @@ class PreviewManager {
         '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges', '--user', 'node',
         ...(sandboxNet ? ['--network', sandboxNet] : []),
         '-e', 'NODE_ENV=development', '-e', `PORT=${effectivePort}`, '-e', 'HOST=0.0.0.0',
-        // Composed backend URL (model B) — the frontend calls the backend here.
+        // Composed backend URL (model B): PUBLIC url for the BROWSER (client-side).
         ...(composedBackendUrl
           ? ['-e', `NUXT_PUBLIC_API_BASE=${composedBackendUrl}`, '-e', `NEXT_PUBLIC_API_BASE=${composedBackendUrl}`, '-e', `API_BASE_URL=${composedBackendUrl}`]
+          : []),
+        // Phase 1: INTERNAL direct url for SERVER-SIDE calls (SSR / API routes / proxy)
+        // — reaches the backend over the project net, no public round-trip.
+        ...(composedInternalUrl
+          ? ['-e', `API_INTERNAL_BASE=${composedInternalUrl}`, '-e', `NUXT_API_BASE=${composedInternalUrl}`, '-e', `INTERNAL_API_BASE=${composedInternalUrl}`]
           : []),
         ...feEnvArgs,
         image, 'sh', '-c', devScript,
@@ -2137,6 +2186,14 @@ class PreviewManager {
       }
     );
 
+    // Phase 1: join the isolated frontend container to the project net so its
+    // SERVER-SIDE code resolves the backend at http://api:<port> (see composedInternalUrl).
+    // Background: the container is created async by `docker run`; connectToProjectNet retries.
+    if (useFrontendContainer && composedInternalUrl) {
+      void ensureProjectNetwork(projectId).then((net) =>
+        connectToProjectNet(net, `claudable-preview-${previewSlug(projectId)}`));
+    }
+
     previewProcess.process = child;
     previewProcess.backendProcess = backendChild;
     previewProcess.backendContainer = backendContainer;
@@ -2173,6 +2230,7 @@ class PreviewManager {
       killProcessTree(previewProcess.backendProcess);
       removeBackendContainer(previewProcess.backendContainer);
       removeBackendContainer(previewProcess.frontendContainer);
+      void removeProjectNetwork(projectId); // Phase 1: drop the per-project net
       previewProcess.backendProcess = null;
       previewProcess.backendContainer = null;
       previewProcess.frontendContainer = null;
@@ -2206,6 +2264,7 @@ class PreviewManager {
       killProcessTree(previewProcess.backendProcess);
       removeBackendContainer(previewProcess.backendContainer);
       removeBackendContainer(previewProcess.frontendContainer);
+      void removeProjectNetwork(projectId); // Phase 1: drop the per-project net
       previewProcess.backendProcess = null;
       previewProcess.backendContainer = null;
       previewProcess.frontendContainer = null;
@@ -2312,6 +2371,7 @@ class PreviewManager {
       killProcessTree(processInfo.backendProcess);
       removeBackendContainer(processInfo.backendContainer);
       removeBackendContainer(processInfo.frontendContainer);
+      void removeProjectNetwork(projectId); // Phase 1: drop the per-project net
     } catch (error) {
       console.error('[PreviewManager] Failed to stop preview process:', error);
     }
