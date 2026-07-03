@@ -271,6 +271,10 @@ interface PreviewBackendConfig {
     cpus?: string;                    // e.g. "1.0"
     pidsLimit?: number;               // default 256
     env?: Record<string, string>;     // container-side env (container paths, not host {PROJECT})
+    dev?: boolean;                    // dev/watch mode: bind-mount the source + run as uid 1000
+                                      //   so the in-container watcher (air / node --watch /
+                                      //   uvicorn --reload) hot-reloads on the agent's edits.
+    watchDir?: string;                // source dir to mount (relative to project), default "backend"
   };
 }
 interface PreviewConfig {
@@ -451,6 +455,14 @@ async function runBackendContainer(
     '--security-opt', 'no-new-privileges',
     '--restart', 'no',
   ];
+  if (c.dev) {
+    // Dev/watch mode: bind-mount the backend source so the in-container watcher
+    // (air / node --watch / uvicorn --reload) hot-reloads on the agent's edits,
+    // and run as uid 1000 to match the host files (writable for node_modules /
+    // air-tmp) — non-root. Falls back to a full rebuild-on-restart if omitted.
+    const hostSrc = toHostPath(path.join(projectPath, c.watchDir || 'backend'));
+    runArgs.push('--user', '1000:1000', '-v', `${hostSrc}:/app`, '-w', '/app');
+  }
   // Egress-locked sandbox network: reaches the public internet (for the app's own
   // API calls) but NOT the box's private ranges — host, Claudable, DBs, other
   // previews, cloud metadata (enforced by DOCKER-USER + INPUT firewall rules).

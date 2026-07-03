@@ -68,20 +68,19 @@ func env(k, def string) string {
 }
 `;
 
+// Dev image with hot-reload: `air` watches the bind-mounted source and recompiles
+// on every edit. Runs as uid 1000 (set at runtime) against the mounted /app; caches
+// go to /tmp so a non-root uid can write them. The preview mounts backend/ over /app.
 const GO_DOCKERFILE = `# syntax=docker/dockerfile:1
-FROM golang:1.25-alpine AS build
-WORKDIR /src
+FROM golang:1.25-alpine
+RUN apk add --no-cache git && go install github.com/air-verse/air@latest
+WORKDIR /app
+ENV HOME=/tmp GOCACHE=/tmp/.cache GOFLAGS=-mod=mod
 COPY backend/go.mod ./
 RUN go mod download
 COPY backend/ ./
-RUN CGO_ENABLED=0 go build -o /out/server .
-
-FROM alpine:3.20
-RUN adduser -D -u 10001 app
-COPY --from=build /out/server /app/server
-USER app
 EXPOSE 8080
-ENTRYPOINT ["/app/server"]
+CMD ["air"]
 `;
 
 const NODE_INDEX = `import express from 'express';
@@ -108,15 +107,18 @@ const NODE_PACKAGE = `{
 }
 `;
 
+// Dev image with hot-reload: Node 22's built-in \`--watch\` restarts on every edit.
+// The preview bind-mounts backend/ over /app (hiding the image's node_modules), so
+// the CMD installs deps into the mount on first start if missing. Runs as uid 1000;
+// caches go to /tmp. \`node --watch\` reloads instantly on the agent's changes.
 const NODE_DOCKERFILE = `FROM node:22-bookworm-slim
-RUN useradd -m -u 10001 app
 WORKDIR /app
+ENV HOME=/tmp npm_config_cache=/tmp/.npm
 COPY backend/package.json ./
-RUN npm install --omit=dev --no-audit --no-fund
+RUN npm install --no-audit --no-fund
 COPY backend/ ./
-USER app
 EXPOSE 8080
-CMD ["node", "index.js"]
+CMD ["sh", "-c", "[ -d node_modules ] || npm install --no-audit --no-fund; exec node --watch index.js"]
 `;
 
 const PY_MAIN = `from fastapi import FastAPI
@@ -145,15 +147,17 @@ const PY_REQS = `fastapi==0.115.6
 uvicorn[standard]==0.34.0
 `;
 
+// Dev image with hot-reload: \`uvicorn --reload\` (watchfiles, bundled with
+// uvicorn[standard]) restarts on every edit. The preview bind-mounts backend/ over
+// /app; site-packages live outside /app so deps survive the mount. Runs as uid 1000.
 const PY_DOCKERFILE = `FROM python:3.12-slim
-RUN useradd -m -u 10001 app
 WORKDIR /app
+ENV HOME=/tmp
 COPY backend/requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 COPY backend/ ./
-USER app
 EXPOSE 8080
-CMD ["sh", "-c", "uvicorn main:app --host 0.0.0.0 --port \${PORT:-8080}"]
+CMD ["sh", "-c", "uvicorn main:app --host 0.0.0.0 --port \${PORT:-8080} --reload"]
 `;
 
 export const BACKEND_STACKS: BackendStack[] = [
