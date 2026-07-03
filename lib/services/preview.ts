@@ -174,6 +174,16 @@ import { PREVIEW_CONFIG } from '@/lib/config/constants';
 const npmCommand = process.platform === 'win32' ? 'npm.cmd' : 'npm';
 const pnpmCommand = process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm';
 
+// A composed/sidecar backend's published port is derived from the frontend port
+// (no second pool slot). Guard the derivation: a widened PREVIEW_PORT range must
+// never produce a port past 65535 (docker -p would fail) — return null so the
+// caller skips the backend instead of crashing the whole preview start.
+const BACKEND_PORT_OFFSET = 5000;
+function deriveBackendPort(frontendPort: number): number | null {
+  const p = frontendPort + BACKEND_PORT_OFFSET;
+  return p >= 1024 && p <= 65535 ? p : null;
+}
+
 /**
  * Dependency-free static file server for imported `static` projects (a single
  * index.html + assets). Reads: argv[2]=port, argv[3]=host, argv[4]=root dir.
@@ -1859,6 +1869,12 @@ class PreviewManager {
     let backendChild: ChildProcess | null = null;
     let backendContainer: string | null = null;
     let frontendContainer: string | null = null;
+    // B6: if start() throws before the preview is tracked (this.processes.set),
+    // tear down anything we already started so it doesn't leak as an orphan.
+    // `committed` flips true at the tracking point, after which the exit/error
+    // handlers (and stop()) own teardown.
+    let committed = false;
+    try {
     const cfg = await readPreviewConfig(projectPath);
     const sandboxNet = process.env.PREVIEW_SANDBOX_NETWORK?.trim();
 
@@ -1880,9 +1896,14 @@ class PreviewManager {
     // URL. The backend port is derived (frontend port + 5000) so it needs no
     // second pool slot. CORS on the backend allows the frontend origin.
     let composedBackendUrl: string | null = null;
-    if (!isStatic && isolationEnabled() && cfg?.backend?.container) {
+    const composedBackendPort = (!isStatic && isolationEnabled() && cfg?.backend?.container)
+      ? deriveBackendPort(effectivePort) : null;
+    if (!isStatic && isolationEnabled() && cfg?.backend?.container && composedBackendPort === null) {
+      log(Buffer.from(`[backend] derived backend port (${effectivePort + BACKEND_PORT_OFFSET}) is out of range; skipping composed backend.`));
+    }
+    if (!isStatic && isolationEnabled() && cfg?.backend?.container && composedBackendPort !== null) {
       const c = cfg.backend.container;
-      const backendPort = effectivePort + 5000;
+      const backendPort = composedBackendPort;
       const cvars = { PROJECT: projectPath, PORT: String(c.port) };
       const cenv: Record<string, string> = {};
       for (const [k, v] of Object.entries(c.env ?? {})) cenv[k] = substVars(String(v), cvars);
@@ -1911,8 +1932,11 @@ class PreviewManager {
 
       // Optional backend sidecar (e.g. a Go service). Build it, run it on an
       // internal loopback port, and tell the static server to proxy to it.
-      if (cfg?.backend) {
-        const backendPort = effectivePort + 5000; // deterministic, per running preview
+      if (cfg?.backend && deriveBackendPort(effectivePort) === null) {
+        log(Buffer.from(`[backend] derived port (${effectivePort + BACKEND_PORT_OFFSET}) out of range; skipping backend sidecar.`));
+      }
+      if (cfg?.backend && deriveBackendPort(effectivePort) !== null) {
+        const backendPort = deriveBackendPort(effectivePort)!; // guaranteed in range
         const useContainer = isolationEnabled() && !!cfg.backend.container;
 
         if (useContainer) {
@@ -2079,6 +2103,7 @@ class PreviewManager {
     previewProcess.backendContainer = backendContainer;
     previewProcess.frontendContainer = frontendContainer;
     this.processes.set(projectId, previewProcess);
+    committed = true; // tracked now — exit/error handlers + stop() own teardown
     // Now tracked via `processes` — free the in-flight reservation.
     this.reservedPorts.delete(preferredPort);
 
@@ -2200,6 +2225,17 @@ class PreviewManager {
     });
 
     return this.toInfo(previewProcess);
+    } catch (err) {
+      if (!committed) {
+        // Nothing tracks these yet — clean up so a mid-start failure doesn't
+        // leave an orphaned container/process (and free the reserved port).
+        killProcessTree(backendChild);
+        removeBackendContainer(backendContainer);
+        removeBackendContainer(frontendContainer);
+        this.reservedPorts.delete(preferredPort);
+      }
+      throw err;
+    }
   }
 
   public async stop(projectId: string): Promise<PreviewInfo> {
