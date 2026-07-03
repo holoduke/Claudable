@@ -1206,6 +1206,12 @@ async function ensureProjectRootStructure(
   log: (message: string) => void
 ): Promise<void> {
   const entries = await fs.readdir(projectPath, { withFileTypes: true });
+  // If the project explicitly defines how to run itself via .claudable/preview.json,
+  // its layout is intentional (e.g. a monorepo with frontend + backend subdirs) —
+  // do NOT try to auto-restructure it into a single root app.
+  if (await pathExists(path.join(projectPath, '.claudable', 'preview.json'))) {
+    return;
+  }
   const hasRootPackageJson = entries.some(
     (entry) => entry.isFile() && entry.name === 'package.json'
   );
