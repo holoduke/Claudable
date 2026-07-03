@@ -266,6 +266,10 @@ export default function ChatPage() {
   const optimisticMessagesRef = useRef<Map<string, any>>(new Map());
   const [mode, setMode] = useState<'act' | 'chat'>('act');
   const [isRunning, setIsRunning] = useState(false);
+  // CLI-style message queue: messages typed while a turn is running wait here and
+  // auto-send (one per turn) when the current turn finishes.
+  const [queuedMessages, setQueuedMessages] = useState<Array<{ message: string; images: any[] }>>([]);
+  const prevBusyRef = useRef(false);
   const [isSseFallbackActive, setIsSseFallbackActive] = useState(false);
   const [showPreview, setShowPreview] = useState(true);
   const toast = useToast();
@@ -473,6 +477,18 @@ export default function ChatPage() {
     }, 6000);
     return () => clearTimeout(t);
   }, [isRunning, projectId]);
+
+  // Flush the queued messages one at a time: when a turn finishes (busy -> idle),
+  // send the next queued message. Edge-detected so we send exactly one per turn.
+  useEffect(() => {
+    const busy = isRunning || hasActiveRequests;
+    if (prevBusyRef.current && !busy && queuedMessages.length > 0) {
+      const next = queuedMessages[0];
+      setQueuedMessages((q) => q.slice(1));
+      runActRef.current?.(next.message, next.images);
+    }
+    prevBusyRef.current = busy;
+  }, [isRunning, hasActiveRequests, queuedMessages]);
 
   const sendInitialPrompt = useCallback(async (initialPrompt: string) => {
     if (initialPromptSent) {
@@ -2967,16 +2983,25 @@ const persistProjectPreferences = useCallback(
             
             {/* Simple input area */}
             <div className="p-4 rounded-bl-2xl">
+              {queuedMessages.length > 0 && (
+                <div className="mb-2 flex items-center justify-between gap-2 px-3 py-1.5 rounded-lg bg-gray-100 dark:bg-gray-800 text-xs text-gray-600 dark:text-gray-300">
+                  <span>{queuedMessages.length} message{queuedMessages.length > 1 ? 's' : ''} queued — will send after the current turn.</span>
+                  <button onClick={() => setQueuedMessages([])} className="text-gray-400 hover:text-red-500">Clear</button>
+                </div>
+              )}
               <ChatInput
                 onSendMessage={(message, images) => {
-                  // Pass images to runAct
-                  runAct(message, images);
+                  // CLI-style: you can always type. If a turn is in progress,
+                  // QUEUE the message (it runs when the current turn finishes)
+                  // instead of blocking. Use Stop to interrupt the current turn.
+                  if (isRunning || hasActiveRequests) {
+                    setQueuedMessages((q) => [...q, { message, images: images || [] }]);
+                  } else {
+                    runAct(message, images);
+                  }
                 }}
-                // Gate on BOTH the event-driven signal and the DB-authoritative
-                // one: isRunning flips false as soon as the POST returns, but a
-                // turn is still running — hasActiveRequests keeps input locked
-                // (and survives a mid-run reload). Matches the server 409 guard.
-                disabled={isRunning || hasActiveRequests}
+                // Never disabled — always allow typing/sending (queued while busy).
+                disabled={false}
                 placeholder={mode === 'act' ? "Ask Claudable..." : "Chat with Claudable..."}
                 mode={mode}
                 onModeChange={setMode}
