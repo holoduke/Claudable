@@ -1834,7 +1834,16 @@ class PreviewManager {
         /* keep default args */
       }
     } else if (bindHost && bindHost.trim().length > 0) {
-      devArgs.push('--hostname', bindHost.trim());
+      // Bind the dev server to all interfaces. Frameworks disagree on the flag:
+      // Nuxt (v3 AND v4) uses `--host` — passing the unknown `--hostname` makes
+      // Nuxt 4 treat the value (0.0.0.0) as a positional rootDir, so it can't
+      // find app.vue/pages and falls back to the default welcome page. Next.js
+      // uses `--hostname`. Match the flag to the framework.
+      if (stackKind(previewProject?.templateType) === 'nuxt') {
+        devArgs.push('--host', bindHost.trim());
+      } else {
+        devArgs.push('--hostname', bindHost.trim());
+      }
     }
 
     // Static imports run our dependency-free node server instead of `npm run dev`.
