@@ -1837,6 +1837,14 @@ class PreviewManager {
     // Bind to all interfaces when hosting remotely so the reverse proxy can
     // reach the dev server (network_mode host -> proxy hits it via the gateway).
     const bindHost = process.env.PREVIEW_BIND_HOST;
+    // Publish preview ports on the reverse-proxy GATEWAY IP (a private 10/8 addr,
+    // egress-firewalled away from sandbox containers), NOT 0.0.0.0. On 0.0.0.0 the
+    // port lands on every host interface incl. the box's PUBLIC IP, so a sandbox
+    // container could reach another project's preview via the public-IP hairpin —
+    // bypassing enable_icc + the private-range egress block (cross-project leak).
+    // Traefik still reaches previews (it targets the gateway IP). Falls back to
+    // 0.0.0.0 for local dev where no gateway is set.
+    const previewPublishHost = (process.env.PREVIEW_PUBLISH_HOST || process.env.DEPLOY_HOST_GATEWAY || '0.0.0.0').trim() || '0.0.0.0';
     const devArgs = ['run', 'dev', '--', '--port', String(effectivePort)];
     const previewProject = await getProjectById(projectId).catch(() => null);
     if (stackKind(previewProject?.templateType) === 'angular') {
@@ -1912,7 +1920,7 @@ class PreviewManager {
       try {
         // Distinct name from the frontend container (which is claudable-preview-<slug>).
         const beName = `${backendContainerName(projectId)}-api`;
-        backendContainer = await runBackendContainer(projectId, projectPath, c, backendPort, cenv, log, '0.0.0.0', beName);
+        backendContainer = await runBackendContainer(projectId, projectPath, c, backendPort, cenv, log, previewPublishHost, beName);
         await writeBackendRoute(projectId, backendPort);
         composedBackendUrl = backendPreviewUrl(projectId, backendPort);
         log(Buffer.from(`[PreviewManager] [backend] composed backend service on ${composedBackendUrl}`));
@@ -2043,7 +2051,7 @@ class PreviewManager {
         // reached by the reverse proxy at the host GATEWAY IP, not via 127.0.0.1
         // (unlike the backend sidecar, which Claudable's own static server
         // proxies to on loopback). Parity with the in-process 0.0.0.0 bind.
-        '-p', `${effectivePort}:${effectivePort}`,
+        '-p', `${previewPublishHost}:${effectivePort}:${effectivePort}`,
         '--memory', fe.memory || '1g',
         '--cpus', String(fe.cpus || '2.0'),
         '--pids-limit', '512',
