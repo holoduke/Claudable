@@ -436,7 +436,7 @@ export default function GlobalSettings({ isOpen, onClose, initialTab = 'general'
                 ...(currentUser ? [{ id: 'claude' as const, label: 'Claude' }] : []),
                 ...(currentUser ? [{ id: 'account' as const, label: 'My Account' }] : []),
                 ...(isAdmin ? [{ id: 'users' as const, label: 'Users' }] : []),
-                ...(isAdmin ? [{ id: 'system' as const, label: 'System' }] : []),
+                ...(isAdmin ? [{ id: 'system' as const, label: 'Network' }] : []),
                 { id: 'about' as const, label: 'About' }
               ] as { id: SettingsTab; label: string }[]).map(tab => (
                 <button

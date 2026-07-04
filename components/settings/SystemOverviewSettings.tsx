@@ -5,12 +5,41 @@ const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? '';
 
 interface Container { name: string; image: string; status: string; state: string; ports: string; networks: string; project: string; role: string }
 interface Network { name: string; driver: string; subnet: string; icc: string }
-interface Overview { host: string; containers: Container[]; networks: Network[]; generatedAt: number }
+interface ProjectRow {
+  id: string; name: string; stack: string; previewUrl: string | null; running: boolean;
+  hasDatabase: boolean; agentContainerized: boolean; internalNetwork: string | null; containers: Container[];
+}
+interface Overview {
+  host: string; agentContainerized: boolean; previewIsolation: boolean;
+  projects: ProjectRow[]; unassigned: Container[]; networks: Network[]; generatedAt: number;
+}
 
-const ROLE_ICON: Record<string, string> = { frontend: '🖥️', backend: '⚙️', database: '🗄️', system: '🧩', other: '📦' };
+const ROLE_ICON: Record<string, string> = { frontend: '🖥️', backend: '⚙️', database: '🗄️', agent: '🤖', system: '🧩', other: '📦' };
+const ROLE_LABEL: Record<string, string> = { frontend: 'Frontend', backend: 'Backend', database: 'Database', agent: 'Agent', system: 'System', other: 'Container' };
 
-function dot(state: string) {
-  return state.includes('run') || state.includes('up') ? 'bg-emerald-500' : 'bg-gray-400';
+function isUp(state: string) { return state.includes('run') || state.includes('up'); }
+
+function Pill({ tone, children }: { tone: 'green' | 'amber' | 'gray' | 'blue'; children: React.ReactNode }) {
+  const map = {
+    green: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300',
+    amber: 'bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300',
+    gray: 'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400',
+    blue: 'bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300',
+  };
+  return <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${map[tone]}`}>{children}</span>;
+}
+
+function ContainerRow({ c }: { c: Container }) {
+  return (
+    <div className="flex items-center gap-2.5 px-3 py-2 text-sm">
+      <span className="text-sm leading-none" aria-hidden>{ROLE_ICON[c.role] || '📦'}</span>
+      <span className={`w-2 h-2 rounded-full shrink-0 ${isUp(c.state) ? 'bg-emerald-500' : 'bg-gray-400'}`} />
+      <span className="text-[11px] text-gray-400 w-16 shrink-0">{ROLE_LABEL[c.role] || 'Container'}</span>
+      <span className="font-mono text-[11px] text-gray-900 dark:text-gray-100 truncate min-w-0 flex-1">{c.name}</span>
+      <span className="text-[10px] text-gray-400 hidden md:block truncate max-w-[22%]" title={c.ports}>{c.ports || '—'}</span>
+      <span className="text-[10px] text-gray-500 dark:text-gray-400 shrink-0">{c.status}</span>
+    </div>
+  );
 }
 
 export default function SystemOverviewSettings() {
@@ -29,44 +58,89 @@ export default function SystemOverviewSettings() {
   }, []);
   useEffect(() => { load(); }, [load]);
 
-  // Group containers by owning project.
-  const groups = (data?.containers ?? []).reduce<Record<string, Container[]>>((acc, c) => {
-    (acc[c.project] ||= []).push(c); return acc;
-  }, {});
-  const projectKeys = Object.keys(groups).sort((a, b) => (a === 'system' ? 1 : b === 'system' ? -1 : a.localeCompare(b)));
-
   return (
     <div className="p-6">
       <div className="flex items-center justify-between mb-1">
-        <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">System overview</h3>
+        <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Network</h3>
         <button onClick={load} className="text-xs px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800">Refresh</button>
       </div>
-      <p className="text-sm text-gray-500 dark:text-gray-400 mb-5">
-        Every container and network on {data?.host || 'the host'}, grouped by the project that owns it.
+      <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+        Every project on {data?.host || 'the host'} — its containers, addresses and access links.
       </p>
+
+      {data && (
+        <div className="flex flex-wrap gap-2 mb-5">
+          <Pill tone={data.agentContainerized ? 'green' : 'gray'}>
+            Agent: {data.agentContainerized ? 'containerized' : 'in-process'}
+          </Pill>
+          <Pill tone={data.previewIsolation ? 'green' : 'gray'}>
+            Preview isolation: {data.previewIsolation ? 'on' : 'off'}
+          </Pill>
+          <Pill tone="blue">{data.projects.length} projects</Pill>
+        </div>
+      )}
 
       {loading ? <p className="text-sm text-gray-500">Loading…</p> :
        error ? <p className="text-sm text-red-500">{error}</p> :
        !data ? null : (
-        <div className="space-y-6">
-          {/* Containers by project */}
-          {projectKeys.map((proj) => (
-            <div key={proj}>
-              <h4 className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 mb-2">{proj === 'system' ? 'System' : proj === '-' ? 'Unassigned' : proj}</h4>
-              <div className="rounded-xl border border-gray-200 dark:border-gray-700 divide-y divide-gray-100 dark:divide-gray-800 overflow-hidden">
-                {groups[proj].map((c) => (
-                  <div key={c.name} className="flex items-center gap-3 px-4 py-2.5 text-sm">
-                    <span className="text-base leading-none" aria-hidden>{ROLE_ICON[c.role] || '📦'}</span>
-                    <span className={`w-2 h-2 rounded-full shrink-0 ${dot(c.state)}`} />
-                    <span className="font-mono text-[12px] text-gray-900 dark:text-gray-100 truncate min-w-0 flex-1">{c.name}</span>
-                    <span className="text-[11px] text-gray-500 dark:text-gray-400 hidden sm:block truncate max-w-[28%]">{c.image}</span>
-                    <span className="text-[11px] text-gray-400 hidden md:block truncate max-w-[22%]">{c.ports || '—'}</span>
-                    <span className="text-[11px] text-gray-500 dark:text-gray-400 shrink-0">{c.status}</span>
+        <div className="space-y-4">
+          {data.projects.map((p) => (
+            <div key={p.id} className="rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
+              <div className="flex items-center gap-3 px-4 py-3 bg-gray-50 dark:bg-gray-800/50">
+                <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${p.running ? 'bg-emerald-500' : 'bg-gray-400'}`} title={p.running ? 'running' : 'stopped'} />
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium text-sm text-gray-900 dark:text-gray-100 truncate">{p.name}</span>
+                    {p.stack && <Pill tone="gray">{p.stack}</Pill>}
+                    {p.hasDatabase && <Pill tone="blue">DB</Pill>}
+                    <Pill tone={p.containers.some((c) => c.role === 'frontend' || c.role === 'backend') ? 'green' : 'amber'}>
+                      {p.containers.some((c) => c.role === 'frontend' || c.role === 'backend') ? 'container' : 'in-process'}
+                    </Pill>
                   </div>
-                ))}
+                  <div className="font-mono text-[10px] text-gray-400 truncate">{p.id}</div>
+                </div>
+                {p.previewUrl && (
+                  <a href={p.previewUrl} target="_blank" rel="noopener noreferrer"
+                     className="text-xs px-2.5 py-1 rounded-lg border border-gray-200 dark:border-gray-600 hover:bg-white dark:hover:bg-gray-700 text-blue-600 dark:text-blue-400 shrink-0">
+                    Open ↗
+                  </a>
+                )}
               </div>
+
+              {/* Addresses */}
+              <div className="px-4 py-2 flex flex-wrap gap-x-5 gap-y-1 text-[11px] border-b border-gray-100 dark:border-gray-800">
+                {p.previewUrl
+                  ? <span className="text-gray-500">Public: <a href={p.previewUrl} target="_blank" rel="noopener noreferrer" className="font-mono text-blue-600 dark:text-blue-400 hover:underline">{p.previewUrl.replace(/^https?:\/\//, '')}</a></span>
+                  : <span className="text-gray-400">Public: — (local only)</span>}
+                {p.internalNetwork
+                  ? <span className="text-gray-500">Internal net: <span className="font-mono text-gray-600 dark:text-gray-300">{p.internalNetwork}</span> · <span className="font-mono">http://api:8080</span></span>
+                  : <span className="text-gray-400">Internal net: —</span>}
+              </div>
+
+              {/* Containers */}
+              {p.containers.length > 0 ? (
+                <div className="divide-y divide-gray-100 dark:divide-gray-800">
+                  {p.containers.map((c) => <ContainerRow key={c.name} c={c} />)}
+                </div>
+              ) : (
+                <div className="px-4 py-2.5 text-[11px] text-gray-400">
+                  No containers. {p.hasDatabase
+                    ? 'Runs in Claudable\'s process — DB-backed previews aren\'t containerized yet (the egress lock would block the database).'
+                    : 'Preview not running, or runs in Claudable\'s process.'}
+                </div>
+              )}
             </div>
           ))}
+
+          {/* Unassigned / system containers */}
+          {data.unassigned.length > 0 && (
+            <div>
+              <h4 className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 mb-2">System &amp; manual</h4>
+              <div className="rounded-xl border border-gray-200 dark:border-gray-700 divide-y divide-gray-100 dark:divide-gray-800 overflow-hidden">
+                {data.unassigned.map((c) => <ContainerRow key={c.name} c={c} />)}
+              </div>
+            </div>
+          )}
 
           {/* Networks */}
           <div>
