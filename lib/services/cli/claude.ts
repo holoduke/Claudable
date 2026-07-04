@@ -20,6 +20,7 @@ import { buildItopsMcpServer } from '../itops/itops-mcp';
 import { buildDiagnosticsMcpServer } from '../diagnostics-mcp';
 import { runAgentTurnContainerized, agentHostPath, defaultAgentSandboxNet, type AgentStreamEvent } from './claude-container';
 import { prepareAgentMcpTurnConfig } from '../agent-mcp-http';
+import { previewSlug, ensureProjectNetwork, connectToProjectNet } from '../preview';
 import { buildImagesMcpServer, imagesEnabledFor } from '../images-mcp';
 import { getProjectService } from '../project-services';
 import { createMessage } from '../message';
@@ -394,6 +395,9 @@ async function runContainerizedTurn(args: {
     };
 
     args.publishStatus('ready', 'Project verified. Starting AI...');
+    // Named so the boot sweep reaps it if this process dies mid-turn, AND so we
+    // can connect it to its project network right after spawn.
+    const containerName = `claudable-agent-${previewSlug(projectId)}-${Date.now().toString(36)}`;
     const { done } = runAgentTurnContainerized(
       {
         projectHostPath,
@@ -406,11 +410,21 @@ async function runContainerizedTurn(args: {
         mcpConfigPath: mcp?.containerPath,
         strictMcpConfig: Boolean(mcp),
         homeHostPath,
-        // Named so the boot sweep reaps it if this process dies mid-turn.
-        containerName: `claudable-agent-${projectId}-${Date.now().toString(36)}`,
+        containerName,
       },
       onEvent,
     );
+
+    // Target architecture: the agent joins its PROJECT's own internal network
+    // (claudable-proj-<slug>) so it can reach ONLY this project's containers
+    // (frontend/backend/db, e.g. http://api:<port>) — isolated from every other
+    // project. It stays on the egress-locked sandbox net for the Anthropic API.
+    // Fire-and-forget: connectToProjectNet retries while the container comes up.
+    // The --internal project net has no gateway, so this adds intra-project reach
+    // WITHOUT widening egress. No-op if the project has no running containers.
+    void ensureProjectNetwork(projectId)
+      .then((net) => connectToProjectNet(net, containerName))
+      .catch((e) => console.error('[ClaudeContainer] project-net attach failed:', e));
 
     const result = await done;
     await queue; // flush in-flight message handling before finishing the turn
