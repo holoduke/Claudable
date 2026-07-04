@@ -480,7 +480,12 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
         selectedModel,
         requestId,
         requesterItopsEnabled,
-      ).then(() => { void checkpointTurn(project_id, projectPath, finalInstruction, requestId); })
+      ).then(() => {
+        void checkpointTurn(project_id, projectPath, finalInstruction, requestId);
+        // A compiled/production backend doesn't hot-reload — rebuild it if the agent
+        // changed its source (no-op for frontend edits / dev-reload backends).
+        void previewManager.rebuildBackendIfChanged(project_id);
+      })
        .catch(async (error) => {
         console.error('[API] Failed to initialize project:', error);
         // Mark terminal on outright rejection — otherwise the request row stays
@@ -506,7 +511,12 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
         requestId,
         thinkingMode,
         requesterItopsEnabled,
-      ).then(() => { void checkpointTurn(project_id, projectPath, finalInstruction, requestId); })
+      ).then(() => {
+        void checkpointTurn(project_id, projectPath, finalInstruction, requestId);
+        // A compiled/production backend doesn't hot-reload — rebuild it if the agent
+        // changed its source (no-op for frontend edits / dev-reload backends).
+        void previewManager.rebuildBackendIfChanged(project_id);
+      })
        .catch(async (error) => {
         console.error('[API] Failed to execute AI:', error);
         // If the executor rejected outright, its own finally never marked the
