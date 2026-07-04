@@ -80,7 +80,15 @@ services:
       - BUILD=1
       - IMAGES=1
       - CONTAINERS=1
-      - NETWORKS=0
+      # NETWORKS: needed for per-project isolation — Claudable creates each
+      # project its OWN network (claudable-proj-<slug>) so that project's agent +
+      # frontend/backend/db reach each other but NOTHING else. SAFE despite the
+      # egress-firewall: those nets are created `--internal` (no gateway → they
+      # physically cannot route to the host / private ranges / internet, firewall
+      # or not). The egress-capable sandbox net stays subnet-firewalled. The AGENT
+      # has NO proxy access (containerized, no docker socket), so only Claudable's
+      # trusted control plane calls this. Reads also power the Network overview.
+      - NETWORKS=1
       - INFO=1
       - VERSION=1
       - PING=1
