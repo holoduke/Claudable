@@ -422,6 +422,26 @@ export async function connectToProjectNet(net: string, container: string, alias?
 export async function removeProjectNetwork(projectId: string): Promise<void> {
   await dockerCli(['network', 'rm', projectNetworkName(projectId)]);
 }
+
+// Skip generated/dependency dirs when scanning a backend's source for changes —
+// their mtimes churn (build output, vendored deps) and would trigger needless rebuilds.
+const MTIME_SKIP_DIRS = new Set(['node_modules', 'vendor', 'bin', 'tmp', '.git', 'target', '__pycache__', '.venv', 'dist', 'build']);
+/** Newest file mtime (ms) anywhere under `dir`, skipping build/dep dirs. 0 if none. */
+async function latestMtimeMs(dir: string, depth = 0): Promise<number> {
+  if (depth > 8) return 0;
+  let newest = 0;
+  const entries = await fs.readdir(dir, { withFileTypes: true }).catch(() => []);
+  for (const e of entries) {
+    if (e.name.startsWith('.') && e.name !== '.claudable') continue;
+    if (e.isDirectory()) {
+      if (MTIME_SKIP_DIRS.has(e.name)) continue;
+      newest = Math.max(newest, await latestMtimeMs(path.join(dir, e.name), depth + 1));
+    } else if (e.isFile()) {
+      try { newest = Math.max(newest, (await fs.stat(path.join(dir, e.name))).mtimeMs); } catch { /* skip */ }
+    }
+  }
+  return newest;
+}
 /** Translate a container path under /app/data to its real host path (for Docker
  *  bind mounts, which the daemon resolves on the HOST). DATA_HOST_DIR is the host
  *  path that the compose mounts at /app/data. */
@@ -982,6 +1002,13 @@ interface PreviewProcess {
   backendContainer?: string | null;
   // Name of the isolated frontend dev-server container (Phase 2 opt-in).
   frontendContainer?: string | null;
+  // A COMPILED/production backend container is built from the project's Dockerfile
+  // and does NOT hot-reload the agent's source edits. These let us rebuild+restart
+  // it after a turn that changed backend files: the dir to watch, the last build
+  // time, and a closure that re-does build+run+net-attach with the same params.
+  backendSrcDir?: string | null;
+  backendBuiltAt?: number;
+  rebuildBackend?: (() => Promise<void>) | null;
   port: number;
   url: string;
   status: PreviewStatus;
@@ -2020,26 +2047,33 @@ class PreviewManager {
     if (!isStatic && isolationEnabled() && cfg?.backend?.container && composedBackendPort !== null) {
       const c = cfg.backend.container;
       const backendPort = composedBackendPort;
-      const cvars = { PROJECT: projectPath, PORT: String(c.port) };
-      const cenv: Record<string, string> = {};
-      for (const [k, v] of Object.entries(c.env ?? {})) cenv[k] = substVars(String(v), cvars);
-      cenv.CORS_ORIGIN = resolvedUrl; // allow the frontend's origin
-      // The backend shares the project net, so it reaches every managed service
-      // (db:5432, cache:6379, …) — inject each one's connection env.
-      Object.assign(cenv, injectedEnv);
-      if (projectDbUrl) cenv.DATABASE_URL = projectDbUrl;
-      try { for (const ev of await listEnvVars(projectId)) cenv[ev.key] = ev.value; } catch { /* best-effort */ }
-      try {
-        // Distinct name from the frontend container (which is claudable-preview-<slug>).
-        const beName = `${backendContainerName(projectId)}-api`;
-        backendContainer = await runBackendContainer(projectId, projectPath, c, backendPort, cenv, log, previewPublishHost, beName);
-        // Phase 1: join the backend to the project's INTERNAL net with alias `api` so
-        // the frontend reaches it DIRECTLY at http://api:<c.port> (server-side/SSR/proxy),
-        // no public round-trip. Egress stays on the sandbox net (firewalled).
+      const beName = `${backendContainerName(projectId)}-api`;
+      // Env recomputed on every (re)build so the backend picks up the latest Env-tab
+      // vars + managed-service connection strings.
+      const computeCenv = async (): Promise<Record<string, string>> => {
+        const cvars = { PROJECT: projectPath, PORT: String(c.port) };
+        const cenv: Record<string, string> = {};
+        for (const [k, v] of Object.entries(c.env ?? {})) cenv[k] = substVars(String(v), cvars);
+        cenv.CORS_ORIGIN = resolvedUrl; // allow the frontend's origin
+        Object.assign(cenv, injectedEnv);          // db:5432, cache:6379, …
+        if (projectDbUrl) cenv.DATABASE_URL = projectDbUrl;
+        try { for (const ev of await listEnvVars(projectId)) cenv[ev.key] = ev.value; } catch { /* best-effort */ }
+        return cenv;
+      };
+      // Build the image + run the container + join the project net (alias `api`).
+      // Reused verbatim by the post-turn rebuild so a compiled/production backend
+      // actually reflects the agent's source edits.
+      const buildAndRunBackend = async (): Promise<string> => {
+        const cenv = await computeCenv();
+        const name = await runBackendContainer(projectId, projectPath, c, backendPort, cenv, log, previewPublishHost, beName);
         const projNet = await ensureProjectNetwork(projectId);
         await connectToProjectNet(projNet, beName, 'api');
+        return name;
+      };
+      try {
+        backendContainer = await buildAndRunBackend();
         composedInternalUrl = `http://api:${c.port}`;
-        log(Buffer.from(`[PreviewManager] [backend] direct internal path ${composedInternalUrl} (project net ${projNet})`));
+        log(Buffer.from(`[PreviewManager] [backend] direct internal path ${composedInternalUrl} (project net claudable-proj-${previewSlug(projectId)})`));
         await writeBackendRoute(projectId, backendPort);
         composedBackendUrl = backendPreviewUrl(projectId, backendPort);
         log(Buffer.from(`[PreviewManager] [backend] composed backend service on ${composedBackendUrl}`));
@@ -2047,6 +2081,20 @@ class PreviewManager {
         const bwCtrl = new AbortController();
         const bwTimer = setTimeout(() => bwCtrl.abort(), 90_000);
         void fetch(composedBackendUrl, { method: 'HEAD', signal: bwCtrl.signal }).catch(() => {}).finally(() => clearTimeout(bwTimer));
+        // Register the rebuild hook: a `dev:true` backend hot-reloads via its own
+        // watcher, so only a NON-dev (compiled/production) backend needs a rebuild
+        // after edits. Watch the Dockerfile's dir (where the backend source lives).
+        if (!c.dev) {
+          previewProcess.backendSrcDir = path.resolve(projectPath, path.dirname(c.dockerfile));
+          previewProcess.backendBuiltAt = Date.now();
+          previewProcess.rebuildBackend = async () => {
+            log(Buffer.from('[PreviewManager] [backend] source changed — rebuilding backend container…'));
+            const name = await buildAndRunBackend();
+            previewProcess.backendContainer = name;
+            previewProcess.backendBuiltAt = Date.now();
+            log(Buffer.from('[PreviewManager] [backend] rebuild complete.'));
+          };
+        }
       } catch (e) {
         log(Buffer.from(`[backend] composed backend failed: ${(e as Error).message}`));
       }
@@ -2395,6 +2443,26 @@ class PreviewManager {
       }
       throw err;
     }
+  }
+
+  /**
+   * After an agent turn: if the project runs a COMPILED/production backend container
+   * (no in-container watcher) and its source changed since the container was built,
+   * rebuild + restart it so the agent's edits actually take effect. Frontend dev
+   * servers (HMR) and `dev:true` backends (air / --watch / --reload) self-reload and
+   * are never rebuilt here. Best-effort — never throws into the caller.
+   */
+  public async rebuildBackendIfChanged(projectId: string): Promise<boolean> {
+    const p = this.processes.get(projectId);
+    if (!p || !p.rebuildBackend || !p.backendSrcDir) return false;
+    try {
+      const latest = await latestMtimeMs(p.backendSrcDir);
+      if (latest > (p.backendBuiltAt ?? 0)) {
+        await p.rebuildBackend();
+        return true;
+      }
+    } catch { /* best-effort */ }
+    return false;
   }
 
   public async stop(projectId: string): Promise<PreviewInfo> {
