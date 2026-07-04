@@ -123,11 +123,7 @@ export default function SystemOverviewSettings() {
                   {p.containers.map((c) => <ContainerRow key={c.name} c={c} />)}
                 </div>
               ) : (
-                <div className="px-4 py-2.5 text-[11px] text-gray-400">
-                  No containers. {p.hasDatabase
-                    ? 'Runs in Claudable\'s process — DB-backed previews aren\'t containerized yet (the egress lock would block the database).'
-                    : 'Preview not running, or runs in Claudable\'s process.'}
-                </div>
+                <div className="px-4 py-2.5 text-[11px] text-gray-400">No running containers.</div>
               )}
             </div>
           ))}

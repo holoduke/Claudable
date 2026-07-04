@@ -155,9 +155,10 @@ export default function ContainersSettings({ projectId }: { projectId: string })
                         <span className={`w-2 h-2 rounded-full ${statusColor(c.status)}`} />{c.status}
                       </span>
                     </div>
-                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{c.description}</p>
                     {c.url && (
-                      <a href={c.url} target="_blank" rel="noreferrer" className="text-xs text-[#DE7356] break-all mt-1 inline-block">{c.url}</a>
+                      /^https?:\/\//.test(c.url)
+                        ? <a href={c.url} target="_blank" rel="noreferrer" className="text-xs text-[#DE7356] break-all mt-1 inline-block">{c.url}</a>
+                        : <div className="text-xs font-mono text-gray-500 dark:text-gray-400 mt-1">{c.url}</div>
                     )}
                   </div>
                 </div>
