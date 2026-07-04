@@ -293,6 +293,75 @@ export async function stopServices(projectId: string): Promise<void> {
   }
 }
 
+/**
+ * Ensure the project's managed containers are running — used by the AGENT turn so
+ * the DB / cache is reachable at its alias even when no preview is active (e.g.
+ * running a migration). Idempotent (skips already-running containers); a no-op for
+ * projects with no managed containers.
+ */
+export async function ensureServicesRunning(projectId: string, log?: (line: string) => void): Promise<void> {
+  await startServices(projectId, log);
+}
+
+// --- lifecycle + observability (operate the containers) ----------------------
+
+export interface ServiceRuntimeStatus {
+  id: string;
+  state: string;    // running / exited / restarting / created / '' (never started)
+  status: string;   // human string ("Up 2 minutes", "Exited (1) 5s ago", …)
+  running: boolean;
+}
+
+/** Live docker state for each of the project's managed containers. */
+export async function serviceStatuses(projectId: string): Promise<Record<string, ServiceRuntimeStatus>> {
+  const specs = await getServices(projectId);
+  const out: Record<string, ServiceRuntimeStatus> = {};
+  await Promise.all(specs.map(async (s) => {
+    const name = serviceContainerName(projectId, s.id);
+    const res = await docker(['inspect', name, '--format', '{{.State.Status}}|{{.State.Running}}|{{.State.Error}}']);
+    if (!res.ok) { out[s.id] = { id: s.id, state: '', status: 'not started', running: false }; return; }
+    const [state = '', running = 'false'] = res.out.trim().split('|');
+    // A short human status via `docker ps` (Status column) for a nicer label.
+    const ps = await docker(['ps', '-a', '--filter', `name=^${name}$`, '--format', '{{.Status}}']);
+    out[s.id] = { id: s.id, state, status: ps.out.trim() || state, running: running === 'true' };
+  }));
+  return out;
+}
+
+/** Start / stop / restart a single managed container. `start` recreates if missing. */
+export async function serviceAction(
+  projectId: string,
+  id: string,
+  action: 'start' | 'stop' | 'restart',
+): Promise<{ ok: boolean; out: string }> {
+  const spec = (await getServices(projectId)).find((s) => s.id === id);
+  if (!spec) return { ok: false, out: `Unknown service: ${id}` };
+  const name = serviceContainerName(projectId, id);
+  if (action === 'stop') return docker(['stop', name]);
+  if (action === 'restart') {
+    const r = await docker(['restart', name]);
+    if (r.ok) return r;
+    // No container to restart (never started / removed) → create it fresh.
+    const net = await ensureProjectNetwork(projectId);
+    try { await startService(projectId, net, spec); return { ok: true, out: 'created' }; }
+    catch (e) { return { ok: false, out: (e as Error).message }; }
+  }
+  // start: try `docker start`, else create fresh on the project net.
+  const started = await docker(['start', name]);
+  if (started.ok) return started;
+  const net = await ensureProjectNetwork(projectId);
+  try { await startService(projectId, net, spec); return { ok: true, out: 'created' }; }
+  catch (e) { return { ok: false, out: (e as Error).message }; }
+}
+
+/** Recent logs from a managed container (newest last). */
+export async function serviceLogs(projectId: string, id: string, tail = 200): Promise<string> {
+  const spec = (await getServices(projectId)).find((s) => s.id === id);
+  if (!spec) return `Unknown service: ${id}`;
+  const res = await docker(['logs', '--tail', String(Math.max(1, Math.min(tail, 1000))), serviceContainerName(projectId, id)]);
+  return res.out.trim() || '(no logs yet)';
+}
+
 // --- generic env injection ---------------------------------------------------
 
 /**
