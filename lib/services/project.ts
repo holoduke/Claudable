@@ -151,6 +151,17 @@ export async function deleteProject(id: string): Promise<void> {
     }
   }
 
+  // Also remove the side-car dirs that live OUTSIDE repoPath, else a deleted
+  // project leaks them on disk: the agent's persistent HOME (session transcripts)
+  // and the checkpoint shadow git repo. `id` is a validated slug (create route),
+  // and PROJECTS_DIR is the shared root, so these resolve safely under data/.
+  for (const rel of [['agent-homes', id], ['checkpoints', id]]) {
+    try {
+      const dir = path.resolve(PROJECTS_DIR_ABSOLUTE, '..', ...rel);
+      await fs.rm(dir, { recursive: true, force: true });
+    } catch { /* best-effort */ }
+  }
+
   // Delete project from database (related data automatically deleted via Cascade)
   await prisma.project.delete({
     where: { id },
