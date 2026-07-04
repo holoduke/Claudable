@@ -115,21 +115,35 @@ export async function GET(_req: NextRequest, { params }: RouteContext) {
       }
     }
 
+    // MANAGED CONTAINERS (generic): every per-project container the project runs
+    // — its database, a cache, a custom image, anything. Listed by id so any
+    // number/kind shows up without hardcoding.
+    const { listServiceViews } = await import('@/lib/services/managed-containers');
+    const managed = await listServiceViews(project_id).catch(() => []);
+    for (const s of managed) {
+      const addr = `${s.alias}${s.ports[0] ? `:${s.ports[0]}` : ''} (internal)`;
+      containers.push({
+        kind: s.kind === 'database' ? 'database' : 'service',
+        id: s.id,
+        name: s.name,
+        type: `${s.image}${s.injectKeys.length ? ` · ${s.injectKeys.join(', ')}` : ''}`,
+        status: 'container',
+        url: addr,
+        description: `${s.hasVolume ? 'Persistent container' : 'Container'} on this project’s private network — reachable only by this project (alias ${s.alias}).`,
+        removable: true,
+        icon: s.icon || undefined,
+      });
+    }
+
+    // Legacy non-container database (Coolify host DB, or a SQLite file) — only
+    // when it's NOT already represented as a managed container above.
     const databaseType = typeof settings.databaseType === 'string' ? settings.databaseType : null;
-    if (databaseType) {
+    const hasManagedDb = managed.some((s) => s.kind === 'database');
+    if (databaseType && !hasManagedDb) {
       const d = getDatabaseOption(databaseType);
       let status = databaseType === 'sqlite' ? 'file' : 'not provisioned';
       let host: string | null = null;
-      let typeLabel = d?.managed ? `${d?.name} · managed` : `${d?.name ?? databaseType} · file`;
-      let description = d?.description ?? 'Application data.';
-      // Per-project CONTAINER database (own container on the project net).
-      const { hasContainerDb } = await import('@/lib/services/managed-containers');
-      if (databaseType === 'postgres' && await hasContainerDb(project_id).catch(() => false)) {
-        status = 'container';
-        host = 'db:5432 (internal)';
-        typeLabel = `${d?.name ?? 'PostgreSQL'} · own container`;
-        description = 'A dedicated Postgres container on this project\'s private network — reachable only by this project, with a persistent volume.';
-      } else if (d?.managed) {
+      if (d?.managed) {
         try {
           const info = await getDatabaseInfo(project_id);
           if (info.provisioned) { status = 'provisioned'; host = (info as { host?: string }).host ?? null; }
@@ -138,10 +152,10 @@ export async function GET(_req: NextRequest, { params }: RouteContext) {
       containers.push({
         kind: 'database',
         name: 'Database',
-        type: typeLabel,
+        type: d?.managed ? `${d?.name} · managed` : `${d?.name ?? databaseType} · file`,
         status,
         url: host,
-        description,
+        description: d?.description ?? 'Application data.',
         removable: true,
       });
     }
@@ -161,8 +175,42 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
     const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
     const backendId = typeof body.backendId === 'string' ? body.backendId : '';
     const databaseId = typeof body.databaseId === 'string' ? body.databaseId : '';
+    const templateId = typeof body.templateId === 'string' ? body.templateId : '';
+    const custom = (body.custom && typeof body.custom === 'object') ? body.custom as Record<string, unknown> : null;
+
+    // Generic: add a container from a TEMPLATE (redis/mongo/mysql/…) or a fully
+    // CUSTOM image — no hardcoded kinds. (backendId/databaseId kept for the
+    // built-in composition slots.)
+    if (templateId || custom) {
+      const { managedContainersEnabled, addServiceFromTemplate, addCustomService } = await import('@/lib/services/managed-containers');
+      if (!managedContainersEnabled()) {
+        return createErrorResponse('unavailable', 'Managed containers need container isolation (PREVIEW_ISOLATION) enabled on this server.', 400);
+      }
+      if (templateId) {
+        const { getContainerTemplate } = await import('@/lib/config/container-templates');
+        if (!getContainerTemplate(templateId)) return createErrorResponse('bad_request', `Unknown template: ${templateId}`, 400);
+        const spec = await addServiceFromTemplate(project_id, templateId);
+        return createSuccessResponse({ ok: true, id: spec.id });
+      }
+      const image = typeof custom!.image === 'string' ? custom!.image.trim() : '';
+      if (!image) return createErrorResponse('bad_request', 'A custom container needs an image.', 400);
+      const parseEnv = (v: unknown): Record<string, string> | undefined =>
+        (v && typeof v === 'object') ? Object.fromEntries(Object.entries(v as Record<string, unknown>).map(([k, val]) => [k, String(val)])) : undefined;
+      const spec = await addCustomService(project_id, {
+        name: typeof custom!.name === 'string' && custom!.name.trim() ? custom!.name.trim() : image,
+        image,
+        alias: typeof custom!.alias === 'string' ? custom!.alias : undefined,
+        kind: typeof custom!.kind === 'string' ? custom!.kind : undefined,
+        env: parseEnv(custom!.env),
+        injectEnv: parseEnv(custom!.injectEnv),
+        mountPath: typeof custom!.mountPath === 'string' ? custom!.mountPath : undefined,
+        ports: Array.isArray(custom!.ports) ? (custom!.ports as unknown[]).map(Number).filter((n) => Number.isInteger(n)) : undefined,
+      });
+      return createSuccessResponse({ ok: true, id: spec.id });
+    }
+
     if (!isValidBackend(backendId) && !isValidDatabase(databaseId)) {
-      return createErrorResponse('bad_request', 'Provide a valid backendId or databaseId', 400);
+      return createErrorResponse('bad_request', 'Provide a valid backendId, databaseId, templateId, or custom container', 400);
     }
     const settings = safeSettings(project!.settings);
     if (isValidBackend(backendId)) {
@@ -198,7 +246,24 @@ export async function DELETE(req: NextRequest, { params }: RouteContext) {
     const { project_id } = await params;
     const { project, error } = await gate(project_id);
     if (error) return error;
-    const kind = new URL(req.url).searchParams.get('kind');
+    const url = new URL(req.url);
+    const serviceId = url.searchParams.get('serviceId');
+    const kind = url.searchParams.get('kind');
+
+    // Generic: remove any managed container by its id (drops its volume).
+    if (serviceId) {
+      const { removeService, getServices } = await import('@/lib/services/managed-containers');
+      const spec = (await getServices(project_id)).find((s) => s.id === serviceId);
+      await removeService(project_id, serviceId, { deleteVolume: true });
+      // If it was the DB backing the composition slot, clear that too.
+      if (spec?.kind === 'database') {
+        const settings = safeSettings(project!.settings);
+        delete settings.databaseType;
+        await prisma.project.update({ where: { id: project_id }, data: { settings: JSON.stringify(settings) } });
+      }
+      return createSuccessResponse({ ok: true });
+    }
+
     const settings = safeSettings(project!.settings);
     if (kind === 'backend') delete settings.backendType;
     else if (kind === 'database') {
@@ -214,7 +279,7 @@ export async function DELETE(req: NextRequest, { params }: RouteContext) {
       }
       delete settings.databaseType;
     }
-    else return createErrorResponse('bad_request', 'kind must be backend or database', 400);
+    else return createErrorResponse('bad_request', 'Provide serviceId, or kind=backend|database', 400);
     await prisma.project.update({ where: { id: project_id }, data: { settings: JSON.stringify(settings) } });
     return createSuccessResponse({ ok: true });
   } catch (error) {
