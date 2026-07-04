@@ -395,7 +395,7 @@ async function dockerRmSync(name: string): Promise<void> {
 // internal-only ALIAS (e.g. http://api:8080) while egress stays locked — no
 // egress-firewall changes needed (proven on box1). The public URL is still injected
 // for browser calls; the internal URL is for server-side/SSR/proxy hops.
-function projectNetworkName(projectId: string): string {
+export function projectNetworkName(projectId: string): string {
   return `claudable-proj-${previewSlug(projectId)}`;
 }
 async function dockerCli(args: string[]): Promise<boolean> {
@@ -405,13 +405,13 @@ async function dockerCli(args: string[]): Promise<boolean> {
     p.on('error', () => res(false));
   });
 }
-async function ensureProjectNetwork(projectId: string): Promise<string> {
+export async function ensureProjectNetwork(projectId: string): Promise<string> {
   const name = projectNetworkName(projectId);
   await dockerCli(['network', 'create', '--internal', name]); // no-op if it already exists
   return name;
 }
 /** Join a container to the project net (container may not be running yet → retry). */
-async function connectToProjectNet(net: string, container: string, alias?: string): Promise<void> {
+export async function connectToProjectNet(net: string, container: string, alias?: string): Promise<void> {
   for (let i = 0; i < 12; i++) {
     const args = ['network', 'connect', ...(alias ? ['--alias', alias] : []), net, container];
     if (await dockerCli(args)) return;
