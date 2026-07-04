@@ -96,6 +96,9 @@ export function runAgentTurnContainerized(
   onEvent: (e: AgentStreamEvent) => void,
 ): { done: Promise<ContainerTurnResult>; abort: () => void } {
   const child: ChildProcess = spawn('docker', buildAgentContainerArgs(o), { env: process.env });
+  // The CLI in -p mode still reads stdin to EOF (piped-prompt support); an open
+  // pipe makes it wait FOREVER before starting. Close it so it sees EOF at once.
+  child.stdin?.end();
   let sessionId: string | undefined;
   let stderr = '';
   let buf = '';
