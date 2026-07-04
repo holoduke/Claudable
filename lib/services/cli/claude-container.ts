@@ -34,7 +34,8 @@ export interface ContainerTurnOptions {
   mcpConfigPath?: string;               // path (in-container) to a --mcp-config json of NETWORK tools
   strictMcpConfig?: boolean;            // only use the given mcp-config (ignore any other sources)
   homeHostPath?: string;                // persistent per-project HOME (CLI session transcripts → --resume works across turns)
-  skillsHostPath?: string;              // HOST path of the global skills dir → mounted read-only at ~/.claude/skills
+  skillsHostPath?: string;              // HOST path of the global skills dir
+  skillsContainerPath?: string;         // where to mount them — MUST equal the /work/.claude/skills symlink target
   settingSources?: string;              // --setting-sources value (e.g. "project,user"); enables skill loading
   systemPrompt?: string;                // REPLACES the CLI default (parity with the SDK's systemPrompt option)
   env?: Record<string, string>;         // extra project env (already secret-free)
@@ -72,13 +73,14 @@ export function buildAgentContainerArgs(o: ContainerTurnOptions): string[] {
   } else {
     args.push('-e', 'HOME=/tmp');
   }
-  // Global skills (read-only) at ~/.claude/skills so the agent can `Skill` the same
-  // catalog the in-process path gets (nuxt-ui, codebase-design, …). Loaded via the
-  // `user` setting source below. Nested under the HOME mount — docker orders by
-  // destination depth, so the home mount lands first.
-  if (o.skillsHostPath && o.skillsHostPath.trim()) {
-    const skillsDest = home ? '/home/agent/.claude/skills' : '/tmp/.claude/skills';
-    args.push('-v', `${o.skillsHostPath.trim()}:${skillsDest}:ro`);
+  // Global skills (read-only) so the agent can `Skill` the same catalog the
+  // in-process path gets (nuxt-ui, codebase-design, …). syncProjectSkills stages
+  // the project's /work/.claude/skills as SYMLINKS into the Claudable home's
+  // skills dir; we mount the real global skills at THAT target path so those
+  // symlinks resolve inside the agent container (and the 'project' source loads
+  // them alongside real project skills).
+  if (o.skillsHostPath && o.skillsHostPath.trim() && o.skillsContainerPath && o.skillsContainerPath.trim()) {
+    args.push('-v', `${o.skillsHostPath.trim()}:${o.skillsContainerPath.trim()}:ro`);
   }
   for (const [k, v] of Object.entries(o.env ?? {})) args.push('-e', `${k}=${v}`);
   // Attach BOTH networks at creation (docker 20.10+): the sandbox net for egress

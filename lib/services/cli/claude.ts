@@ -367,19 +367,19 @@ async function runContainerizedTurn(args: {
     }
 
     // Global skills so the containerized agent has the SAME `Skill` catalog as the
-    // in-process path (nuxt-ui, codebase-design, …). They live in a host volume
-    // (compose: ./global-skills → /home/node/.claude/skills); mount that host dir
-    // read-only at the agent's ~/.claude/skills. GLOBAL_SKILLS_HOST_DIR is preferred;
-    // otherwise derive it as a sibling of DATA_HOST_DIR (compose mounts ./data and
-    // ./global-skills side by side). settingSources 'project,user' then loads
-    // /work/.claude/skills (project) + ~/.claude/skills (global).
+    // in-process path (nuxt-ui, codebase-design, …). syncProjectSkills stages the
+    // project's /work/.claude/skills as symlinks into the Claudable home's skills
+    // dir (respecting per-project skill disabling) + real project skills. We mount
+    // the global skills host volume (compose: ./global-skills → <claudableHome>/
+    // .claude/skills) read-only at THAT SAME target path in the agent container, so
+    // the /work symlinks resolve. --setting-sources 'project' then loads them all.
+    await syncProjectSkills(projectId).catch(() => {});
+    const skillsContainerPath = path.join(os.homedir(), '.claude', 'skills'); // = the symlink target
     let skillsHostPath: string | undefined;
     const skillsEnv = process.env.GLOBAL_SKILLS_HOST_DIR?.trim();
     const dataHost = process.env.DATA_HOST_DIR?.trim();
     if (skillsEnv) skillsHostPath = skillsEnv;
     else if (dataHost) skillsHostPath = path.join(path.dirname(dataHost), 'global-skills');
-    // Stage the project's own skills (real dirs, not the dangling global symlinks
-    // syncProjectSkills makes) so the 'project' source finds them in the container.
 
     // The 3 in-process tools become NETWORK tools: registered under a per-turn
     // capability token, served by /api/agent-mcp/<token>/<server>, revoked below.
@@ -460,9 +460,11 @@ async function runContainerizedTurn(args: {
         strictMcpConfig: Boolean(mcp),
         homeHostPath,
         skillsHostPath,
-        // Load project + global skills (the mounted catalog). Matches the
-        // in-process path, which uses settingSources for the same reason.
-        settingSources: skillsHostPath ? 'project,user' : 'project',
+        skillsContainerPath,
+        // 'project' loads /work/.claude/skills (real project skills + the staged
+        // global symlinks that now resolve to the mounted skills); 'user' is a
+        // harmless belt-and-suspenders for anything in the agent HOME.
+        settingSources: 'project,user',
         containerName,
         env: agentEnv,
       },
