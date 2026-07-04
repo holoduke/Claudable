@@ -360,26 +360,33 @@ async function runContainerizedTurn(args: {
     try {
       const homeDir = path.resolve(process.cwd(), 'data', 'agent-homes', projectId);
       await fs.mkdir(homeDir, { recursive: true });
-      await fs.chmod(homeDir, 0o777);
+      await fs.chmod(homeDir, 0o777).catch(() => {}); // best-effort — the real test is writability
+      // Verify the dir is actually WRITABLE by us before committing to it — a
+      // chmod that failed (e.g. root-owned dir) must not silently make every turn
+      // amnesiac. Probe with a real write; only fall back to /tmp if it fails.
+      const probe = path.join(homeDir, '.write-probe');
+      await fs.writeFile(probe, '');
+      await fs.rm(probe, { force: true });
       homeHostPath = agentHostPath(homeDir);
     } catch (e) {
-      console.error('[ClaudeContainer] Failed to prepare agent home (running amnesiac):', e);
+      console.error('[ClaudeContainer] Agent home not writable — running amnesiac (no --resume):', e);
     }
 
     // Global skills so the containerized agent has the SAME `Skill` catalog as the
-    // in-process path (nuxt-ui, codebase-design, …). syncProjectSkills stages the
-    // project's /work/.claude/skills as symlinks into the Claudable home's skills
-    // dir (respecting per-project skill disabling) + real project skills. We mount
-    // the global skills host volume (compose: ./global-skills → <claudableHome>/
-    // .claude/skills) read-only at THAT SAME target path in the agent container, so
-    // the /work symlinks resolve. --setting-sources 'project' then loads them all.
-    await syncProjectSkills(projectId).catch(() => {});
+    // in-process path (nuxt-ui, codebase-design, …). We mount the global-skills host
+    // volume (compose: ./global-skills → <claudableHome>/.claude/skills) read-only at
+    // THAT SAME target path in the agent container, then syncProjectSkills stages the
+    // project's /work/.claude/skills as symlinks to it (respecting per-project skill
+    // disabling) + real project skills, so the 'project' source loads them all.
+    // GUARD: only stage the global symlinks when the mount will actually be present,
+    // else they'd dangle inside the container (no DATA_HOST_DIR → no mount).
     const skillsContainerPath = path.join(os.homedir(), '.claude', 'skills'); // = the symlink target
     let skillsHostPath: string | undefined;
     const skillsEnv = process.env.GLOBAL_SKILLS_HOST_DIR?.trim();
     const dataHost = process.env.DATA_HOST_DIR?.trim();
     if (skillsEnv) skillsHostPath = skillsEnv;
     else if (dataHost) skillsHostPath = path.join(path.dirname(dataHost), 'global-skills');
+    if (skillsHostPath) await syncProjectSkills(projectId).catch(() => {});
 
     // The 3 in-process tools become NETWORK tools: registered under a per-turn
     // capability token, served by /api/agent-mcp/<token>/<server>, revoked below.
