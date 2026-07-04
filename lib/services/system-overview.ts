@@ -119,22 +119,27 @@ export async function getSystemOverview(): Promise<SystemOverview> {
     return null;
   };
 
+  // Claudable-only view: a container is shown if it's owned by a known project
+  // OR it's one of Claudable's own system containers. Everything else on the host
+  // (coolify, gitea, portal, unrelated manual apps) is deliberately hidden.
   const byProject = new Map<string, SystemContainer[]>();
   const unassigned: SystemContainer[] = [];
   for (const c of parsed) {
-    if (c.role === 'system') { unassigned.push(c); continue; }
+    if (c.role === 'system') { unassigned.push(c); continue; } // claudable / claudable-dockerproxy
     const owner = ownerOf(c.name);
     if (owner) {
       c.project = owner;
       (byProject.get(owner) ?? byProject.set(owner, []).get(owner)!).push(c);
-    } else {
-      unassigned.push(c);
     }
+    // else: not a Claudable container → omit it from the overview.
   }
 
   const agentContainerized = agentContainerizedDefault();
+  // Only Claudable's own networks (sandbox, per-project claudable-proj-*, the
+  // compose default) — not coolify/host/bridge or other apps' networks.
   const knownNets = new Set(
-    rawN.split('\n').map((l) => { try { return (JSON.parse(l) as { Name?: string }).Name; } catch { return undefined; } }).filter(Boolean) as string[],
+    (rawN.split('\n').map((l) => { try { return (JSON.parse(l) as { Name?: string }).Name; } catch { return undefined; } }).filter(Boolean) as string[])
+      .filter((n) => /^claudable/u.test(n)),
   );
 
   // Build per-project overview rows.

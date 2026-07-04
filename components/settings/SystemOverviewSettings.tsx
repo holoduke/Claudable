@@ -65,7 +65,7 @@ export default function SystemOverviewSettings() {
         <button onClick={load} className="text-xs px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800">Refresh</button>
       </div>
       <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
-        Every project on {data?.host || 'the host'} — its containers, addresses and access links.
+        Claudable projects on {data?.host || 'the host'} — their containers, addresses and access links. Other host containers (Coolify, etc.) are hidden.
       </p>
 
       {data && (
@@ -135,7 +135,7 @@ export default function SystemOverviewSettings() {
           {/* Unassigned / system containers */}
           {data.unassigned.length > 0 && (
             <div>
-              <h4 className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 mb-2">System &amp; manual</h4>
+              <h4 className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 mb-2">Claudable system</h4>
               <div className="rounded-xl border border-gray-200 dark:border-gray-700 divide-y divide-gray-100 dark:divide-gray-800 overflow-hidden">
                 {data.unassigned.map((c) => <ContainerRow key={c.name} c={c} />)}
               </div>
