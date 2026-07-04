@@ -406,6 +406,8 @@ async function runContainerizedTurn(args: {
         mcpConfigPath: mcp?.containerPath,
         strictMcpConfig: Boolean(mcp),
         homeHostPath,
+        // Named so the boot sweep reaps it if this process dies mid-turn.
+        containerName: `claudable-agent-${projectId}-${Date.now().toString(36)}`,
       },
       onEvent,
     );
