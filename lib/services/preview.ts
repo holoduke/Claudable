@@ -40,6 +40,9 @@ async function sweepOrphanedPreviewContainers(): Promise<void> {
     await new Promise<void>((res) => {
       const p = spawn('sh', ['-c',
         'ids=$(docker ps -aq --filter name=claudable-preview-); [ -n "$ids" ] && docker rm -f $ids >/dev/null 2>&1; ' +
+        // Phase 2: orphaned agent-turn containers (their parent docker-CLI process
+        // died with the old Claudable process; unnamed they would leak forever).
+        'ids=$(docker ps -aq --filter name=claudable-agent-); [ -n "$ids" ] && docker rm -f $ids >/dev/null 2>&1; ' +
         // Phase 1: also drop orphaned per-project networks (safe once their containers are gone).
         'for n in $(docker network ls --filter name=claudable-proj- --format "{{.Name}}"); do docker network rm "$n" >/dev/null 2>&1; done; true'],
         { env: process.env, stdio: 'ignore' });

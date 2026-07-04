@@ -38,6 +38,7 @@ export interface ContainerTurnOptions {
   memory?: string;                      // e.g. "2g"
   cpus?: string;                        // e.g. "2.0"
   timeoutMs?: number;                   // hang safety net (default 30 min)
+  containerName?: string;               // named claudable-agent-* so the boot sweep can reap orphans
 }
 
 const CLI_IN_IMAGE = '/app/node_modules/@anthropic-ai/claude-agent-sdk/cli.js';
@@ -47,6 +48,7 @@ export function buildAgentContainerArgs(o: ContainerTurnOptions): string[] {
   const image = o.image || process.env.AGENT_IMAGE || 'claudable-claudable';
   const args = [
     'run', '--rm', '-i',
+    ...(o.containerName ? ['--name', o.containerName] : []),
     '--user', '1000:1000',                       // non-root, matches the mounted project owner
     '--cap-drop', 'ALL',
     '--security-opt', 'no-new-privileges',
