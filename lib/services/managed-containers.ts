@@ -55,8 +55,12 @@ export interface ManagedServiceSpec {
 
 // Service kinds that OTHER services implicitly wait for (a DB/cache/… should be
 // up + healthy before an app/worker that connects to it on startup). So "the app
-// depends on the db" is ordered automatically, with no config.
-const INFRA_KINDS = new Set(['database', 'cache', 'storage', 'search', 'queue', 'broker']);
+// depends on the db" is ordered automatically, with no config. Includes common
+// short aliases a custom container might use as its `kind` (db/redis/postgres/…).
+const INFRA_KINDS = new Set([
+  'database', 'cache', 'storage', 'search', 'queue', 'broker',
+  'db', 'redis', 'postgres', 'postgresql', 'mysql', 'mariadb', 'mongo', 'mongodb', 'kv',
+]);
 
 /** Non-secret view for the UI / Network page. */
 export interface ManagedServiceView {
@@ -75,14 +79,18 @@ export function managedContainersEnabled(): boolean {
   return !!(process.env.PREVIEW_ISOLATION && process.env.PREVIEW_ISOLATION.trim());
 }
 
-function docker(args: string[]): Promise<{ ok: boolean; out: string }> {
+// Keep stdout and stderr SEPARATE: parsers (inspect health/status) must read only
+// stdout — a stray stderr warning folded into stdout would break `=== 'healthy'`
+// and the `|`-split. Error messages read stderr; logs read both.
+function docker(args: string[]): Promise<{ ok: boolean; out: string; err: string }> {
   return new Promise((resolve) => {
     let out = '';
+    let err = '';
     const p = spawn('docker', args, { env: process.env });
     p.stdout?.on('data', (c) => { out += c.toString(); });
-    p.stderr?.on('data', (c) => { out += c.toString(); });
-    p.on('error', () => resolve({ ok: false, out }));
-    p.on('exit', (code) => resolve({ ok: code === 0, out }));
+    p.stderr?.on('data', (c) => { err += c.toString(); });
+    p.on('error', (e) => resolve({ ok: false, out, err: err || e.message }));
+    p.on('exit', (code) => resolve({ ok: code === 0, out, err }));
   });
 }
 
@@ -325,7 +333,7 @@ async function startService(
 
   say(`starting ${spec.image} on ${net} (alias ${spec.alias || spec.id}, no host port)`);
   const run = await docker(args);
-  if (!run.ok) { say(`failed: ${run.out.trim().slice(-200)}`); throw new Error(`Managed container ${spec.id} failed: ${run.out.trim().slice(-160)}`); }
+  if (!run.ok) { const msg = (run.err || run.out).trim(); say(`failed: ${msg.slice(-200)}`); throw new Error(`Managed container ${spec.id} failed: ${msg.slice(-160)}`); }
   return name;
 }
 
@@ -509,7 +517,8 @@ export async function serviceLogs(projectId: string, id: string, tail = 200): Pr
   const spec = (await getServices(projectId)).find((s) => s.id === id);
   if (!spec) return `Unknown service: ${id}`;
   const res = await docker(['logs', '--tail', String(Math.max(1, Math.min(tail, 1000))), serviceContainerName(projectId, id)]);
-  return res.out.trim() || '(no logs yet)';
+  // Container logs come on BOTH streams (app stdout + stderr) — show both.
+  return [res.out, res.err].filter((s) => s.trim()).join('\n').trim() || '(no logs yet)';
 }
 
 // --- generic env injection ---------------------------------------------------

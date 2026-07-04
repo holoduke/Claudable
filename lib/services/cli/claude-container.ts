@@ -71,10 +71,16 @@ export function buildAgentContainerArgs(o: ContainerTurnOptions): string[] {
   }
   for (const [k, v] of Object.entries(o.env ?? {})) args.push('-e', `${k}=${v}`);
   // Attach BOTH networks at creation (docker 20.10+): the sandbox net for egress
-  // to the Anthropic API, and the project's internal net so `db`/`cache` aliases
-  // resolve from the FIRST command — no post-spawn attach race.
-  if (o.sandboxNet && o.sandboxNet.trim()) args.push('--network', o.sandboxNet.trim());
-  if (o.projectNet && o.projectNet.trim()) args.push('--network', o.projectNet.trim());
+  // to the Anthropic API (PRIMARY), and the project's internal net so `db`/`cache`
+  // aliases resolve from the FIRST command — no post-spawn attach race.
+  // GUARD: the project net is `--internal` (no gateway). Only attach it when the
+  // sandbox net is ALSO present, else the agent would sit on an egress-less net
+  // and couldn't reach the API. With no sandbox net, run on the default bridge
+  // (egress ok, no DB reach) — the safe degrade.
+  if (o.sandboxNet && o.sandboxNet.trim()) {
+    args.push('--network', o.sandboxNet.trim());
+    if (o.projectNet && o.projectNet.trim()) args.push('--network', o.projectNet.trim());
+  }
   args.push(image, 'node', CLI_IN_IMAGE,
     '-p', o.prompt,
     '--output-format', 'stream-json', '--verbose',
