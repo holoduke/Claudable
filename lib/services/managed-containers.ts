@@ -2,20 +2,23 @@
  * Per-project MANAGED CONTAINERS (composition step 3).
  *
  * A project can be composed with an ARBITRARY set of containers — 1, 2, 5, any
- * mix — not a fixed frontend/backend/db triad. Each is a generic spec (image +
- * alias + env + optional persistent volume) that Claudable runs ON THAT
+ * mix, any image — not a fixed frontend/backend/db triad. Each is a generic spec
+ * (image + alias + env + optional persistent volume) that Claudable runs ON THAT
  * PROJECT'S OWN internal network (claudable-proj-<slug>) and NOTHING else:
- *  - NO host port is published → a managed container is unreachable from the
- *    host or any other project; only this project's own containers (frontend /
- *    backend / agent), attached to the same internal net, reach it by its alias.
+ *  - NO host port is published → unreachable from the host or any other project;
+ *    only this project's own containers (frontend / backend / agent), attached to
+ *    the same internal net, reach it by its alias.
  *  - The project net is `--internal` (no gateway) → these containers have no
- *    egress at all, which is exactly what a database/cache wants.
- *  - Optional NAMED VOLUME (claudable-svc-<slug>-<id>-data) persists state across
- *    restarts/redeploys.
+ *    egress at all, which is exactly what a database / cache wants.
+ *  - Optional NAMED VOLUME (claudable-svc-<slug>-<id>-data) persists state.
  *
- * The DATABASE is just the first well-known KIND built on this model (a postgres
- * image + a volume + generated creds exposed as DATABASE_URL). New kinds (cache,
- * queue, search, a bespoke image) are added the same way — no hardcoded types.
+ * Nothing here is hardcoded to "database". Services come from either:
+ *  - a TEMPLATE (lib/config/container-templates.ts — postgres/mysql/redis/…), which
+ *    is pure data + a generated credential set, or
+ *  - a fully CUSTOM spec (any image/alias/env/ports/volume the user provides).
+ * Each service can declare `injectEnv` (e.g. DATABASE_URL / REDIS_URL) that is
+ * merged into the app + agent automatically — so a new kind needs ZERO changes to
+ * the preview/agent wiring.
  *
  * Talks to Docker via DOCKER_HOST (the socket-proxy), never the raw socket. The
  * AGENT never calls this (no docker access); only Claudable's control plane does.
@@ -26,6 +29,7 @@ import { encrypt, decrypt } from '@/lib/crypto';
 import { getProjectService, upsertProjectServiceConnection } from '@/lib/services/project-services';
 import { prisma } from '@/lib/db/client';
 import { previewSlug, ensureProjectNetwork } from './preview';
+import { getContainerTemplate, type ContainerTemplate, type SecretKind } from '@/lib/config/container-templates';
 
 const PROVIDER = 'managed-containers';
 
@@ -36,8 +40,11 @@ export interface ManagedServiceSpec {
   image: string;                    // docker image
   alias?: string;                   // DNS alias on the project net (default = id)
   kind?: string;                    // 'database' | 'cache' | 'service' | … (hint only)
-  env?: Record<string, string>;     // NON-secret env
-  secretEnvEnc?: string;            // encrypted JSON blob of secret env (e.g. DB password)
+  templateId?: string;              // the template it came from, if any
+  icon?: string;
+  env?: Record<string, string>;     // NON-secret container env
+  secretEnvEnc?: string;            // encrypted JSON blob of secret container env
+  injectEnvEnc?: string;            // encrypted JSON blob of env to inject into the app/agent
   mountPath?: string;               // if set, a persistent named volume is mounted here
   memory?: string;                  // default 512m
   cpus?: string;                    // default 1.0
@@ -47,7 +54,8 @@ export interface ManagedServiceSpec {
 /** Non-secret view for the UI / Network page. */
 export interface ManagedServiceView {
   id: string; name: string; image: string; alias: string; kind: string;
-  mountPath: string | null; hasVolume: boolean; ports: number[];
+  icon: string | null; mountPath: string | null; hasVolume: boolean; ports: number[];
+  injectKeys: string[];             // names of the env vars this service exposes (no values)
 }
 
 export function serviceContainerName(projectId: string, id: string): string {
@@ -82,6 +90,11 @@ async function saveServices(projectId: string, services: ManagedServiceSpec[]): 
   await upsertProjectServiceConnection(projectId, PROVIDER, { services });
 }
 
+function decryptBlob(enc?: string): Record<string, string> {
+  if (!enc) return {};
+  try { return JSON.parse(decrypt(enc)) as Record<string, string>; } catch { return {}; }
+}
+
 /** Public (secret-free) view of the project's managed containers. */
 export async function listServiceViews(projectId: string): Promise<ManagedServiceView[]> {
   return (await getServices(projectId)).map((s) => ({
@@ -90,9 +103,11 @@ export async function listServiceViews(projectId: string): Promise<ManagedServic
     image: s.image,
     alias: s.alias || s.id,
     kind: s.kind || 'service',
+    icon: s.icon || null,
     mountPath: s.mountPath || null,
     hasVolume: !!s.mountPath,
     ports: s.ports || [],
+    injectKeys: Object.keys(decryptBlob(s.injectEnvEnc)),
   }));
 }
 
@@ -115,13 +130,110 @@ export async function removeService(
   await saveServices(projectId, (await getServices(projectId)).filter((s) => s.id !== id));
 }
 
-// --- runtime -----------------------------------------------------------------
+// --- building specs: from a template, or fully custom ------------------------
 
-function decryptSecretEnv(spec: ManagedServiceSpec): Record<string, string> {
-  if (!spec.secretEnvEnc) return {};
-  try { return JSON.parse(decrypt(spec.secretEnvEnc)) as Record<string, string>; }
-  catch { return {}; }
+/** A slug safe for an alias / a template-generated database name. */
+function idSlug(s: string, max = 24): string {
+  return (s.toLowerCase().replace(/[^a-z0-9]/gu, '_').replace(/_+/gu, '_').replace(/^_|_$/gu, '') || 'app').slice(0, max);
 }
+/** DNS-label alias (letters/digits/hyphen). */
+function aliasSlug(s: string, max = 30): string {
+  return (s.toLowerCase().replace(/[^a-z0-9-]/gu, '-').replace(/-+/gu, '-').replace(/^-|-$/gu, '') || 'svc').slice(0, max);
+}
+
+/** Generate the credential set a template asks for. */
+function generateSecrets(kind: SecretKind, projectName: string): Record<string, string> {
+  if (kind === 'none') return {};
+  return { user: 'app', pass: randomBytes(18).toString('base64url'), db: idSlug(projectName) };
+}
+
+function applyTemplateVars(tmpl: Record<string, string> | undefined, vars: Record<string, string>): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(tmpl ?? {})) {
+    out[k] = v.replace(/\{(\w+)\}/g, (_m, name) => (name in vars ? vars[name] : `{${name}}`));
+  }
+  return out;
+}
+
+/** Turn a template + a unique service id into a stored spec (generating creds). */
+async function specFromTemplate(projectId: string, template: ContainerTemplate, id: string): Promise<ManagedServiceSpec> {
+  const project = await prisma.project.findUnique({ where: { id: projectId }, select: { name: true } });
+  const secrets = generateSecrets(template.secrets || 'none', project?.name || projectId);
+  const vars = { alias: template.alias, port: String(template.port ?? ''), ...secrets };
+  const containerEnv = applyTemplateVars(template.containerEnv, vars);
+  const injectEnv = applyTemplateVars(template.injectEnv, vars);
+  return {
+    id,
+    name: template.name,
+    image: template.image,
+    alias: template.alias,
+    kind: template.kind,
+    templateId: template.id,
+    icon: template.icon,
+    mountPath: template.mountPath,
+    memory: template.memory,
+    cpus: template.cpus,
+    ports: template.port ? [template.port] : [],
+    secretEnvEnc: Object.keys(containerEnv).length ? encrypt(JSON.stringify(containerEnv)) : undefined,
+    injectEnvEnc: Object.keys(injectEnv).length ? encrypt(JSON.stringify(injectEnv)) : undefined,
+  };
+}
+
+/** Add a service from a template (postgres/mysql/redis/…). Idempotent per id. */
+export async function addServiceFromTemplate(
+  projectId: string,
+  templateId: string,
+  opts: { id?: string } = {},
+): Promise<ManagedServiceSpec> {
+  const template = getContainerTemplate(templateId);
+  if (!template) throw new Error(`Unknown container template: ${templateId}`);
+  const id = opts.id || template.id;
+  const existing = (await getServices(projectId)).find((s) => s.id === id);
+  if (existing) return existing;
+  const spec = await specFromTemplate(projectId, template, id);
+  await addService(projectId, spec);
+  return spec;
+}
+
+export interface CustomServiceInput {
+  name: string;
+  image: string;
+  alias?: string;
+  kind?: string;
+  env?: Record<string, string>;      // plain env (non-secret)
+  injectEnv?: Record<string, string>; // env to inject into the app/agent
+  mountPath?: string;
+  ports?: number[];
+  memory?: string;
+  cpus?: string;
+}
+
+/** Add a fully CUSTOM container (any image). No template, no generated secrets. */
+export async function addCustomService(projectId: string, input: CustomServiceInput): Promise<ManagedServiceSpec> {
+  const alias = aliasSlug(input.alias || input.name);
+  // Unique id within the project (alias, de-duped with a suffix if taken).
+  const existing = new Set((await getServices(projectId)).map((s) => s.id));
+  let id = alias;
+  for (let i = 2; existing.has(id); i += 1) id = `${alias}-${i}`;
+  const spec: ManagedServiceSpec = {
+    id,
+    name: input.name || alias,
+    image: input.image,
+    alias,
+    kind: input.kind || 'service',
+    icon: '📦',
+    env: input.env && Object.keys(input.env).length ? input.env : undefined,
+    injectEnvEnc: input.injectEnv && Object.keys(input.injectEnv).length ? encrypt(JSON.stringify(input.injectEnv)) : undefined,
+    mountPath: input.mountPath,
+    memory: input.memory,
+    cpus: input.cpus,
+    ports: input.ports || [],
+  };
+  await addService(projectId, spec);
+  return spec;
+}
+
+// --- runtime -----------------------------------------------------------------
 
 /** Start one managed container on the project net (idempotent). Returns its name. */
 async function startService(
@@ -153,7 +265,7 @@ async function startService(
     await docker(['volume', 'create', vol]);
     args.push('-v', `${vol}:${spec.mountPath}`);
   }
-  const env = { ...(spec.env || {}), ...decryptSecretEnv(spec) };
+  const env = { ...(spec.env || {}), ...decryptBlob(spec.secretEnvEnc) };
   for (const [k, v] of Object.entries(env)) args.push('-e', `${k}=${v}`);
   args.push(spec.image);
 
@@ -181,64 +293,36 @@ export async function stopServices(projectId: string): Promise<void> {
   }
 }
 
-// --- the DATABASE kind (first well-known kind) -------------------------------
-
-const PG_IMAGE = process.env.PREVIEW_DB_IMAGE || 'pgvector/pgvector:pg16';
-const PG_PORT = 5432;
-
-function dbNameSlug(s: string): string {
-  return (s.toLowerCase().replace(/[^a-z0-9]/gu, '_').replace(/_+/gu, '_').replace(/^_|_$/gu, '') || 'app').slice(0, 24);
-}
+// --- generic env injection ---------------------------------------------------
 
 /**
- * Ensure the project has a Postgres managed container (kind 'database', alias
- * 'db'). Generates credentials ONCE, stores them encrypted in the spec, and
- * returns the internal DATABASE_URL (postgresql://…@db:5432/…). Idempotent.
+ * The env every managed container exposes to the APP + agent, merged
+ * (DATABASE_URL, REDIS_URL, MONGO_URL, custom vars…). Reachable because the app /
+ * agent share the project's internal net. Generic: a new template that declares
+ * `injectEnv` shows up here automatically.
  */
-export async function ensurePostgresService(projectId: string): Promise<string> {
-  const existing = (await getServices(projectId)).find((s) => s.kind === 'database');
-  if (existing) {
-    const url = getDbUrlFromSpec(existing);
-    if (url) return url;
+export async function getInjectedEnv(projectId: string): Promise<Record<string, string>> {
+  const merged: Record<string, string> = {};
+  for (const spec of await getServices(projectId)) {
+    Object.assign(merged, decryptBlob(spec.injectEnvEnc));
   }
-  const project = await prisma.project.findUnique({ where: { id: projectId }, select: { name: true } });
-  const user = 'app';
-  const password = randomBytes(18).toString('base64url');
-  const database = dbNameSlug(project?.name || projectId);
-  const spec: ManagedServiceSpec = {
-    id: 'db',
-    name: 'Database',
-    image: PG_IMAGE,
-    alias: 'db',
-    kind: 'database',
-    mountPath: '/var/lib/postgresql/data',
-    memory: process.env.PREVIEW_DB_MEMORY || '512m',
-    cpus: process.env.PREVIEW_DB_CPUS || '1.0',
-    ports: [PG_PORT],
-    secretEnvEnc: encrypt(JSON.stringify({
-      POSTGRES_USER: user,
-      POSTGRES_PASSWORD: password,
-      POSTGRES_DB: database,
-    })),
-  };
-  await addService(projectId, spec);
-  return `postgresql://${user}:${password}@db:${PG_PORT}/${database}`;
+  return merged;
 }
 
-function getDbUrlFromSpec(spec: ManagedServiceSpec): string | null {
-  const env = decryptSecretEnv(spec);
-  if (!env.POSTGRES_USER || !env.POSTGRES_PASSWORD || !env.POSTGRES_DB) return null;
-  const alias = spec.alias || 'db';
-  return `postgresql://${env.POSTGRES_USER}:${env.POSTGRES_PASSWORD}@${alias}:${PG_PORT}/${env.POSTGRES_DB}`;
-}
-
-/** The internal DATABASE_URL for this project's container DB, or null. */
-export async function getContainerDbUrl(projectId: string): Promise<string | null> {
-  const spec = (await getServices(projectId)).find((s) => s.kind === 'database');
-  return spec ? getDbUrlFromSpec(spec) : null;
-}
+// --- convenience for the DB kind (used by the preview isolation gate) --------
 
 /** Whether the project runs a per-project container database. */
 export async function hasContainerDb(projectId: string): Promise<boolean> {
   return (await getServices(projectId)).some((s) => s.kind === 'database');
+}
+
+/** The internal DATABASE_URL this project's container DB exposes, or null. */
+export async function getContainerDbUrl(projectId: string): Promise<string | null> {
+  return (await getInjectedEnv(projectId)).DATABASE_URL || null;
+}
+
+/** Back-compat shim: add a Postgres container via the template. */
+export async function ensurePostgresService(projectId: string): Promise<string> {
+  await addServiceFromTemplate(projectId, 'postgres');
+  return (await getContainerDbUrl(projectId)) || '';
 }

@@ -1,24 +1,26 @@
 "use client";
 import { useCallback, useEffect, useState } from 'react';
 import { BACKEND_STACKS } from '@/lib/config/backend-stacks';
-import { DATABASES } from '@/lib/config/databases';
+import { CONTAINER_TEMPLATES } from '@/lib/config/container-templates';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? '';
 
 interface Container {
-  kind: 'frontend' | 'backend' | 'database';
+  kind: 'frontend' | 'backend' | 'database' | 'service';
+  id?: string;          // managed-service id (generic containers)
   name: string;
   type: string;
   status: string;
   url: string | null;
   description: string;
   removable: boolean;
+  icon?: string;
 }
 
-const KIND_ICON: Record<string, string> = { frontend: '🖥️', backend: '⚙️', database: '🗄️' };
+const KIND_ICON: Record<string, string> = { frontend: '🖥️', backend: '⚙️', database: '🗄️', service: '📦' };
 
 function statusColor(s: string): string {
-  if (s === 'running' || s === 'provisioned') return 'bg-emerald-500';
+  if (s === 'running' || s === 'provisioned' || s === 'container') return 'bg-emerald-500';
   if (s === 'file') return 'bg-blue-400';
   return 'bg-gray-400';
 }
@@ -28,7 +30,9 @@ export default function ContainersSettings({ projectId }: { projectId: string })
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [addBackend, setAddBackend] = useState(false);
-  const [addDatabase, setAddDatabase] = useState(false);
+  const [addService, setAddService] = useState(false);
+  const [customOpen, setCustomOpen] = useState(false);
+  const [custom, setCustom] = useState({ name: '', image: '', alias: '', mountPath: '', env: '' });
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -41,26 +45,41 @@ export default function ContainersSettings({ projectId }: { projectId: string })
 
   useEffect(() => { load(); }, [load]);
 
-  const add = async (payload: Record<string, string>) => {
+  const add = async (payload: Record<string, unknown>) => {
     setBusy(true);
     try {
       await fetch(`${API_BASE}/api/projects/${projectId}/containers`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
       });
-      setAddBackend(false); setAddDatabase(false);
+      setAddBackend(false); setAddService(false); setCustomOpen(false);
+      setCustom({ name: '', image: '', alias: '', mountPath: '', env: '' });
       await load();
     } finally { setBusy(false); }
   };
-  const remove = async (kind: string) => {
+  const remove = async (c: Container) => {
     setBusy(true);
     try {
-      await fetch(`${API_BASE}/api/projects/${projectId}/containers?kind=${kind}`, { method: 'DELETE' });
+      const q = c.id ? `serviceId=${encodeURIComponent(c.id)}` : `kind=${c.kind}`;
+      await fetch(`${API_BASE}/api/projects/${projectId}/containers?${q}`, { method: 'DELETE' });
       await load();
     } finally { setBusy(false); }
+  };
+  const addCustom = () => {
+    const env: Record<string, string> = {};
+    for (const line of custom.env.split('\n')) {
+      const eq = line.indexOf('=');
+      if (eq > 0) env[line.slice(0, eq).trim()] = line.slice(eq + 1).trim();
+    }
+    void add({ custom: {
+      name: custom.name.trim() || custom.image.trim(),
+      image: custom.image.trim(),
+      alias: custom.alias.trim() || undefined,
+      mountPath: custom.mountPath.trim() || undefined,
+      env: Object.keys(env).length ? env : undefined,
+    } });
   };
 
   const hasBackend = containers.some((c) => c.kind === 'backend');
-  const hasDatabase = containers.some((c) => c.kind === 'database');
 
   // Image-generation capability (per-project connection).
   const [img, setImg] = useState<{ connected: boolean; hasOwnKey: boolean; usesGlobalKey: boolean; globalAvailable: boolean } | null>(null);
@@ -103,10 +122,10 @@ export default function ContainersSettings({ projectId }: { projectId: string })
       ) : (
         <div className="space-y-3">
           {containers.map((c) => (
-            <div key={c.kind} className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 p-4">
+            <div key={c.id || c.kind} className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 p-4">
               <div className="flex items-start justify-between gap-3">
                 <div className="flex items-start gap-3 min-w-0">
-                  <span className="text-xl leading-none mt-0.5" aria-hidden>{KIND_ICON[c.kind]}</span>
+                  <span className="text-xl leading-none mt-0.5" aria-hidden>{c.icon || KIND_ICON[c.kind]}</span>
                   <div className="min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">{c.name}</span>
@@ -122,7 +141,7 @@ export default function ContainersSettings({ projectId }: { projectId: string })
                   </div>
                 </div>
                 {c.removable && (
-                  <button onClick={() => remove(c.kind)} disabled={busy}
+                  <button onClick={() => remove(c)} disabled={busy}
                     className="text-xs text-red-500 hover:text-red-600 disabled:opacity-50 shrink-0">Remove</button>
                 )}
               </div>
@@ -150,26 +169,55 @@ export default function ContainersSettings({ projectId }: { projectId: string })
                 )}
               </div>
             )}
-            {!hasDatabase && (
-              <div className="relative">
-                <button onClick={() => setAddDatabase(v => !v)} disabled={busy}
-                  className="text-sm px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-200 disabled:opacity-50">
-                  + Add database
-                </button>
-                {addDatabase && (
-                  <div className="absolute z-20 mt-1 w-72 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-lg p-1">
-                    {DATABASES.map(d => (
-                      <button key={d.id} onClick={() => add({ databaseId: d.id })}
-                        className="w-full text-left px-3 py-2 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800">
-                        <div className="text-sm font-medium text-gray-900 dark:text-gray-50">{d.name}</div>
-                        <div className="text-xs text-gray-500 dark:text-gray-400">{d.description}</div>
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
+            <div className="relative">
+              <button onClick={() => { setAddService(v => !v); setCustomOpen(false); }} disabled={busy}
+                className="text-sm px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-200 disabled:opacity-50">
+                + Add container
+              </button>
+              {addService && (
+                <div className="absolute z-20 mt-1 w-80 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-lg p-1">
+                  {CONTAINER_TEMPLATES.map(t => (
+                    <button key={t.id} onClick={() => add({ templateId: t.id })}
+                      className="w-full text-left px-3 py-2 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800">
+                      <div className="text-sm font-medium text-gray-900 dark:text-gray-50">{t.icon ? `${t.icon} ` : ''}{t.name}</div>
+                      <div className="text-xs text-gray-500 dark:text-gray-400">{t.description}</div>
+                    </button>
+                  ))}
+                  <button onClick={() => { setCustomOpen(true); setAddService(false); }}
+                    className="w-full text-left px-3 py-2 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 border-t border-gray-100 dark:border-gray-800 mt-1">
+                    <div className="text-sm font-medium text-gray-900 dark:text-gray-50">📦 Custom container…</div>
+                    <div className="text-xs text-gray-500 dark:text-gray-400">Any Docker image, on this project’s private network.</div>
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
+
+          {/* Custom container form */}
+          {customOpen && (
+            <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 p-4 space-y-2">
+              <div className="text-sm font-medium text-gray-900 dark:text-gray-100">Custom container</div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <input value={custom.image} onChange={(e) => setCustom(s => ({ ...s, image: e.target.value }))}
+                  placeholder="Image (e.g. redis:7-alpine)" className="text-sm px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-transparent text-gray-900 dark:text-gray-100" />
+                <input value={custom.name} onChange={(e) => setCustom(s => ({ ...s, name: e.target.value }))}
+                  placeholder="Name (optional)" className="text-sm px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-transparent text-gray-900 dark:text-gray-100" />
+                <input value={custom.alias} onChange={(e) => setCustom(s => ({ ...s, alias: e.target.value }))}
+                  placeholder="Network alias (e.g. cache)" className="text-sm px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-transparent text-gray-900 dark:text-gray-100" />
+                <input value={custom.mountPath} onChange={(e) => setCustom(s => ({ ...s, mountPath: e.target.value }))}
+                  placeholder="Volume mount path (optional)" className="text-sm px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-transparent text-gray-900 dark:text-gray-100" />
+              </div>
+              <textarea value={custom.env} onChange={(e) => setCustom(s => ({ ...s, env: e.target.value }))}
+                placeholder="Env (one KEY=value per line)" rows={2}
+                className="w-full text-sm px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-transparent text-gray-900 dark:text-gray-100 font-mono" />
+              <div className="flex gap-2">
+                <button onClick={addCustom} disabled={busy || !custom.image.trim()}
+                  className="text-sm px-4 py-2 rounded-lg bg-[#DE7356] text-white disabled:opacity-50">Add</button>
+                <button onClick={() => setCustomOpen(false)} className="text-sm px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300">Cancel</button>
+              </div>
+              <p className="text-xs text-gray-400 dark:text-gray-500">No host port is published — reachable only by this project’s other containers at its alias.</p>
+            </div>
+          )}
           {/* Capabilities — shared services a project connects to */}
           <div className="pt-4 mt-2 border-t border-gray-100 dark:border-gray-800">
             <h4 className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-2">Capabilities</h4>
@@ -211,7 +259,7 @@ export default function ContainersSettings({ projectId }: { projectId: string })
           </div>
 
           <p className="text-xs text-gray-400 dark:text-gray-500 pt-2">
-            Changes apply on the next preview start. A custom-container option is coming.
+            Changes apply on the next preview start. Each container runs on this project’s private network — no host port, reachable only by this project.
           </p>
         </div>
       )}

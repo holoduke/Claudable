@@ -9,7 +9,7 @@ import { findAvailablePort } from '@/lib/utils/ports';
 import { getProjectById, updateProject, updateProjectStatus } from './project';
 import { prisma } from '@/lib/db/client';
 import { getDatabaseUrl } from '@/lib/services/database';
-import { startServices, getContainerDbUrl } from '@/lib/services/managed-containers';
+import { startServices, getInjectedEnv } from '@/lib/services/managed-containers';
 import { recordBackendChunk } from '@/lib/services/diagnostics';
 import { listEnvVars } from '@/lib/services/env';
 
@@ -1786,8 +1786,13 @@ class PreviewManager {
     // (below); a host DB still does, since the egress lock would cut it off.
     let dbIsContainer = false;
     let projectDbUrl: string | null = null;
+    let injectedEnv: Record<string, string> = {};
     try {
-      const containerDbUrl = isolationEnabled() ? await getContainerDbUrl(projectId) : null;
+      // Every managed container's exposed env (DATABASE_URL, REDIS_URL, …) —
+      // generic, so a Redis/Mongo/custom service is injected the same way a DB is.
+      injectedEnv = isolationEnabled() ? await getInjectedEnv(projectId) : {};
+      Object.assign(env, injectedEnv);
+      const containerDbUrl = injectedEnv.DATABASE_URL || null;
       dbIsContainer = !!containerDbUrl;
       projectDbUrl = containerDbUrl || await getDatabaseUrl(projectId);
       if (projectDbUrl) env.DATABASE_URL = projectDbUrl;
@@ -2017,7 +2022,9 @@ class PreviewManager {
       const cenv: Record<string, string> = {};
       for (const [k, v] of Object.entries(c.env ?? {})) cenv[k] = substVars(String(v), cvars);
       cenv.CORS_ORIGIN = resolvedUrl; // allow the frontend's origin
-      // The backend shares the project net, so it reaches the DB at db:5432.
+      // The backend shares the project net, so it reaches every managed service
+      // (db:5432, cache:6379, …) — inject each one's connection env.
+      Object.assign(cenv, injectedEnv);
       if (projectDbUrl) cenv.DATABASE_URL = projectDbUrl;
       try { for (const ev of await listEnvVars(projectId)) cenv[ev.key] = ev.value; } catch { /* best-effort */ }
       try {

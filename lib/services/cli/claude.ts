@@ -21,7 +21,7 @@ import { buildDiagnosticsMcpServer } from '../diagnostics-mcp';
 import { runAgentTurnContainerized, agentHostPath, defaultAgentSandboxNet, type AgentStreamEvent } from './claude-container';
 import { prepareAgentMcpTurnConfig } from '../agent-mcp-http';
 import { previewSlug, ensureProjectNetwork, connectToProjectNet } from '../preview';
-import { getContainerDbUrl } from '../managed-containers';
+import { getInjectedEnv } from '../managed-containers';
 import { buildImagesMcpServer, imagesEnabledFor } from '../images-mcp';
 import { getProjectService } from '../project-services';
 import { createMessage } from '../message';
@@ -402,14 +402,12 @@ async function runContainerizedTurn(args: {
         .catch((err) => console.error('[ClaudeContainer] event handling failed:', err));
     };
 
-    // The project's own container DB (if any) is reachable at db:5432 once the
-    // agent joins the project net below — hand it DATABASE_URL so it can run
-    // migrations / seed against the same database the app uses.
-    const agentEnv: Record<string, string> = {};
-    try {
-      const dbUrl = await getContainerDbUrl(projectId);
-      if (dbUrl) agentEnv.DATABASE_URL = dbUrl;
-    } catch { /* non-fatal */ }
+    // The project's own managed containers (DB, cache, …) are reachable by alias
+    // once the agent joins the project net below — hand it their connection env
+    // (DATABASE_URL, REDIS_URL, …) so it can run migrations / seed / integrate
+    // against the same services the app uses. Generic: whatever the services expose.
+    let agentEnv: Record<string, string> = {};
+    try { agentEnv = await getInjectedEnv(projectId); } catch { /* non-fatal */ }
 
     args.publishStatus('ready', 'Project verified. Starting AI...');
     // Named so the boot sweep reaps it if this process dies mid-turn, AND so we
