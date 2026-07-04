@@ -116,8 +116,21 @@ export async function getSystemOverview(): Promise<SystemOverview> {
     .sort((a, b) => b.slug.length - a.slug.length);
 
   const ownerOf = (name: string): string | null => {
+    // 1) Claudable-MANAGED containers: match the exact naming scheme, anchored, so
+    //    a short slug like 'db'/'api' can't grab unrelated names.
     for (const { id, slug } of slugMap) {
-      if (name.includes(slug)) return id;
+      if (
+        name === `claudable-preview-${slug}` ||
+        name.startsWith(`claudable-preview-${slug}-`) ||
+        name.startsWith(`claudable-svc-${slug}-`) ||
+        name.startsWith(`claudable-agent-${slug}-`)
+      ) return id;
+    }
+    // 2) Manually-deployed containers a Claudable project happens to own (e.g.
+    //    storyloop-api / storyloop-db): loose substring match, but only for slugs
+    //    long enough not to false-match (>= 6 chars) — excludes 'db'/'api'/'app'.
+    for (const { id, slug } of slugMap) {
+      if (slug.length >= 6 && name.includes(slug)) return id;
     }
     return null;
   };

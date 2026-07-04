@@ -23,8 +23,10 @@ const PROJECTS_DIR = process.env.PROJECTS_DIR || './data/projects';
 const PROJECTS_DIR_ABSOLUTE = path.isAbsolute(PROJECTS_DIR) ? PROJECTS_DIR : path.resolve(process.cwd(), PROJECTS_DIR);
 const CHECKPOINTS_ROOT = path.resolve(PROJECTS_DIR_ABSOLUTE, '..', 'checkpoints');
 
-// Never snapshot deps/build output or the project's own git dir.
-const EXCLUDES = ['.git', 'node_modules', '.next', '.nuxt', '.output', 'dist', '.vite', '.turbo', '.cache', 'coverage'];
+// Never snapshot deps/build output or the project's own git dir. Also never
+// snapshot the per-turn agent MCP config — it carries a live capability token
+// (revoked at turn end, but must not be captured into a checkpoint mid-turn).
+const EXCLUDES = ['.git', 'node_modules', '.next', '.nuxt', '.output', 'dist', '.vite', '.turbo', '.cache', 'coverage', '.claudable/agent-mcp.json'];
 const MAX_GIT_OUTPUT = 512 * 1024; // cap captured stdout/stderr per git call
 
 function gitDir(projectId: string): string {

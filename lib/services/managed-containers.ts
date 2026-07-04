@@ -46,6 +46,7 @@ export interface ManagedServiceSpec {
   secretEnvEnc?: string;            // encrypted JSON blob of secret container env
   injectEnvEnc?: string;            // encrypted JSON blob of env to inject into the app/agent
   mountPath?: string;               // if set, a persistent named volume is mounted here
+  healthCmd?: string;               // docker HEALTHCHECK (shell form) for readiness waits
   memory?: string;                  // default 512m
   cpus?: string;                    // default 1.0
   ports?: number[];                 // container ports (informational; NOT host-published)
@@ -90,6 +91,16 @@ async function saveServices(projectId: string, services: ManagedServiceSpec[]): 
   await upsertProjectServiceConnection(projectId, PROVIDER, { services });
 }
 
+// Serialize the read-modify-write of a project's spec list so two concurrent
+// add/remove calls can't clobber each other (lost update). Per-project chain.
+const specLocks = new Map<string, Promise<unknown>>();
+function withSpecLock<T>(projectId: string, fn: () => Promise<T>): Promise<T> {
+  const prev = specLocks.get(projectId) ?? Promise.resolve();
+  const next = prev.then(fn, fn);
+  specLocks.set(projectId, next.catch(() => {}));
+  return next;
+}
+
 function decryptBlob(enc?: string): Record<string, string> {
   if (!enc) return {};
   try { return JSON.parse(decrypt(enc)) as Record<string, string>; } catch { return {}; }
@@ -113,10 +124,12 @@ export async function listServiceViews(projectId: string): Promise<ManagedServic
 
 /** Add (or replace by id) a managed container spec. Does NOT start it. */
 export async function addService(projectId: string, spec: ManagedServiceSpec): Promise<void> {
-  const services = await getServices(projectId);
-  const next = services.filter((s) => s.id !== spec.id);
-  next.push(spec);
-  await saveServices(projectId, next);
+  await withSpecLock(projectId, async () => {
+    const services = await getServices(projectId);
+    const next = services.filter((s) => s.id !== spec.id);
+    next.push(spec);
+    await saveServices(projectId, next);
+  });
 }
 
 /** Remove a managed container (stops it; drops its volume only if asked). */
@@ -127,7 +140,9 @@ export async function removeService(
 ): Promise<void> {
   await docker(['rm', '-f', serviceContainerName(projectId, id)]);
   if (opts.deleteVolume) await docker(['volume', 'rm', serviceVolumeName(projectId, id)]);
-  await saveServices(projectId, (await getServices(projectId)).filter((s) => s.id !== id));
+  await withSpecLock(projectId, async () => {
+    await saveServices(projectId, (await getServices(projectId)).filter((s) => s.id !== id));
+  });
 }
 
 // --- building specs: from a template, or fully custom ------------------------
@@ -155,22 +170,34 @@ function applyTemplateVars(tmpl: Record<string, string> | undefined, vars: Recor
   return out;
 }
 
-/** Turn a template + a unique service id into a stored spec (generating creds). */
-async function specFromTemplate(projectId: string, template: ContainerTemplate, id: string): Promise<ManagedServiceSpec> {
+/** Pick a value not already used, appending -2, -3, … (used for ids AND aliases). */
+function uniqueName(base: string, taken: Set<string>): string {
+  if (!taken.has(base)) return base;
+  for (let i = 2; ; i += 1) { const c = `${base}-${i}`; if (!taken.has(c)) return c; }
+}
+
+/** Turn a template + a unique id/alias into a stored spec (generating creds). */
+async function specFromTemplate(
+  projectId: string, template: ContainerTemplate, id: string, alias: string,
+): Promise<ManagedServiceSpec> {
   const project = await prisma.project.findUnique({ where: { id: projectId }, select: { name: true } });
   const secrets = generateSecrets(template.secrets || 'none', project?.name || projectId);
-  const vars = { alias: template.alias, port: String(template.port ?? ''), ...secrets };
+  const vars: Record<string, string> = { alias, port: String(template.port ?? ''), ...secrets };
   const containerEnv = applyTemplateVars(template.containerEnv, vars);
   const injectEnv = applyTemplateVars(template.injectEnv, vars);
+  const healthCmd = template.healthCmd
+    ? template.healthCmd.replace(/\{(\w+)\}/g, (_m, n) => (n in vars ? vars[n] : `{${n}}`))
+    : undefined;
   return {
     id,
     name: template.name,
     image: template.image,
-    alias: template.alias,
+    alias,
     kind: template.kind,
     templateId: template.id,
     icon: template.icon,
     mountPath: template.mountPath,
+    healthCmd,
     memory: template.memory,
     cpus: template.cpus,
     ports: template.port ? [template.port] : [],
@@ -187,12 +214,21 @@ export async function addServiceFromTemplate(
 ): Promise<ManagedServiceSpec> {
   const template = getContainerTemplate(templateId);
   if (!template) throw new Error(`Unknown container template: ${templateId}`);
-  const id = opts.id || template.id;
-  const existing = (await getServices(projectId)).find((s) => s.id === id);
-  if (existing) return existing;
-  const spec = await specFromTemplate(projectId, template, id);
-  await addService(projectId, spec);
-  return spec;
+  return withSpecLock(projectId, async () => {
+    const services = await getServices(projectId);
+    const id = opts.id || template.id;
+    const existing = services.find((s) => s.id === id);
+    if (existing) return existing;
+    // Uniquify BOTH id and alias so two services never collide on either (e.g.
+    // postgres + mysql both default to alias 'db').
+    const uid = uniqueName(id, new Set(services.map((s) => s.id)));
+    const alias = uniqueName(template.alias, new Set(services.map((s) => s.alias || s.id)));
+    const spec = await specFromTemplate(projectId, template, uid, alias);
+    const next = services.filter((s) => s.id !== spec.id);
+    next.push(spec);
+    await saveServices(projectId, next);
+    return spec;
+  });
 }
 
 export interface CustomServiceInput {
@@ -210,27 +246,31 @@ export interface CustomServiceInput {
 
 /** Add a fully CUSTOM container (any image). No template, no generated secrets. */
 export async function addCustomService(projectId: string, input: CustomServiceInput): Promise<ManagedServiceSpec> {
-  const alias = aliasSlug(input.alias || input.name);
-  // Unique id within the project (alias, de-duped with a suffix if taken).
-  const existing = new Set((await getServices(projectId)).map((s) => s.id));
-  let id = alias;
-  for (let i = 2; existing.has(id); i += 1) id = `${alias}-${i}`;
-  const spec: ManagedServiceSpec = {
-    id,
-    name: input.name || alias,
-    image: input.image,
-    alias,
-    kind: input.kind || 'service',
-    icon: '📦',
-    env: input.env && Object.keys(input.env).length ? input.env : undefined,
-    injectEnvEnc: input.injectEnv && Object.keys(input.injectEnv).length ? encrypt(JSON.stringify(input.injectEnv)) : undefined,
-    mountPath: input.mountPath,
-    memory: input.memory,
-    cpus: input.cpus,
-    ports: input.ports || [],
-  };
-  await addService(projectId, spec);
-  return spec;
+  const wantAlias = aliasSlug(input.alias || input.name);
+  return withSpecLock(projectId, async () => {
+    const services = await getServices(projectId);
+    // Unique id AND alias so two custom services never collide on either.
+    const id = uniqueName(wantAlias, new Set(services.map((s) => s.id)));
+    const alias = uniqueName(wantAlias, new Set(services.map((s) => s.alias || s.id)));
+    const spec: ManagedServiceSpec = {
+      id,
+      name: input.name || alias,
+      image: input.image,
+      alias,
+      kind: input.kind || 'service',
+      icon: '📦',
+      env: input.env && Object.keys(input.env).length ? input.env : undefined,
+      injectEnvEnc: input.injectEnv && Object.keys(input.injectEnv).length ? encrypt(JSON.stringify(input.injectEnv)) : undefined,
+      mountPath: input.mountPath,
+      memory: input.memory,
+      cpus: input.cpus,
+      ports: input.ports || [],
+    };
+    const next = services.filter((s) => s.id !== spec.id);
+    next.push(spec);
+    await saveServices(projectId, next);
+    return spec;
+  });
 }
 
 // --- runtime -----------------------------------------------------------------
@@ -265,6 +305,12 @@ async function startService(
     await docker(['volume', 'create', vol]);
     args.push('-v', `${vol}:${spec.mountPath}`);
   }
+  if (spec.healthCmd) {
+    // Docker runs this INSIDE the container (not via the denied `docker exec`), so
+    // waitForServicesHealthy can poll .State.Health without EXEC on the proxy.
+    args.push('--health-cmd', spec.healthCmd, '--health-interval', '2s',
+      '--health-timeout', '3s', '--health-retries', '20', '--health-start-period', '2s');
+  }
   const env = { ...(spec.env || {}), ...decryptBlob(spec.secretEnvEnc) };
   for (const [k, v] of Object.entries(env)) args.push('-e', `${k}=${v}`);
   args.push(spec.image);
@@ -286,11 +332,55 @@ export async function startServices(projectId: string, log?: (line: string) => v
   }
 }
 
+/**
+ * Wait until every service that declares a healthcheck reports `healthy` (or the
+ * timeout elapses). Called before the app/agent use the services so a first
+ * request/migration doesn't race a just-started Postgres. Best-effort: returns
+ * after `timeoutMs` regardless (the app's own client retries cover the rest).
+ */
+export async function waitForServicesHealthy(
+  projectId: string,
+  timeoutMs = 25_000,
+  log?: (line: string) => void,
+): Promise<void> {
+  const withHealth = (await getServices(projectId)).filter((s) => s.healthCmd);
+  if (!withHealth.length) return;
+  const deadline = Date.now() + timeoutMs;
+  const pending = new Set(withHealth.map((s) => s.id));
+  while (pending.size && Date.now() < deadline) {
+    for (const id of [...pending]) {
+      const res = await docker(['inspect', serviceContainerName(projectId, id), '--format', '{{.State.Health.Status}}']);
+      const status = res.out.trim();
+      if (!res.ok || status === 'healthy' || status === '' || status === '<no value>') {
+        // healthy, or no health info (container gone / no healthcheck) → stop waiting on it
+        if (status === 'healthy') log?.(`[svc:${id}] healthy`);
+        pending.delete(id);
+      }
+    }
+    if (pending.size) await new Promise((r) => setTimeout(r, 500));
+  }
+  if (pending.size) log?.(`[svc] readiness timed out for: ${[...pending].join(', ')}`);
+}
+
 /** Stop all managed containers (keeps their volumes). */
 export async function stopServices(projectId: string): Promise<void> {
   for (const spec of await getServices(projectId)) {
     await docker(['rm', '-f', serviceContainerName(projectId, spec.id)]);
   }
+}
+
+/**
+ * Tear down ALL of a project's managed containers AND their volumes, and forget
+ * the specs. Used on project deletion so a removed project leaves no orphaned DB
+ * container / volume behind. Must run BEFORE the project row is deleted (it reads
+ * the specs, which are cascade-deleted with the project).
+ */
+export async function removeAllServices(projectId: string): Promise<void> {
+  for (const spec of await getServices(projectId)) {
+    await docker(['rm', '-f', serviceContainerName(projectId, spec.id)]);
+    await docker(['volume', 'rm', serviceVolumeName(projectId, spec.id)]);
+  }
+  try { await saveServices(projectId, []); } catch { /* row may already be gone */ }
 }
 
 /**
@@ -301,6 +391,7 @@ export async function stopServices(projectId: string): Promise<void> {
  */
 export async function ensureServicesRunning(projectId: string, log?: (line: string) => void): Promise<void> {
   await startServices(projectId, log);
+  await waitForServicesHealthy(projectId, 25_000, log);
 }
 
 // --- lifecycle + observability (operate the containers) ----------------------

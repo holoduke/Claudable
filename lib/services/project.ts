@@ -121,8 +121,28 @@ export async function updateProject(
  * Delete project
  */
 export async function deleteProject(id: string): Promise<void> {
-  // Delete project directory
   const project = await getProjectById(id);
+
+  // Tear down the project's runtime BEFORE the row is deleted: stop the preview
+  // (its frontend/backend containers + project network) and remove every managed
+  // container + volume — otherwise a deleted project leaks its DB container,
+  // volume and network. Best-effort + dynamic imports (avoid load-time cycles).
+  try {
+    const { removeAllServices } = await import('./managed-containers');
+    await removeAllServices(id);
+  } catch (error) {
+    console.warn('[ProjectService] Failed to remove managed containers on delete:', error);
+  }
+  try {
+    const { previewManager } = await import('./preview');
+    await previewManager.stop(id).catch(() => {});
+  } catch { /* preview may not be running */ }
+  try {
+    const { removeProjectNetwork } = await import('./preview');
+    await removeProjectNetwork(id);
+  } catch { /* net may already be gone or in use */ }
+
+  // Delete project directory
   if (project?.repoPath) {
     try {
       await fs.rm(project.repoPath, { recursive: true, force: true });

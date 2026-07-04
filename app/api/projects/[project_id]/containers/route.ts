@@ -275,10 +275,13 @@ export async function DELETE(req: NextRequest, { params }: RouteContext) {
     else if (kind === 'database') {
       if (settings.databaseType === 'postgres') {
         // Remove the per-project container DB (and its volume) if present;
-        // otherwise tear down the legacy Coolify DB.
-        const { hasContainerDb, removeService } = await import('@/lib/services/managed-containers');
-        if (await hasContainerDb(project_id)) {
-          try { await removeService(project_id, 'db', { deleteVolume: true }); } catch (e) { console.error('[containers] removeService(db) failed:', e); }
+        // otherwise tear down the legacy Coolify DB. Find the DB service by KIND,
+        // not a hardcoded id — the spec's id is the template id ('postgres'/'mysql'),
+        // not necessarily 'db'.
+        const { getServices, removeService } = await import('@/lib/services/managed-containers');
+        const dbSvc = (await getServices(project_id)).find((s) => s.kind === 'database');
+        if (dbSvc) {
+          try { await removeService(project_id, dbSvc.id, { deleteVolume: true }); } catch (e) { console.error('[containers] removeService(db) failed:', e); }
         } else {
           try { await removeDatabase(project_id); } catch (e) { console.error('[containers] removeDatabase failed:', e); }
         }

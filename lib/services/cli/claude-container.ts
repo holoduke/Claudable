@@ -29,7 +29,8 @@ export interface ContainerTurnOptions {
   model?: string;
   sessionId?: string;                   // resume a prior turn
   image?: string;                       // agent image (has the claude CLI)
-  sandboxNet?: string;                  // egress-locked network name
+  sandboxNet?: string;                  // egress-locked network name (primary; internet for the API)
+  projectNet?: string;                  // the project's internal net (reach db/cache by alias) — attached at RUN
   mcpConfigPath?: string;               // path (in-container) to a --mcp-config json of NETWORK tools
   strictMcpConfig?: boolean;            // only use the given mcp-config (ignore any other sources)
   homeHostPath?: string;                // persistent per-project HOME (CLI session transcripts → --resume works across turns)
@@ -69,7 +70,11 @@ export function buildAgentContainerArgs(o: ContainerTurnOptions): string[] {
     args.push('-e', 'HOME=/tmp');
   }
   for (const [k, v] of Object.entries(o.env ?? {})) args.push('-e', `${k}=${v}`);
+  // Attach BOTH networks at creation (docker 20.10+): the sandbox net for egress
+  // to the Anthropic API, and the project's internal net so `db`/`cache` aliases
+  // resolve from the FIRST command — no post-spawn attach race.
   if (o.sandboxNet && o.sandboxNet.trim()) args.push('--network', o.sandboxNet.trim());
+  if (o.projectNet && o.projectNet.trim()) args.push('--network', o.projectNet.trim());
   args.push(image, 'node', CLI_IN_IMAGE,
     '-p', o.prompt,
     '--output-format', 'stream-json', '--verbose',
