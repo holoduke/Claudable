@@ -4,9 +4,12 @@
  * The agent controls some tool arguments (e.g. infra_health's host), so any tool
  * that opens a connection must refuse internal/loopback/link-local targets — else
  * it becomes an SSRF recon primitive (IMDS at 169.254.169.254, localhost services,
- * RFC-1918 hosts). This is a literal-IP + common-name check; it does NOT resolve
- * DNS, so a public hostname that points at a private IP is residual risk.
+ * RFC-1918 hosts). `isBlockedHost` is a literal-IP + common-name check;
+ * `assertHostAllowed` additionally RESOLVES the hostname and re-checks every
+ * resolved IP, closing the DNS-rebinding gap (a public name pointing at a private IP).
  */
+import { lookup } from 'dns/promises';
+
 export function isBlockedHost(host: string): boolean {
   const h = host.trim().toLowerCase().replace(/^\[|\]$/gu, '');
   if (!h) return true;
@@ -24,6 +27,26 @@ export function isBlockedHost(host: string): boolean {
     if (a === 100 && b >= 64 && b <= 127) return true;             // CGNAT
   }
   return false;
+}
+
+/**
+ * Resolve `host` and throw if the literal OR any resolved IP is internal — so a
+ * public hostname that resolves to 169.254.169.254 / 127.0.0.1 / an RFC-1918 host
+ * is refused. Call this before any it-ops tool opens a connection to an
+ * agent-supplied host.
+ */
+export async function assertHostAllowed(host: string): Promise<void> {
+  if (isBlockedHost(host)) throw new Error(`Refusing internal/loopback host: ${host}`);
+  let addrs: Array<{ address: string }> = [];
+  try {
+    addrs = await lookup(host.trim().replace(/^\[|\]$/gu, ''), { all: true });
+  } catch {
+    // Unresolvable → let the connection attempt fail naturally (nothing to SSRF).
+    return;
+  }
+  for (const { address } of addrs) {
+    if (isBlockedHost(address)) throw new Error(`Host ${host} resolves to a blocked internal address (${address}).`);
+  }
 }
 
 /** fetch() with a hard timeout so an unreachable service can't stall the agent. */

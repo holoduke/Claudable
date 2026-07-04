@@ -47,6 +47,7 @@ export interface ManagedServiceSpec {
   injectEnvEnc?: string;            // encrypted JSON blob of env to inject into the app/agent
   mountPath?: string;               // if set, a persistent named volume is mounted here
   healthCmd?: string;               // docker HEALTHCHECK (shell form) for readiness waits
+  capAdd?: string[];                // caps to add back on top of --cap-drop ALL
   dependsOn?: string[];             // ids/aliases that must be healthy before this one starts
   memory?: string;                  // default 512m
   cpus?: string;                    // default 1.0
@@ -212,6 +213,7 @@ async function specFromTemplate(
     icon: template.icon,
     mountPath: template.mountPath,
     healthCmd,
+    capAdd: template.capAdd,
     memory: template.memory,
     cpus: template.cpus,
     ports: template.port ? [template.port] : [],
@@ -314,8 +316,14 @@ async function startService(
     '--cpus', String(spec.cpus || '1.0'),
     '--pids-limit', '512',
     '--security-opt', 'no-new-privileges',
+    // Drop ALL Linux capabilities, add back only what a template declares it needs
+    // (a DB entrypoint needs a few for initdb/chown). A CUSTOM/arbitrary image runs
+    // fully capless — a compromised image can't use CAP_NET_RAW/etc. against its
+    // co-attached project containers, on top of the no-egress internal net.
+    '--cap-drop', 'ALL',
     '--restart', 'unless-stopped',
   ];
+  for (const cap of spec.capAdd ?? []) args.push('--cap-add', cap);
   if (spec.mountPath) {
     const vol = serviceVolumeName(projectId, spec.id);
     await docker(['volume', 'create', vol]);
@@ -324,8 +332,12 @@ async function startService(
   if (spec.healthCmd) {
     // Docker runs this INSIDE the container (not via the denied `docker exec`), so
     // waitForServicesHealthy can poll .State.Health without EXEC on the proxy.
-    args.push('--health-cmd', spec.healthCmd, '--health-interval', '2s',
-      '--health-timeout', '3s', '--health-retries', '20', '--health-start-period', '2s');
+    // Probe FAST only during the start window (--health-start-interval, docker 25+)
+    // for quick readiness, then SLOW (30s) forever after — avoids a probe every 2s
+    // for the life of every persistent DB.
+    args.push('--health-cmd', spec.healthCmd,
+      '--health-start-period', '20s', '--health-start-interval', '1s',
+      '--health-interval', '30s', '--health-timeout', '3s', '--health-retries', '5');
   }
   const env = { ...(spec.env || {}), ...decryptBlob(spec.secretEnvEnc) };
   for (const [k, v] of Object.entries(env)) args.push('-e', `${k}=${v}`);
@@ -457,8 +469,9 @@ export async function removeAllServices(projectId: string): Promise<void> {
  * projects with no managed containers.
  */
 export async function ensureServicesRunning(projectId: string, log?: (line: string) => void): Promise<void> {
+  // startServices already health-gates each dependency level, so the whole set is
+  // ready when it returns — no second full wait (which doubled a cold-DB stall).
   await startServices(projectId, log);
-  await waitForServicesHealthy(projectId, 25_000, log);
 }
 
 // --- lifecycle + observability (operate the containers) ----------------------
@@ -470,18 +483,35 @@ export interface ServiceRuntimeStatus {
   running: boolean;
 }
 
-/** Live docker state for each of the project's managed containers. */
+/** A short "Up 2m" / "Exited 5m ago" label from a container's state + timestamps. */
+function uptimeLabel(state: string, running: boolean, startedAt: string, finishedAt: string): string {
+  const rel = (iso: string): string => {
+    const t = Date.parse(iso);
+    if (!Number.isFinite(t)) return '';
+    const s = Math.max(0, Math.round((Date.now() - t) / 1000));
+    if (s < 60) return `${s}s`;
+    if (s < 3600) return `${Math.floor(s / 60)}m`;
+    if (s < 86400) return `${Math.floor(s / 3600)}h`;
+    return `${Math.floor(s / 86400)}d`;
+  };
+  if (running) return startedAt ? `Up ${rel(startedAt)}` : 'Up';
+  if (state === 'exited') return finishedAt ? `Exited ${rel(finishedAt)} ago` : 'Exited';
+  return state || 'not started';
+}
+
+/** Live docker state for each of the project's managed containers (ONE inspect each). */
 export async function serviceStatuses(projectId: string): Promise<Record<string, ServiceRuntimeStatus>> {
   const specs = await getServices(projectId);
   const out: Record<string, ServiceRuntimeStatus> = {};
   await Promise.all(specs.map(async (s) => {
     const name = serviceContainerName(projectId, s.id);
-    const res = await docker(['inspect', name, '--format', '{{.State.Status}}|{{.State.Running}}|{{.State.Error}}']);
+    // Single inspect gives state + timestamps → derive the human label locally
+    // (no extra `docker ps` per service, which was ~4x the cost, on every poll).
+    const res = await docker(['inspect', name, '--format', '{{.State.Status}}|{{.State.Running}}|{{.State.StartedAt}}|{{.State.FinishedAt}}']);
     if (!res.ok) { out[s.id] = { id: s.id, state: '', status: 'not started', running: false }; return; }
-    const [state = '', running = 'false'] = res.out.trim().split('|');
-    // A short human status via `docker ps` (Status column) for a nicer label.
-    const ps = await docker(['ps', '-a', '--filter', `name=^${name}$`, '--format', '{{.Status}}']);
-    out[s.id] = { id: s.id, state, status: ps.out.trim() || state, running: running === 'true' };
+    const [state = '', running = 'false', startedAt = '', finishedAt = ''] = res.out.trim().split('|');
+    const isRunning = running === 'true';
+    out[s.id] = { id: s.id, state, status: uptimeLabel(state, isRunning, startedAt, finishedAt), running: isRunning };
   }));
   return out;
 }
