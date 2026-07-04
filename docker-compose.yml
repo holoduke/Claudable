@@ -92,9 +92,14 @@ services:
       - INFO=1
       - VERSION=1
       - PING=1
+      # VOLUMES: needed to manage per-project DB NAMED VOLUMES (persistence for a
+      # project's own database container). Low-risk: this API only creates/removes
+      # *named* docker volumes — it does NOT grant host bind-mounts (those go
+      # through container-create, i.e. POST, which is unchanged). No host-escape
+      # surface beyond what POST already allows.
+      - VOLUMES=1
       # Denied: everything that could escalate off the box.
       - EXEC=0
-      - VOLUMES=0
       - SWARM=0
       - SYSTEM=0
       - AUTH=0
