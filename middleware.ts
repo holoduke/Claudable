@@ -27,6 +27,9 @@ export default auth((req) => {
     pathname === '/share' ||
     pathname.startsWith('/share/') ||
     pathname.startsWith('/api/share/') ||
+    // Network-MCP for the containerized agent — the unguessable per-turn token
+    // in the path is the credential; the handler validates + revokes it.
+    pathname.startsWith('/api/agent-mcp/') ||
     // Guest review endpoints — the handlers self-authorize (X-Share-Token for
     // comments; client-logs is intentionally open preview telemetry). A signed-in
     // user still needs a session there; passing them through here is safe.

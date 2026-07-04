@@ -31,9 +31,12 @@ export interface ContainerTurnOptions {
   image?: string;                       // agent image (has the claude CLI)
   sandboxNet?: string;                  // egress-locked network name
   mcpConfigPath?: string;               // path (in-container) to a --mcp-config json of NETWORK tools
+  strictMcpConfig?: boolean;            // only use the given mcp-config (ignore any other sources)
+  systemPrompt?: string;                // REPLACES the CLI default (parity with the SDK's systemPrompt option)
   env?: Record<string, string>;         // extra project env (already secret-free)
   memory?: string;                      // e.g. "2g"
   cpus?: string;                        // e.g. "2.0"
+  timeoutMs?: number;                   // hang safety net (default 30 min)
 }
 
 const CLI_IN_IMAGE = '/app/node_modules/@anthropic-ai/claude-agent-sdk/cli.js';
@@ -65,6 +68,8 @@ export function buildAgentContainerArgs(o: ContainerTurnOptions): string[] {
   if (o.model) args.push('--model', o.model);
   if (o.sessionId) args.push('--resume', o.sessionId);
   if (o.mcpConfigPath) args.push('--mcp-config', o.mcpConfigPath);
+  if (o.strictMcpConfig) args.push('--strict-mcp-config');
+  if (o.systemPrompt) args.push('--system-prompt', o.systemPrompt);
   return args;
 }
 
@@ -113,10 +118,23 @@ export function runAgentTurnContainerized(
   });
   child.stderr?.on('data', (c: Buffer) => { stderr += c.toString(); });
 
+  // Hang safety net: a wedged CLI/container must not pin the turn forever.
+  const timeoutMs = o.timeoutMs ?? 30 * 60 * 1000;
+  let timedOut = false;
+  const timer = setTimeout(() => {
+    timedOut = true;
+    try { child.kill('SIGTERM'); } catch { /* already gone */ }
+  }, timeoutMs);
+
   const done = new Promise<ContainerTurnResult>((resolve) => {
-    child.on('error', (e) => resolve({ ok: false, code: null, error: e.message }));
+    child.on('error', (e) => { clearTimeout(timer); resolve({ ok: false, code: null, error: e.message }); });
     child.on('exit', (code) => {
+      clearTimeout(timer);
       if (buf.trim()) handleLine(buf); // flush any trailing partial line
+      if (timedOut) {
+        resolve({ ok: false, code, sessionId, error: `Agent turn timed out after ${Math.round(timeoutMs / 60000)} minutes.` });
+        return;
+      }
       resolve({ ok: code === 0, code, sessionId, error: code === 0 ? undefined : stderr.slice(-500) });
     });
   });

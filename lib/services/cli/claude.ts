@@ -8,7 +8,7 @@ import { query } from '@anthropic-ai/claude-agent-sdk';
 import type { ClaudeSession, ClaudeResponse } from '@/types/backend';
 import { streamManager } from '../stream';
 import { serializeMessage, createRealtimeMessage } from '@/lib/serializers/chat';
-import { updateProject, getProjectById } from '../project';
+import { getProjectById } from '../project';
 import { syncProjectSkills, hasDisabledSkills } from '../skills';
 import { CLAUDE_SYSTEM_PROMPT } from './prompts/claude-system-prompt';
 import { NEXT_SYSTEM_PROMPT } from './prompts/next-system-prompt';
@@ -19,6 +19,7 @@ import { resolveProjectClaudeToken } from '../claude-credentials';
 import { buildItopsMcpServer } from '../itops/itops-mcp';
 import { buildDiagnosticsMcpServer } from '../diagnostics-mcp';
 import { runAgentTurnContainerized, agentHostPath, defaultAgentSandboxNet, type AgentStreamEvent } from './claude-container';
+import { prepareAgentMcpTurnConfig } from '../agent-mcp-http';
 import { buildImagesMcpServer, imagesEnabledFor } from '../images-mcp';
 import { getProjectService } from '../project-services';
 import { createMessage } from '../message';
@@ -201,277 +202,15 @@ import {
   markUserRequestAsFailed,
 } from '@/lib/services/user-requests';
 
-import { type ToolAction, pickFirstString, buildToolMetadata, inferActionFromToolName } from './tool-metadata';
-
-interface ToolPlaceholderDetails {
-  raw: string;
-  toolName?: string;
-  target?: string;
-  summary?: string;
-  action?: ToolAction;
-  isResult: boolean;
-}
-
-const parseToolPlaceholderText = (text: string): ToolPlaceholderDetails | null => {
-  const trimmed = text.trim();
-  if (!trimmed) {
-    return null;
-  }
-
-  let toolName: string | undefined;
-  let target: string | undefined;
-  let summary: string | undefined;
-  let isResult = false;
-
-  const bracketMatch = trimmed.match(/^\[Tool:\s*([^\]\n]+)\s*\](.*)$/i);
-  if (bracketMatch) {
-    toolName = bracketMatch[1]?.trim();
-    const trailing = bracketMatch[2]?.trim();
-    if (trailing) {
-      target = trailing;
-    }
-  }
-
-  const usingToolMatch = trimmed.match(/^Using tool:\s*([^\n]+?)(?:\s+on\s+(.+))?$/i);
-  if (usingToolMatch) {
-    toolName = toolName ?? usingToolMatch[1]?.trim();
-    const maybeTarget = usingToolMatch[2]?.trim();
-    if (maybeTarget) {
-      target = maybeTarget;
-    }
-  }
-
-  const toolResultMatch = trimmed.match(/^Tool result:\s*(.+)$/i);
-  if (toolResultMatch) {
-    summary = toolResultMatch[1]?.trim() || undefined;
-    isResult = true;
-  }
-
-  if (!toolName && !target && !summary) {
-    return null;
-  }
-
-  const action = inferActionFromToolName(toolName) ?? (isResult ? undefined : 'Executed');
-
-  return {
-    raw: trimmed,
-    toolName,
-    target,
-    summary,
-    action,
-    isResult,
-  };
-};
-
-const buildMetadataFromPlaceholder = (details: ToolPlaceholderDetails): Record<string, unknown> => {
-  const metadata: Record<string, unknown> = {};
-
-  if (details.toolName) {
-    metadata.toolName = details.toolName;
-    metadata.tool_name = details.toolName;
-  }
-
-  if (details.target) {
-    metadata.filePath = details.target;
-    metadata.file_path = details.target;
-  }
-
-  if (details.summary) {
-    metadata.summary = details.summary;
-  }
-
-  const action = details.action ?? inferActionFromToolName(details.toolName);
-  if (action) {
-    metadata.action = action;
-  }
-
-  metadata.placeholderType = details.isResult ? 'result' : 'start';
-
-  return metadata;
-};
-
-const mergeMetadata = (
-  base: Record<string, unknown> | undefined,
-  extension: Record<string, unknown>
-): Record<string, unknown> => {
-  const result: Record<string, unknown> = { ...(base ?? {}) };
-  for (const [key, value] of Object.entries(extension)) {
-    if (value !== undefined) {
-      result[key] = value;
-    }
-  }
-  return result;
-};
-
-const normalizeSignatureValue = (value?: string | null): string => {
-  if (typeof value !== 'string') {
-    return '';
-  }
-  const trimmed = value.trim();
-  return trimmed.length > 0 ? trimmed.toLowerCase() : '';
-};
-
-const computeToolMessageSignature = (
-  metadata: Record<string, unknown>,
-  content: string,
-  messageType: 'tool_use' | 'tool_result' = 'tool_use'
-): string => {
-  const meta = metadata ?? {};
-  const toolName =
-    pickFirstString(meta.toolName) ?? pickFirstString(meta.tool_name);
-  const filePath =
-    pickFirstString(meta.filePath) ??
-    pickFirstString(meta.file_path) ??
-    pickFirstString(meta.targetPath) ??
-    pickFirstString(meta.target_path);
-  const summary =
-    pickFirstString(meta.summary) ??
-    pickFirstString(meta.resultSummary) ??
-    pickFirstString(meta.result_summary) ??
-    pickFirstString(meta.description);
-  const command = pickFirstString(meta.command);
-  const action = pickFirstString(meta.action);
-
-  return [
-    normalizeSignatureValue(messageType),
-    normalizeSignatureValue(toolName),
-    normalizeSignatureValue(filePath),
-    normalizeSignatureValue(summary),
-    normalizeSignatureValue(command),
-    normalizeSignatureValue(action),
-    normalizeSignatureValue(content),
-  ].join('|');
-};
-
-const createToolMessageContent = (details: ToolPlaceholderDetails): string => {
-  if (details.isResult && details.summary) {
-    return `Tool result: ${details.summary}`;
-  }
-  if (details.toolName) {
-    const targetSegment = details.target ? ` on ${details.target}` : '';
-    return `Using tool: ${details.toolName}${targetSegment}`;
-  }
-  return details.raw;
-};
-
-const dispatchToolMessage = async ({
-  projectId,
-  metadata,
-  content,
-  requestId,
-  persist = true,
-  isStreaming = false,
-  messageType = 'tool_use',
-  dedupeKey,
-  dedupeStore,
-}: {
-  projectId: string;
-  metadata: Record<string, unknown>;
-  content: string;
-  requestId?: string;
-  persist?: boolean;
-  isStreaming?: boolean;
-  messageType?: 'tool_use' | 'tool_result';
-  dedupeKey?: string;
-  dedupeStore?: Set<string>;
-}): Promise<void> => {
-  const trimmedContent = content.trim();
-  if (!trimmedContent) {
-    return;
-  }
-
-  const enrichedMetadata = {
-    ...(metadata ?? {}),
-  };
-
-  if (requestId && !enrichedMetadata.requestId) {
-    enrichedMetadata.requestId = requestId;
-  }
-
-  if (persist && dedupeStore && dedupeKey) {
-    const normalizedKey = dedupeKey.trim();
-    if (normalizedKey.length > 0) {
-      if (dedupeStore.has(normalizedKey)) {
-        return;
-      }
-      dedupeStore.add(normalizedKey);
-    }
-  }
-
-  if (!persist) {
-    const transientMetadata = {
-      ...enrichedMetadata,
-      isTransientToolMessage: true,
-    };
-    streamManager.publish(projectId, {
-      type: 'message',
-      data: createRealtimeMessage({
-        projectId,
-        role: 'tool',
-        content: trimmedContent,
-        messageType,
-        metadata: transientMetadata,
-        requestId,
-        isStreaming,
-      }),
-    });
-    return;
-  }
-
-  try {
-    const savedMessage = await createMessage({
-      projectId,
-      role: 'tool',
-      messageType,
-      content: trimmedContent,
-      metadata: enrichedMetadata,
-      cliSource: 'claude',
-    });
-
-    streamManager.publish(projectId, {
-      type: 'message',
-      data: serializeMessage(savedMessage, {
-        requestId,
-        isStreaming,
-        isFinal: !isStreaming,
-      }),
-    });
-  } catch (error) {
-    console.error('[ClaudeService] Failed to persist tool message:', error);
-  }
-};
-
-const handleToolPlaceholderMessage = async (
-  projectId: string,
-  placeholderText: string,
-  requestId: string | undefined,
-  baseMetadata?: Record<string, unknown>,
-  options?: { dedupeStore?: Set<string> }
-): Promise<boolean> => {
-  const details = parseToolPlaceholderText(placeholderText);
-  if (!details) {
-    return false;
-  }
-
-  const metadata = mergeMetadata(baseMetadata, buildMetadataFromPlaceholder(details));
-  const content = createToolMessageContent(details);
-  const messageType: 'tool_use' | 'tool_result' = details.isResult ? 'tool_result' : 'tool_use';
-  const signature = computeToolMessageSignature(metadata, content, messageType);
-
-  await dispatchToolMessage({
-    projectId,
-    metadata,
-    content,
-    requestId,
-    persist: true,
-    isStreaming: false,
-    messageType,
-    dedupeKey: signature,
-    dedupeStore: options?.dedupeStore,
-  });
-
-  return true;
-};
+import { buildToolMetadata } from './tool-metadata';
+// Shared message handling (placeholder protocol, tool cards, thinking blocks,
+// session persistence) — used by BOTH the in-process loop below and the
+// containerized runner, so both render identical chat output.
+import {
+  createAgentMessageProcessor,
+  dispatchToolMessage,
+  handleToolPlaceholderMessage,
+} from './agent-messages';
 
 function resolveModelId(model?: string | null): string {
   return normalizeClaudeModelId(model);
@@ -516,48 +255,199 @@ function buildThinkingOptions(mode: ThinkingMode | undefined): {
 }
 
 /**
+ * The agent's system prompt for a project + the images capability flag it
+ * implies. Shared by the in-process path and the containerized path so both
+ * agents get IDENTICAL instructions (stack prompt, model identity, appdiag,
+ * image generation, database note).
+ */
+async function buildAgentSystemPrompt(
+  projectId: string,
+  modelLabel: string,
+  resolvedModel: string,
+): Promise<{ systemPrompt: string; imagesOn: boolean }> {
+  // Pick the system prompt for the project's tech stack (Nuxt | Next.js | Angular).
+  const stackProject = await getProjectById(projectId).catch(() => null);
+  // Image generation available when the project (or Claudable) has an xAI key.
+  const imagesOn = await imagesEnabledFor(projectId).catch(() => false);
+  let systemPrompt = selectSystemPrompt(stackProject?.templateType);
+
+  // Tell the agent which model it's running as — otherwise it guesses its own
+  // version wrong (e.g. answering "4.6" when the user selected Fable 5).
+  systemPrompt += `\n\nYou are running as ${modelLabel} (model id \`${resolvedModel}\`). If asked which model you are, answer with this.`;
+
+  // Tell the agent about the live diagnostics tool so it verifies its own work
+  // and can act on real runtime errors instead of guessing.
+  systemPrompt += `\n\n## Checking the running app\nYou have a tool \`mcp__appdiag__check_app_health\` that returns the CURRENTLY RUNNING preview's uncaught browser errors, console errors/warnings, and Nuxt backend (server) errors. Use it to:\n- verify a change actually works after you edit (check for new errors before saying you're done),\n- investigate when the user reports something is broken,\n- find real bugs to fix proactively.\nAn empty result means nothing has been reported since the preview last started — it is not proof the app is bug-free; exercise the feature in the preview, then check again.`;
+
+  if (imagesOn) {
+    systemPrompt += `\n\n## Generating images\nYou have a tool \`mcp__images__generate_image\` that generates an image from a text prompt and saves it into the project's public/generated/, returning a path like \`/generated/hero.png\`. Use it whenever the app needs a REAL image (hero, illustration, avatar, texture, background) instead of a placeholder or an external stock URL, then reference the returned path directly in the markup. Write vivid, specific prompts.`;
+  }
+
+  // If a Postgres was provisioned for this project, tell the agent so it builds
+  // data-backed features against DATABASE_URL (set in the preview + deploy env).
+  try {
+    const dbSvc = await getProjectService(projectId, 'database');
+    if ((dbSvc?.serviceData as { engine?: string } | undefined)?.engine === 'postgresql') {
+      systemPrompt += `\n\n## Database\nThis project has a PostgreSQL database. Its connection string is in the DATABASE_URL environment variable (already set in the running preview). Use it for any data persistence — prefer Prisma (schema datasource \`url = env("DATABASE_URL")\`, run \`prisma db push\`) or Drizzle/pg. Never hardcode credentials; always read DATABASE_URL from the environment.`;
+    }
+  } catch { /* non-fatal */ }
+
+  return { systemPrompt, imagesOn };
+}
+
+/**
  * Phase 2 (control/data split): run the turn in a HARDENED ISOLATED CONTAINER
  * (no docker socket → the agent can't self-provision) instead of in-process.
- * Gated by AGENT_CONTAINERIZED (default off → the in-process path below is used,
- * unchanged). First cut: streams assistant text via the same createMessage +
- * streamManager pipeline the in-process loop uses. TODO(next): reuse the full
- * message handling (thinking/tool cards) via a shared processAgentMessage, plus
- * network-MCP for the 3 tools. Proven feasible on box1.
+ * Gated by AGENT_CONTAINERIZED (default off → the in-process path is used,
+ * unchanged). Full parity: the same system prompt, the same message pipeline
+ * (thinking blocks + tool cards via the shared processor), session resume, and
+ * the 3 tools (appdiag/images/itops) reachable over network-MCP with a
+ * per-turn capability token. Proven feasible on box1.
  */
-async function runContainerizedTurn(
-  projectId: string,
-  projectPath: string,
-  instruction: string,
-  resolvedModel: string,
-  sessionId?: string,
-  requestId?: string,
-): Promise<void> {
-  const oauthToken = process.env.CLAUDE_CODE_OAUTH_TOKEN || '';
-  const projectHostPath = agentHostPath(path.resolve(projectPath));
+async function runContainerizedTurn(args: {
+  projectId: string;
+  projectPath: string;
+  instruction: string;
+  resolvedModel: string;
+  modelLabel: string;
+  sessionId?: string;
+  requestId?: string;
+  itopsEnabled: boolean;
+  suppressUserError: boolean;
+  publishStatus: (status: string, message?: string) => void;
+  safeMarkRunning: () => Promise<void>;
+  safeMarkCompleted: () => Promise<void>;
+  safeMarkFailed: (message?: string) => Promise<void>;
+}): Promise<void> {
+  const { projectId, projectPath, instruction, resolvedModel, modelLabel, sessionId, requestId } = args;
 
-  const onEvent = (e: AgentStreamEvent) => {
-    if (e.type !== 'assistant') return;
-    const msg = (e as { message?: { content?: unknown } }).message;
-    let text = '';
-    if (typeof msg?.content === 'string') text = msg.content;
-    else if (Array.isArray(msg?.content)) {
-      for (const b of msg.content as Array<{ type?: string; text?: string }>) {
-        if (b?.type === 'text' && typeof b.text === 'string') text += b.text;
-      }
+  args.publishStatus('starting', 'Starting isolated agent container...');
+  await args.safeMarkRunning();
+
+  let mcp: Awaited<ReturnType<typeof prepareAgentMcpTurnConfig>> = null;
+  try {
+    const project = await getProjectById(projectId);
+    if (!project) {
+      throw new Error(`Project not found: ${projectId}. Cannot create messages for non-existent project.`);
     }
-    if (!text.trim()) return;
-    void createMessage({ projectId, role: 'assistant', messageType: 'chat', content: text, cliSource: 'claude' })
-      .then((saved) => streamManager.publish(projectId, { type: 'message', data: serializeMessage(saved, { requestId }) }))
-      .catch((err) => console.error('[ClaudeContainer] persist failed:', err));
-  };
 
-  const { done } = runAgentTurnContainerized(
-    { projectHostPath, prompt: instruction, oauthToken, model: resolvedModel, sessionId, sandboxNet: defaultAgentSandboxNet() },
-    onEvent,
-  );
-  const result = await done;
-  if (!result.ok) {
-    console.error('[ClaudeContainer] turn failed:', result.error);
+    const { systemPrompt, imagesOn } = await buildAgentSystemPrompt(projectId, modelLabel, resolvedModel);
+
+    // Credential: the project's assigned Claude token, falling back to the global env.
+    let oauthToken = process.env.CLAUDE_CODE_OAUTH_TOKEN || '';
+    try {
+      const projectToken = await resolveProjectClaudeToken(projectId);
+      if (projectToken) oauthToken = projectToken;
+    } catch (e) {
+      console.error('[ClaudeContainer] Failed to resolve project Claude credential:', e);
+    }
+    if (!oauthToken) {
+      throw new Error('No Claude credential available (CLAUDE_CODE_OAUTH_TOKEN unset and no project credential).');
+    }
+
+    const absoluteProjectPath = path.isAbsolute(projectPath)
+      ? path.resolve(projectPath)
+      : path.resolve(process.cwd(), projectPath);
+    const projectHostPath = agentHostPath(absoluteProjectPath);
+
+    // The 3 in-process tools become NETWORK tools: registered under a per-turn
+    // capability token, served by /api/agent-mcp/<token>/<server>, revoked below.
+    mcp = await prepareAgentMcpTurnConfig({
+      projectId,
+      projectPath: absoluteProjectPath,
+      imagesOn,
+      itopsEnabled: args.itopsEnabled,
+    });
+
+    const processor = createAgentMessageProcessor({
+      projectId,
+      requestId,
+      publishStatus: args.publishStatus,
+      markCompleted: args.safeMarkCompleted,
+    });
+
+    // stream-json events arrive on stdout; chain handling onto a queue so
+    // messages persist + publish strictly in order.
+    let sawResult = false;
+    let queue: Promise<void> = Promise.resolve();
+    const onEvent = (e: AgentStreamEvent) => {
+      queue = queue
+        .then(() => processor.processMessage(e as Parameters<typeof processor.processMessage>[0]))
+        .then((kind) => {
+          if (kind === 'result') sawResult = true;
+        })
+        .catch((err) => console.error('[ClaudeContainer] event handling failed:', err));
+    };
+
+    args.publishStatus('ready', 'Project verified. Starting AI...');
+    const { done } = runAgentTurnContainerized(
+      {
+        projectHostPath,
+        prompt: instruction,
+        oauthToken,
+        model: resolvedModel,
+        sessionId,
+        sandboxNet: defaultAgentSandboxNet(),
+        systemPrompt,
+        mcpConfigPath: mcp?.containerPath,
+        strictMcpConfig: Boolean(mcp),
+      },
+      onEvent,
+    );
+
+    const result = await done;
+    await queue; // flush in-flight message handling before finishing the turn
+
+    if (!result.ok) {
+      throw new Error(result.error?.trim() || `Agent container exited with code ${result.code}.`);
+    }
+
+    // The CLI's final `result` event already published completed + marked the
+    // request; these are idempotent fallbacks for a turn that ended without one.
+    if (!sawResult) args.publishStatus('completed');
+    await args.safeMarkCompleted();
+    console.log('[ClaudeContainer] Turn completed');
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    console.error('[ClaudeContainer] Turn failed:', errorMessage);
+
+    // When this attempt will be retried (e.g. a failed session resume), stay
+    // silent so the user doesn't see a spurious error — just rethrow.
+    if (args.suppressUserError) {
+      throw new Error(errorMessage);
+    }
+
+    await args.safeMarkFailed(errorMessage);
+    args.publishStatus('error', errorMessage);
+
+    // Persist + stream a visible error message so it shows up in the chat log.
+    try {
+      const errorChatMessage = await createMessage({
+        projectId,
+        role: 'assistant',
+        messageType: 'error',
+        content: errorMessage,
+        cliSource: 'claude',
+      });
+      streamManager.publish(projectId, {
+        type: 'message',
+        data: serializeMessage(errorChatMessage, requestId ? { requestId } : undefined),
+      });
+    } catch (persistError) {
+      console.error('[ClaudeContainer] Failed to persist error message:', persistError);
+    }
+
+    streamManager.publish(projectId, {
+      type: 'error',
+      error: errorMessage,
+      data: requestId ? { requestId } : undefined,
+    });
+    throw new Error(errorMessage);
+  } finally {
+    // Revoke the turn's tool token + remove the mcp-config from the project.
+    if (mcp) {
+      await mcp.cleanup().catch((e) => console.error('[ClaudeContainer] MCP cleanup failed:', e));
+    }
   }
 }
 
@@ -580,14 +470,6 @@ export async function executeClaude(
   console.log(`[ClaudeService] Session ID: ${sessionId || 'new session'}`);
   console.log(`[ClaudeService] Instruction: ${instruction.substring(0, 100)}...`);
   console.log(`========================================\n`);
-
-  // Phase 2 (control/data split): when enabled, run the turn in a HARDENED ISOLATED
-  // container (no docker access → can't self-provision). Default OFF → the in-process
-  // path below runs UNCHANGED. Flag-gated so the live agent is untouched until verified.
-  if (process.env.AGENT_CONTAINERIZED === 'true') {
-    await runContainerizedTurn(projectId, projectPath, instruction, resolvedModel, sessionId, requestId);
-    return;
-  }
 
   const configuredMaxTokens = Number(process.env.CLAUDE_CODE_MAX_OUTPUT_TOKENS);
   const maxOutputTokens = Number.isFinite(configuredMaxTokens) && configuredMaxTokens > 0
@@ -639,6 +521,28 @@ export async function executeClaude(
     });
   };
 
+  // Phase 2 (control/data split): when enabled, run the turn in a HARDENED ISOLATED
+  // container (no docker access → can't self-provision). Default OFF → the in-process
+  // path below runs UNCHANGED. Flag-gated so the live agent is untouched until verified.
+  if (process.env.AGENT_CONTAINERIZED === 'true') {
+    await runContainerizedTurn({
+      projectId,
+      projectPath,
+      instruction,
+      resolvedModel,
+      modelLabel,
+      sessionId,
+      requestId,
+      itopsEnabled: options.requesterItopsEnabled === true,
+      suppressUserError: options.suppressUserError === true,
+      publishStatus,
+      safeMarkRunning,
+      safeMarkCompleted,
+      safeMarkFailed,
+    });
+    return;
+  }
+
   // Send start notification via SSE
   publishStatus('starting', 'Initializing Claude Agent SDK...');
 
@@ -646,24 +550,20 @@ export async function executeClaude(
 
   // Collect stderr from SDK process for better diagnostics
   const stderrBuffer: string[] = [];
-  const placeholderHistory = new Map<string, Set<string>>();
-  const persistedToolMessageSignatures = new Set<string>();
-  const markPlaceholderHandled = (sessionKey: string, placeholder: string): boolean => {
-    const normalized = placeholder.trim();
-    if (!normalized) {
-      return false;
-    }
-    let entries = placeholderHistory.get(sessionKey);
-    if (!entries) {
-      entries = new Set<string>();
-      placeholderHistory.set(sessionKey, entries);
-    }
-    if (entries.has(normalized)) {
-      return false;
-    }
-    entries.add(normalized);
-    return true;
-  };
+
+  let currentSessionId: string | undefined = sessionId;
+
+  // Shared message handler (system/init, assistant, result) + the placeholder/
+  // tool-card dedupe state the partial-streaming branch below reuses.
+  const processor = createAgentMessageProcessor({
+    projectId,
+    requestId,
+    onSessionId: (sid) => { currentSessionId = sid; },
+    publishStatus,
+    markCompleted: safeMarkCompleted,
+  });
+  const { markPlaceholderHandled, persistedToolMessageSignatures, completedStreamSessions } = processor;
+  void currentSessionId; // kept for parity/debugging (assigned via onSessionId)
 
   try {
     // Verify project exists (prevents foreign key constraint errors)
@@ -692,32 +592,13 @@ export async function executeClaude(
       ? path.resolve(projectPath)
       : path.resolve(process.cwd(), projectPath);
 
-    // Pick the system prompt for the project's tech stack (Nuxt | Next.js | Angular).
-    const stackProject = await getProjectById(projectId).catch(() => null);
-    // Image generation available when the project (or Claudable) has an xAI key.
-    const imagesOn = await imagesEnabledFor(projectId).catch(() => false);
-    let systemPromptForStack = selectSystemPrompt(stackProject?.templateType);
-
-    // Tell the agent which model it's running as — otherwise it guesses its own
-    // version wrong (e.g. answering "4.6" when the user selected Fable 5).
-    systemPromptForStack += `\n\nYou are running as ${modelLabel} (model id \`${resolvedModel}\`). If asked which model you are, answer with this.`;
-
-    // Tell the agent about the live diagnostics tool so it verifies its own work
-    // and can act on real runtime errors instead of guessing.
-    systemPromptForStack += `\n\n## Checking the running app\nYou have a tool \`mcp__appdiag__check_app_health\` that returns the CURRENTLY RUNNING preview's uncaught browser errors, console errors/warnings, and Nuxt backend (server) errors. Use it to:\n- verify a change actually works after you edit (check for new errors before saying you're done),\n- investigate when the user reports something is broken,\n- find real bugs to fix proactively.\nAn empty result means nothing has been reported since the preview last started — it is not proof the app is bug-free; exercise the feature in the preview, then check again.`;
-
-    if (imagesOn) {
-      systemPromptForStack += `\n\n## Generating images\nYou have a tool \`mcp__images__generate_image\` that generates an image from a text prompt and saves it into the project's public/generated/, returning a path like \`/generated/hero.png\`. Use it whenever the app needs a REAL image (hero, illustration, avatar, texture, background) instead of a placeholder or an external stock URL, then reference the returned path directly in the markup. Write vivid, specific prompts.`;
-    }
-
-    // If a Postgres was provisioned for this project, tell the agent so it builds
-    // data-backed features against DATABASE_URL (set in the preview + deploy env).
-    try {
-      const dbSvc = await getProjectService(projectId, 'database');
-      if ((dbSvc?.serviceData as { engine?: string } | undefined)?.engine === 'postgresql') {
-        systemPromptForStack += `\n\n## Database\nThis project has a PostgreSQL database. Its connection string is in the DATABASE_URL environment variable (already set in the running preview). Use it for any data persistence — prefer Prisma (schema datasource \`url = env("DATABASE_URL")\`, run \`prisma db push\`) or Drizzle/pg. Never hardcode credentials; always read DATABASE_URL from the environment.`;
-      }
-    } catch { /* non-fatal */ }
+    // Stack prompt + model identity + tool/database guidance — shared with the
+    // containerized path so both agents get IDENTICAL instructions.
+    const { systemPrompt: systemPromptForStack, imagesOn } = await buildAgentSystemPrompt(
+      projectId,
+      modelLabel,
+      resolvedModel,
+    );
 
     // it-ops follows the USER running the agent, NOT the project: attach the broker
     // only when the person who triggered this run has it-ops enabled. A different
@@ -832,8 +713,6 @@ export async function executeClaude(
       } as any,
     });
 
-    let currentSessionId: string | undefined = sessionId;
-
     interface AssistantStreamState {
       messageId: string;
       content: string;
@@ -842,7 +721,6 @@ export async function executeClaude(
     }
 
     const assistantStreamStates = new Map<string, AssistantStreamState>();
-    const completedStreamSessions = new Set<string>();
 
     // Handle streaming response
     for await (const message of response) {
@@ -1033,149 +911,11 @@ export async function executeClaude(
         continue;
       }
 
-      // Handle by message type
-      if (message.type === 'system' && message.subtype === 'init') {
-        // Initialize session
-        currentSessionId = message.session_id;
-        console.log(`[ClaudeService] Session initialized: ${currentSessionId}`);
-
-        // Save session ID to project
-        if (currentSessionId) {
-          await updateProject(projectId, {
-            activeClaudeSessionId: currentSessionId,
-          });
-        }
-
-        // Send connection notification via SSE
-        streamManager.publish(projectId, {
-          type: 'connected',
-          data: {
-            projectId,
-            sessionId: currentSessionId,
-            timestamp: new Date().toISOString(),
-            connectionStage: 'assistant',
-          },
-        });
-      } else if (message.type === 'assistant') {
-        const sessionKey = (message.session_id ?? message.uuid ?? 'default').toString();
-        if (completedStreamSessions.has(sessionKey)) {
-          completedStreamSessions.delete(sessionKey);
-          continue;
-        }
-
-        // Assistant message
-        const assistantMessage = message.message;
-        let content = '';
-
-        // Extract content
-        if (typeof assistantMessage.content === 'string') {
-          content = assistantMessage.content;
-        } else if (Array.isArray(assistantMessage.content)) {
-          const parts: string[] = [];
-          for (const block of assistantMessage.content as unknown[]) {
-            if (!block || typeof block !== 'object') {
-              continue;
-            }
-
-            const safeBlock = block as any;
-
-            // Surface extended-thinking blocks so the user can see the model's
-            // reasoning. ChatLog renders <thinking>…</thinking> as a collapsible
-            // section, so wrap the reasoning text in those tags.
-            if (safeBlock.type === 'thinking') {
-              const thinkingText =
-                typeof safeBlock.thinking === 'string'
-                  ? safeBlock.thinking.trim()
-                  : '';
-              if (thinkingText) {
-                parts.push(`<thinking>${thinkingText}</thinking>`);
-              }
-              continue;
-            }
-
-            if (safeBlock.type === 'text') {
-              const text = typeof safeBlock.text === 'string' ? safeBlock.text : '';
-              const trimmed = text.trim();
-              if (!trimmed) {
-                continue;
-              }
-
-              const isPlaceholderLine =
-                /^\[Tool:\s*/i.test(trimmed) ||
-                /^Using tool:/i.test(trimmed) ||
-                /^Tool result:/i.test(trimmed);
-
-              if (isPlaceholderLine) {
-                const shouldHandle = markPlaceholderHandled(sessionKey, trimmed);
-                if (shouldHandle) {
-                  try {
-                    await handleToolPlaceholderMessage(
-                      projectId,
-                      trimmed,
-                      requestId,
-                      undefined,
-                      { dedupeStore: persistedToolMessageSignatures }
-                    );
-                  } catch (error) {
-                    console.error('[ClaudeService] Failed to handle assistant tool placeholder:', error);
-                  }
-                }
-                continue;
-              }
-
-              parts.push(text);
-              continue;
-            }
-
-            if (safeBlock.type === 'tool_use') {
-              const metadata = buildToolMetadata(safeBlock as Record<string, unknown>);
-              const name = typeof safeBlock.name === 'string' ? safeBlock.name : pickFirstString(safeBlock.name);
-              const toolContent = `Using tool: ${name ?? 'tool'}`;
-              await dispatchToolMessage({
-                projectId,
-                metadata,
-                content: toolContent,
-                requestId,
-                persist: true,
-                isStreaming: false,
-                messageType: 'tool_use',
-                dedupeKey: computeToolMessageSignature(metadata, toolContent, 'tool_use'),
-                dedupeStore: persistedToolMessageSignatures,
-              });
-              continue;
-            }
-          }
-
-          content = parts.join('\n');
-        }
-
-        console.log('[ClaudeService] Assistant message:', content.substring(0, 100));
-
-        // Save message to DB
-        if (content) {
-          const savedMessage = await createMessage({
-            projectId,
-            role: 'assistant',
-            messageType: 'chat',
-            content,
-            // sessionId is Session table foreign key, so don't store Claude SDK session ID
-            // Claude SDK session ID is stored in project.activeClaudeSessionId
-            cliSource: 'claude',
-          });
-
-          // Send via SSE in real-time
-          streamManager.publish(projectId, {
-            type: 'message',
-            data: serializeMessage(savedMessage, { requestId }),
-          });
-        }
-      } else if (message.type === 'result') {
-        // Final result
-        console.log('[ClaudeService] Task completed:', message.subtype);
-
-        publishStatus('completed');
+      // Whole-message handling (system/init, assistant, result) is shared with
+      // the containerized path — see agent-messages.ts.
+      const kind = await processor.processMessage(message as Parameters<typeof processor.processMessage>[0]);
+      if (kind === 'result') {
         emittedCompletedStatus = true;
-        await safeMarkCompleted();
       }
     }
 
