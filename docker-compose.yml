@@ -46,6 +46,9 @@ services:
       # Host path that the ./data volume maps to — needed to translate container
       # project paths to host paths for Docker bind mounts (isolated frontends).
       - DATA_HOST_DIR=${DATA_HOST_DIR:-}
+      # Phase 2 (control/data split): run agent turns in a hardened isolated
+      # container instead of in-process. Default off = in-process path unchanged.
+      - AGENT_CONTAINERIZED=${AGENT_CONTAINERIZED:-}
       - DOCKER_HOST=tcp://127.0.0.1:2375
       - DOCKER_BUILDKIT=0
     volumes:
