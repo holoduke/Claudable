@@ -66,11 +66,13 @@ async function checkHost(host: string): Promise<string> {
   return `${clean}: https ${http}; ${certInfo}`;
 }
 
-export function buildItopsMcpServer() {
-  return createSdkMcpServer({
-    name: 'itops',
-    version: '0.1.0',
-    tools: [
+/**
+ * The itops tool definitions. Exposed separately from the SDK server wrapper
+ * so the network-MCP bridge (agent-mcp-http.ts) can serve the SAME tools to the
+ * containerized agent over HTTP.
+ */
+export function itopsToolDefs() {
+  return [
       tool(
         'list_deploy_targets',
         'List the deploy targets (boxes/domains) apps can be published to.',
@@ -320,6 +322,13 @@ export function buildItopsMcpServer() {
           );
         },
       ),
-    ],
+  ];
+}
+
+export function buildItopsMcpServer() {
+  return createSdkMcpServer({
+    name: 'itops',
+    version: '0.1.0',
+    tools: itopsToolDefs(),
   });
 }

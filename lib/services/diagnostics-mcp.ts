@@ -18,11 +18,13 @@ function ago(ts: number, now: number): string {
   return `${Math.floor(s / 3600)}h ago`;
 }
 
-export function buildDiagnosticsMcpServer(projectId: string) {
-  return createSdkMcpServer({
-    name: 'appdiag',
-    version: '0.1.0',
-    tools: [
+/**
+ * The appdiag tool definitions. Exposed separately from the SDK server wrapper
+ * so the network-MCP bridge (agent-mcp-http.ts) can serve the SAME tools to the
+ * containerized agent over HTTP.
+ */
+export function diagnosticsToolDefs(projectId: string) {
+  return [
       tool(
         'check_app_health',
         'Inspect the CURRENTLY RUNNING preview of this project for runtime problems: uncaught browser errors, console errors/warnings, and Nuxt/nitro backend (server) errors. Use this to verify your changes work and to find bugs to fix — call it after editing, or when the user reports something is broken. Returns the most recent entries newest-last.',
@@ -53,6 +55,13 @@ export function buildDiagnosticsMcpServer(projectId: string) {
           );
         },
       ),
-    ],
+  ];
+}
+
+export function buildDiagnosticsMcpServer(projectId: string) {
+  return createSdkMcpServer({
+    name: 'appdiag',
+    version: '0.1.0',
+    tools: diagnosticsToolDefs(projectId),
   });
 }

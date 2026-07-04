@@ -25,11 +25,13 @@ function slugify(s: string): string {
   return s.toLowerCase().replace(/[^a-z0-9]+/gu, '-').replace(/^-+|-+$/gu, '').slice(0, 40) || 'image';
 }
 
-export function buildImagesMcpServer(projectId: string, projectPath: string) {
-  return createSdkMcpServer({
-    name: 'images',
-    version: '0.1.0',
-    tools: [
+/**
+ * The images tool definitions. Exposed separately from the SDK server wrapper
+ * so the network-MCP bridge (agent-mcp-http.ts) can serve the SAME tools to the
+ * containerized agent over HTTP.
+ */
+export function imagesToolDefs(projectId: string, projectPath: string) {
+  return [
       tool(
         'generate_image',
         'Generate an image from a text prompt (xAI / Grok) and save it into this project so it can be used in the app. Returns the public path (e.g. /generated/hero.png) — reference that path in an <img>/background/asset. Use this whenever the app needs a real image (hero, illustration, avatar, texture) instead of a placeholder.',
@@ -89,6 +91,13 @@ export function buildImagesMcpServer(projectId: string, projectPath: string) {
           );
         },
       ),
-    ],
+  ];
+}
+
+export function buildImagesMcpServer(projectId: string, projectPath: string) {
+  return createSdkMcpServer({
+    name: 'images',
+    version: '0.1.0',
+    tools: imagesToolDefs(projectId, projectPath),
   });
 }
