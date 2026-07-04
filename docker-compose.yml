@@ -49,6 +49,11 @@ services:
       # Phase 2 (control/data split): run agent turns in a hardened isolated
       # container instead of in-process. Default off = in-process path unchanged.
       - AGENT_CONTAINERIZED=${AGENT_CONTAINERIZED:-}
+      # Host path of the global skills dir (compose mounts ./global-skills into
+      # THIS container). The containerized agent bind-mounts it read-only at its
+      # ~/.claude/skills so it has the same Skill catalog. If empty, it's derived
+      # as a sibling of DATA_HOST_DIR.
+      - GLOBAL_SKILLS_HOST_DIR=${GLOBAL_SKILLS_HOST_DIR:-}
       - DOCKER_HOST=tcp://127.0.0.1:2375
       - DOCKER_BUILDKIT=0
     volumes:

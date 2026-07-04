@@ -34,6 +34,8 @@ export interface ContainerTurnOptions {
   mcpConfigPath?: string;               // path (in-container) to a --mcp-config json of NETWORK tools
   strictMcpConfig?: boolean;            // only use the given mcp-config (ignore any other sources)
   homeHostPath?: string;                // persistent per-project HOME (CLI session transcripts → --resume works across turns)
+  skillsHostPath?: string;              // HOST path of the global skills dir → mounted read-only at ~/.claude/skills
+  settingSources?: string;              // --setting-sources value (e.g. "project,user"); enables skill loading
   systemPrompt?: string;                // REPLACES the CLI default (parity with the SDK's systemPrompt option)
   env?: Record<string, string>;         // extra project env (already secret-free)
   memory?: string;                      // e.g. "2g"
@@ -64,10 +66,19 @@ export function buildAgentContainerArgs(o: ContainerTurnOptions): string[] {
   ];
   // Persistent HOME (session transcripts under ~/.claude → --resume works across
   // turns). Ephemeral /tmp fallback = amnesiac turns, kept for safety.
-  if (o.homeHostPath && o.homeHostPath.trim()) {
-    args.push('-v', `${o.homeHostPath.trim()}:/home/agent`, '-e', 'HOME=/home/agent');
+  const home = o.homeHostPath && o.homeHostPath.trim() ? o.homeHostPath.trim() : '';
+  if (home) {
+    args.push('-v', `${home}:/home/agent`, '-e', 'HOME=/home/agent');
   } else {
     args.push('-e', 'HOME=/tmp');
+  }
+  // Global skills (read-only) at ~/.claude/skills so the agent can `Skill` the same
+  // catalog the in-process path gets (nuxt-ui, codebase-design, …). Loaded via the
+  // `user` setting source below. Nested under the HOME mount — docker orders by
+  // destination depth, so the home mount lands first.
+  if (o.skillsHostPath && o.skillsHostPath.trim()) {
+    const skillsDest = home ? '/home/agent/.claude/skills' : '/tmp/.claude/skills';
+    args.push('-v', `${o.skillsHostPath.trim()}:${skillsDest}:ro`);
   }
   for (const [k, v] of Object.entries(o.env ?? {})) args.push('-e', `${k}=${v}`);
   // Attach BOTH networks at creation (docker 20.10+): the sandbox net for egress
@@ -89,6 +100,9 @@ export function buildAgentContainerArgs(o: ContainerTurnOptions): string[] {
   if (o.sessionId) args.push('--resume', o.sessionId);
   if (o.mcpConfigPath) args.push('--mcp-config', o.mcpConfigPath);
   if (o.strictMcpConfig) args.push('--strict-mcp-config');
+  // Load skills: 'project' → /work/.claude/skills, 'user' → ~/.claude/skills (the
+  // mounted global catalog). Without this the containerized CLI loads no skills.
+  if (o.settingSources && o.settingSources.trim()) args.push('--setting-sources', o.settingSources.trim());
   if (o.systemPrompt) args.push('--system-prompt', o.systemPrompt);
   return args;
 }
