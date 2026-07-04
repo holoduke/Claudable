@@ -542,10 +542,17 @@ export async function executeClaude(
     });
   };
 
-  // Phase 2 (control/data split): when enabled, run the turn in a HARDENED ISOLATED
-  // container (no docker access → can't self-provision). Default OFF → the in-process
-  // path below runs UNCHANGED. Flag-gated so the live agent is untouched until verified.
-  if (process.env.AGENT_CONTAINERIZED === 'true') {
+  // Phase 2 (control/data split): run the turn in a HARDENED ISOLATED container
+  // (no docker access → can't self-provision) instead of in-process.
+  // DEFAULT: on wherever the container infra exists (PREVIEW_ISOLATION set) — this
+  // is now the standard path. AGENT_CONTAINERIZED overrides explicitly either way
+  // ('false' forces in-process even with isolation; 'true' forces containers).
+  // Local dev without the infra falls back to in-process automatically.
+  const containerizeFlag = process.env.AGENT_CONTAINERIZED?.trim();
+  const containerize = containerizeFlag
+    ? containerizeFlag === 'true'
+    : Boolean(process.env.PREVIEW_ISOLATION?.trim());
+  if (containerize) {
     await runContainerizedTurn({
       projectId,
       projectPath,

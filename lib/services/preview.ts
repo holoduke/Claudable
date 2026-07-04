@@ -81,10 +81,22 @@ function hashSlug(s: string): string {
 /** projectId → a valid DNS label ('preview-' + slug must stay <= 63 chars).
  * If sanitizing changed the id (two ids could collide) or it's too long, append a
  * hash of the raw id so distinct projects never share a route file. */
-function previewSlug(projectId: string): string {
+export function previewSlug(projectId: string): string {
   const s = projectId.toLowerCase().replace(/[^a-z0-9-]/gu, '-').replace(/-+/gu, '-').replace(/^-|-$/gu, '');
   const needsHash = s !== projectId.toLowerCase() || s.length > 55;
   return needsHash ? `${s.slice(0, 46).replace(/-$/u, '')}-${hashSlug(projectId)}` : s;
+}
+
+/**
+ * The stable PUBLIC preview URL for a project (preview-<slug>.<domain>), or null
+ * when this deployment doesn't use per-project subdomains. Keyed to the project
+ * (not the port) so it's valid whether or not a preview is currently running —
+ * used by the Network overview for the access link.
+ */
+export function projectPreviewUrl(projectId: string): string | null {
+  const tmpl = process.env.PREVIEW_URL_TEMPLATE || '';
+  if (tmpl.includes('{project}') && previewRouteDir()) return tmpl.replace('{project}', previewSlug(projectId));
+  return null;
 }
 
 function previewUrlFor(projectId: string, port: number): string {
