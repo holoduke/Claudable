@@ -415,7 +415,11 @@ async function runContainerizedTurn(args: {
     const result = await done;
     await queue; // flush in-flight message handling before finishing the turn
 
-    if (!result.ok) {
+    // A nonzero exit AFTER the CLI emitted its `result` event is a normal
+    // turn-level outcome (e.g. a usage-policy refusal, which the result event
+    // already surfaced as an assistant message + completed status) — NOT an
+    // infra failure. Only treat a nonzero exit with NO result as a real error.
+    if (!result.ok && !sawResult) {
       throw new Error(result.error?.trim() || `Agent container exited with code ${result.code}.`);
     }
 
