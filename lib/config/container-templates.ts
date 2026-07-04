@@ -35,9 +35,16 @@ export interface ContainerTemplate {
   // Readiness check (docker HEALTHCHECK, shell form, templated) — lets the app +
   // agent wait until the service actually accepts connections before using it.
   healthCmd?: string;
+  // Linux capabilities to ADD back on top of `--cap-drop ALL` (managed containers
+  // run capless by default; a DB image's entrypoint needs a few for initdb/chown).
+  capAdd?: string[];
   memory?: string;
   cpus?: string;
 }
+
+// Caps a Postgres/MySQL image's root entrypoint needs before it drops to its own
+// user (chown/chmod the data dir + su-exec). Everything else stays dropped.
+const DB_CAPS = ['CHOWN', 'DAC_OVERRIDE', 'FOWNER', 'SETGID', 'SETUID'];
 
 /**
  * Template placeholders resolved at provision time:
@@ -59,6 +66,7 @@ export const CONTAINER_TEMPLATES: ContainerTemplate[] = [
     containerEnv: { POSTGRES_USER: '{user}', POSTGRES_PASSWORD: '{pass}', POSTGRES_DB: '{db}' },
     injectEnv: { DATABASE_URL: 'postgresql://{user}:{pass}@{alias}:{port}/{db}' },
     healthCmd: 'pg_isready -U {user} -d {db}',
+    capAdd: DB_CAPS,
   },
   {
     id: 'mysql',
@@ -78,6 +86,7 @@ export const CONTAINER_TEMPLATES: ContainerTemplate[] = [
     },
     injectEnv: { DATABASE_URL: 'mysql://{user}:{pass}@{alias}:{port}/{db}' },
     healthCmd: 'mysqladmin ping -h 127.0.0.1 -u{user} -p{pass} --silent',
+    capAdd: DB_CAPS,
   },
   {
     id: 'redis',
@@ -103,6 +112,7 @@ export const CONTAINER_TEMPLATES: ContainerTemplate[] = [
     mountPath: '/data/db',
     injectEnv: { MONGO_URL: 'mongodb://{alias}:{port}' },
     healthCmd: "mongosh --quiet --eval 'db.runCommand({ping:1}).ok'",
+    capAdd: DB_CAPS,
   },
 ];
 

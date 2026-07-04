@@ -233,6 +233,7 @@ export async function prepareAgentMcpTurnConfig(o: {
   projectPath: string;
   imagesOn: boolean;
   itopsEnabled: boolean;
+  homeHostPath?: string;   // agent HOME mount (host path) → write the token file OUTSIDE the project tree
 }): Promise<{ containerPath: string; token: string; cleanup: () => Promise<void> } | null> {
   // The container reaches Claudable via its PUBLIC url (sandbox egress allows
   // internet, not the host) — override with AGENT_MCP_BASE_URL if ever needed.
@@ -251,11 +252,17 @@ export async function prepareAgentMcpTurnConfig(o: {
     ),
   };
 
-  const dir = path.join(o.projectPath, '.claudable');
+  // Prefer the agent's HOME mount (data/agent-homes/<id> → /home/agent): the token
+  // file then lives OUTSIDE the project tree, so it can never be captured by a
+  // checkpoint or the project's own git even mid-turn. Fall back to the project's
+  // .claudable/ only if no home mount is available.
+  const useHome = !!(o.homeHostPath && o.homeHostPath.trim());
+  const dir = useHome ? o.homeHostPath!.trim() : path.join(o.projectPath, '.claudable');
   const filePath = path.join(dir, 'agent-mcp.json');
+  const containerPath = useHome ? '/home/agent/agent-mcp.json' : '/work/.claudable/agent-mcp.json';
   try {
     await fs.mkdir(dir, { recursive: true });
-    await fs.writeFile(filePath, JSON.stringify(config, null, 2));
+    await fs.writeFile(filePath, JSON.stringify(config, null, 2), { mode: 0o600 });
   } catch (error) {
     releaseAgentMcpTurn(token);
     console.error('[AgentMCP] Failed to write per-turn mcp-config:', error);
@@ -263,7 +270,7 @@ export async function prepareAgentMcpTurnConfig(o: {
   }
 
   return {
-    containerPath: '/work/.claudable/agent-mcp.json',
+    containerPath,
     token,
     cleanup: async () => {
       releaseAgentMcpTurn(token);

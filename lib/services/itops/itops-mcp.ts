@@ -17,7 +17,7 @@ import tls from 'tls';
 import { createSdkMcpServer, tool } from '@anthropic-ai/claude-agent-sdk';
 import { z } from 'zod';
 import { listDeployTargets } from './deploy-targets';
-import { isBlockedHost, fetchWithTimeout } from './net';
+import { assertHostAllowed, fetchWithTimeout } from './net';
 import * as gitea from './gitea-ops';
 import * as giteaAdmin from './gitea-admin-ops';
 import * as coolify from './coolify-ops';
@@ -41,9 +41,10 @@ function audit(toolName: string, args: unknown) {
 /** Reachability + TLS-cert health for a hostname (read-only, no creds). */
 async function checkHost(host: string): Promise<string> {
   const clean = host.replace(/^https?:\/\//u, '').replace(/\/.*$/u, '').replace(/:\d+$/u, '');
-  // Refuse internal/loopback/link-local targets so this can't be used for SSRF
-  // recon (IMDS, localhost services, RFC-1918). See net.ts.
-  if (isBlockedHost(clean)) return `${clean}: blocked (internal/loopback address not allowed)`;
+  // Refuse internal/loopback/link-local targets — literal AND DNS-resolved — so this
+  // can't be used for SSRF recon (IMDS, localhost services, RFC-1918). See net.ts.
+  try { await assertHostAllowed(clean); }
+  catch (e) { return `${clean}: blocked (${(e as Error).message})`; }
   let http = 'n/a';
   try {
     const res = await fetchWithTimeout(`https://${clean}/`, { method: 'HEAD', redirect: 'manual' }, 6000);

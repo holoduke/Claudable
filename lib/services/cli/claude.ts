@@ -373,6 +373,7 @@ async function runContainerizedTurn(args: {
       projectPath: absoluteProjectPath,
       imagesOn,
       itopsEnabled: args.itopsEnabled,
+      homeHostPath, // write the per-turn token file in the HOME mount, not the project tree
     });
 
     const processor = createAgentMessageProcessor({
