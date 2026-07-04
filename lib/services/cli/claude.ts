@@ -382,10 +382,17 @@ async function runContainerizedTurn(args: {
     });
 
     // stream-json events arrive on stdout; chain handling onto a queue so
-    // messages persist + publish strictly in order.
+    // messages persist + publish strictly in order. Capture the final result's
+    // SUBTYPE: 'success' means the turn genuinely produced its answer (incl. a
+    // usage-policy refusal, which the CLI reports as success); anything else
+    // ('error_during_execution', 'error_max_turns', …) is a real turn failure.
     let sawResult = false;
+    let resultSubtype: string | undefined;
     let queue: Promise<void> = Promise.resolve();
     const onEvent = (e: AgentStreamEvent) => {
+      if (e.type === 'result' && typeof (e as { subtype?: unknown }).subtype === 'string') {
+        resultSubtype = (e as { subtype?: string }).subtype;
+      }
       queue = queue
         .then(() => processor.processMessage(e as Parameters<typeof processor.processMessage>[0]))
         .then((kind) => {
@@ -429,12 +436,18 @@ async function runContainerizedTurn(args: {
     const result = await done;
     await queue; // flush in-flight message handling before finishing the turn
 
-    // A nonzero exit AFTER the CLI emitted its `result` event is a normal
-    // turn-level outcome (e.g. a usage-policy refusal, which the result event
-    // already surfaced as an assistant message + completed status) — NOT an
-    // infra failure. Only treat a nonzero exit with NO result as a real error.
-    if (!result.ok && !sawResult) {
-      throw new Error(result.error?.trim() || `Agent container exited with code ${result.code}.`);
+    // Success = the CLI reported a `result` with subtype 'success' (this covers a
+    // usage-policy refusal, which still "succeeds" at producing its message). A
+    // nonzero exit, a non-success subtype (e.g. 'error_during_execution' from a
+    // stale --resume), or no result at all is a REAL failure → throw so
+    // applyChanges can retry with a fresh session and the user isn't left with a
+    // silent dead turn.
+    const turnSucceeded = resultSubtype === 'success';
+    if (!turnSucceeded) {
+      throw new Error(
+        result.error?.trim() ||
+        (resultSubtype ? `Agent turn failed (${resultSubtype}).` : `Agent container exited with code ${result.code}.`),
+      );
     }
 
     // The CLI's final `result` event already published completed + marked the
