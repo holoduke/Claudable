@@ -47,10 +47,16 @@ export interface ManagedServiceSpec {
   injectEnvEnc?: string;            // encrypted JSON blob of env to inject into the app/agent
   mountPath?: string;               // if set, a persistent named volume is mounted here
   healthCmd?: string;               // docker HEALTHCHECK (shell form) for readiness waits
+  dependsOn?: string[];             // ids/aliases that must be healthy before this one starts
   memory?: string;                  // default 512m
   cpus?: string;                    // default 1.0
   ports?: number[];                 // container ports (informational; NOT host-published)
 }
+
+// Service kinds that OTHER services implicitly wait for (a DB/cache/… should be
+// up + healthy before an app/worker that connects to it on startup). So "the app
+// depends on the db" is ordered automatically, with no config.
+const INFRA_KINDS = new Set(['database', 'cache', 'storage', 'search', 'queue', 'broker']);
 
 /** Non-secret view for the UI / Network page. */
 export interface ManagedServiceView {
@@ -240,6 +246,7 @@ export interface CustomServiceInput {
   injectEnv?: Record<string, string>; // env to inject into the app/agent
   mountPath?: string;
   ports?: number[];
+  dependsOn?: string[];              // ids/aliases that must be healthy first
   memory?: string;
   cpus?: string;
 }
@@ -262,6 +269,7 @@ export async function addCustomService(projectId: string, input: CustomServiceIn
       env: input.env && Object.keys(input.env).length ? input.env : undefined,
       injectEnvEnc: input.injectEnv && Object.keys(input.injectEnv).length ? encrypt(JSON.stringify(input.injectEnv)) : undefined,
       mountPath: input.mountPath,
+      dependsOn: input.dependsOn && input.dependsOn.length ? input.dependsOn : undefined,
       memory: input.memory,
       cpus: input.cpus,
       ports: input.ports || [],
@@ -321,14 +329,62 @@ async function startService(
   return name;
 }
 
-/** Start ALL of a project's managed containers on its internal network. */
+/**
+ * Order services into dependency LEVELS (each level can start in parallel; a
+ * later level must wait for the earlier ones to be healthy). Edges come from an
+ * explicit `dependsOn` (id or alias) PLUS the implicit rule "every non-infra
+ * service depends on every infra service" (app → db/cache). Cycles/leftovers are
+ * emitted as a final level so startup never hangs.
+ */
+export function orderServiceLevels(services: ManagedServiceSpec[]): ManagedServiceSpec[][] {
+  const byId = new Map(services.map((s) => [s.id, s]));
+  const byAlias = new Map(services.map((s) => [s.alias || s.id, s]));
+  const resolve = (ref: string): string | undefined => (byId.get(ref) || byAlias.get(ref))?.id;
+  const infraIds = services.filter((s) => INFRA_KINDS.has(s.kind || '')).map((s) => s.id);
+
+  const deps = new Map<string, Set<string>>();
+  for (const s of services) {
+    const d = new Set<string>();
+    for (const ref of s.dependsOn ?? []) { const id = resolve(ref); if (id && id !== s.id) d.add(id); }
+    if (!INFRA_KINDS.has(s.kind || '')) for (const iid of infraIds) if (iid !== s.id) d.add(iid);
+    deps.set(s.id, d);
+  }
+
+  const done = new Set<string>();
+  const levels: ManagedServiceSpec[][] = [];
+  let remaining = services.map((s) => s.id);
+  while (remaining.length) {
+    const ready = remaining.filter((id) => [...deps.get(id)!].every((dep) => done.has(dep)));
+    // No progress → a dependency cycle (or a dep on a missing service): start what's
+    // left together rather than hang.
+    const batch = ready.length ? ready : remaining;
+    levels.push(batch.map((id) => byId.get(id)!));
+    batch.forEach((id) => done.add(id));
+    remaining = remaining.filter((id) => !done.has(id));
+  }
+  return levels;
+}
+
+/**
+ * Start ALL of a project's managed containers on its internal network, in
+ * DEPENDENCY ORDER: each level starts, then we wait for its health-checked
+ * services to be ready before starting the next level. So a service that depends
+ * on the DB (implicitly or via dependsOn) only starts once the DB accepts
+ * connections — no crash-loop-until-restart.
+ */
 export async function startServices(projectId: string, log?: (line: string) => void): Promise<void> {
   const services = await getServices(projectId);
   if (!services.length) return;
   const net = await ensureProjectNetwork(projectId);
-  for (const spec of services) {
-    try { await startService(projectId, net, spec, log); }
-    catch (e) { log?.(`[svc:${spec.id}] ${(e as Error).message}`); }
+  const levels = orderServiceLevels(services);
+  for (const level of levels) {
+    for (const spec of level) {
+      try { await startService(projectId, net, spec, log); }
+      catch (e) { log?.(`[svc:${spec.id}] ${(e as Error).message}`); }
+    }
+    // Gate the next level on THIS level's readiness (only services with a
+    // healthcheck actually block; app/worker services without one don't).
+    await waitForServicesHealthy(projectId, 25_000, log, level.map((s) => s.id));
   }
 }
 
@@ -342,8 +398,11 @@ export async function waitForServicesHealthy(
   projectId: string,
   timeoutMs = 25_000,
   log?: (line: string) => void,
+  onlyIds?: string[],
 ): Promise<void> {
-  const withHealth = (await getServices(projectId)).filter((s) => s.healthCmd);
+  const idSet = onlyIds ? new Set(onlyIds) : null;
+  const withHealth = (await getServices(projectId))
+    .filter((s) => s.healthCmd && (!idSet || idSet.has(s.id)));
   if (!withHealth.length) return;
   const deadline = Date.now() + timeoutMs;
   const pending = new Set(withHealth.map((s) => s.id));

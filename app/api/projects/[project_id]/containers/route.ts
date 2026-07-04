@@ -211,6 +211,7 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
         injectEnv: parseEnv(custom!.injectEnv),
         mountPath: typeof custom!.mountPath === 'string' ? custom!.mountPath : undefined,
         ports: Array.isArray(custom!.ports) ? (custom!.ports as unknown[]).map(Number).filter((n) => Number.isInteger(n)) : undefined,
+        dependsOn: Array.isArray(custom!.dependsOn) ? (custom!.dependsOn as unknown[]).map(String) : undefined,
       });
       return createSuccessResponse({ ok: true, id: spec.id });
     }
