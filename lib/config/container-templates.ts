@@ -32,6 +32,9 @@ export interface ContainerTemplate {
   secrets?: SecretKind;               // credential set to generate (default 'none')
   containerEnv?: Record<string, string>; // env for the container, templated
   injectEnv?: Record<string, string>;    // env injected into the app/agent, templated
+  // Readiness check (docker HEALTHCHECK, shell form, templated) — lets the app +
+  // agent wait until the service actually accepts connections before using it.
+  healthCmd?: string;
   memory?: string;
   cpus?: string;
 }
@@ -55,6 +58,7 @@ export const CONTAINER_TEMPLATES: ContainerTemplate[] = [
     secrets: 'postgres',
     containerEnv: { POSTGRES_USER: '{user}', POSTGRES_PASSWORD: '{pass}', POSTGRES_DB: '{db}' },
     injectEnv: { DATABASE_URL: 'postgresql://{user}:{pass}@{alias}:{port}/{db}' },
+    healthCmd: 'pg_isready -U {user} -d {db}',
   },
   {
     id: 'mysql',
@@ -73,6 +77,7 @@ export const CONTAINER_TEMPLATES: ContainerTemplate[] = [
       MYSQL_ROOT_PASSWORD: '{pass}',
     },
     injectEnv: { DATABASE_URL: 'mysql://{user}:{pass}@{alias}:{port}/{db}' },
+    healthCmd: 'mysqladmin ping -h 127.0.0.1 -u{user} -p{pass} --silent',
   },
   {
     id: 'redis',
@@ -84,6 +89,7 @@ export const CONTAINER_TEMPLATES: ContainerTemplate[] = [
     icon: '⚡',
     port: 6379,
     injectEnv: { REDIS_URL: 'redis://{alias}:{port}' },
+    healthCmd: 'redis-cli ping',
   },
   {
     id: 'mongo',
@@ -96,6 +102,7 @@ export const CONTAINER_TEMPLATES: ContainerTemplate[] = [
     port: 27017,
     mountPath: '/data/db',
     injectEnv: { MONGO_URL: 'mongodb://{alias}:{port}' },
+    healthCmd: "mongosh --quiet --eval 'db.runCommand({ping:1}).ok'",
   },
 ];
 

@@ -9,7 +9,7 @@ import { findAvailablePort } from '@/lib/utils/ports';
 import { getProjectById, updateProject, updateProjectStatus } from './project';
 import { prisma } from '@/lib/db/client';
 import { getDatabaseUrl } from '@/lib/services/database';
-import { startServices, getInjectedEnv } from '@/lib/services/managed-containers';
+import { ensureServicesRunning, getInjectedEnv } from '@/lib/services/managed-containers';
 import { recordBackendChunk } from '@/lib/services/diagnostics';
 import { listEnvVars } from '@/lib/services/env';
 
@@ -419,7 +419,7 @@ export async function connectToProjectNet(net: string, container: string, alias?
     await new Promise((r) => setTimeout(r, 500));
   }
 }
-async function removeProjectNetwork(projectId: string): Promise<void> {
+export async function removeProjectNetwork(projectId: string): Promise<void> {
   await dockerCli(['network', 'rm', projectNetworkName(projectId)]);
 }
 /** Translate a container path under /app/data to its real host path (for Docker
@@ -1823,7 +1823,9 @@ class PreviewManager {
     // the app that uses them. Each is reachable ONLY by this project (alias, no
     // host port); the DB kind is what DATABASE_URL above points at (…@db:5432/…).
     if (isolationEnabled()) {
-      try { await startServices(projectId, (line) => log(Buffer.from(line))); }
+      // Start them AND wait for readiness (a just-started Postgres must accept
+      // connections before the first SSR/API request queries it on a cold start).
+      try { await ensureServicesRunning(projectId, (line) => log(Buffer.from(line))); }
       catch (e) { log(Buffer.from(`[svc] start failed: ${(e as Error).message}`)); }
     }
 
@@ -2157,6 +2159,12 @@ class PreviewManager {
       // These are the PROJECT's secrets, meant for its own code; Claudable's own
       // secrets are never passed (only NODE_ENV/PORT/HOST + these below).
       const feEnvArgs: string[] = [];
+      // Managed-service connection env (DATABASE_URL, REDIS_URL, …) FIRST, so the
+      // app's server-side code (Next API routes, Nuxt server routes, Prisma, SSR
+      // loaders) reaches this project's OWN containers over the project net — the
+      // frontend container joins that net below. A project's own Env-tab var of the
+      // same name overrides it (added after).
+      for (const [k, v] of Object.entries(injectedEnv)) feEnvArgs.push('-e', `${k}=${v}`);
       try {
         for (const ev of await listEnvVars(projectId)) feEnvArgs.push('-e', `${ev.key}=${ev.value}`);
       } catch { /* env vars are best-effort */ }
@@ -2230,10 +2238,12 @@ class PreviewManager {
 
     // Join the isolated frontend container to the project net so its SERVER-SIDE
     // code reaches this project's own services directly: the backend at
-    // http://api:<port> (composedInternalUrl) AND the database at db:5432
-    // (dbIsContainer). Background: `docker run` creates the container async, so
-    // connectToProjectNet retries.
-    if (useFrontendContainer && (composedInternalUrl || dbIsContainer)) {
+    // http://api:<port> (composedInternalUrl) AND any managed service by alias
+    // (db:5432, cache:6379, …). Join whenever there's ANYTHING to reach — a
+    // composed backend OR any managed container that exposes env (not just a DB),
+    // else a Redis-only project's `cache` alias wouldn't resolve. `docker run`
+    // creates the container async, so connectToProjectNet retries.
+    if (useFrontendContainer && (composedInternalUrl || Object.keys(injectedEnv).length > 0)) {
       void ensureProjectNetwork(projectId).then((net) =>
         connectToProjectNet(net, `claudable-preview-${previewSlug(projectId)}`));
     }
