@@ -366,6 +366,21 @@ async function runContainerizedTurn(args: {
       console.error('[ClaudeContainer] Failed to prepare agent home (running amnesiac):', e);
     }
 
+    // Global skills so the containerized agent has the SAME `Skill` catalog as the
+    // in-process path (nuxt-ui, codebase-design, …). They live in a host volume
+    // (compose: ./global-skills → /home/node/.claude/skills); mount that host dir
+    // read-only at the agent's ~/.claude/skills. GLOBAL_SKILLS_HOST_DIR is preferred;
+    // otherwise derive it as a sibling of DATA_HOST_DIR (compose mounts ./data and
+    // ./global-skills side by side). settingSources 'project,user' then loads
+    // /work/.claude/skills (project) + ~/.claude/skills (global).
+    let skillsHostPath: string | undefined;
+    const skillsEnv = process.env.GLOBAL_SKILLS_HOST_DIR?.trim();
+    const dataHost = process.env.DATA_HOST_DIR?.trim();
+    if (skillsEnv) skillsHostPath = skillsEnv;
+    else if (dataHost) skillsHostPath = path.join(path.dirname(dataHost), 'global-skills');
+    // Stage the project's own skills (real dirs, not the dangling global symlinks
+    // syncProjectSkills makes) so the 'project' source finds them in the container.
+
     // The 3 in-process tools become NETWORK tools: registered under a per-turn
     // capability token, served by /api/agent-mcp/<token>/<server>, revoked below.
     mcp = await prepareAgentMcpTurnConfig({
@@ -444,6 +459,10 @@ async function runContainerizedTurn(args: {
         mcpConfigPath: mcp?.containerPath,
         strictMcpConfig: Boolean(mcp),
         homeHostPath,
+        skillsHostPath,
+        // Load project + global skills (the mounted catalog). Matches the
+        // in-process path, which uses settingSources for the same reason.
+        settingSources: skillsHostPath ? 'project,user' : 'project',
         containerName,
         env: agentEnv,
       },
