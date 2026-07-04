@@ -113,12 +113,19 @@ export async function POST(request: NextRequest) {
           const { scaffoldBackend } = await import('@/lib/utils/scaffold-backend');
           await scaffoldBackend(path.resolve(project.repoPath), backendId);
         }
-        // Actually provision a managed Postgres (was recorded but never created).
+        // Postgres: a PER-PROJECT CONTAINER database (own container on the project's
+        // internal net, reachable only by this project) when isolation is available;
+        // otherwise the legacy Coolify host DB.
         if (databaseId === 'postgres') {
           try {
-            const { provisionPostgres } = await import('@/lib/services/database');
-            await provisionPostgres(project.id);
-          } catch (e) { console.error('[API] provisionPostgres failed:', e); }
+            const { managedContainersEnabled, ensurePostgresService } = await import('@/lib/services/managed-containers');
+            if (managedContainersEnabled()) {
+              await ensurePostgresService(project.id);
+            } else {
+              const { provisionPostgres } = await import('@/lib/services/database');
+              await provisionPostgres(project.id);
+            }
+          } catch (e) { console.error('[API] database provisioning failed:', e); }
         }
         await prisma.project.update({ where: { id: project.id }, data: { settings: JSON.stringify(nextSettings) } });
         (project as { settings?: string | null }).settings = JSON.stringify(nextSettings);

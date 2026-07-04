@@ -120,7 +120,16 @@ export async function GET(_req: NextRequest, { params }: RouteContext) {
       const d = getDatabaseOption(databaseType);
       let status = databaseType === 'sqlite' ? 'file' : 'not provisioned';
       let host: string | null = null;
-      if (d?.managed) {
+      let typeLabel = d?.managed ? `${d?.name} · managed` : `${d?.name ?? databaseType} · file`;
+      let description = d?.description ?? 'Application data.';
+      // Per-project CONTAINER database (own container on the project net).
+      const { hasContainerDb } = await import('@/lib/services/managed-containers');
+      if (databaseType === 'postgres' && await hasContainerDb(project_id).catch(() => false)) {
+        status = 'container';
+        host = 'db:5432 (internal)';
+        typeLabel = `${d?.name ?? 'PostgreSQL'} · own container`;
+        description = 'A dedicated Postgres container on this project\'s private network — reachable only by this project, with a persistent volume.';
+      } else if (d?.managed) {
         try {
           const info = await getDatabaseInfo(project_id);
           if (info.provisioned) { status = 'provisioned'; host = (info as { host?: string }).host ?? null; }
@@ -129,10 +138,10 @@ export async function GET(_req: NextRequest, { params }: RouteContext) {
       containers.push({
         kind: 'database',
         name: 'Database',
-        type: d?.managed ? `${d?.name} · managed` : `${d?.name ?? databaseType} · file`,
+        type: typeLabel,
         status,
         url: host,
-        description: d?.description ?? 'Application data.',
+        description,
         removable: true,
       });
     }
@@ -165,10 +174,16 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
     }
     if (isValidDatabase(databaseId)) {
       settings.databaseType = databaseId;
-      // Managed Postgres is actually provisioned via Coolify (best-effort — the
-      // type is still recorded so the preview can inject it once available).
+      // Postgres: prefer a PER-PROJECT CONTAINER database (own container on the
+      // project's internal net, reachable only by this project). Falls back to the
+      // legacy Coolify host DB only when container isolation isn't available.
       if (databaseId === 'postgres') {
-        try { await provisionPostgres(project_id); } catch (e) { console.error('[containers] provisionPostgres failed:', e); }
+        const { managedContainersEnabled, ensurePostgresService } = await import('@/lib/services/managed-containers');
+        if (managedContainersEnabled()) {
+          try { await ensurePostgresService(project_id); } catch (e) { console.error('[containers] ensurePostgresService failed:', e); }
+        } else {
+          try { await provisionPostgres(project_id); } catch (e) { console.error('[containers] provisionPostgres failed:', e); }
+        }
       }
     }
     await prisma.project.update({ where: { id: project_id }, data: { settings: JSON.stringify(settings) } });
@@ -187,7 +202,16 @@ export async function DELETE(req: NextRequest, { params }: RouteContext) {
     const settings = safeSettings(project!.settings);
     if (kind === 'backend') delete settings.backendType;
     else if (kind === 'database') {
-      if (settings.databaseType === 'postgres') { try { await removeDatabase(project_id); } catch (e) { console.error('[containers] removeDatabase failed:', e); } }
+      if (settings.databaseType === 'postgres') {
+        // Remove the per-project container DB (and its volume) if present;
+        // otherwise tear down the legacy Coolify DB.
+        const { hasContainerDb, removeService } = await import('@/lib/services/managed-containers');
+        if (await hasContainerDb(project_id)) {
+          try { await removeService(project_id, 'db', { deleteVolume: true }); } catch (e) { console.error('[containers] removeService(db) failed:', e); }
+        } else {
+          try { await removeDatabase(project_id); } catch (e) { console.error('[containers] removeDatabase failed:', e); }
+        }
+      }
       delete settings.databaseType;
     }
     else return createErrorResponse('bad_request', 'kind must be backend or database', 400);
