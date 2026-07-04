@@ -11,9 +11,11 @@ interface Container {
   name: string;
   type: string;
   status: string;
+  statusDetail?: string;
   url: string | null;
   description: string;
   removable: boolean;
+  manageable?: boolean; // start/stop/restart/logs available
   icon?: string;
 }
 
@@ -63,6 +65,25 @@ export default function ContainersSettings({ projectId }: { projectId: string })
       await fetch(`${API_BASE}/api/projects/${projectId}/containers?${q}`, { method: 'DELETE' });
       await load();
     } finally { setBusy(false); }
+  };
+  const action = async (id: string, act: 'start' | 'stop' | 'restart') => {
+    setBusy(true);
+    try {
+      await fetch(`${API_BASE}/api/projects/${projectId}/containers/${encodeURIComponent(id)}`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: act }),
+      });
+      await load();
+    } finally { setBusy(false); }
+  };
+  const [logsFor, setLogsFor] = useState<string | null>(null);
+  const [logsText, setLogsText] = useState('');
+  const viewLogs = async (id: string) => {
+    setLogsFor(id); setLogsText('Loading…');
+    try {
+      const r = await fetch(`${API_BASE}/api/projects/${projectId}/containers/${encodeURIComponent(id)}?tail=200`);
+      const j = await r.json();
+      setLogsText((j?.data?.logs ?? j?.logs ?? '(no logs)') as string);
+    } catch { setLogsText('Failed to load logs.'); }
   };
   const addCustom = () => {
     const env: Record<string, string> = {};
@@ -140,13 +161,46 @@ export default function ContainersSettings({ projectId }: { projectId: string })
                     )}
                   </div>
                 </div>
-                {c.removable && (
-                  <button onClick={() => remove(c)} disabled={busy}
-                    className="text-xs text-red-500 hover:text-red-600 disabled:opacity-50 shrink-0">Remove</button>
-                )}
+                <div className="flex items-center gap-2 shrink-0">
+                  {c.manageable && c.id && (
+                    <>
+                      {c.status === 'running' ? (
+                        <button onClick={() => action(c.id!, 'stop')} disabled={busy}
+                          className="text-xs text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 disabled:opacity-50">Stop</button>
+                      ) : (
+                        <button onClick={() => action(c.id!, 'start')} disabled={busy}
+                          className="text-xs text-emerald-600 hover:text-emerald-700 disabled:opacity-50">Start</button>
+                      )}
+                      <button onClick={() => action(c.id!, 'restart')} disabled={busy}
+                        className="text-xs text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 disabled:opacity-50">Restart</button>
+                      <button onClick={() => viewLogs(c.id!)} disabled={busy}
+                        className="text-xs text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 disabled:opacity-50">Logs</button>
+                    </>
+                  )}
+                  {c.removable && (
+                    <button onClick={() => remove(c)} disabled={busy}
+                      className="text-xs text-red-500 hover:text-red-600 disabled:opacity-50">Remove</button>
+                  )}
+                </div>
               </div>
             </div>
           ))}
+
+          {/* Logs modal */}
+          {logsFor && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setLogsFor(null)}>
+              <div className="w-full max-w-3xl rounded-xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 shadow-xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
+                <div className="flex items-center justify-between px-4 py-2.5 border-b border-gray-100 dark:border-gray-800">
+                  <span className="text-sm font-medium text-gray-900 dark:text-gray-100">Logs · {logsFor}</span>
+                  <div className="flex items-center gap-3">
+                    <button onClick={() => viewLogs(logsFor)} className="text-xs text-gray-500 hover:text-gray-700 dark:hover:text-gray-300">Refresh</button>
+                    <button onClick={() => setLogsFor(null)} className="text-xs text-gray-500 hover:text-gray-700 dark:hover:text-gray-300">Close</button>
+                  </div>
+                </div>
+                <pre className="text-[11px] font-mono text-gray-800 dark:text-gray-200 bg-gray-50 dark:bg-gray-950 p-3 max-h-[60vh] overflow-auto whitespace-pre-wrap">{logsText}</pre>
+              </div>
+            </div>
+          )}
 
           {/* Add actions */}
           <div className="flex flex-wrap gap-2 pt-1">

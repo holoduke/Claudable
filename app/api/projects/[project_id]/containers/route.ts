@@ -118,19 +118,25 @@ export async function GET(_req: NextRequest, { params }: RouteContext) {
     // MANAGED CONTAINERS (generic): every per-project container the project runs
     // — its database, a cache, a custom image, anything. Listed by id so any
     // number/kind shows up without hardcoding.
-    const { listServiceViews } = await import('@/lib/services/managed-containers');
+    const { listServiceViews, serviceStatuses } = await import('@/lib/services/managed-containers');
+    type SvcStatuses = Awaited<ReturnType<typeof serviceStatuses>>;
     const managed = await listServiceViews(project_id).catch(() => []);
+    const statuses: SvcStatuses = managed.length ? await serviceStatuses(project_id).catch(() => ({} as SvcStatuses)) : {};
     for (const s of managed) {
       const addr = `${s.alias}${s.ports[0] ? `:${s.ports[0]}` : ''} (internal)`;
+      const rt = statuses[s.id];
       containers.push({
         kind: s.kind === 'database' ? 'database' : 'service',
         id: s.id,
         name: s.name,
         type: `${s.image}${s.injectKeys.length ? ` · ${s.injectKeys.join(', ')}` : ''}`,
-        status: 'container',
+        // Live docker state: running / exited / not started (falls back to 'container').
+        status: rt ? (rt.running ? 'running' : (rt.state || 'stopped')) : 'container',
+        statusDetail: rt?.status,
         url: addr,
         description: `${s.hasVolume ? 'Persistent container' : 'Container'} on this project’s private network — reachable only by this project (alias ${s.alias}).`,
         removable: true,
+        manageable: true,
         icon: s.icon || undefined,
       });
     }
