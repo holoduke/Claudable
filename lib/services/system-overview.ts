@@ -10,6 +10,7 @@ import { spawn } from 'child_process';
 import { getAllProjects } from './project';
 import { getProjectService } from './project-services';
 import { previewSlug, projectPreviewUrl } from './preview';
+import { hasContainerDb } from './managed-containers';
 
 export interface SystemContainer {
   name: string;
@@ -69,6 +70,8 @@ function agentContainerizedDefault(): boolean {
 function roleOf(name: string): SystemContainer['role'] {
   if (name === 'claudable' || name === 'claudable-dockerproxy') return 'system';
   if (/^claudable-agent-/u.test(name)) return 'agent';
+  if (/^claudable-svc-.*-db$/u.test(name)) return 'database'; // managed DB container
+  if (/^claudable-svc-/u.test(name)) return 'other';          // generic managed container
   if (/^claudable-preview-.+-api$/u.test(name)) return 'backend';
   if (/^claudable-preview-/u.test(name)) return 'frontend';
   if (/-(db|postgres|mysql)$/u.test(name)) return 'database';
@@ -146,6 +149,9 @@ export async function getSystemOverview(): Promise<SystemOverview> {
   const projectRows: ProjectOverview[] = await Promise.all(projects.map(async (p) => {
     const containers = (byProject.get(p.id) ?? []).sort((a, b) => a.role.localeCompare(b.role));
     let hasDatabase = containers.some((c) => c.role === 'database');
+    if (!hasDatabase) {
+      try { hasDatabase = await hasContainerDb(p.id); } catch { /* non-fatal */ }
+    }
     if (!hasDatabase) {
       try {
         const dbSvc = await getProjectService(p.id, 'database');

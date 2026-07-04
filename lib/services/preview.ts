@@ -9,6 +9,7 @@ import { findAvailablePort } from '@/lib/utils/ports';
 import { getProjectById, updateProject, updateProjectStatus } from './project';
 import { prisma } from '@/lib/db/client';
 import { getDatabaseUrl } from '@/lib/services/database';
+import { startServices, getContainerDbUrl } from '@/lib/services/managed-containers';
 import { recordBackendChunk } from '@/lib/services/diagnostics';
 import { listEnvVars } from '@/lib/services/env';
 
@@ -1777,13 +1778,18 @@ class PreviewManager {
       NEXT_PUBLIC_APP_URL: initialUrl,
     };
 
-    // If a Postgres was provisioned for this project, expose DATABASE_URL to the
-    // dev server so the generated app can talk to its database in the preview.
-    // NOTE: this is the PROJECT's DB, distinct from Claudable's own DATABASE_URL
-    // (which is always in process.env) — frontend isolation keys off THIS.
+    // Expose DATABASE_URL to the dev server. Prefer the per-project CONTAINER DB
+    // (internal @db:5432, reachable over the project net; the URL comes from the
+    // stored spec, so it's known before the container is started below); fall back
+    // to a legacy Coolify host DB. NOTE: distinct from Claudable's own DATABASE_URL
+    // (always in process.env). A CONTAINER db does NOT block frontend isolation
+    // (below); a host DB still does, since the egress lock would cut it off.
+    let dbIsContainer = false;
     let projectDbUrl: string | null = null;
     try {
-      projectDbUrl = await getDatabaseUrl(projectId);
+      const containerDbUrl = isolationEnabled() ? await getContainerDbUrl(projectId) : null;
+      dbIsContainer = !!containerDbUrl;
+      projectDbUrl = containerDbUrl || await getDatabaseUrl(projectId);
       if (projectDbUrl) env.DATABASE_URL = projectDbUrl;
     } catch { /* non-fatal */ }
 
@@ -1806,6 +1812,15 @@ class PreviewManager {
       entries.forEach((entry) => log(Buffer.from(entry)));
     };
     flushPendingLogs();
+
+    // Per-project MANAGED CONTAINERS (composition step 3): start the project's
+    // own containers (its Postgres DB, a cache, …) on its INTERNAL network before
+    // the app that uses them. Each is reachable ONLY by this project (alias, no
+    // host port); the DB kind is what DATABASE_URL above points at (…@db:5432/…).
+    if (isolationEnabled()) {
+      try { await startServices(projectId, (line) => log(Buffer.from(line))); }
+      catch (e) { log(Buffer.from(`[svc] start failed: ${(e as Error).message}`)); }
+    }
 
     // Ensure dependencies with the same per-project lock used by installDependencies
     const ensureWithLock = async () => {
@@ -1974,9 +1989,12 @@ class PreviewManager {
     // in preview.json. Skipped when the project has a DB (the egress lock would
     // block a box-hosted Postgres). Uses a FOREGROUND `docker run` so it reuses
     // the existing spawn/readiness/log machinery below unchanged.
+    // A CONTAINER DB lives on the project's internal net, so the frontend CAN be
+    // containerized and reach it at db:5432 — only a legacy HOST DB (blocked by
+    // the egress lock) forces the frontend to stay in-process.
     const feKind = stackKind(project.templateType);
     const useFrontendContainer =
-      !isStatic && isolationEnabled() && !projectDbUrl &&
+      !isStatic && isolationEnabled() && (!projectDbUrl || dbIsContainer) &&
       (feKind === 'nuxt' || feKind === 'next' || feKind === 'angular') &&
       cfg?.frontend?.isolate !== false;
 
@@ -1999,6 +2017,8 @@ class PreviewManager {
       const cenv: Record<string, string> = {};
       for (const [k, v] of Object.entries(c.env ?? {})) cenv[k] = substVars(String(v), cvars);
       cenv.CORS_ORIGIN = resolvedUrl; // allow the frontend's origin
+      // The backend shares the project net, so it reaches the DB at db:5432.
+      if (projectDbUrl) cenv.DATABASE_URL = projectDbUrl;
       try { for (const ev of await listEnvVars(projectId)) cenv[ev.key] = ev.value; } catch { /* best-effort */ }
       try {
         // Distinct name from the frontend container (which is claudable-preview-<slug>).
@@ -2201,10 +2221,12 @@ class PreviewManager {
       }
     );
 
-    // Phase 1: join the isolated frontend container to the project net so its
-    // SERVER-SIDE code resolves the backend at http://api:<port> (see composedInternalUrl).
-    // Background: the container is created async by `docker run`; connectToProjectNet retries.
-    if (useFrontendContainer && composedInternalUrl) {
+    // Join the isolated frontend container to the project net so its SERVER-SIDE
+    // code reaches this project's own services directly: the backend at
+    // http://api:<port> (composedInternalUrl) AND the database at db:5432
+    // (dbIsContainer). Background: `docker run` creates the container async, so
+    // connectToProjectNet retries.
+    if (useFrontendContainer && (composedInternalUrl || dbIsContainer)) {
       void ensureProjectNetwork(projectId).then((net) =>
         connectToProjectNet(net, `claudable-preview-${previewSlug(projectId)}`));
     }
