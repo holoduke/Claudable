@@ -350,6 +350,20 @@ async function runContainerizedTurn(args: {
       : path.resolve(process.cwd(), projectPath);
     const projectHostPath = agentHostPath(absoluteProjectPath);
 
+    // Persistent per-project HOME so the CLI's session transcripts (~/.claude)
+    // survive between turns — without this every containerized turn is amnesiac
+    // and --resume can never find its session. Lives under DATA_DIR (not in the
+    // project repo, so checkpoints stay clean); must be writable by uid 1000.
+    let homeHostPath: string | undefined;
+    try {
+      const homeDir = path.resolve(process.cwd(), 'data', 'agent-homes', projectId);
+      await fs.mkdir(homeDir, { recursive: true });
+      await fs.chmod(homeDir, 0o777);
+      homeHostPath = agentHostPath(homeDir);
+    } catch (e) {
+      console.error('[ClaudeContainer] Failed to prepare agent home (running amnesiac):', e);
+    }
+
     // The 3 in-process tools become NETWORK tools: registered under a per-turn
     // capability token, served by /api/agent-mcp/<token>/<server>, revoked below.
     mcp = await prepareAgentMcpTurnConfig({
@@ -391,6 +405,7 @@ async function runContainerizedTurn(args: {
         systemPrompt,
         mcpConfigPath: mcp?.containerPath,
         strictMcpConfig: Boolean(mcp),
+        homeHostPath,
       },
       onEvent,
     );

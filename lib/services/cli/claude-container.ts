@@ -32,6 +32,7 @@ export interface ContainerTurnOptions {
   sandboxNet?: string;                  // egress-locked network name
   mcpConfigPath?: string;               // path (in-container) to a --mcp-config json of NETWORK tools
   strictMcpConfig?: boolean;            // only use the given mcp-config (ignore any other sources)
+  homeHostPath?: string;                // persistent per-project HOME (CLI session transcripts → --resume works across turns)
   systemPrompt?: string;                // REPLACES the CLI default (parity with the SDK's systemPrompt option)
   env?: Record<string, string>;         // extra project env (already secret-free)
   memory?: string;                      // e.g. "2g"
@@ -56,9 +57,15 @@ export function buildAgentContainerArgs(o: ContainerTurnOptions): string[] {
     '-v', `${o.projectHostPath}:/work`,
     // HARD BOUNDARY: no docker socket, no DOCKER_HOST — the agent cannot reach the
     // control plane's Docker (can't self-provision). Egress-locked sandbox net only.
-    '-e', 'HOME=/tmp',
     '-e', `CLAUDE_CODE_OAUTH_TOKEN=${o.oauthToken}`,
   ];
+  // Persistent HOME (session transcripts under ~/.claude → --resume works across
+  // turns). Ephemeral /tmp fallback = amnesiac turns, kept for safety.
+  if (o.homeHostPath && o.homeHostPath.trim()) {
+    args.push('-v', `${o.homeHostPath.trim()}:/home/agent`, '-e', 'HOME=/home/agent');
+  } else {
+    args.push('-e', 'HOME=/tmp');
+  }
   for (const [k, v] of Object.entries(o.env ?? {})) args.push('-e', `${k}=${v}`);
   if (o.sandboxNet && o.sandboxNet.trim()) args.push('--network', o.sandboxNet.trim());
   args.push(image, 'node', CLI_IN_IMAGE,
