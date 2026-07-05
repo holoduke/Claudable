@@ -1,5 +1,5 @@
 "use client";
-import { createContext, useCallback, useContext, useState, useRef } from 'react';
+import { createContext, useCallback, useContext, useMemo, useState, useRef } from 'react';
 
 type ToastKind = 'success' | 'error' | 'info';
 interface Toast { id: number; kind: ToastKind; message: string }
@@ -25,12 +25,13 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
     setTimeout(() => remove(id), kind === 'error' ? 6000 : 3500);
   }, [remove]);
 
-  const api: ToastApi = {
-    toast,
-    success: useCallback((m: string) => toast(m, 'success'), [toast]),
-    error: useCallback((m: string) => toast(m, 'error'), [toast]),
-    info: useCallback((m: string) => toast(m, 'info'), [toast]),
-  };
+  const success = useCallback((m: string) => toast(m, 'success'), [toast]);
+  const error = useCallback((m: string) => toast(m, 'error'), [toast]);
+  const info = useCallback((m: string) => toast(m, 'info'), [toast]);
+  const api: ToastApi = useMemo(
+    () => ({ toast, success, error, info }),
+    [toast, success, error, info]
+  );
 
   return (
     <ToastContext.Provider value={api}>

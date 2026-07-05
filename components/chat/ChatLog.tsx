@@ -4,10 +4,12 @@ import { motion, AnimatePresence } from 'framer-motion';
 import ReactMarkdown from 'react-markdown';
 import { useWebSocket } from '@/hooks/useWebSocket';
 import ToolResultItem from './ToolResultItem';
+import { extractDiffData } from './DiffView';
 import ThinkingSection from './ThinkingSection';
 import type { ChatMessage, RealtimeEvent, RealtimeStatus } from '@/types';
 import { toChatMessage, normalizeChatContent } from '@/lib/serializers/client/chat';
 import { toRelativePath } from '@/lib/utils/path';
+import { useToast } from '@/components/ui/Toast';
 
 import { type ToolAction, normalizeAction, inferActionFromToolName, pickFirstString, extractPathFromInput } from '@/lib/services/cli/tool-metadata';
 
@@ -773,11 +775,20 @@ const ToolMessage = ({
       ? cleanedContent
       : metadataContentCandidate) ?? lastStableValuesRef.current.content;
   
+  const toolInput =
+    metadata && typeof metadata === 'object'
+      ? (metadata as Record<string, unknown>).toolInput ??
+        (metadata as Record<string, unknown>).tool_input ??
+        (metadata as Record<string, unknown>).input
+      : undefined;
+  const diffData = extractDiffData(toolInput, persistedAction);
+
   return (
     <ToolResultItem
       action={persistedAction}
       filePath={persistedLabel}
       content={persistedContent}
+      diff={diffData}
       isExpanded={isExpanded}
       onToggle={onToggle}
     />
@@ -822,6 +833,7 @@ interface ChatLogProps {
 }
 
 export default function ChatLog({ projectId, onSessionStatusChange, onProjectStatusUpdate, onSseFallbackActive, startRequest, completeRequest, onAddUserMessage, serverBusy = false, onReverted }: ChatLogProps) {
+  const toast = useToast();
   const [revertingSha, setRevertingSha] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const copyMessage = useCallback(async (id: string, text: string) => {
@@ -835,13 +847,13 @@ export default function ChatLog({ projectId, onSessionStatusChange, onProjectSta
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sha }),
       });
       if (res.ok) onReverted?.();
-      else alert('Revert failed. The checkpoint may no longer be available.');
+      else toast.error('Revert failed. The checkpoint may no longer be available.');
     } catch {
-      alert('Revert failed.');
+      toast.error('Revert failed.');
     } finally {
       setRevertingSha(null);
     }
-  }, [projectId, onReverted]);
+  }, [projectId, onReverted, toast]);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [selectedLog, setSelectedLog] = useState<LogEntry | null>(null);

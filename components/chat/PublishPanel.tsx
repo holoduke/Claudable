@@ -2,6 +2,7 @@
 import { FaRocket } from 'react-icons/fa';
 import { formatTimeAgo } from '@/lib/utils/format';
 import type { DeployRun, DeploymentStatus } from '@/hooks/useDeployPolling';
+import { useToast } from '@/components/ui/Toast';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? '';
 
@@ -53,6 +54,7 @@ export default function PublishPanel({
   onClose,
   onOpenServiceSettings,
 }: PublishPanelProps) {
+  const toast = useToast();
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/50" onClick={onClose} />
@@ -215,7 +217,7 @@ export default function PublishPanel({
                   }
                 } catch (e) {
                   console.error('🚀 Gitea publish failed:', e);
-                  alert('Publish failed. Make sure the project is connected to Gitea in Settings → Services.');
+                  toast.error('Publish failed. Make sure the project is connected to Gitea in Settings → Services.');
                   setDeploymentStatus('idle');
                   setPublishLoading(false);
                 }
@@ -263,7 +265,7 @@ export default function PublishPanel({
                 }
               } catch (e) {
                 console.error('🚀 Publish failed:', e);
-                alert('Publish failed. Check Settings and tokens.');
+                toast.error('Publish failed. Check Settings and tokens.');
                 setDeploymentStatus('idle');
                 setPublishLoading(false);
                 setTimeout(() => onClose(), 1000);

@@ -998,7 +998,7 @@ export default function HomePage() {
                 </h1>
               </div>
               <p className="text-xl text-gray-700 dark:text-gray-200 font-light tracking-tight">
-                Connect CLI Agent • Build what you want • Deploy instantly
+                Describe it • Watch it build • Ship it
               </p>
             </div>
             
@@ -1404,16 +1404,20 @@ export default function HomePage() {
                         }}
                         className="group text-left rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 hover:border-gray-300 dark:hover:border-gray-600 hover:shadow-sm transition-all overflow-hidden"
                       >
-                        {/* Site thumbnail (headless screenshot of the preview). The
-                            gradient shows until/unless a thumbnail exists; the img
-                            hides itself on 404 to reveal it. */}
-                        <div className="aspect-video w-full bg-gradient-to-br from-gray-100 to-gray-200 dark:from-gray-800 dark:to-gray-900 relative">
+                        {/* Site thumbnail (headless screenshot of the preview). When
+                            none exists yet (preview never run), a branded placeholder
+                            with the project's initial shows instead of flat grey; the
+                            img hides itself on 404 to reveal it. */}
+                        <div className="aspect-video w-full relative bg-gradient-to-br from-[#DE7356]/8 via-gray-50 to-[#DE7356]/5 dark:from-[#DE7356]/12 dark:via-gray-900 dark:to-gray-950 flex items-center justify-center overflow-hidden">
+                          <span className="text-4xl font-bold text-[#DE7356]/25 dark:text-[#DE7356]/35 select-none" aria-hidden>
+                            {(project.name || '?').trim().charAt(0).toUpperCase()}
+                          </span>
                           {/* eslint-disable-next-line @next/next/no-img-element */}
                           <img
                             src={`${API_BASE}/api/projects/${project.id}/thumbnail${thumbsVersion ? `?v=${thumbsVersion}` : ''}`}
                             alt=""
                             loading="lazy"
-                            className="w-full h-full object-cover object-top"
+                            className="absolute inset-0 w-full h-full object-cover object-top"
                             onError={(e) => { (e.currentTarget as HTMLImageElement).style.visibility = 'hidden'; }}
                             onLoad={(e) => { (e.currentTarget as HTMLImageElement).style.visibility = 'visible'; }}
                           />

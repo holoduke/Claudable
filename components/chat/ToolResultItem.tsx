@@ -1,27 +1,35 @@
 import React, { useId, useState } from 'react';
 import { motion } from 'framer-motion';
 import { toRelativePath } from '@/lib/utils/path';
+import DiffView, { DiffData } from './DiffView';
 
 interface ToolResultItemProps {
   action: 'Edited' | 'Created' | 'Read' | 'Deleted' | 'Generated' | 'Searched' | 'Executed';
   filePath: string;
   content?: string;
+  diff?: DiffData | null;
   isExpanded?: boolean;
   onToggle?: (nextExpanded: boolean) => void;
 }
+
+const hasDiffData = (diff?: DiffData | null): diff is DiffData =>
+  Boolean(diff && (diff.patch || (diff.segments && diff.segments.length > 0)));
 
 const ToolResultItem: React.FC<ToolResultItemProps> = ({
   action,
   filePath,
   content,
+  diff,
   isExpanded: controlledExpanded,
   onToggle,
 }) => {
   const [uncontrolledExpanded, setUncontrolledExpanded] = useState(false);
+  const [copied, setCopied] = useState(false);
   const contentId = useId();
   const isControlled = typeof controlledExpanded === 'boolean';
   const isExpanded = isControlled ? controlledExpanded : uncontrolledExpanded;
-  const hasContent = Boolean(content);
+  const showDiff = (action === 'Edited' || action === 'Created') && hasDiffData(diff);
+  const hasContent = Boolean(content) || showDiff;
 
   const handleToggle = () => {
     if (!hasContent) return;
@@ -34,6 +42,22 @@ const ToolResultItem: React.FC<ToolResultItemProps> = ({
 
   // Convert to relative path for display
   const displayPath = toRelativePath(filePath);
+
+  const copyText = showDiff && diff
+    ? diff.patch ?? (diff.segments ?? []).map((s) => s.newText || s.oldText).join('\n')
+    : content ?? '';
+
+  const handleCopy = async (event: React.MouseEvent) => {
+    event.stopPropagation();
+    if (!copyText) return;
+    try {
+      await navigator.clipboard.writeText(copyText);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      /* clipboard blocked */
+    }
+  };
   
   const getIcon = () => {
     switch (action) {
@@ -137,9 +161,31 @@ const ToolResultItem: React.FC<ToolResultItemProps> = ({
           id={contentId}
         >
           <div className="mt-2 ml-6 p-3 bg-gray-50 dark:bg-gray-900 rounded-lg">
-            <pre className="text-xs text-gray-700 dark:text-gray-200 font-mono whitespace-pre-wrap break-words">
-              {content}
-            </pre>
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <span
+                className="truncate text-[11px] font-mono text-gray-500 dark:text-gray-400"
+                title={displayPath}
+              >
+                {displayPath}
+              </span>
+              {copyText ? (
+                <button
+                  type="button"
+                  onClick={handleCopy}
+                  className="shrink-0 rounded px-1.5 py-0.5 text-[11px] text-gray-500 hover:bg-gray-200 dark:text-gray-400 dark:hover:bg-gray-700 transition-colors"
+                  aria-label="Copy to clipboard"
+                >
+                  {copied ? 'Copied' : 'Copy'}
+                </button>
+              ) : null}
+            </div>
+            {showDiff && diff ? (
+              <DiffView diff={diff} />
+            ) : (
+              <pre className="text-xs text-gray-700 dark:text-gray-200 font-mono whitespace-pre-wrap break-words">
+                {content}
+              </pre>
+            )}
           </div>
         </motion.div>
       )}
