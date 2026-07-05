@@ -40,7 +40,7 @@ const DEPLOY_HOST_GATEWAY = process.env.DEPLOY_HOST_GATEWAY || 'host.docker.inte
  * avoid ports already in use on the host. Deterministic so re-runs target the
  * same port; collisions within the band surface loudly via the health check.
  */
-export function deployPortFor(repoName: string): number {
+function deployPortFor(repoName: string): number {
   let hash = 0;
   for (let i = 0; i < repoName.length; i += 1) {
     hash = (hash * 31 + repoName.charCodeAt(i)) >>> 0;

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
-import { SendHorizontal, MessageSquare, Image as ImageIcon, Wrench } from 'lucide-react';
+import { SendHorizontal, MessageSquare, Image as ImageIcon, Wrench, Square } from 'lucide-react';
 import { useToast } from '@/components/ui/Toast';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? '';
@@ -47,6 +47,8 @@ interface ChatInputProps {
   onCliChange?: (cliId: string) => void;
   cliChangeDisabled?: boolean;
   isRunning?: boolean;
+  /** Interrupt the running turn (CLI parity: Esc). Shown as a Stop button while running. */
+  onStop?: () => void;
 }
 
 export default function ChatInput({
@@ -66,7 +68,8 @@ export default function ChatInput({
   cliOptions = [],
   onCliChange,
   cliChangeDisabled = false,
-  isRunning = false
+  isRunning = false,
+  onStop
 }: ChatInputProps) {
   const toast = useToast();
   const [message, setMessage] = useState('');
@@ -266,6 +269,12 @@ export default function ChatInput({
       if (e.key === 'ArrowUp') { e.preventDefault(); setSkillActiveIdx((i) => (i - 1 + skillMatches.length) % skillMatches.length); return; }
       if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); const s = skillMatches[skillActiveIdx]; if (s) chooseSkill(s.name); return; }
       if (e.key === 'Escape') { e.preventDefault(); setDismissedQuery(skillQuery); return; }
+    }
+    // CLI parity: Esc interrupts the running turn.
+    if (e.key === 'Escape' && isRunning && onStop) {
+      e.preventDefault();
+      onStop();
+      return;
     }
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
@@ -706,14 +715,27 @@ export default function ChatInput({
             </button>
           </div>
 
-          <button
-            id="chatinput-send-message-button"
-            type="submit"
-            className="flex size-8 items-center justify-center rounded-full bg-gray-900 text-white transition-all duration-150 ease-out disabled:cursor-not-allowed disabled:opacity-50 hover:scale-110 disabled:hover:scale-100"
-            disabled={disabled || isSubmitting || isUploading || (!message.trim() && uploadedImages.length === 0)}
-          >
-            <SendHorizontal className="h-4 w-4" />
-          </button>
+          <div className="flex items-center gap-1.5">
+            {isRunning && onStop && (
+              <button
+                type="button"
+                onClick={onStop}
+                title="Stop the current turn (Esc)"
+                aria-label="Stop the current turn"
+                className="flex size-8 items-center justify-center rounded-full border border-red-500/40 bg-red-500/10 text-red-500 transition-all duration-150 ease-out hover:bg-red-500 hover:text-white"
+              >
+                <Square className="h-3 w-3 fill-current" />
+              </button>
+            )}
+            <button
+              id="chatinput-send-message-button"
+              type="submit"
+              className="flex size-8 items-center justify-center rounded-full bg-[#DE7356] text-white transition-all duration-150 ease-out disabled:cursor-not-allowed disabled:opacity-50 hover:bg-[#c9634a] hover:scale-110 disabled:hover:scale-100 disabled:hover:bg-[#DE7356]"
+              disabled={disabled || isSubmitting || isUploading || (!message.trim() && uploadedImages.length === 0)}
+            >
+              <SendHorizontal className="h-4 w-4" />
+            </button>
+          </div>
         </div>
       </div>
 

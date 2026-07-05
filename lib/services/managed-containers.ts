@@ -70,10 +70,10 @@ export interface ManagedServiceView {
   injectKeys: string[];             // names of the env vars this service exposes (no values)
 }
 
-export function serviceContainerName(projectId: string, id: string): string {
+function serviceContainerName(projectId: string, id: string): string {
   return `claudable-svc-${previewSlug(projectId)}-${id}`;
 }
-export function serviceVolumeName(projectId: string, id: string): string {
+function serviceVolumeName(projectId: string, id: string): string {
   return `claudable-svc-${previewSlug(projectId)}-${id}-data`;
 }
 export function managedContainersEnabled(): boolean {
@@ -135,16 +135,6 @@ export async function listServiceViews(projectId: string): Promise<ManagedServic
     ports: s.ports || [],
     injectKeys: Object.keys(decryptBlob(s.injectEnvEnc)),
   }));
-}
-
-/** Add (or replace by id) a managed container spec. Does NOT start it. */
-export async function addService(projectId: string, spec: ManagedServiceSpec): Promise<void> {
-  await withSpecLock(projectId, async () => {
-    const services = await getServices(projectId);
-    const next = services.filter((s) => s.id !== spec.id);
-    next.push(spec);
-    await saveServices(projectId, next);
-  });
 }
 
 /** Remove a managed container (stops it; drops its volume only if asked). */
@@ -392,7 +382,7 @@ export function orderServiceLevels(services: ManagedServiceSpec[]): ManagedServi
  * on the DB (implicitly or via dependsOn) only starts once the DB accepts
  * connections — no crash-loop-until-restart.
  */
-export async function startServices(projectId: string, log?: (line: string) => void): Promise<void> {
+async function startServices(projectId: string, log?: (line: string) => void): Promise<void> {
   const services = await getServices(projectId);
   if (!services.length) return;
   const net = await ensureProjectNetwork(projectId);
@@ -414,7 +404,7 @@ export async function startServices(projectId: string, log?: (line: string) => v
  * request/migration doesn't race a just-started Postgres. Best-effort: returns
  * after `timeoutMs` regardless (the app's own client retries cover the rest).
  */
-export async function waitForServicesHealthy(
+async function waitForServicesHealthy(
   projectId: string,
   timeoutMs = 25_000,
   log?: (line: string) => void,
@@ -439,13 +429,6 @@ export async function waitForServicesHealthy(
     if (pending.size) await new Promise((r) => setTimeout(r, 500));
   }
   if (pending.size) log?.(`[svc] readiness timed out for: ${[...pending].join(', ')}`);
-}
-
-/** Stop all managed containers (keeps their volumes). */
-export async function stopServices(projectId: string): Promise<void> {
-  for (const spec of await getServices(projectId)) {
-    await docker(['rm', '-f', serviceContainerName(projectId, spec.id)]);
-  }
 }
 
 /**
@@ -575,7 +558,7 @@ export async function hasContainerDb(projectId: string): Promise<boolean> {
 }
 
 /** The internal DATABASE_URL this project's container DB exposes, or null. */
-export async function getContainerDbUrl(projectId: string): Promise<string | null> {
+async function getContainerDbUrl(projectId: string): Promise<string | null> {
   return (await getInjectedEnv(projectId)).DATABASE_URL || null;
 }
 

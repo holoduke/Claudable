@@ -64,14 +64,3 @@ export function handleApiError(
 
   return createErrorResponse(defaultMessage, message, status);
 }
-
-/**
- * Wrapper for async API handlers with consistent error handling
- */
-export function withApiHandler<T = any>(
-  handler: () => Promise<NextResponse<ApiResponse<T>>>,
-  context: string,
-  errorMessage?: string
-): Promise<NextResponse<ApiResponse<T>>> {
-  return handler().catch((error) => handleApiError(error, context, errorMessage));
-}

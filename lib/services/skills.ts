@@ -37,10 +37,10 @@ const STATE_FILE = '.skills-state.json'; // <project>/.claude/.skills-state.json
 const DISABLED_SUBDIR = '.disabled'; // parked (disabled) project skills
 
 // Pure id logic lives in skills-id.ts (no prisma) so it stays unit-testable.
-// Imported for internal use and re-exported so existing
+// Imported for internal use; SkillError is re-exported so existing
 // `@/lib/services/skills` imports keep working.
 import { SkillError, normalizeSkillName, assertSafeSkillId } from './skills-id';
-export { SkillError, normalizeSkillName, assertSafeSkillId };
+export { SkillError };
 
 async function projectBaseDir(projectId: string): Promise<string> {
   const project = await getProjectById(projectId);
@@ -130,10 +130,6 @@ async function readSkillsDir(
 
 async function claudeDir(projectId: string): Promise<string> {
   return path.join(await projectBaseDir(projectId), '.claude');
-}
-
-export async function getDisabledSkills(projectId: string): Promise<string[]> {
-  return [...(await getDisabledSet(projectId))].sort();
 }
 
 /** True once the user has disabled at least one skill for this project. */
@@ -326,7 +322,7 @@ export async function listSkills(projectId: string): Promise<Skill[]> {
 }
 
 /** Global (shared) skills, with this project's enabled state applied. */
-export async function listGlobalSkills(projectId: string): Promise<Skill[]> {
+async function listGlobalSkills(projectId: string): Promise<Skill[]> {
   const disabled = await getDisabledSet(projectId);
   const skills = await readSkillsDir(globalSkillsDir(), 'global');
   return skills.map((s) => ({ ...s, enabled: !disabled.has(s.id) }));

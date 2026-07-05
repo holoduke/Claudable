@@ -10,7 +10,7 @@
  */
 import { lookup } from 'dns/promises';
 
-export function isBlockedHost(host: string): boolean {
+function isBlockedHost(host: string): boolean {
   const h = host.trim().toLowerCase().replace(/^\[|\]$/gu, '');
   if (!h) return true;
   if (h === 'localhost' || h.endsWith('.localhost') || h.endsWith('.local') || h.endsWith('.internal')) return true;

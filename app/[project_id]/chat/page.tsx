@@ -2023,6 +2023,17 @@ const persistProjectPreferences = useCallback(
 
   runActRef.current = (m, i) => runAct(m, i);
   currentRouteRef.current = currentRoute;
+
+  // CLI parity: Stop/Esc interrupts the running turn server-side. The SSE
+  // 'completed' status it triggers flips isRunning; queued messages then flow.
+  async function stopTurn() {
+    try {
+      await fetch(`${API_BASE}/api/chat/${projectId}/act/stop`, { method: 'POST' });
+    } catch {
+      /* best-effort — the turn keeps streaming if the stop didn't land */
+    }
+  }
+
   async function runAct(messageOverride?: string, externalImages?: any[]) {
     let finalMessage = messageOverride || prompt;
     const imagesToUse = externalImages || uploadedImages;
@@ -2650,6 +2661,8 @@ const persistProjectPreferences = useCallback(
                 }}
                 // Never disabled — always allow typing/sending (queued while busy).
                 disabled={false}
+                isRunning={isRunning || hasActiveRequests}
+                onStop={stopTurn}
                 placeholder={mode === 'act' ? "Ask Claudable..." : "Chat with Claudable..."}
                 mode={mode}
                 onModeChange={setMode}
@@ -2747,7 +2760,6 @@ const persistProjectPreferences = useCallback(
                             }
                           }}
                           className="bg-transparent text-sm text-gray-700 dark:text-gray-200 outline-none w-40"
-                          placeholder="route"
                         />
                         <button
                           onClick={() => navigateToRoute(currentRoute)}

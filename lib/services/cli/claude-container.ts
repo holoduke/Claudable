@@ -15,6 +15,9 @@
  */
 import { spawn, type ChildProcess } from 'child_process';
 import path from 'path';
+import fs from 'fs';
+import os from 'os';
+import { randomUUID } from 'crypto';
 
 /** A parsed stream-json event from the CLI (system/assistant/tool_use/result …). */
 export interface AgentStreamEvent {
@@ -43,6 +46,11 @@ export interface ContainerTurnOptions {
   cpus?: string;                        // e.g. "2.0"
   timeoutMs?: number;                   // hang safety net (default 30 min)
   containerName?: string;               // named claudable-agent-* so the boot sweep can reap orphans
+  /** 0600 tmp file carrying the OAuth token + project env. Keeps secrets OUT of
+   *  the `docker run` argv, which any host user can read via /proc. Set by
+   *  runAgentTurnContainerized; the inline `-e` fallback exists only for direct
+   *  callers of buildAgentContainerArgs. */
+  envFilePath?: string;
 }
 
 const CLI_IN_IMAGE = '/app/node_modules/@anthropic-ai/claude-agent-sdk/cli.js';
@@ -63,8 +71,14 @@ export function buildAgentContainerArgs(o: ContainerTurnOptions): string[] {
     '-v', `${o.projectHostPath}:/work`,
     // HARD BOUNDARY: no docker socket, no DOCKER_HOST — the agent cannot reach the
     // control plane's Docker (can't self-provision). Egress-locked sandbox net only.
-    '-e', `CLAUDE_CODE_OAUTH_TOKEN=${o.oauthToken}`,
   ];
+  // Secrets (OAuth token, project DB URLs) travel via a 0600 env-file the docker
+  // CLIENT reads locally — never on the world-readable argv.
+  if (o.envFilePath) {
+    args.push('--env-file', o.envFilePath);
+  } else {
+    args.push('-e', `CLAUDE_CODE_OAUTH_TOKEN=${o.oauthToken}`);
+  }
   // Persistent HOME (session transcripts under ~/.claude → --resume works across
   // turns). Ephemeral /tmp fallback = amnesiac turns, kept for safety.
   const home = o.homeHostPath && o.homeHostPath.trim() ? o.homeHostPath.trim() : '';
@@ -82,7 +96,9 @@ export function buildAgentContainerArgs(o: ContainerTurnOptions): string[] {
   if (o.skillsHostPath && o.skillsHostPath.trim() && o.skillsContainerPath && o.skillsContainerPath.trim()) {
     args.push('-v', `${o.skillsHostPath.trim()}:${o.skillsContainerPath.trim()}:ro`);
   }
-  for (const [k, v] of Object.entries(o.env ?? {})) args.push('-e', `${k}=${v}`);
+  if (!o.envFilePath) {
+    for (const [k, v] of Object.entries(o.env ?? {})) args.push('-e', `${k}=${v}`);
+  }
   // Attach BOTH networks at creation (docker 20.10+): the sandbox net for egress
   // to the Anthropic API (PRIMARY), and the project's internal net so `db`/`cache`
   // aliases resolve from the FIRST command — no post-spawn attach race.
@@ -94,8 +110,10 @@ export function buildAgentContainerArgs(o: ContainerTurnOptions): string[] {
     args.push('--network', o.sandboxNet.trim());
     if (o.projectNet && o.projectNet.trim()) args.push('--network', o.projectNet.trim());
   }
+  // The prompt is NOT passed as an argument (it would be visible in `ps` on the
+  // host) — runAgentTurnContainerized pipes it via stdin, which `-p` reads to EOF.
   args.push(image, 'node', CLI_IN_IMAGE,
-    '-p', o.prompt,
+    '-p',
     '--output-format', 'stream-json', '--verbose',
     '--permission-mode', 'bypassPermissions');
   if (o.model) args.push('--model', o.model);
@@ -124,9 +142,21 @@ export function runAgentTurnContainerized(
   o: ContainerTurnOptions,
   onEvent: (e: AgentStreamEvent) => void,
 ): { done: Promise<ContainerTurnResult>; abort: () => void } {
-  const child: ChildProcess = spawn('docker', buildAgentContainerArgs(o), { env: process.env });
-  // The CLI in -p mode still reads stdin to EOF (piped-prompt support); an open
-  // pipe makes it wait FOREVER before starting. Close it so it sees EOF at once.
+  // Secrets + project env go through a 0600 env-file (docker reads it client-side)
+  // and the prompt through stdin — NEITHER may appear in the world-readable argv.
+  // Env-file values are single-line by format; strip newlines defensively.
+  const envFile = path.join(os.tmpdir(), `claudable-agent-env-${randomUUID().slice(0, 12)}`);
+  const envLines = [
+    `CLAUDE_CODE_OAUTH_TOKEN=${String(o.oauthToken).replace(/\r?\n/g, '')}`,
+    ...Object.entries(o.env ?? {}).map(([k, v]) => `${k}=${String(v).replace(/\r?\n/g, ' ')}`),
+  ];
+  fs.writeFileSync(envFile, envLines.join('\n') + '\n', { mode: 0o600 });
+  const removeEnvFile = () => { try { fs.unlinkSync(envFile); } catch { /* already gone */ } };
+
+  const child: ChildProcess = spawn('docker', buildAgentContainerArgs({ ...o, envFilePath: envFile }), { env: process.env });
+  // `-p` reads the prompt from stdin to EOF; write it and close so the CLI starts
+  // immediately (an open pipe would make it wait forever).
+  child.stdin?.write(o.prompt);
   child.stdin?.end();
   let sessionId: string | undefined;
   let stderr = '';
@@ -166,9 +196,10 @@ export function runAgentTurnContainerized(
   }, timeoutMs);
 
   const done = new Promise<ContainerTurnResult>((resolve) => {
-    child.on('error', (e) => { clearTimeout(timer); resolve({ ok: false, code: null, error: e.message }); });
+    child.on('error', (e) => { clearTimeout(timer); removeEnvFile(); resolve({ ok: false, code: null, error: e.message }); });
     child.on('exit', (code) => {
       clearTimeout(timer);
+      removeEnvFile();
       if (buf.trim()) handleLine(buf); // flush any trailing partial line
       if (timedOut) {
         resolve({ ok: false, code, sessionId, error: `Agent turn timed out after ${Math.round(timeoutMs / 60000)} minutes.` });

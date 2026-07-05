@@ -19,6 +19,7 @@ import { resolveProjectClaudeToken } from '../claude-credentials';
 import { buildItopsMcpServer } from '../itops/itops-mcp';
 import { buildDiagnosticsMcpServer } from '../diagnostics-mcp';
 import { runAgentTurnContainerized, agentHostPath, defaultAgentSandboxNet, type AgentStreamEvent } from './claude-container';
+import { registerAgentRun, unregisterAgentRun } from './run-registry';
 import { prepareAgentMcpTurnConfig } from '../agent-mcp-http';
 import { previewSlug, ensureProjectNetwork } from '../preview';
 import { getInjectedEnv, ensureServicesRunning } from '../managed-containers';
@@ -358,9 +359,16 @@ async function runContainerizedTurn(args: {
     // project repo, so checkpoints stay clean); must be writable by uid 1000.
     let homeHostPath: string | undefined;
     try {
-      const homeDir = path.resolve(process.cwd(), 'data', 'agent-homes', projectId);
+      const homesRoot = path.resolve(process.cwd(), 'data', 'agent-homes');
+      const homeDir = path.join(homesRoot, projectId);
       await fs.mkdir(homeDir, { recursive: true });
-      await fs.chmod(homeDir, 0o777).catch(() => {}); // best-effort — the real test is writability
+      // Owner-only: the app and the agent container both run as uid 1000, so 700
+      // suffices — transcripts must not be readable (or writable: CLAUDE.md
+      // poisoning) by other host users. Parent locked too so new files inside
+      // stay unreachable regardless of their own mode. Best-effort — the real
+      // test is the write probe below.
+      await fs.chmod(homesRoot, 0o700).catch(() => {});
+      await fs.chmod(homeDir, 0o700).catch(() => {});
       // Verify the dir is actually WRITABLE by us before committing to it — a
       // chmod that failed (e.g. root-owned dir) must not silently make every turn
       // amnesiac. Probe with a real write; only fall back to /tmp if it fails.
@@ -453,7 +461,8 @@ async function runContainerizedTurn(args: {
     // Named so the boot sweep reaps it if this process dies mid-turn. A random
     // suffix makes it collision-proof for concurrent turns.
     const containerName = `claudable-agent-${previewSlug(projectId)}-${randomUUID().slice(0, 8)}`;
-    const { done } = runAgentTurnContainerized(
+    let interruptedByUser = false;
+    const { done, abort } = runAgentTurnContainerized(
       {
         projectHostPath,
         prompt: instruction,
@@ -478,8 +487,30 @@ async function runContainerizedTurn(args: {
       onEvent,
     );
 
-    const result = await done;
+    // Expose this turn to the Stop endpoint (Esc-style interrupt). The flag lets
+    // the failure path below tell "user pressed Stop" apart from a real crash.
+    registerAgentRun(projectId, {
+      requestId,
+      abort: () => {
+        interruptedByUser = true;
+        abort();
+      },
+    });
+
+    let result: Awaited<typeof done>;
+    try {
+      result = await done;
+    } finally {
+      unregisterAgentRun(projectId, requestId);
+    }
     await queue; // flush in-flight message handling before finishing the turn
+
+    if (interruptedByUser) {
+      await args.safeMarkFailed('Stopped by user');
+      args.publishStatus('completed', 'Stopped by user');
+      console.log('[ClaudeContainer] Turn stopped by user');
+      return;
+    }
 
     // Success = the CLI reported a `result` with subtype 'success' (this covers a
     // usage-policy refusal, which still "succeeds" at producing its message). A
@@ -651,6 +682,10 @@ export async function executeClaude(
   // Collect stderr from SDK process for better diagnostics
   const stderrBuffer: string[] = [];
 
+  // Esc-style interrupt: the Stop endpoint (via the run registry) aborts this
+  // controller, which the SDK honors mid-turn.
+  const abortController = new AbortController();
+
   let currentSessionId: string | undefined = sessionId;
 
   // Shared message handler (system/init, assistant, result) + the placeholder/
@@ -763,9 +798,12 @@ export async function executeClaude(
     // Start Claude Agent SDK query
     console.log(`[ClaudeService] 🤖 Querying Claude Agent SDK...`);
     console.log(`[ClaudeService] 📁 Working Directory: ${absoluteProjectPath}`);
+    registerAgentRun(projectId, { requestId, abort: () => abortController.abort() });
+
     const response = query({
       prompt: instruction,
       options: {
+        abortController,
         cwd: absoluteProjectPath, // SDK uses `cwd` (workingDirectory is ignored); without this the agent edits Claudable's own /app
         workingDirectory: absoluteProjectPath, // Work only in project folder (protects Claudable root)
         additionalDirectories: [absoluteProjectPath],
@@ -1026,6 +1064,18 @@ export async function executeClaude(
       emittedCompletedStatus = true;
     }
   } catch (error) {
+    // User-initiated Stop: not an error. Close the turn quietly (CLI parity:
+    // the transcript keeps whatever streamed before the interrupt).
+    if (abortController.signal.aborted) {
+      console.log('[ClaudeService] Turn stopped by user');
+      await safeMarkFailed('Stopped by user');
+      if (!emittedCompletedStatus) {
+        publishStatus('completed', 'Stopped by user');
+        emittedCompletedStatus = true;
+      }
+      return;
+    }
+
     console.error(`[ClaudeService] Failed to execute Claude:`, error);
 
     let errorMessage = 'Unknown error';
@@ -1102,6 +1152,8 @@ export async function executeClaude(
     });
 
     throw new Error(errorMessage);
+  } finally {
+    unregisterAgentRun(projectId, requestId);
   }
 }
 

@@ -126,7 +126,7 @@ const normalizeSignatureValue = (value?: string | null): string => {
   return trimmed.length > 0 ? trimmed.toLowerCase() : '';
 };
 
-export const computeToolMessageSignature = (
+const computeToolMessageSignature = (
   metadata: Record<string, unknown>,
   content: string,
   messageType: 'tool_use' | 'tool_result' = 'tool_use'

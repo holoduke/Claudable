@@ -8,7 +8,7 @@ import type { Comment, User } from '@prisma/client';
 
 type CommentWithAuthor = Comment & { author: Pick<User, 'id' | 'name' | 'email' | 'image'> | null };
 
-export function serializeComment(c: CommentWithAuthor) {
+function serializeComment(c: CommentWithAuthor) {
   const name = c.authorName || c.author?.name || (c.author?.email ? c.author.email.split('@')[0] : null) || 'Anonymous';
   return {
     id: c.id,
