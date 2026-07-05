@@ -9,6 +9,7 @@
  * by the GET route; they're regenerable, so losing them on redeploy is harmless.
  */
 import { execFile } from 'child_process';
+import { randomUUID } from 'crypto';
 import { promisify } from 'util';
 import fs from 'fs/promises';
 import path from 'path';
@@ -67,7 +68,9 @@ export async function captureThumbnail(projectId: string): Promise<boolean> {
 
   await fs.mkdir(THUMBS_DIR, { recursive: true });
   const out = thumbnailFile(projectId);
-  const tmp = `${out}.tmp.png`;
+  // Unique tmp per capture: the retry loop and a client-triggered POST can run
+  // concurrently, and a shared tmp name made one rename fail with ENOENT.
+  const tmp = `${out}.${randomUUID().slice(0, 8)}.tmp.png`;
   // Containerized previews publish on the docker-bridge gateway (PREVIEW_PUBLISH_HOST,
   // e.g. 10.0.1.1), NOT on localhost inside this container — probing localhost made
   // every capture fail (and, pre-quality-gate, saved screenshots of the browser's
