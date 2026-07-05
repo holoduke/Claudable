@@ -42,10 +42,10 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
             key={t.id}
             role="status"
             onClick={() => remove(t.id)}
-            className={`pointer-events-auto cursor-pointer max-w-sm rounded-lg border px-3.5 py-2.5 text-sm shadow-lg flex items-start gap-2 animate-[toastin_.15s_ease-out] ${
-              t.kind === 'success' ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
-              : t.kind === 'error' ? 'bg-red-50 border-red-200 text-red-800'
-              : 'bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-100'
+            className={`pointer-events-auto cursor-pointer max-w-sm rounded-xl border px-3.5 py-2.5 text-sm shadow-lg backdrop-blur-xl flex items-start gap-2 animate-[toastin_.15s_ease-out] ${
+              t.kind === 'success' ? 'bg-emerald-50/95 border-emerald-200 text-emerald-800 dark:bg-emerald-950/80 dark:border-emerald-500/25 dark:text-emerald-200'
+              : t.kind === 'error' ? 'bg-red-50/95 border-red-200 text-red-800 dark:bg-red-950/80 dark:border-red-500/25 dark:text-red-200'
+              : 'bg-white/95 dark:bg-[#181310]/95 border-gray-200 dark:border-white/10 text-gray-800 dark:text-gray-100'
             }`}
           >
             <span className="mt-0.5 shrink-0">

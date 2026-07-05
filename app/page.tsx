@@ -12,7 +12,8 @@ import ThemeToggle from '@/components/ui/ThemeToggle';
 import { useGlobalSettings } from '@/contexts/GlobalSettingsContext';
 import { getDefaultModelForCli, getModelDisplayName } from '@/lib/constants/cliModels';
 import Image from 'next/image';
-import { Image as ImageIcon } from 'lucide-react';
+import { Image as ImageIcon, Palette, Layers, Server, Database } from 'lucide-react';
+import BrandWordmark from '@/components/ui/BrandWordmark';
 import type { Project as ProjectSummary } from '@/types/project';
 import { fetchCliStatusSnapshot, createCliStatusFallback } from '@/hooks/useCLI';
 import type { CLIStatus } from '@/types/cli';
@@ -738,12 +739,22 @@ export default function HomePage() {
 
 
   return (
-    <div className="flex h-screen relative overflow-hidden bg-white dark:bg-gray-900 ">
+    <div className="flex h-screen relative overflow-hidden bg-white dark:bg-[#0c0a09]">
       {/* My account (always top-right) */}
       <div className="fixed top-3 right-4 z-50 flex items-center gap-2"><ThemeToggle /><UserMenu /></div>
       {/* Radial gradient background from bottom center */}
       <div className="absolute inset-0">
-        <div className="absolute inset-0 bg-white dark:bg-gray-900 " />
+        <div className="absolute inset-0 bg-white dark:bg-[#0c0a09]" />
+        {/* Dotted grid (dark mode), radially masked toward the hero. */}
+        <div
+          className="absolute inset-0 hidden dark:block opacity-40"
+          style={{
+            backgroundImage: 'radial-gradient(rgba(255,255,255,0.07) 1px, transparent 1px)',
+            backgroundSize: '32px 32px',
+            maskImage: 'radial-gradient(ellipse 55% 50% at 50% 38%, black, transparent 75%)',
+            WebkitMaskImage: 'radial-gradient(ellipse 55% 50% at 50% 38%, black, transparent 75%)',
+          }}
+        />
         <div
           className="absolute inset-0 hidden dark:block transition-all duration-1000 ease-in-out"
           style={{
@@ -772,7 +783,7 @@ export default function HomePage() {
         <div className={`${sidebarOpen ? 'w-0' : 'w-12'} fixed inset-y-0 left-0 z-40 bg-transparent border-r border-gray-200 dark:border-gray-700/20 transition-all duration-300 flex flex-col`}>
           <button
             onClick={() => setSidebarOpen(true)}
-            className="w-full h-12 flex items-center justify-center text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+            className="w-full h-12 flex items-center justify-center text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-white/[0.06] transition-colors"
             title="Open sidebar"
           >
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -784,7 +795,7 @@ export default function HomePage() {
           <div className="mt-auto mb-2">
             <button
               onClick={() => setShowGlobalSettings(true)}
-              className="w-full h-12 flex items-center justify-center text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+              className="w-full h-12 flex items-center justify-center text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-white/[0.06] transition-colors"
               title="Settings"
             >
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -796,17 +807,17 @@ export default function HomePage() {
         </div>
         
         {/* Sidebar - Overlay style */}
-        <div className={`${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} fixed inset-y-0 left-0 z-40 w-64 bg-white dark:bg-gray-900/95 backdrop-blur-2xl border-r border-gray-200 dark:border-gray-700 transition-transform duration-300`}>
+        <div className={`${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} fixed inset-y-0 left-0 z-40 w-64 bg-white dark:bg-[#12100e]/95 backdrop-blur-2xl border-r border-gray-200 dark:border-white/[0.08] transition-transform duration-300`}>
         <div className="flex flex-col h-full">
           {/* History header with close button */}
-          <div className="p-3 border-b border-gray-200 dark:border-gray-700 ">
+          <div className="p-3 border-b border-gray-200 dark:border-white/[0.08]">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2 px-2 py-1">
                 <h2 className="text-gray-900 dark:text-gray-50 font-medium text-lg">History</h2>
               </div>
               <button
                 onClick={() => setSidebarOpen(false)}
-                className="p-1 text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-800 rounded transition-colors"
+                className="p-1 text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-white/[0.06] rounded transition-colors"
                 title="Close sidebar"
               >
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -853,7 +864,7 @@ export default function HomePage() {
                         <input
                           name="name"
                           defaultValue={project.name}
-                          className="w-full px-2 py-1 text-sm bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded text-gray-900 dark:text-gray-50 focus:outline-none focus:ring-2 focus:ring-orange-500"
+                          className="w-full px-2 py-1 text-sm bg-white dark:bg-white/[0.06] border border-gray-300 dark:border-white/10 rounded text-gray-900 dark:text-gray-50 focus:outline-none focus:ring-2 focus:ring-[#DE7356]"
                           autoFocus
                           onBlur={() => setEditingProject(null)}
                         />
@@ -864,7 +875,7 @@ export default function HomePage() {
                             // input's onBlur closes the editor, which would otherwise
                             // unmount the form before this submit fires (rename lost).
                             onMouseDown={(e) => e.preventDefault()}
-                            className="px-2 py-1 text-xs bg-orange-500 text-white rounded hover:bg-orange-600 transition-colors"
+                            className="px-2 py-1 text-xs bg-[#DE7356] text-white rounded hover:bg-[#c9634a] transition-colors"
                           >
                             Save
                           </button>
@@ -933,7 +944,7 @@ export default function HomePage() {
                               e.stopPropagation();
                               setEditingProject(project);
                             }}
-                            className="p-1 text-gray-400 dark:text-gray-500 hover:text-orange-500 transition-colors"
+                            className="p-1 text-gray-400 dark:text-gray-500 hover:text-[#DE7356] transition-colors"
                             title="Edit project name"
                           >
                             <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -962,10 +973,10 @@ export default function HomePage() {
             </div>
           </div>
           
-          <div className="p-2 border-t border-gray-200 dark:border-gray-700 ">
+          <div className="p-2 border-t border-gray-200 dark:border-white/[0.08]">
             <button 
               onClick={() => setShowGlobalSettings(true)}
-              className="w-full flex items-center gap-2 p-2 text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-all text-sm"
+              className="w-full flex items-center gap-2 p-2 text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-white/[0.06] rounded-lg transition-all text-sm"
             >
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
@@ -982,20 +993,27 @@ export default function HomePage() {
         <div className="flex-1 flex flex-col overflow-y-auto p-8">
           <div className="w-full max-w-4xl mx-auto my-auto">
             <div className="text-center mb-12">
-              <div className="flex justify-center mb-6">
-                <h1 
-                  className="font-extrabold tracking-tight select-none transition-colors duration-1000 ease-in-out"
-                  style={{
-                    fontFamily: "'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
-                    color: (assistantBrandColors[selectedAssistant] || assistantBrandColors.claude),
-                    letterSpacing: '-0.06em',
-                    fontWeight: 800,
-                    fontSize: '72px',
-                    lineHeight: '72px'
-                  }}
-                >
-                  Claudable
-                </h1>
+              <div className="flex flex-col items-center gap-5 mb-6 select-none">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src="/Claudable_Icon.png"
+                  alt=""
+                  width={48}
+                  height={48}
+                  className="h-12 w-12 rounded-xl ring-1 ring-black/5 dark:ring-white/10 shadow-[0_8px_30px_-6px_rgba(222,115,86,0.45)]"
+                />
+                {/* Brand wordmark, tinted by the selected assistant's color —
+                    solid in light mode, white→brand gradient in dark. */}
+                <div className="relative h-[34px] w-[196px]">
+                  <BrandWordmark
+                    className="absolute inset-0 dark:hidden"
+                    style={{ background: assistantBrandColors[selectedAssistant] || assistantBrandColors.claude }}
+                  />
+                  <BrandWordmark
+                    className="absolute inset-0 hidden dark:block"
+                    style={{ background: `linear-gradient(180deg, #ffffff 20%, ${assistantBrandColors[selectedAssistant] || assistantBrandColors.claude} 120%)` }}
+                  />
+                </div>
               </div>
               <p className="text-xl text-gray-700 dark:text-gray-200 font-light tracking-tight">
                 Describe it • Watch it build • Ship it
@@ -1008,7 +1026,7 @@ export default function HomePage() {
                 {uploadedImages.map((image) => (
                   <div key={image.id} className="relative group">
                     {image.isImage === false ? (
-                      <div className="w-20 h-20 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 flex flex-col items-center justify-center p-1.5 text-center">
+                      <div className="w-20 h-20 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-white/[0.05] flex flex-col items-center justify-center p-1.5 text-center">
                         <svg className="w-6 h-6 text-gray-400 dark:text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                         </svg>
@@ -1046,10 +1064,10 @@ export default function HomePage() {
               onDragLeave={handleDragLeave}
               onDragOver={handleDragOver}
               onDrop={handleDrop}
-              className={`group flex flex-col gap-4 p-4 w-full rounded-[28px] border backdrop-blur-xl text-base shadow-xl transition-all duration-150 ease-in-out mb-6 relative overflow-visible ${
-                isDragOver 
-                  ? 'border-[#DE7356] bg-[#DE7356]/10 ' 
-                  : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 '
+              className={`group flex flex-col gap-4 p-4 w-full rounded-[28px] border backdrop-blur-xl text-base shadow-xl transition-all duration-200 ease-in-out mb-6 relative overflow-visible ${
+                isDragOver
+                  ? 'border-[#DE7356] bg-[#DE7356]/10 '
+                  : 'border-gray-200 bg-white/90 dark:border-white/[0.08] dark:bg-white/[0.04] focus-within:border-[#DE7356]/50 dark:focus-within:border-[#DE7356]/45 focus-within:shadow-[0_0_0_4px_rgba(222,115,86,0.08),0_20px_60px_-20px_rgba(222,115,86,0.25)]'
               }`}
             >
               <div className="relative flex flex-1 items-center">
@@ -1093,7 +1111,7 @@ export default function HomePage() {
                 {/* Image Upload Button */}
                 <div className="flex items-center gap-2">
                   <label
-                    className="flex items-center justify-center w-8 h-8 text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="flex items-center justify-center w-8 h-8 text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-white/[0.06] rounded-full transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                     title="Upload images or files"
                   >
                     <ImageIcon className="h-4 w-4" />
@@ -1112,9 +1130,9 @@ export default function HomePage() {
                   type="button"
                   onClick={() => setShowDesignPicker(true)}
                   title="Pick a design style"
-                  className="justify-center whitespace-nowrap text-sm font-medium transition-colors duration-100 ease-in-out border border-gray-200 dark:border-gray-700/50 bg-transparent shadow-sm hover:bg-gray-50 dark:hover:bg-gray-800 hover:border-gray-300 dark:hover:border-gray-600/50 px-3 py-2 flex h-8 items-center gap-1.5 rounded-full text-gray-700 dark:text-gray-200 hover:text-gray-900 dark:hover:text-gray-100"
+                  className="justify-center whitespace-nowrap text-sm font-medium transition-colors duration-100 ease-in-out border border-gray-200 dark:border-white/[0.09] bg-transparent shadow-sm hover:bg-gray-50 dark:hover:bg-white/[0.05] hover:border-gray-300 dark:hover:border-white/[0.18] px-3 py-2 flex h-8 items-center gap-1.5 rounded-full text-gray-700 dark:text-gray-200 hover:text-gray-900 dark:hover:text-gray-100"
                 >
-                  <span aria-hidden className="text-sm leading-none">🎨</span>
+                  <Palette aria-hidden className="h-3.5 w-3.5 text-[#DE7356]/80" />
                   <span className="hidden md:flex text-sm font-medium">
                     {selectedDesign ? selectedDesign.name : 'Design'}
                   </span>
@@ -1125,9 +1143,9 @@ export default function HomePage() {
                     type="button"
                     onClick={() => setShowStackMenu(v => !v)}
                     title="Pick a tech stack"
-                    className="justify-center whitespace-nowrap text-sm font-medium transition-colors duration-100 ease-in-out border border-gray-200 dark:border-gray-700/50 bg-transparent shadow-sm hover:bg-gray-50 dark:hover:bg-gray-800 hover:border-gray-300 dark:hover:border-gray-600/50 px-3 py-2 flex h-8 items-center gap-1.5 rounded-full text-gray-700 dark:text-gray-200 hover:text-gray-900 dark:hover:text-gray-100"
+                    className="justify-center whitespace-nowrap text-sm font-medium transition-colors duration-100 ease-in-out border border-gray-200 dark:border-white/[0.09] bg-transparent shadow-sm hover:bg-gray-50 dark:hover:bg-white/[0.05] hover:border-gray-300 dark:hover:border-white/[0.18] px-3 py-2 flex h-8 items-center gap-1.5 rounded-full text-gray-700 dark:text-gray-200 hover:text-gray-900 dark:hover:text-gray-100"
                   >
-                    <span aria-hidden className="text-sm leading-none">🧱</span>
+                    <Layers aria-hidden className="h-3.5 w-3.5 text-[#DE7356]/80" />
                     <span className="hidden md:flex text-sm font-medium">
                       {STACKS.find(s => s.id === selectedStack)?.name ?? 'Stack'}
                     </span>
@@ -1135,17 +1153,17 @@ export default function HomePage() {
                   {showStackMenu && (
                     <>
                       <div className="fixed inset-0 z-[290]" onClick={() => setShowStackMenu(false)} />
-                      <div className="absolute bottom-full mb-2 left-0 z-[300] w-72 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-lg p-1">
+                      <div className="absolute bottom-full mb-2 left-0 z-[300] w-72 rounded-xl border border-gray-200 dark:border-white/10 bg-white dark:bg-[#181310] shadow-xl p-1">
                         {STACKS.map(s => (
                           <button
                             key={s.id}
                             type="button"
                             onClick={() => { setSelectedStack(s.id); setShowStackMenu(false); }}
-                            className={`w-full text-left px-3 py-2 rounded-lg transition-colors ${selectedStack === s.id ? 'bg-gray-100 dark:bg-gray-800' : 'hover:bg-gray-50 dark:hover:bg-gray-800'}`}
+                            className={`w-full text-left px-3 py-2 rounded-lg transition-colors ${selectedStack === s.id ? 'bg-gray-100 dark:bg-white/[0.07]' : 'hover:bg-gray-50 dark:hover:bg-white/[0.05]'}`}
                           >
                             <div className="flex items-center justify-between">
                               <span className="text-sm font-medium text-gray-900 dark:text-gray-50">{s.name}</span>
-                              {selectedStack === s.id && <span className="text-xs text-blue-600">✓</span>}
+                              {selectedStack === s.id && <span className="text-xs text-[#DE7356]">✓</span>}
                             </div>
                             <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{s.description}</p>
                           </button>
@@ -1160,9 +1178,9 @@ export default function HomePage() {
                     type="button"
                     onClick={() => setShowBackendMenu(v => !v)}
                     title="Add a backend"
-                    className="justify-center whitespace-nowrap text-sm font-medium transition-colors duration-100 ease-in-out border border-gray-200 dark:border-gray-700/50 bg-transparent shadow-sm hover:bg-gray-50 dark:hover:bg-gray-800 hover:border-gray-300 dark:hover:border-gray-600/50 px-3 py-2 flex h-8 items-center gap-1.5 rounded-full text-gray-700 dark:text-gray-200 hover:text-gray-900 dark:hover:text-gray-100"
+                    className="justify-center whitespace-nowrap text-sm font-medium transition-colors duration-100 ease-in-out border border-gray-200 dark:border-white/[0.09] bg-transparent shadow-sm hover:bg-gray-50 dark:hover:bg-white/[0.05] hover:border-gray-300 dark:hover:border-white/[0.18] px-3 py-2 flex h-8 items-center gap-1.5 rounded-full text-gray-700 dark:text-gray-200 hover:text-gray-900 dark:hover:text-gray-100"
                   >
-                    <span aria-hidden className="text-sm leading-none">⚙️</span>
+                    <Server aria-hidden className="h-3.5 w-3.5 text-[#DE7356]/80" />
                     <span className="hidden md:flex text-sm font-medium">
                       {BACKEND_STACKS.find(b => b.id === selectedBackend)?.name ?? 'No backend'}
                     </span>
@@ -1170,21 +1188,21 @@ export default function HomePage() {
                   {showBackendMenu && (
                     <>
                       <div className="fixed inset-0 z-[290]" onClick={() => setShowBackendMenu(false)} />
-                      <div className="absolute bottom-full mb-2 left-0 z-[300] w-72 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-lg p-1">
+                      <div className="absolute bottom-full mb-2 left-0 z-[300] w-72 rounded-xl border border-gray-200 dark:border-white/10 bg-white dark:bg-[#181310] shadow-xl p-1">
                         <button type="button" onClick={() => { setSelectedBackend(''); setShowBackendMenu(false); }}
-                          className={`w-full text-left px-3 py-2 rounded-lg transition-colors ${!selectedBackend ? 'bg-gray-100 dark:bg-gray-800' : 'hover:bg-gray-50 dark:hover:bg-gray-800'}`}>
+                          className={`w-full text-left px-3 py-2 rounded-lg transition-colors ${!selectedBackend ? 'bg-gray-100 dark:bg-white/[0.07]' : 'hover:bg-gray-50 dark:hover:bg-white/[0.05]'}`}>
                           <div className="flex items-center justify-between">
                             <span className="text-sm font-medium text-gray-900 dark:text-gray-50">No backend</span>
-                            {!selectedBackend && <span className="text-xs text-blue-600">✓</span>}
+                            {!selectedBackend && <span className="text-xs text-[#DE7356]">✓</span>}
                           </div>
                           <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Frontend only.</p>
                         </button>
                         {BACKEND_STACKS.map(b => (
                           <button key={b.id} type="button" onClick={() => { setSelectedBackend(b.id); setShowBackendMenu(false); }}
-                            className={`w-full text-left px-3 py-2 rounded-lg transition-colors ${selectedBackend === b.id ? 'bg-gray-100 dark:bg-gray-800' : 'hover:bg-gray-50 dark:hover:bg-gray-800'}`}>
+                            className={`w-full text-left px-3 py-2 rounded-lg transition-colors ${selectedBackend === b.id ? 'bg-gray-100 dark:bg-white/[0.07]' : 'hover:bg-gray-50 dark:hover:bg-white/[0.05]'}`}>
                             <div className="flex items-center justify-between">
                               <span className="text-sm font-medium text-gray-900 dark:text-gray-50">{b.name}</span>
-                              {selectedBackend === b.id && <span className="text-xs text-blue-600">✓</span>}
+                              {selectedBackend === b.id && <span className="text-xs text-[#DE7356]">✓</span>}
                             </div>
                             <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{b.description}</p>
                           </button>
@@ -1199,9 +1217,9 @@ export default function HomePage() {
                     type="button"
                     onClick={() => setShowDatabaseMenu(v => !v)}
                     title="Add a database"
-                    className="justify-center whitespace-nowrap text-sm font-medium transition-colors duration-100 ease-in-out border border-gray-200 dark:border-gray-700/50 bg-transparent shadow-sm hover:bg-gray-50 dark:hover:bg-gray-800 hover:border-gray-300 dark:hover:border-gray-600/50 px-3 py-2 flex h-8 items-center gap-1.5 rounded-full text-gray-700 dark:text-gray-200 hover:text-gray-900 dark:hover:text-gray-100"
+                    className="justify-center whitespace-nowrap text-sm font-medium transition-colors duration-100 ease-in-out border border-gray-200 dark:border-white/[0.09] bg-transparent shadow-sm hover:bg-gray-50 dark:hover:bg-white/[0.05] hover:border-gray-300 dark:hover:border-white/[0.18] px-3 py-2 flex h-8 items-center gap-1.5 rounded-full text-gray-700 dark:text-gray-200 hover:text-gray-900 dark:hover:text-gray-100"
                   >
-                    <span aria-hidden className="text-sm leading-none">🗄️</span>
+                    <Database aria-hidden className="h-3.5 w-3.5 text-[#DE7356]/80" />
                     <span className="hidden md:flex text-sm font-medium">
                       {DATABASES.find(d => d.id === selectedDatabase)?.name ?? 'No database'}
                     </span>
@@ -1209,20 +1227,20 @@ export default function HomePage() {
                   {showDatabaseMenu && (
                     <>
                       <div className="fixed inset-0 z-[290]" onClick={() => setShowDatabaseMenu(false)} />
-                      <div className="absolute bottom-full mb-2 left-0 z-[300] w-72 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-lg p-1">
+                      <div className="absolute bottom-full mb-2 left-0 z-[300] w-72 rounded-xl border border-gray-200 dark:border-white/10 bg-white dark:bg-[#181310] shadow-xl p-1">
                         <button type="button" onClick={() => { setSelectedDatabase(''); setShowDatabaseMenu(false); }}
-                          className={`w-full text-left px-3 py-2 rounded-lg transition-colors ${!selectedDatabase ? 'bg-gray-100 dark:bg-gray-800' : 'hover:bg-gray-50 dark:hover:bg-gray-800'}`}>
+                          className={`w-full text-left px-3 py-2 rounded-lg transition-colors ${!selectedDatabase ? 'bg-gray-100 dark:bg-white/[0.07]' : 'hover:bg-gray-50 dark:hover:bg-white/[0.05]'}`}>
                           <div className="flex items-center justify-between">
                             <span className="text-sm font-medium text-gray-900 dark:text-gray-50">No database</span>
-                            {!selectedDatabase && <span className="text-xs text-blue-600">✓</span>}
+                            {!selectedDatabase && <span className="text-xs text-[#DE7356]">✓</span>}
                           </div>
                         </button>
                         {DATABASES.map(d => (
                           <button key={d.id} type="button" onClick={() => { setSelectedDatabase(d.id); setShowDatabaseMenu(false); }}
-                            className={`w-full text-left px-3 py-2 rounded-lg transition-colors ${selectedDatabase === d.id ? 'bg-gray-100 dark:bg-gray-800' : 'hover:bg-gray-50 dark:hover:bg-gray-800'}`}>
+                            className={`w-full text-left px-3 py-2 rounded-lg transition-colors ${selectedDatabase === d.id ? 'bg-gray-100 dark:bg-white/[0.07]' : 'hover:bg-gray-50 dark:hover:bg-white/[0.05]'}`}>
                             <div className="flex items-center justify-between">
                               <span className="text-sm font-medium text-gray-900 dark:text-gray-50">{d.name}</span>
-                              {selectedDatabase === d.id && <span className="text-xs text-blue-600">✓</span>}
+                              {selectedDatabase === d.id && <span className="text-xs text-[#DE7356]">✓</span>}
                             </div>
                             <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{d.description}</p>
                           </button>
@@ -1239,7 +1257,7 @@ export default function HomePage() {
                       setShowAssistantDropdown(!showAssistantDropdown);
                       setShowModelDropdown(false);
                     }}
-                    className="justify-center whitespace-nowrap text-sm font-medium transition-colors duration-100 ease-in-out disabled:pointer-events-none disabled:opacity-50 border border-gray-200 dark:border-gray-700/50 bg-transparent shadow-sm hover:bg-gray-50 dark:hover:bg-gray-800 hover:border-gray-300 dark:hover:border-gray-600/50 px-3 py-2 flex h-8 items-center gap-1 rounded-full text-gray-700 dark:text-gray-200 hover:text-gray-900 dark:hover:text-gray-100"
+                    className="justify-center whitespace-nowrap text-sm font-medium transition-colors duration-100 ease-in-out disabled:pointer-events-none disabled:opacity-50 border border-gray-200 dark:border-white/[0.09] bg-transparent shadow-sm hover:bg-gray-50 dark:hover:bg-white/[0.05] hover:border-gray-300 dark:hover:border-white/[0.18] px-3 py-2 flex h-8 items-center gap-1 rounded-full text-gray-700 dark:text-gray-200 hover:text-gray-900 dark:hover:text-gray-100"
                   >
                     <div className="w-4 h-4 rounded overflow-hidden">
                       <Image
@@ -1259,7 +1277,7 @@ export default function HomePage() {
                   </button>
                   
                   {showAssistantDropdown && (
-                    <div className="absolute top-full mt-1 left-0 z-[300] min-w-full whitespace-nowrap rounded-2xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 backdrop-blur-xl shadow-lg">
+                    <div className="absolute top-full mt-1 left-0 z-[300] min-w-full whitespace-nowrap rounded-2xl border border-gray-200 dark:border-white/10 bg-white dark:bg-[#181310] backdrop-blur-xl shadow-xl">
                       {ASSISTANT_OPTIONS.map((option) => (
                         <button
                           key={option.id}
@@ -1269,8 +1287,8 @@ export default function HomePage() {
                             !cliStatus[option.id]?.installed
                               ? 'opacity-50 cursor-not-allowed text-gray-400 dark:text-gray-500 '
                               : selectedAssistant === option.id 
-                              ? 'bg-gray-100 dark:bg-gray-800 text-black font-semibold' 
-                              : 'text-gray-800 dark:text-gray-100 hover:text-black hover:bg-gray-100 dark:hover:bg-gray-800 '
+                              ? 'bg-gray-100 dark:bg-white/[0.07] text-gray-900 dark:text-white font-semibold'
+                              : 'text-gray-800 dark:text-gray-100 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-white/[0.05] '
                           }`}
                         >
                           <div className="w-4 h-4 rounded overflow-hidden">
@@ -1297,7 +1315,7 @@ export default function HomePage() {
                       setShowModelDropdown((current) => !current);
                       setShowAssistantDropdown(false);
                     }}
-                    className="justify-center whitespace-nowrap text-sm font-medium transition-colors duration-100 ease-in-out disabled:pointer-events-none disabled:opacity-50 border border-gray-200 dark:border-gray-700/50 bg-transparent shadow-sm hover:bg-gray-50 dark:hover:bg-gray-800 hover:border-gray-300 dark:hover:border-gray-600/50 px-3 py-2 flex h-8 items-center gap-1 rounded-full text-gray-700 dark:text-gray-200 hover:text-gray-900 dark:hover:text-gray-100 min-w-[140px]"
+                    className="justify-center whitespace-nowrap text-sm font-medium transition-colors duration-100 ease-in-out disabled:pointer-events-none disabled:opacity-50 border border-gray-200 dark:border-white/[0.09] bg-transparent shadow-sm hover:bg-gray-50 dark:hover:bg-white/[0.05] hover:border-gray-300 dark:hover:border-white/[0.18] px-3 py-2 flex h-8 items-center gap-1 rounded-full text-gray-700 dark:text-gray-200 hover:text-gray-900 dark:hover:text-gray-100 min-w-[140px]"
                   >
                     <span className="text-sm font-medium whitespace-nowrap">
                       {availableModels.find(m => m.id === selectedModel)?.name ?? getModelDisplayName(selectedAssistant, selectedModel)}
@@ -1308,15 +1326,15 @@ export default function HomePage() {
                   </button>
                   
                   {showModelDropdown && (
-                    <div className="absolute top-full mt-1 left-0 z-[300] min-w-full max-h-[300px] overflow-y-auto rounded-2xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 backdrop-blur-xl shadow-lg">
+                    <div className="absolute top-full mt-1 left-0 z-[300] min-w-full max-h-[300px] overflow-y-auto rounded-2xl border border-gray-200 dark:border-white/10 bg-white dark:bg-[#181310] backdrop-blur-xl shadow-xl">
                       {availableModels.map((model) => (
                           <button
                             key={model.id}
                             onClick={() => handleModelChange(model.id)}
                             className={`w-full px-3 py-2 text-left first:rounded-t-2xl last:rounded-b-2xl transition-colors ${
-                              selectedModel === model.id 
-                                ? 'bg-gray-100 dark:bg-gray-800 text-black font-semibold' 
-                                : 'text-gray-800 dark:text-gray-100 hover:text-black hover:bg-gray-100 dark:hover:bg-gray-800 '
+                              selectedModel === model.id
+                                ? 'bg-gray-100 dark:bg-white/[0.07] text-gray-900 dark:text-white font-semibold'
+                                : 'text-gray-800 dark:text-gray-100 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-white/[0.05] '
                             }`}
                           >
                             <span className="text-sm font-medium">{model.name}</span>
@@ -1331,7 +1349,7 @@ export default function HomePage() {
                   <button
                     type="submit"
                     disabled={(!prompt.trim() && uploadedImages.length === 0) || isCreatingProject}
-                    className="flex h-8 w-8 items-center justify-center rounded-full bg-gray-900 text-white transition-opacity duration-150 ease-out disabled:cursor-not-allowed disabled:opacity-50 hover:scale-110"
+                    className="flex h-8 w-8 items-center justify-center rounded-full bg-[#DE7356] text-white shadow-[0_4px_16px_-4px_rgba(222,115,86,0.6)] transition-all duration-150 ease-out hover:bg-[#c9634a] hover:scale-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#DE7356] focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-[#0c0a09] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:scale-100 disabled:hover:bg-[#DE7356]"
                   >
                     {isCreatingProject ? (
                       <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
@@ -1376,7 +1394,7 @@ export default function HomePage() {
                   key={example.text}
                   onClick={() => setPrompt(example.prompt)}
                   disabled={isCreatingProject}
-                  className="px-4 py-2 text-sm font-medium text-gray-500 dark:text-gray-400 bg-transparent border border-[#DE7356]/10 rounded-full hover:bg-gray-50 dark:hover:bg-gray-800 hover:border-[#DE7356]/15 hover:text-gray-700 dark:hover:text-gray-200 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="px-4 py-2 text-sm font-medium text-gray-500 dark:text-gray-400 bg-transparent border border-gray-200 dark:border-white/[0.08] rounded-full hover:bg-gray-50 dark:hover:bg-white/[0.04] hover:border-[#DE7356]/40 dark:hover:border-[#DE7356]/40 hover:text-gray-700 dark:hover:text-gray-200 hover:-translate-y-px transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {example.text}
                 </button>
@@ -1402,7 +1420,7 @@ export default function HomePage() {
                           if (selectedModel) params.set('model', selectedModel);
                           router.push(`/${project.id}/chat${params.toString() ? '?' + params.toString() : ''}`);
                         }}
-                        className="group text-left rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 hover:border-gray-300 dark:hover:border-gray-600 hover:shadow-sm transition-all overflow-hidden"
+                        className="group text-left rounded-xl border border-gray-200 dark:border-white/[0.08] bg-white dark:bg-white/[0.03] hover:border-[#DE7356]/40 dark:hover:border-[#DE7356]/35 hover:shadow-[0_12px_40px_-12px_rgba(222,115,86,0.25)] hover:-translate-y-0.5 transition-all duration-200 overflow-hidden"
                       >
                         {/* Site thumbnail (headless screenshot of the preview). When
                             none exists yet (preview never run), a branded placeholder
@@ -1443,7 +1461,7 @@ export default function HomePage() {
 
             {projects.length === 0 && projectsLoaded && (
               <div className="mt-12 w-full max-w-3xl mx-auto">
-                <div className="rounded-2xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-6 py-12 flex flex-col items-center text-center">
+                <div className="rounded-2xl border border-gray-200 dark:border-white/[0.08] bg-white dark:bg-white/[0.03] px-6 py-12 flex flex-col items-center text-center">
                   <div className="w-12 h-12 rounded-xl bg-[#DE7356]/10 text-[#DE7356] flex items-center justify-center mb-4">
                     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                       <path d="M12 5v14" />
@@ -1477,12 +1495,12 @@ export default function HomePage() {
 
       {/* Delete Project Modal */}
       {deleteModal.isOpen && deleteModal.project && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50">
           <motion.div
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.9 }}
-            className="bg-white dark:bg-gray-900 rounded-lg p-6 max-w-md w-full mx-4 border border-gray-200 dark:border-gray-700"
+            initial={{ opacity: 0, scale: 0.95, y: 8 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.95, y: 8 }}
+            className="bg-white dark:bg-[#181310] rounded-2xl p-6 max-w-md w-full mx-4 border border-gray-200 dark:border-white/10 shadow-2xl"
           >
             <div className="flex items-center gap-3 mb-4">
               <div className="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center">
@@ -1539,10 +1557,10 @@ export default function HomePage() {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 50, scale: 0.9 }}
           >
-            <div className={`px-6 py-4 rounded-lg shadow-lg border flex items-center gap-3 max-w-sm ${
+            <div className={`px-6 py-4 rounded-xl shadow-lg border backdrop-blur-xl flex items-center gap-3 max-w-sm ${
               toast.type === 'success'
-                ? 'bg-white dark:bg-gray-900 border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300'
-                : 'bg-white dark:bg-gray-900 border-red-200 dark:border-red-800 text-red-700 dark:text-red-300'
+                ? 'bg-white/95 dark:bg-[#181310]/95 border-emerald-200 dark:border-emerald-500/25 text-emerald-700 dark:text-emerald-300'
+                : 'bg-white/95 dark:bg-[#181310]/95 border-red-200 dark:border-red-500/25 text-red-700 dark:text-red-300'
             }`}>
               {toast.type === 'success' ? (
                 <svg className="w-5 h-5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">

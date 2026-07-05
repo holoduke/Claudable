@@ -5,6 +5,7 @@ import {
   ArrowRight,
   Atom,
   Bot,
+  Box,
   Braces,
   CheckCircle2,
   ChevronDown,
@@ -85,6 +86,7 @@ export const FaFileImport = wrap(FileInput);
 export const FaTimes = wrap(X);
 export const FaCheckCircle = wrap(CheckCircle2);
 export const FaMagic = wrap(Sparkles);
+export const FaCube = wrap(Box);
 export const FaPuzzlePiece = wrap(Puzzle);
 export const FaSearch = wrap(Search);
 export const FaUsers = wrap(Users);

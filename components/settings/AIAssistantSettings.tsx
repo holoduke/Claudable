@@ -39,7 +39,7 @@ export function AIAssistantSettings({ projectId }: AIAssistantSettingsProps) {
         
         <div className="space-y-4">
           {/* Current CLI */}
-          <div className="p-4 bg-gray-50 dark:bg-gray-900 rounded-lg">
+          <div className="p-4 bg-gray-50 dark:bg-white/[0.03] rounded-lg">
             <div className="flex items-center justify-between">
               <div>
                 <h4 className="text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">
@@ -64,7 +64,7 @@ export function AIAssistantSettings({ projectId }: AIAssistantSettingsProps) {
           </div>
 
           {/* Current Model */}
-          <div className="p-4 bg-gray-50 dark:bg-gray-900 rounded-lg">
+          <div className="p-4 bg-gray-50 dark:bg-white/[0.03] rounded-lg">
             <h4 className="text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">
               Model
             </h4>
@@ -73,13 +73,6 @@ export function AIAssistantSettings({ projectId }: AIAssistantSettingsProps) {
             </span>
           </div>
 
-
-          {/* Note */}
-          <div className="text-center">
-            <p className="text-sm text-gray-500 dark:text-gray-400 ">
-              To modify these settings, use Global Settings
-            </p>
-          </div>
         </div>
       </div>
     </div>

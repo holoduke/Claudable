@@ -1,7 +1,11 @@
 import { signIn } from '@/lib/auth';
 import GoogleSignInButton from '@/components/auth/GoogleSignInButton';
+import SpotlightCard from '@/components/auth/SpotlightCard';
+import BrandWordmark from '@/components/ui/BrandWordmark';
 
 export const dynamic = 'force-dynamic';
+
+export const metadata = { title: 'Sign in · Claudable' };
 
 // Fine film grain (inline SVG) — the texture that makes dark UIs feel premium.
 const GRAIN =
@@ -16,10 +20,10 @@ export default async function LoginPage({
 
   return (
     <div className="font-grotesk relative min-h-screen overflow-hidden bg-[#0a0807] text-white antialiased flex items-center justify-center px-5 py-10">
-      {/* Aurora — two soft warm gradients drifting slowly. */}
+      {/* Aurora — soft warm gradients drifting slowly. */}
       <div aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden">
         <div
-          className="absolute left-1/2 top-[-18%] h-[46rem] w-[46rem] -translate-x-1/2 rounded-full blur-[140px] opacity-[0.28]"
+          className="absolute left-1/2 top-[-16%] h-[46rem] w-[46rem] -translate-x-1/2 rounded-full blur-[140px] opacity-[0.30]"
           style={{ background: 'radial-gradient(circle at 50% 50%, #DE7356, transparent 70%)', animation: 'loginAurora 26s ease-in-out infinite' }}
         />
         <div
@@ -27,7 +31,7 @@ export default async function LoginPage({
           style={{ background: 'radial-gradient(circle at 50% 50%, #E8A87C, transparent 70%)', animation: 'loginAurora 32s ease-in-out infinite reverse' }}
         />
         <div
-          className="absolute left-[-10%] top-1/3 h-[32rem] w-[32rem] rounded-full blur-[150px] opacity-[0.14]"
+          className="absolute left-[-10%] top-1/3 h-[32rem] w-[32rem] rounded-full blur-[150px] opacity-[0.15]"
           style={{ background: 'radial-gradient(circle at 50% 50%, #8f2f1c, transparent 70%)', animation: 'loginAurora 38s ease-in-out infinite' }}
         />
       </div>
@@ -49,34 +53,42 @@ export default async function LoginPage({
       <div aria-hidden className="pointer-events-none absolute inset-0" style={{ background: 'radial-gradient(ellipse 80% 80% at 50% 40%, transparent 45%, rgba(0,0,0,0.6) 100%)' }} />
 
       {/* Content */}
-      <main className="relative z-10 w-full max-w-[400px] flex flex-col items-center text-center">
-        {/* Wordmark — confident, single warm gradient with a soft glow (no rainbow). */}
-        <h1
-          className="font-display select-none leading-[0.9] tracking-tight"
+      <main className="relative z-10 w-full max-w-[380px] flex flex-col items-center text-center">
+        {/* Brand lockup — real logo mark + wordmark, not a display-font headline. */}
+        <div
+          className="flex flex-col items-center"
           style={{ animation: 'loginFadeUp .8s ease-out both', animationDelay: '.05s' }}
         >
-          <span
-            className="block bg-gradient-to-b from-white to-[#e6a582] bg-clip-text text-transparent drop-shadow-[0_2px_40px_rgba(222,115,86,0.28)]"
-            style={{ fontSize: 'clamp(3rem, 11vw, 4.75rem)' }}
-          >
-            CLAUDABLE
-          </span>
-        </h1>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/Claudable_Icon.png"
+            alt=""
+            width={56}
+            height={56}
+            className="h-14 w-14 rounded-[15px] shadow-[0_10px_40px_-6px_rgba(222,115,86,0.55),0_2px_8px_rgba(0,0,0,0.5)] ring-1 ring-white/10"
+          />
+          <BrandWordmark
+            className="mt-6 h-[30px] w-[174px]"
+            style={{ background: 'linear-gradient(180deg, #ffffff 30%, #ecc7b2 100%)' }}
+          />
+        </div>
 
         <p
-          className="mt-3 text-[15px] text-white/45 tracking-wide"
+          className="mt-4 text-[15px] text-white/45 tracking-wide"
           style={{ animation: 'loginFadeUp .8s ease-out both', animationDelay: '.16s' }}
         >
           Describe it. Watch it build. Ship it.
         </p>
 
         {/* Sign-in card */}
-        <div
-          className="mt-9 w-full rounded-2xl border border-white/[0.08] bg-white/[0.025] p-6 backdrop-blur-xl shadow-[0_24px_70px_-24px_rgba(0,0,0,0.85)]"
+        <SpotlightCard
+          className="mt-9 w-full p-7"
           style={{ animation: 'loginFadeUp .8s ease-out both', animationDelay: '.26s' }}
         >
-          <h2 className="text-[15px] font-semibold text-white/90">Sign in to continue</h2>
-          <p className="mt-1 text-[13px] text-white/40">Use your organization Google account.</p>
+          <h1 className="text-[17px] font-semibold tracking-tight text-white/95">Welcome back</h1>
+          <p className="mt-1.5 text-[13px] leading-relaxed text-white/40">
+            Sign in with your organization&rsquo;s Google account.
+          </p>
 
           {error && (
             <div className="mt-5 flex items-start gap-2.5 rounded-xl border border-red-400/25 bg-red-500/[0.08] px-3.5 py-3 text-left text-[13px] text-red-200/90">
@@ -92,7 +104,7 @@ export default async function LoginPage({
           )}
 
           <form
-            className="mt-5"
+            className="mt-6"
             action={async () => {
               'use server';
               await signIn('google', { redirectTo: '/' });
@@ -101,13 +113,15 @@ export default async function LoginPage({
             <GoogleSignInButton />
           </form>
 
-          <div className="mt-5 flex items-center justify-center gap-1.5 text-[12px] text-white/30">
-            <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" aria-hidden>
-              <path d="M12 2 4 5v6c0 5 3.4 8.5 8 11 4.6-2.5 8-6 8-11V5l-8-3Z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
-            </svg>
-            <span>Access restricted to your organization</span>
+          <div className="mt-6 border-t border-white/[0.06] pt-4">
+            <div className="flex items-center justify-center gap-1.5 text-[12px] text-white/30">
+              <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" aria-hidden>
+                <path d="M12 2 4 5v6c0 5 3.4 8.5 8 11 4.6-2.5 8-6 8-11V5l-8-3Z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
+              </svg>
+              <span>Access restricted to your organization</span>
+            </div>
           </div>
-        </div>
+        </SpotlightCard>
 
         <p
           className="mt-8 text-[11px] uppercase tracking-[0.28em] text-white/20"

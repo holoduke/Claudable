@@ -75,19 +75,13 @@ export default function ProjectClaudeSettings({ projectId }: Props) {
 
   return (
     <div className="p-6 space-y-4">
-      <div>
-        <h3 className="text-lg font-medium text-gray-900 dark:text-gray-50 mb-1">Claude account</h3>
-        <p className="text-sm text-gray-600 dark:text-gray-300">
-          Which Claude account this project&apos;s agent runs use. Pick a connected account (yours, or one a
-          teammate shared) or use the platform default.
-        </p>
-      </div>
+      <h3 className="text-lg font-medium text-gray-900 dark:text-gray-50">Claude account</h3>
 
       <select
         value={credentialId ?? '__default__'}
         onChange={(e) => choose(e.target.value)}
         disabled={busy}
-        className="w-full max-w-md px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-sm text-gray-800 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-gray-200 disabled:opacity-50"
+        className="w-full max-w-md px-3 py-2 rounded-lg border border-gray-200 dark:border-white/[0.08] bg-white dark:bg-white/[0.06] text-sm text-gray-800 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-gray-200 disabled:opacity-50"
       >
         <option value="__default__">Platform default (shared Claude)</option>
         {options.map((o) => (
