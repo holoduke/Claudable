@@ -40,6 +40,24 @@ export async function getThumbnail(projectId: string): Promise<Buffer | null> {
 }
 
 /**
+ * Capture with retries. A dev server's first compile can outlive the preview
+ * readiness window (start() continues after its 60s wait), so a single early
+ * capture attempt would silently miss — retry on a backoff until one succeeds
+ * or the preview stops. Fire-and-forget; used by the preview-start hook.
+ */
+export async function captureThumbnailWithRetry(
+  projectId: string,
+  delaysMs: number[] = [15_000, 45_000, 120_000, 300_000],
+): Promise<void> {
+  for (const delay of delaysMs) {
+    await new Promise((r) => setTimeout(r, delay));
+    const status = previewManager.getStatus(projectId);
+    if (status.status !== 'running') return; // preview stopped — give up quietly
+    if (await captureThumbnail(projectId)) return;
+  }
+}
+
+/**
  * Screenshot the project's running preview. Returns true on success. No-op (false)
  * if the preview isn't running — there's nothing to capture.
  */
@@ -63,6 +81,7 @@ export async function captureThumbnail(projectId: string): Promise<boolean> {
       return false;
     }
   } catch {
+    console.log(`[thumbnail] skip capture for ${projectId}: preview not reachable yet`);
     return false; // not reachable (yet) — keep the old thumbnail
   }
 
