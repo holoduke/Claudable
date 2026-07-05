@@ -24,6 +24,8 @@ export async function POST(req: NextRequest, { params }: Ctx) {
     const body = (await req.json().catch(() => null)) ?? {};
     const userId = typeof body.userId === 'string' ? body.userId : '';
     if (!userId) return createErrorResponse('invalid_input', 'userId is required', 400);
+    // Default to least-privilege viewer; only 'editor' grants write.
+    const role = body.role === 'editor' ? 'editor' : 'viewer';
 
     // Only assign users from the same org as the project (or the manager's org
     // for legacy projects with no orgId) — never leak across orgs.
@@ -33,7 +35,7 @@ export async function POST(req: NextRequest, { params }: Ctx) {
       return createErrorResponse('invalid_user', 'User is not in this organization', 400);
     }
 
-    await addProjectMember(project_id, userId);
+    await addProjectMember(project_id, userId, role);
     return createSuccessResponse(await getProjectAccess(project_id), 201);
   } catch (error) {
     return handleApiError(error, 'API', 'Failed to add project member');

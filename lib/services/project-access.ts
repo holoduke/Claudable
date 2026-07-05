@@ -90,21 +90,31 @@ export async function getProjectAccess(projectId: string) {
       email: m.user.email,
       name: m.user.name,
       image: m.user.image,
+      role: m.role === 'editor' ? 'editor' : 'viewer',
     })),
   };
 }
+
+export type MemberRole = 'viewer' | 'editor';
 
 export async function setProjectVisibility(projectId: string, visibility: Visibility) {
   return prisma.project.update({ where: { id: projectId }, data: { visibility } });
 }
 
-/** Idempotent: adding an already-assigned user is a no-op. */
-export async function addProjectMember(projectId: string, userId: string) {
+/**
+ * Idempotent: adding an already-assigned user updates their role. Defaults to
+ * `viewer` (least privilege) — read-only until explicitly promoted to editor.
+ */
+export async function addProjectMember(projectId: string, userId: string, role: MemberRole = 'viewer') {
   await prisma.projectMember.upsert({
     where: { projectId_userId: { projectId, userId } },
-    update: {},
-    create: { projectId, userId },
+    update: { role },
+    create: { projectId, userId, role },
   });
+}
+
+export async function setProjectMemberRole(projectId: string, userId: string, role: MemberRole) {
+  await prisma.projectMember.updateMany({ where: { projectId, userId }, data: { role } });
 }
 
 export async function removeProjectMember(projectId: string, userId: string) {
