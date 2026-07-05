@@ -156,7 +156,7 @@ function resolveProjectRepoPath(projectId: string, repoPath?: string | null) {
   return path.resolve(process.cwd(), process.env.PROJECTS_DIR || './data/projects', projectId);
 }
 
-export async function ensureProjectRepository(projectId: string, repoPath?: string | null) {
+async function ensureProjectRepository(projectId: string, repoPath?: string | null) {
   const resolved = resolveProjectRepoPath(projectId, repoPath);
   await fs.mkdir(resolved, { recursive: true });
   return resolved;

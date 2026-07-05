@@ -17,7 +17,7 @@ interface ErrorBoundaryState {
  * Error Boundary Component
  * Catches errors in child components and displays a fallback UI
  */
-export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
+class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
   constructor(props: ErrorBoundaryProps) {
     super(props);
     this.state = {

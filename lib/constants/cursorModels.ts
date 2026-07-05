@@ -55,12 +55,6 @@ const CURSOR_MODEL_ALIASES: Record<string, string> = {
 
 const KNOWN_CURSOR_MODEL_IDS = new Set(CURSOR_MODEL_DEFINITIONS.map((model) => model.id));
 
-const CURSOR_CLI_MODEL_IDS: Record<string, string> = {
-  'gpt-5': 'gpt-5',
-  'sonnet-4': 'sonnet-4',
-  'sonnet-4-thinking': 'sonnet-4-thinking',
-};
-
 export function normalizeCursorModelId(model?: string | null): string {
   if (!model || typeof model !== 'string') {
     return CURSOR_DEFAULT_MODEL;
@@ -98,9 +92,4 @@ export function getCursorModelDisplayName(id?: string | null): string {
   const normalized = normalizeCursorModelId(id);
   const match = CURSOR_MODEL_DEFINITIONS.find((model) => model.id === normalized);
   return match?.name ?? normalized;
-}
-
-export function resolveCursorCliModelId(modelId?: string | null): string {
-  const normalized = normalizeCursorModelId(modelId);
-  return CURSOR_CLI_MODEL_IDS[normalized] ?? normalized;
 }

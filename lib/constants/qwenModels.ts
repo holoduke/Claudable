@@ -80,7 +80,7 @@ export function normalizeQwenModelId(model?: string | null): QwenModelId {
   return QWEN_MODEL_ALIAS_MAP[normalized] ?? QWEN_DEFAULT_MODEL;
 }
 
-export function getQwenModelDefinition(id: string): QwenModelDefinition | undefined {
+function getQwenModelDefinition(id: string): QwenModelDefinition | undefined {
   return (
     QWEN_MODEL_DEFINITIONS.find((definition) => definition.id === id) ??
     QWEN_MODEL_DEFINITIONS.find((definition) =>

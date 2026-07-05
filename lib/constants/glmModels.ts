@@ -52,7 +52,7 @@ export function normalizeGLMModelId(model?: string | null): GLMModelId {
   return GLM_MODEL_ALIAS_MAP[normalized] ?? GLM_DEFAULT_MODEL;
 }
 
-export function getGLMModelDefinition(id: string): GLMModelDefinition | undefined {
+function getGLMModelDefinition(id: string): GLMModelDefinition | undefined {
   return (
     GLM_MODEL_DEFINITIONS.find((definition) => definition.id === id) ??
     GLM_MODEL_DEFINITIONS.find((definition) =>

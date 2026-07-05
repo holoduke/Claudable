@@ -20,13 +20,13 @@ function primaryDomain(): string {
   return allowedDomains()[0] || 'example.com';
 }
 
-export function emailDomainAllowed(email: string): boolean {
+function emailDomainAllowed(email: string): boolean {
   const domain = email.split('@')[1]?.toLowerCase();
   return !!domain && allowedDomains().includes(domain);
 }
 
 /** The single org (created on demand). Keyed by the primary allowed domain. */
-export async function ensureOrg() {
+async function ensureOrg() {
   const domain = primaryDomain();
   // upsert is race-safe for concurrent first sign-ins (vs findUnique-then-create).
   return prisma.organization.upsert({

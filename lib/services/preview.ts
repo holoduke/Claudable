@@ -56,11 +56,9 @@ import {
 import type { PreviewProcess, PreviewInfo } from './preview/types';
 
 // Re-export the public preview API so existing importers keep working unchanged.
-export { previewSlug, projectPreviewUrl, backendPreviewUrl } from './preview/routes';
+export { previewSlug, projectPreviewUrl } from './preview/routes';
 export {
-  projectNetworkName,
   ensureProjectNetwork,
-  connectToProjectNet,
   removeProjectNetwork,
 } from './preview/docker';
 export type { PreviewInfo } from './preview/types';

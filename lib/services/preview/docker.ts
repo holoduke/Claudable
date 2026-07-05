@@ -70,7 +70,7 @@ export async function dockerRmSync(name: string): Promise<void> {
 // internal-only ALIAS (e.g. http://api:8080) while egress stays locked — no
 // egress-firewall changes needed (proven on box1). The public URL is still injected
 // for browser calls; the internal URL is for server-side/SSR/proxy hops.
-export function projectNetworkName(projectId: string): string {
+function projectNetworkName(projectId: string): string {
   return `claudable-proj-${previewSlug(projectId)}`;
 }
 async function dockerCli(args: string[]): Promise<boolean> {

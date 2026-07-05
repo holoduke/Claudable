@@ -7,7 +7,7 @@
  * from Settings without ripping out the underlying API routes — flip the list to
  * re-enable.
  */
-export const HIDDEN_INTEGRATIONS: readonly string[] = ['vercel', 'supabase'];
+const HIDDEN_INTEGRATIONS: readonly string[] = ['vercel', 'supabase'];
 
 export function isIntegrationVisible(id: string): boolean {
   return !HIDDEN_INTEGRATIONS.includes(id);

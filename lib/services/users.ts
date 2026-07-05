@@ -9,8 +9,6 @@
 import { prisma } from '@/lib/db/client';
 import type { User } from '@prisma/client';
 
-export type Role = 'admin' | 'user';
-
 const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/u;
 
 /**
@@ -61,17 +59,6 @@ export async function addExternalUser(
     }
     throw error;
   }
-}
-
-export async function setUserRole(id: string, role: Role): Promise<User> {
-  if (role !== 'admin' && role !== 'user') {
-    throw new Error('Role must be "admin" or "user"');
-  }
-  return prisma.user.update({ where: { id }, data: { role } });
-}
-
-export async function setUserActive(id: string, isActive: boolean): Promise<User> {
-  return prisma.user.update({ where: { id }, data: { isActive: Boolean(isActive) } });
 }
 
 export async function setUserItops(id: string, itopsEnabled: boolean): Promise<User> {

@@ -109,10 +109,6 @@ async function checkpointExistsUnlocked(projectId: string, projectPath: string, 
   return (await git(projectId, projectPath, ['cat-file', '-t', sha])).out === 'commit';
 }
 
-export function checkpointExists(projectId: string, projectPath: string, sha: string): Promise<boolean> {
-  return withLock(projectId, () => checkpointExistsUnlocked(projectId, projectPath, sha));
-}
-
 /**
  * Restore the work-tree to a checkpoint (forward-restore): make the tracked files
  * match `sha`, delete files added since, then record the restore as a new

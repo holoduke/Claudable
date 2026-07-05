@@ -38,13 +38,6 @@ export const ACTIVE_CLI_NAME_MAP = ACTIVE_CLI_OPTIONS.reduce<Record<ActiveCliId,
   return acc;
 }, {} as Record<ActiveCliId, string>);
 
-export const ACTIVE_CLI_ICON_MAP = ACTIVE_CLI_OPTIONS.reduce<Record<ActiveCliId, string>>((acc, option) => {
-  if (option.icon) {
-    acc[option.id] = option.icon;
-  }
-  return acc;
-}, {} as Record<ActiveCliId, string>);
-
 export const ACTIVE_CLI_MODEL_OPTIONS = ACTIVE_CLI_OPTIONS.reduce<Record<ActiveCliId, { id: string; name: string }[]>>(
   (acc, option) => {
     acc[option.id] = getModelDefinitionsForCli(option.id).map(({ id, name }) => ({

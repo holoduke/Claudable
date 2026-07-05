@@ -151,7 +151,7 @@ export function normalizeClaudeModelId(model?: string | null): ClaudeModelId {
   return resolved;
 }
 
-export function getClaudeModelDefinition(id: string): ClaudeModelDefinition | undefined {
+function getClaudeModelDefinition(id: string): ClaudeModelDefinition | undefined {
   return (
     CLAUDE_MODEL_DEFINITIONS.find(def => def.id === id) ??
     CLAUDE_MODEL_DEFINITIONS.find(def =>
