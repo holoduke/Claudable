@@ -57,7 +57,7 @@ export default function MyAccountSettings({ user, onToast, onChanged }: MyAccoun
         <form action={signOutAction}>
           <button
             type="submit"
-            className="h-9 flex items-center gap-2 px-3 rounded-lg text-sm font-medium border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-red-600 hover:border-red-200 transition-colors"
+            className="h-9 flex items-center gap-2 px-3 rounded-lg text-sm font-medium border border-gray-200 dark:border-white/[0.08] bg-white dark:bg-white/[0.03] text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-white/[0.06] hover:text-red-600 hover:border-red-200 transition-colors"
             title="Sign out of Claudable"
           >
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><polyline points="16 17 21 12 16 7" /><line x1="21" y1="12" x2="9" y2="12" /></svg>
@@ -66,15 +66,9 @@ export default function MyAccountSettings({ user, onToast, onChanged }: MyAccoun
         </form>
       </div>
 
-      <div className="rounded-xl border border-gray-200 dark:border-gray-700 p-4">
+      <div className="rounded-xl border border-gray-200 dark:border-white/[0.08] p-4">
         <div className="flex items-start justify-between gap-4">
-          <div>
-            <div className="font-medium text-gray-900 dark:text-gray-50">it-ops tools</div>
-            <p className="mt-1 text-sm text-gray-500 dark:text-gray-400 max-w-md">
-              Gives the agent real infrastructure tools (Gitea, Coolify, Traefik) in every
-              project you own. AWS/IAM stays propose-only. Credentials never reach the agent.
-            </p>
-          </div>
+          <div className="font-medium text-gray-900 dark:text-gray-50">it-ops tools</div>
           {isAdmin ? (
             <button
               type="button"
@@ -83,21 +77,18 @@ export default function MyAccountSettings({ user, onToast, onChanged }: MyAccoun
               role="switch"
               aria-checked={itops}
               className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors disabled:opacity-50 ${
-                itops ? 'bg-amber-500' : 'bg-gray-300'
+                itops ? 'bg-[#DE7356]' : 'bg-gray-300'
               }`}
               title={itops ? 'Disable it-ops tools' : 'Enable it-ops tools'}
             >
               <span className={`inline-block h-5 w-5 transform rounded-full bg-white dark:bg-gray-900 transition-transform ${itops ? 'translate-x-5' : 'translate-x-1'}`} />
             </button>
           ) : (
-            <span className={`shrink-0 rounded-full px-3 py-1 text-xs font-medium ${itops ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400'}`}>
+            <span className={`shrink-0 rounded-full px-3 py-1 text-xs font-medium ${itops ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 dark:bg-white/[0.06] text-gray-500 dark:text-gray-400'}`}>
               {itops ? 'Enabled by admin' : 'Disabled'}
             </span>
           )}
         </div>
-        {!isAdmin && (
-          <p className="mt-3 text-xs text-gray-400 dark:text-gray-500">Only an admin can enable it-ops for your account.</p>
-        )}
       </div>
     </div>
   );

@@ -3,7 +3,7 @@ import { useState } from 'react';
 import ProjectSettings from '@/components/settings/ProjectSettings';
 import UserMenu from '@/components/layout/UserMenu';
 import { usePathname } from 'next/navigation';
-import Image from 'next/image';
+import BrandWordmark from '@/components/ui/BrandWordmark';
 
 export default function Header() {
   const [globalSettingsOpen, setGlobalSettingsOpen] = useState(false);
@@ -21,7 +21,7 @@ export default function Header() {
   }
 
   return (
-    <header className="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 sticky top-0 z-40">
+    <header className="bg-white/90 dark:bg-[#0c0a09]/90 backdrop-blur-xl border-b border-gray-200 dark:border-white/[0.08] sticky top-0 z-40">
       <div className="max-w-7xl mx-auto py-4 px-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -39,16 +39,9 @@ export default function Header() {
                 </svg>
               </button>
             )}
-            <div className="h-8">
-              <Image
-                src="/Claudable_logo.svg"
-                alt="Claudable"
-                width={120}
-                height={32}
-                className="h-8 w-auto"
-                priority
-              />
-            </div>
+            {/* Masked wordmark so it renders dark-on-light and white-on-dark
+                (the raw SVG has black paths — invisible on a dark header). */}
+            <BrandWordmark className="h-[22px] w-[128px] bg-gray-900 dark:bg-white" />
             <nav className="flex items-center gap-3" />
           </div>
           <div className="flex items-center gap-3">

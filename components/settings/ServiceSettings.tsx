@@ -213,21 +213,20 @@ export function ServiceSettings({ projectId, projectName, onOpenGlobalSettings }
   return (
     <div className="p-6 space-y-6">
       <div>
-        <h3 className="text-lg font-medium text-gray-900 dark:text-gray-50 mb-1">
+        <h3 className="text-lg font-medium text-gray-900 dark:text-gray-50 mb-4">
           Service Integrations
         </h3>
-        <p className="text-sm text-gray-600 dark:text-gray-300 mb-4">Connect a Git repository to push code and deploy.</p>
 
         <div className="space-y-4">
           {services.map(service => (
             <div
               key={service.id}
-              className="relative group overflow-hidden rounded-2xl border border-gray-200 dark:border-gray-700/80 bg-white dark:bg-gray-900/70 backdrop-blur supports-[backdrop-filter]:bg-white/60 transition-all duration-200 hover:shadow-lg"
+              className="relative group overflow-hidden rounded-2xl border border-gray-200 dark:border-white/[0.08] bg-white dark:bg-white/[0.03] backdrop-blur supports-[backdrop-filter]:bg-white/60 transition-all duration-200 hover:shadow-lg"
             >
               <div className="absolute inset-x-0 -top-px h-px bg-gradient-to-r from-transparent via-gray-200 to-transparent" />
               <div className="p-5 flex flex-col sm:flex-row sm:items-center gap-4 sm:gap-6 justify-between">
                 <div className="flex items-center gap-4 flex-1 min-w-0">
-                  <div className="w-10 h-10 rounded-xl ring-1 ring-inset ring-gray-200 dark:ring-gray-700 bg-gray-50 dark:bg-gray-900 text-gray-700 dark:text-gray-200 flex items-center justify-center">
+                  <div className="w-10 h-10 rounded-xl ring-1 ring-inset ring-gray-200 dark:ring-white/[0.08] bg-gray-50 dark:bg-white/[0.06] text-gray-700 dark:text-gray-200 flex items-center justify-center">
                     {getProviderIcon(service.icon)}
                   </div>
                   <div className="min-w-0">
@@ -250,11 +249,7 @@ export function ServiceSettings({ projectId, projectName, onOpenGlobalSettings }
                     </div>
 
                     <div className="text-sm leading-6 text-gray-600 dark:text-gray-300 min-w-0">
-                      {!service.connected ? (
-                        <p className="truncate whitespace-nowrap sm:whitespace-normal sm:overflow-visible sm:max-w-[60ch]">
-                          {service.description}
-                        </p>
-                      ) : (
+                      {!service.connected ? null : (
                         <div className="text-gray-700 dark:text-gray-200 ">
                           {service.id === 'github' && service.connection?.service_data?.repo_url ? (
                             <div className="flex items-center gap-2">
@@ -262,7 +257,7 @@ export function ServiceSettings({ projectId, projectName, onOpenGlobalSettings }
                               <a 
                                 href={service.connection.service_data.repo_url}
                                 target="_blank" rel="noopener noreferrer"
-                                className="truncate font-mono text-blue-600 hover:underline"
+                                className="truncate font-mono text-[#DE7356] hover:underline"
                               >
                                 {service.connection.service_data.repo_name || service.connection.service_data.repo_url}
                               </a>
@@ -273,7 +268,7 @@ export function ServiceSettings({ projectId, projectName, onOpenGlobalSettings }
                               <a 
                                 href={service.connection.service_data.project_url}
                                 target="_blank" rel="noopener noreferrer"
-                                className="truncate font-mono text-blue-600 hover:underline"
+                                className="truncate font-mono text-[#DE7356] hover:underline"
                               >
                                 {service.connection.service_data.project_name || service.connection.service_data.project_url}
                               </a>
@@ -284,7 +279,7 @@ export function ServiceSettings({ projectId, projectName, onOpenGlobalSettings }
                               <a 
                                 href={service.connection.service_data.project_url}
                                 target="_blank" rel="noopener noreferrer"
-                                className="truncate font-mono text-blue-600 hover:underline"
+                                className="truncate font-mono text-[#DE7356] hover:underline"
                               >
                                 {service.connection.service_data.project_name || service.connection.service_data.project_id}
                               </a>
@@ -318,7 +313,7 @@ export function ServiceSettings({ projectId, projectName, onOpenGlobalSettings }
                     ) : (
                       <button
                         onClick={() => handleConnect(service.id)}
-                        className="px-4 py-2.5 text-sm rounded-xl bg-blue-600 hover:bg-blue-700 text-white shadow-sm transition disabled:opacity-50 whitespace-nowrap w-full sm:w-auto"
+                        className="px-4 py-2.5 text-sm rounded-xl bg-[#DE7356] hover:bg-[#c9634a] text-white shadow-sm transition disabled:opacity-50 whitespace-nowrap w-full sm:w-auto"
                         disabled={isLoading || tokenStatus[service.id as keyof typeof tokenStatus] === null}
                       >
                         {tokenStatus[service.id as keyof typeof tokenStatus] === null ? 'Checking...' : 'Connect'}

@@ -23,8 +23,8 @@ function Pill({ tone, children }: { tone: 'green' | 'amber' | 'gray' | 'blue'; c
   const map = {
     green: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300',
     amber: 'bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300',
-    gray: 'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400',
-    blue: 'bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300',
+    gray: 'bg-gray-100 text-gray-500 dark:bg-white/[0.06] dark:text-gray-400',
+    blue: 'bg-[#DE7356]/10 text-[#DE7356] dark:bg-[#DE7356]/20 dark:text-[#DE7356]',
   };
   return <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${map[tone]}`}>{children}</span>;
 }
@@ -60,13 +60,13 @@ export default function SystemOverviewSettings() {
 
   return (
     <div className="p-6">
-      <div className="flex items-center justify-between mb-1">
-        <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Network</h3>
-        <button onClick={load} className="text-xs px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800">Refresh</button>
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-baseline gap-3">
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Network</h3>
+          {data?.host && <span className="text-xs font-mono text-gray-400 dark:text-gray-500">{data.host}</span>}
+        </div>
+        <button onClick={load} className="text-xs px-3 py-1.5 rounded-lg border border-gray-200 dark:border-white/[0.08] hover:bg-gray-50 dark:hover:bg-white/[0.06]">Refresh</button>
       </div>
-      <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
-        Claudable projects on {data?.host || 'the host'} — their containers, addresses and access links. Other host containers (Coolify, etc.) are hidden.
-      </p>
 
       {data && (
         <div className="flex flex-wrap gap-2 mb-5">
@@ -85,8 +85,8 @@ export default function SystemOverviewSettings() {
        !data ? null : (
         <div className="space-y-4">
           {data.projects.map((p) => (
-            <div key={p.id} className="rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
-              <div className="flex items-center gap-3 px-4 py-3 bg-gray-50 dark:bg-gray-800/50">
+            <div key={p.id} className="rounded-xl border border-gray-200 dark:border-white/[0.08] overflow-hidden">
+              <div className="flex items-center gap-3 px-4 py-3 bg-gray-50 dark:bg-white/[0.03]">
                 <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${p.running ? 'bg-emerald-500' : 'bg-gray-400'}`} title={p.running ? 'running' : 'stopped'} />
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
@@ -101,16 +101,16 @@ export default function SystemOverviewSettings() {
                 </div>
                 {p.previewUrl && (
                   <a href={p.previewUrl} target="_blank" rel="noopener noreferrer"
-                     className="text-xs px-2.5 py-1 rounded-lg border border-gray-200 dark:border-gray-600 hover:bg-white dark:hover:bg-gray-700 text-blue-600 dark:text-blue-400 shrink-0">
+                     className="text-xs px-2.5 py-1 rounded-lg border border-gray-200 dark:border-white/[0.08] hover:bg-white dark:hover:bg-white/[0.06] text-[#DE7356] shrink-0">
                     Open ↗
                   </a>
                 )}
               </div>
 
               {/* Addresses */}
-              <div className="px-4 py-2 flex flex-wrap gap-x-5 gap-y-1 text-[11px] border-b border-gray-100 dark:border-gray-800">
+              <div className="px-4 py-2 flex flex-wrap gap-x-5 gap-y-1 text-[11px] border-b border-gray-100 dark:border-white/[0.06]">
                 {p.previewUrl
-                  ? <span className="text-gray-500">Public: <a href={p.previewUrl} target="_blank" rel="noopener noreferrer" className="font-mono text-blue-600 dark:text-blue-400 hover:underline">{p.previewUrl.replace(/^https?:\/\//, '')}</a></span>
+                  ? <span className="text-gray-500">Public: <a href={p.previewUrl} target="_blank" rel="noopener noreferrer" className="font-mono text-[#DE7356] hover:underline">{p.previewUrl.replace(/^https?:\/\//, '')}</a></span>
                   : <span className="text-gray-400">Public: — (local only)</span>}
                 {p.internalNetwork
                   ? <span className="text-gray-500">Internal net: <span className="font-mono text-gray-600 dark:text-gray-300">{p.internalNetwork}</span></span>
@@ -119,7 +119,7 @@ export default function SystemOverviewSettings() {
 
               {/* Containers */}
               {p.containers.length > 0 ? (
-                <div className="divide-y divide-gray-100 dark:divide-gray-800">
+                <div className="divide-y divide-gray-100 dark:divide-white/[0.06]">
                   {p.containers.map((c) => <ContainerRow key={c.name} c={c} />)}
                 </div>
               ) : (
@@ -132,7 +132,7 @@ export default function SystemOverviewSettings() {
           {data.unassigned.length > 0 && (
             <div>
               <h4 className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 mb-2">Claudable system</h4>
-              <div className="rounded-xl border border-gray-200 dark:border-gray-700 divide-y divide-gray-100 dark:divide-gray-800 overflow-hidden">
+              <div className="rounded-xl border border-gray-200 dark:border-white/[0.08] divide-y divide-gray-100 dark:divide-white/[0.06] overflow-hidden">
                 {data.unassigned.map((c) => <ContainerRow key={c.name} c={c} />)}
               </div>
             </div>
@@ -141,10 +141,10 @@ export default function SystemOverviewSettings() {
           {/* Networks */}
           <div>
             <h4 className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 mb-2">Networks</h4>
-            <div className="rounded-xl border border-gray-200 dark:border-gray-700 overflow-x-auto">
+            <div className="rounded-xl border border-gray-200 dark:border-white/[0.08] overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="text-left text-[11px] text-gray-400 border-b border-gray-100 dark:border-gray-800">
+                  <tr className="text-left text-[11px] text-gray-400 border-b border-gray-100 dark:border-white/[0.06]">
                     <th className="px-4 py-2 font-medium">Name</th>
                     <th className="px-4 py-2 font-medium">Driver</th>
                     <th className="px-4 py-2 font-medium">Subnet</th>
@@ -153,7 +153,7 @@ export default function SystemOverviewSettings() {
                 </thead>
                 <tbody>
                   {data.networks.map((n) => (
-                    <tr key={n.name} className="border-b border-gray-50 dark:border-gray-800/50 last:border-0">
+                    <tr key={n.name} className="border-b border-gray-50 dark:border-white/[0.05] last:border-0">
                       <td className="px-4 py-2 font-mono text-[12px] text-gray-900 dark:text-gray-100">{n.name}</td>
                       <td className="px-4 py-2 text-[12px] text-gray-500">{n.driver}</td>
                       <td className="px-4 py-2 font-mono text-[12px] text-gray-500">{n.subnet || '—'}</td>

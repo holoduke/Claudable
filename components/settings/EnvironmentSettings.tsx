@@ -157,12 +157,9 @@ export function EnvironmentSettings({ projectId }: EnvironmentSettingsProps) {
   return (
     <div className="p-6 space-y-6">
       <div>
-        <h3 className="text-lg font-medium text-gray-900 dark:text-gray-50 mb-1">
+        <h3 className="text-lg font-medium text-gray-900 dark:text-gray-50 mb-4">
           Environment Variables
         </h3>
-        <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
-          Injected into the preview and agent containers. Changes apply on the next preview start.
-        </p>
 
         {error && (
           <div className="mb-4 flex items-start justify-between gap-3 text-xs text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg px-3 py-2">
@@ -186,7 +183,7 @@ export function EnvironmentSettings({ projectId }: EnvironmentSettingsProps) {
             variables.map((variable, index) => (
               <div
                 key={variable.key}
-                className="flex items-center gap-2 p-3 bg-gray-50 dark:bg-gray-900 rounded-lg"
+                className="flex items-center gap-2 p-3 bg-gray-50 dark:bg-white/[0.03] rounded-lg"
               >
                 {editingIndex === index ? (
                   <>
@@ -198,7 +195,7 @@ export function EnvironmentSettings({ projectId }: EnvironmentSettingsProps) {
                       type={variable.isSecret ? 'password' : 'text'}
                       value={editValue}
                       onChange={(e) => setEditValue(e.target.value)}
-                      className="flex-1 px-2 py-1 border border-gray-300 dark:border-gray-700 rounded "
+                      className="flex-1 px-2 py-1 border border-gray-300 dark:border-white/[0.08] rounded "
                     />
                     <button
                       onClick={() => handleUpdate(index)}
@@ -256,7 +253,7 @@ export function EnvironmentSettings({ projectId }: EnvironmentSettingsProps) {
         </div>
 
         {/* Add New Variable */}
-        <div className="border-t border-gray-200 dark:border-gray-700 pt-6">
+        <div className="border-t border-gray-200 dark:border-white/[0.08] pt-6">
           <h4 className="text-sm font-medium text-gray-700 dark:text-gray-200 mb-3">
             Add New Variable
           </h4>
@@ -274,14 +271,14 @@ export function EnvironmentSettings({ projectId }: EnvironmentSettingsProps) {
                     .toUpperCase();
                   setNewKey(cleaned);
                 }}
-                className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 "
+                className="flex-1 px-3 py-2 border border-gray-300 dark:border-white/[0.08] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#DE7356] "
               />
               <input
                 type={isSecret ? 'password' : 'text'}
                 placeholder="Value"
                 value={newValue}
                 onChange={(e) => setNewValue(e.target.value)}
-                className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 "
+                className="flex-1 px-3 py-2 border border-gray-300 dark:border-white/[0.08] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#DE7356] "
               />
             </div>
 
@@ -291,7 +288,7 @@ export function EnvironmentSettings({ projectId }: EnvironmentSettingsProps) {
                   type="checkbox"
                   checked={isSecret}
                   onChange={(e) => setIsSecret(e.target.checked)}
-                  className="w-4 h-4 text-blue-500 border-gray-300 dark:border-gray-700 rounded focus:ring-blue-500"
+                  className="w-4 h-4 text-[#DE7356] border-gray-300 dark:border-white/[0.08] rounded focus:ring-[#DE7356]"
                 />
                 <span className="text-sm text-gray-700 dark:text-gray-200 ">
                   Mark as secret
@@ -301,7 +298,7 @@ export function EnvironmentSettings({ projectId }: EnvironmentSettingsProps) {
               <button
                 onClick={handleAdd}
                 disabled={!newKey || !newValue || isBusy}
-                className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                className="px-4 py-2 bg-[#DE7356] text-white rounded-lg hover:bg-[#c9634a] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
                 {isBusy ? 'Working…' : 'Add Variable'}
               </button>
