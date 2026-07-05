@@ -167,14 +167,20 @@ export function SkillsSettings({ projectId }: SkillsSettingsProps) {
   };
 
   const remove = async (skillName: string) => {
+    if (!window.confirm(`Delete the skill "${skillName}"? This can't be undone.`)) return;
     try {
-      await fetch(`${API_BASE}/api/projects/${projectId}/skills/${encodeURIComponent(skillName)}`, {
+      const r = await fetch(`${API_BASE}/api/projects/${projectId}/skills/${encodeURIComponent(skillName)}`, {
         method: 'DELETE',
       });
+      if (!r.ok) {
+        const msg = await r.json().then((j) => j?.error || j?.message).catch(() => null);
+        setError(msg || `Failed to delete skill (${r.status})`);
+        return;
+      }
       if (editing === skillName) resetForm();
       await load();
     } catch (e) {
-      console.error('Failed to delete skill:', e);
+      setError(e instanceof Error ? e.message : 'Failed to delete skill');
     }
   };
 

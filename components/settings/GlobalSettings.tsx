@@ -459,28 +459,16 @@ export default function GlobalSettings({ isOpen, onClose, initialTab = 'general'
             {activeTab === 'general' && (
               <div className="space-y-6">
                 <div>
-                  <h3 className="text-lg font-medium text-gray-900 dark:text-gray-50 mb-4">Preferences</h3>
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700">
+                  <h3 className="text-lg font-medium text-gray-900 dark:text-gray-50 mb-4">Defaults</h3>
+                  <div className="p-4 bg-gray-50 dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700">
+                    <div className="flex items-center justify-between">
                       <div>
-                        <p className="font-medium text-gray-900 dark:text-gray-50">Auto-save projects</p>
-                        <p className="text-sm text-gray-600 dark:text-gray-300">Automatically save changes to projects</p>
+                        <p className="font-medium text-gray-900 dark:text-gray-50">Default assistant</p>
+                        <p className="text-sm text-gray-600 dark:text-gray-300">Used for new projects — change it in the AI Agents tab.</p>
                       </div>
-                      <label className="relative inline-flex items-center cursor-pointer">
-                        <input type="checkbox" className="sr-only peer" defaultChecked />
-                        <div className="w-11 h-6 bg-white dark:bg-gray-900 rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#DE7356]"></div>
-                      </label>
-                    </div>
-                    
-                    <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700">
-                      <div>
-                        <p className="font-medium text-gray-900 dark:text-gray-50 ">Show file extensions</p>
-                        <p className="text-sm text-gray-600 dark:text-gray-300 ">Display file extensions in code explorer</p>
-                      </div>
-                      <label className="relative inline-flex items-center cursor-pointer">
-                        <input type="checkbox" className="sr-only peer" defaultChecked />
-                        <div className="w-11 h-6 bg-white dark:bg-gray-900 rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#DE7356]"></div>
-                      </label>
+                      <span className="text-sm font-mono px-2 py-1 rounded bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-200">
+                        {globalSettings?.default_cli || '—'}
+                      </span>
                     </div>
                   </div>
                 </div>

@@ -605,9 +605,11 @@ export default function HomePage() {
             // Successfully kicked off ACT with image payloads
           } else {
             console.error('❌ ACT failed:', await actResponse.text());
+            showToast('Project created, but the agent could not start — open the chat and try again.', 'error');
           }
         } catch (actError) {
           console.error('❌ ACT API error:', actError);
+          showToast('Project created, but the agent could not start — open the chat and try again.', 'error');
         }
       }
       
@@ -620,6 +622,10 @@ export default function HomePage() {
       setUploadedImages([]);
       setPrompt('');
       setSelectedDesign(null);
+      // Reset the optional composition too, so the next new project doesn't
+      // silently inherit the last backend/database.
+      setSelectedBackend('');
+      setSelectedDatabase('');
 
       const params = new URLSearchParams();
       if (selectedAssistant) params.set('cli', selectedAssistant);
