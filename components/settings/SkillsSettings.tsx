@@ -221,6 +221,15 @@ export function SkillsSettings({ projectId }: SkillsSettingsProps) {
           )}
         </div>
 
+        {/* Errors from actions taken OUTSIDE the form (e.g. a failed delete) must
+            be visible too — only suppress this copy while the form shows its own. */}
+        {error && editing === null && (
+          <div className="flex items-start justify-between gap-3 text-xs text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg px-3 py-2">
+            <span className="break-words min-w-0">{error}</span>
+            <button onClick={() => setError(null)} className="shrink-0 hover:text-red-800 dark:hover:text-red-300">✕</button>
+          </div>
+        )}
+
         {editing !== null && (
           <div className="space-y-3 rounded-xl border border-blue-200 bg-blue-50/40 p-4">
             <div className="text-sm font-medium text-gray-900 dark:text-gray-50">

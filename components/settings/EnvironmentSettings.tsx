@@ -16,24 +16,51 @@ interface EnvironmentSettingsProps {
   projectId: string;
 }
 
+/** Read the API's error text; fall back to the status code. */
+async function errText(response: Response): Promise<string> {
+  try {
+    const j = await response.json();
+    return j?.error || j?.message || `Request failed (${response.status})`;
+  } catch {
+    return `Request failed (${response.status})`;
+  }
+}
+
 export function EnvironmentSettings({ projectId }: EnvironmentSettingsProps) {
   const [variables, setVariables] = useState<EnvironmentVariable[]>([]);
   const [newKey, setNewKey] = useState('');
   const [newValue, setNewValue] = useState('');
   const [isSecret, setIsSecret] = useState(false);
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
+  // Edits live in local state so Cancel can't leave never-saved values on screen.
+  const [editValue, setEditValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [isBusy, setIsBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [loadError, setLoadError] = useState('');
 
   const loadEnvironmentVariables = useCallback(async () => {
     setIsLoading(true);
+    setLoadError('');
     try {
       const response = await fetch(`${API_BASE}/api/env/${projectId}`);
-      if (response.ok) {
-        const data = await response.json();
-        setVariables(data || []);
+      if (!response.ok) {
+        setLoadError(await errText(response));
+        setVariables([]);
+        return;
       }
-    } catch (error) {
-      console.error('Failed to load environment variables:', error);
+      const data = await response.json();
+      // API rows use snake_case (is_secret) — map to the UI shape so secrets
+      // stay masked after a reload.
+      const rows = Array.isArray(data) ? data : [];
+      setVariables(rows.map((r: { key: string; value: string; is_secret?: boolean; isSecret?: boolean }) => ({
+        key: r.key,
+        value: r.value,
+        isSecret: Boolean(r.is_secret ?? r.isSecret),
+      })));
+    } catch (err) {
+      console.error('Failed to load environment variables:', err);
+      setLoadError('Could not load environment variables.');
     } finally {
       setIsLoading(false);
     }
@@ -44,123 +71,146 @@ export function EnvironmentSettings({ projectId }: EnvironmentSettingsProps) {
   }, [loadEnvironmentVariables]);
 
   const handleAdd = async () => {
-    if (!newKey || !newValue) return;
-
-    const newVar: EnvironmentVariable = {
-      key: newKey,
-      value: newValue,
-      isSecret
-    };
-
+    if (!newKey || !newValue || isBusy) return;
+    setIsBusy(true);
+    setError('');
     try {
       const response = await fetch(`${API_BASE}/api/env/${projectId}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          key: newVar.key,
-          value: newVar.value,
+          key: newKey,
+          value: newValue,
           scope: 'runtime',
           var_type: 'string',
-          is_secret: newVar.isSecret || false
+          is_secret: isSecret
         })
       });
 
-      if (response.ok) {
-        setVariables([...variables, newVar]);
-        setNewKey('');
-        setNewValue('');
-        setIsSecret(false);
+      if (!response.ok) {
+        setError(await errText(response));
+        return;
       }
-    } catch (error) {
-      console.error('Failed to add environment variable:', error);
+      setVariables([...variables, { key: newKey, value: newValue, isSecret }]);
+      setNewKey('');
+      setNewValue('');
+      setIsSecret(false);
+    } catch (err) {
+      console.error('Failed to add environment variable:', err);
+      setError('Could not add the variable (network error).');
+    } finally {
+      setIsBusy(false);
     }
   };
 
-  const handleUpdate = async (index: number, variable: EnvironmentVariable) => {
+  const handleUpdate = async (index: number) => {
+    const variable = variables[index];
+    if (!variable || isBusy) return;
+    setIsBusy(true);
+    setError('');
     try {
-      const response = await fetch(`${API_BASE}/api/env/${projectId}/${variable.key}`, {
+      const response = await fetch(`${API_BASE}/api/env/${projectId}/${encodeURIComponent(variable.key)}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ value: variable.value })
+        body: JSON.stringify({ value: editValue })
       });
 
-      if (response.ok) {
-        const updated = [...variables];
-        updated[index] = variable;
-        setVariables(updated);
-        setEditingIndex(null);
+      if (!response.ok) {
+        setError(await errText(response));
+        return;
       }
-    } catch (error) {
-      console.error('Failed to update environment variable:', error);
+      const updated = [...variables];
+      updated[index] = { ...variable, value: editValue };
+      setVariables(updated);
+      setEditingIndex(null);
+    } catch (err) {
+      console.error('Failed to update environment variable:', err);
+      setError('Could not update the variable (network error).');
+    } finally {
+      setIsBusy(false);
     }
   };
 
   const handleDelete = async (index: number, key: string) => {
+    if (isBusy) return;
     if (!confirm(`Delete environment variable "${key}"?`)) return;
-
+    setIsBusy(true);
+    setError('');
     try {
-      const response = await fetch(`${API_BASE}/api/env/${projectId}/${key}`, {
+      const response = await fetch(`${API_BASE}/api/env/${projectId}/${encodeURIComponent(key)}`, {
         method: 'DELETE'
       });
 
-      if (response.ok) {
-        setVariables(variables.filter((_, i) => i !== index));
+      if (!response.ok) {
+        setError(await errText(response));
+        return;
       }
-    } catch (error) {
-      console.error('Failed to delete environment variable:', error);
+      setVariables(variables.filter((_, i) => i !== index));
+    } catch (err) {
+      console.error('Failed to delete environment variable:', err);
+      setError('Could not delete the variable (network error).');
+    } finally {
+      setIsBusy(false);
     }
   };
 
   return (
     <div className="p-6 space-y-6">
       <div>
-        <h3 className="text-lg font-medium text-gray-900 dark:text-gray-50 mb-4">
+        <h3 className="text-lg font-medium text-gray-900 dark:text-gray-50 mb-1">
           Environment Variables
         </h3>
+        <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+          Injected into the preview and agent containers. Changes apply on the next preview start.
+        </p>
+
+        {error && (
+          <div className="mb-4 flex items-start justify-between gap-3 text-xs text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg px-3 py-2">
+            <span className="break-words min-w-0">{error}</span>
+            <button onClick={() => setError('')} className="shrink-0 hover:text-red-800 dark:hover:text-red-300">✕</button>
+          </div>
+        )}
 
         {/* Variables List */}
         <div className="space-y-2 mb-6">
           {isLoading ? (
             <div className="text-gray-500 dark:text-gray-400">Loading...</div>
+          ) : loadError ? (
+            <div className="text-sm text-red-600 dark:text-red-400">
+              {loadError}{' '}
+              <button onClick={loadEnvironmentVariables} className="underline hover:no-underline">Retry</button>
+            </div>
           ) : variables.length === 0 ? (
             <div className="text-gray-500 dark:text-gray-400 text-sm">No environment variables configured</div>
           ) : (
             variables.map((variable, index) => (
               <div
-                key={index}
+                key={variable.key}
                 className="flex items-center gap-2 p-3 bg-gray-50 dark:bg-gray-900 rounded-lg"
               >
                 {editingIndex === index ? (
                   <>
-                    <input
-                      type="text"
-                      value={variable.key}
-                      onChange={(e) => {
-                        const updated = [...variables];
-                        updated[index] = { ...variable, key: e.target.value };
-                        setVariables(updated);
-                      }}
-                      className="flex-1 px-2 py-1 border border-gray-300 dark:border-gray-700 rounded "
-                    />
+                    {/* The key identifies the row server-side — rename isn't supported, so it's read-only here. */}
+                    <span className="flex-1 px-2 py-1 font-mono text-sm text-gray-500 dark:text-gray-400">
+                      {variable.key}
+                    </span>
                     <input
                       type={variable.isSecret ? 'password' : 'text'}
-                      value={variable.value}
-                      onChange={(e) => {
-                        const updated = [...variables];
-                        updated[index] = { ...variable, value: e.target.value };
-                        setVariables(updated);
-                      }}
+                      value={editValue}
+                      onChange={(e) => setEditValue(e.target.value)}
                       className="flex-1 px-2 py-1 border border-gray-300 dark:border-gray-700 rounded "
                     />
                     <button
-                      onClick={() => handleUpdate(index, variable)}
-                      className="px-3 py-1 text-sm bg-green-500 text-white rounded hover:bg-green-600"
+                      onClick={() => handleUpdate(index)}
+                      disabled={isBusy}
+                      className="px-3 py-1 text-sm bg-green-500 text-white rounded hover:bg-green-600 disabled:opacity-50"
                     >
                       Save
                     </button>
                     <button
                       onClick={() => setEditingIndex(null)}
-                      className="px-3 py-1 text-sm bg-gray-400 text-white rounded hover:bg-gray-500"
+                      disabled={isBusy}
+                      className="px-3 py-1 text-sm bg-gray-400 text-white rounded hover:bg-gray-500 disabled:opacity-50"
                     >
                       Cancel
                     </button>
@@ -180,20 +230,21 @@ export function EnvironmentSettings({ projectId }: EnvironmentSettingsProps) {
                       </span>
                     )}
                     <button
-                      onClick={() => setEditingIndex(index)}
+                      onClick={() => { setEditingIndex(index); setEditValue(variable.value); }}
                       className="p-1 text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 "
                     >
                       <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} 
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
                               d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                       </svg>
                     </button>
                     <button
                       onClick={() => handleDelete(index, variable.key)}
-                      className="p-1 text-red-400 hover:text-red-600"
+                      disabled={isBusy}
+                      className="p-1 text-red-400 hover:text-red-600 disabled:opacity-50"
                     >
                       <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} 
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
                               d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                       </svg>
                     </button>
@@ -233,7 +284,7 @@ export function EnvironmentSettings({ projectId }: EnvironmentSettingsProps) {
                 className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 "
               />
             </div>
-            
+
             <div className="flex items-center justify-between">
               <label className="flex items-center space-x-2 cursor-pointer">
                 <input
@@ -246,13 +297,13 @@ export function EnvironmentSettings({ projectId }: EnvironmentSettingsProps) {
                   Mark as secret
                 </span>
               </label>
-              
+
               <button
                 onClick={handleAdd}
-                disabled={!newKey || !newValue}
+                disabled={!newKey || !newValue || isBusy}
                 className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
-                Add Variable
+                {isBusy ? 'Working…' : 'Add Variable'}
               </button>
             </div>
           </div>

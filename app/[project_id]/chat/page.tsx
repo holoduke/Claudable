@@ -323,7 +323,14 @@ export default function ChatPage() {
   // Always points at the latest runAct closure (used by persistEdits).
   const runActRef = useRef<((m?: string, i?: any[]) => Promise<void>) | null>(null);
   const currentRouteRef = useRef<string>('/');
+  // User explicitly stopped the preview — suppress the auto-start effect until
+  // they act again, else stop() (previewUrl→null) immediately re-triggered
+  // auto-start and "Stop" just cold-restarted the server.
+  const userStoppedPreviewRef = useRef(false);
   const [showGlobalSettings, setShowGlobalSettings] = useState(false);
+  // Which tab the settings modal opens on: the gear opens General; the publish
+  // panel's "Open Settings → Services" jumps straight to the Deploy tab.
+  const [settingsInitialTab, setSettingsInitialTab] = useState<'general' | 'services'>('general');
   const [uploadedImages, setUploadedImages] = useState<{name: string; url: string; base64?: string; path?: string}[]>([]);
   const [isInitializing, setIsInitializing] = useState(true);
   // Initialize states with default values, will be loaded from localStorage in useEffect
@@ -1052,6 +1059,8 @@ const persistProjectPreferences = useCallback(
   }, [projectId, startDeploymentPolling]);
 
   const start = useCallback(async () => {
+    // Any explicit start lifts the "user stopped it" latch.
+    userStoppedPreviewRef.current = false;
     try {
       // Fast path: if the dev server is already running, show it immediately
       // (no loading overlay, no artificial delay).
@@ -1550,12 +1559,31 @@ const persistProjectPreferences = useCallback(
 
   const stop = useCallback(async () => {
     try {
+      userStoppedPreviewRef.current = true;
       await fetch(`${API_BASE}/api/projects/${projectId}/preview/stop`, { method: 'POST' });
       setPreviewUrl(null);
     } catch (error) {
       console.error('Error stopping preview:', error);
     }
   }, [projectId]);
+
+  // Stable session-status callback: ChatLog keys its initial-load effect off
+  // this prop (via checkActiveSession); an inline arrow gave it a new identity
+  // every parent render → full history refetch per render.
+  const sessionStatusDepsRef = useRef({ hasInitialPrompt, agentWorkComplete, previewUrl });
+  useEffect(() => {
+    sessionStatusDepsRef.current = { hasInitialPrompt, agentWorkComplete, previewUrl };
+  }, [hasInitialPrompt, agentWorkComplete, previewUrl]);
+  const handleSessionStatusChange = useCallback((isRunningValue: boolean) => {
+    setIsRunning(isRunningValue);
+    const d = sessionStatusDepsRef.current;
+    // Track agent task completion and auto-start preview
+    if (!isRunningValue && d.hasInitialPrompt && !d.agentWorkComplete && !d.previewUrl) {
+      setAgentWorkComplete(true);
+      localStorage.setItem(`project_${projectId}_taskComplete`, 'true');
+      start();
+    }
+  }, [projectId, start]);
 
   const loadSubdirectory = useCallback(async (dir: string): Promise<Entry[]> => {
     try {
@@ -2192,13 +2220,18 @@ const persistProjectPreferences = useCallback(
     loadProjectInfoRef.current = loadProjectInfo;
   }, [loadProjectInfo]);
 
+  // Apply ?cli=/&model= ONCE per page load. This effect re-fires when
+  // preferredCli changes (it's a dep), so without the guard every later
+  // dropdown change snapped straight back to the URL's values.
+  const urlPrefsAppliedRef = useRef(false);
   useEffect(() => {
-    if (!searchParams) return;
+    if (!searchParams || urlPrefsAppliedRef.current) return;
     const cliParam = searchParams.get('cli');
     const modelParam = searchParams.get('model');
     if (!cliParam && !modelParam) {
       return;
     }
+    urlPrefsAppliedRef.current = true;
     const sanitizedCli = cliParam ? sanitizeCli(cliParam) : preferredCli;
     if (cliParam) {
       setUsingGlobalDefaults(false);
@@ -2717,7 +2750,8 @@ const persistProjectPreferences = useCallback(
   const previousActiveState = useRef(false);
   
   useEffect(() => {
-    if (!hasActiveRequests && !previewUrl && !isStartingPreview && !previewStartFailedRef.current) {
+    if (!hasActiveRequests && !previewUrl && !isStartingPreview && !previewStartFailedRef.current
+        && !userStoppedPreviewRef.current) {
       if (!previousActiveState.current) {
         console.log('🔄 Preview not running; auto-starting');
       } else {
@@ -2965,18 +2999,7 @@ const persistProjectPreferences = useCallback(
                       // We don't replace it completely, just keep the reference to handlers
                     }
                   }}
-                  onSessionStatusChange={(isRunningValue) => {
-                  console.log('🔍 [DEBUG] Session status change:', isRunningValue);
-                  setIsRunning(isRunningValue);
-                  // Track agent task completion and auto-start preview
-                  if (!isRunningValue && hasInitialPrompt && !agentWorkComplete && !previewUrl) {
-                    setAgentWorkComplete(true);
-                    // Save to localStorage
-                    localStorage.setItem(`project_${projectId}_taskComplete`, 'true');
-                    // Auto-start preview server after initial prompt task completion
-                    start();
-                  }
-                }}
+                  onSessionStatusChange={handleSessionStatusChange}
                 onSseFallbackActive={(active) => {
                   console.log('🔄 [SSE] Fallback status:', active);
                   setIsSseFallbackActive(active);
@@ -3179,14 +3202,11 @@ const persistProjectPreferences = useCallback(
                       
                       {/* Action Buttons Group */}
                       <div className="flex items-center gap-1.5">
-                        <button 
+                        <button
                           className="h-9 w-9 flex items-center justify-center bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg transition-colors"
-                          onClick={() => {
-                            const iframe = iframeRef.current;
-                            if (iframe) {
-                              iframe.src = iframe.src;
-                            }
-                          }}
+                          // refreshPreview keeps the CURRENT route (`iframe.src = iframe.src`
+                          // reloaded the last parent-set URL, losing in-app navigation).
+                          onClick={refreshPreview}
                           title="Refresh preview"
                           aria-label="Refresh preview"
                         >
@@ -3272,7 +3292,7 @@ const persistProjectPreferences = useCallback(
                   </button>
                   {/* Settings Button */}
                   <button
-                    onClick={() => setShowGlobalSettings(true)}
+                    onClick={() => { setSettingsInitialTab('general'); setShowGlobalSettings(true); }}
                     className="h-9 w-9 flex items-center justify-center bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg transition-colors"
                     title="Settings"
                     aria-label="Settings"
@@ -3416,10 +3436,7 @@ const persistProjectPreferences = useCallback(
                         <button
                           className="flex items-center gap-2 mx-auto px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg transition-colors"
                           onClick={() => {
-                            const iframe = iframeRef.current;
-                            if (iframe) {
-                              iframe.src = iframe.src;
-                            }
+                            refreshPreview();
                             const overlay = document.getElementById('iframe-error-overlay');
                             if (overlay) overlay.style.display = 'none';
                           }}
@@ -3876,7 +3893,14 @@ const persistProjectPreferences = useCallback(
         projectId={projectId}
         isOpen={showDesignImport}
         onClose={() => setShowDesignImport(false)}
-        onApply={(prompt) => { runAct(prompt); }}
+        onApply={(prompt) => {
+          // Same busy rule as ChatInput: never launch a second concurrent turn.
+          if (isRunning || hasActiveRequests) {
+            setQueuedMessages(prev => [...prev, { message: prompt, images: [] }]);
+          } else {
+            runAct(prompt);
+          }
+        }}
       />
 
       <SkillsModal
@@ -4002,7 +4026,7 @@ const persistProjectPreferences = useCallback(
                   </div>
                   <button
                     className="mt-3 w-full px-4 py-2 rounded-xl border border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-100 hover:bg-gray-50 dark:hover:bg-gray-800 "
-                    onClick={() => { setShowPublishPanel(false); setShowGlobalSettings(true); }}
+                    onClick={() => { setShowPublishPanel(false); setSettingsInitialTab('services'); setShowGlobalSettings(true); }}
                   >
                     Open Settings → Services
                   </button>
@@ -4089,7 +4113,8 @@ const persistProjectPreferences = useCallback(
                     } else {
                       const errorText = await vercelRes.text();
                       console.error('🚀 Vercel deploy failed:', vercelRes.status, errorText);
-                      setDeploymentStatus('idle');
+                      // Show the failure panel — 'idle' made the failure invisible.
+                      setDeploymentStatus('error');
                       setPublishLoading(false);
                     }
                   } catch (e) {
@@ -4122,7 +4147,7 @@ const persistProjectPreferences = useCallback(
         projectId={projectId}
         projectName={projectName}
         projectDescription={projectDescription}
-        initialTab="services"
+        initialTab={settingsInitialTab}
         onProjectUpdated={({ name, description }) => {
           setProjectName(name);
           setProjectDescription(description ?? '');

@@ -57,6 +57,9 @@ export function ProjectSettings({
           id: 'environment' as SettingsTab,
           label: 'Envs',
           icon: <span className="w-4 h-4 inline-flex"><FaLock /></span>,
+          // Env vars are per-project; in the global (header) scope the API calls
+          // would just 404 against the fake "global-settings" project id.
+          hidden: !isProjectScoped,
         },
         {
           id: 'containers' as SettingsTab,
@@ -68,6 +71,8 @@ export function ProjectSettings({
           id: 'services' as SettingsTab,
           label: 'Deploy',
           icon: <span className="w-4 h-4 inline-flex"><FaPlug /></span>,
+          // Git connect is per-project too — dead against "global-settings".
+          hidden: !isProjectScoped,
         },
         {
           id: 'skills' as SettingsTab,
@@ -181,6 +186,7 @@ export function ProjectSettings({
           {activeTab === 'services' && (
             <ServiceSettings
               projectId={projectId}
+              projectName={projectName}
               onOpenGlobalSettings={() => {
                 // Open Global Settings with services tab
                 setShowGlobalSettings(true);

@@ -99,14 +99,10 @@ export function useUserRequests({ projectId }: UseUserRequestsOptions) {
         return;
       }
     } catch (error) {
-      if (activeRequestIdsRef.current.size > 0) {
-        activeRequestIdsRef.current.clear();
-        setFromActiveSet();
-      } else {
-        setHasActiveRequests(false);
-        setActiveCount(0);
-      }
-      previousActiveState.current = false;
+      // KEEP the previous busy state on a transient fetch error. Clearing it on
+      // one blip flipped busy→idle mid-turn, which fired the queued-message
+      // flusher and let sends bypass the queue → a concurrent second turn (or a
+      // 409). The next successful poll corrects the state either way.
       if (process.env.NODE_ENV === 'development') {
         console.warn('[UserRequests] Failed to check active requests (network issue):', error);
       }
