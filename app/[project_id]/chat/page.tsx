@@ -4,10 +4,9 @@ import { AnimatePresence } from 'framer-motion';
 import { MotionDiv, MotionH3, MotionP, MotionButton } from '@/lib/motion';
 import { useRouter, useSearchParams, useParams } from 'next/navigation';
 import dynamic from 'next/dynamic';
-import { FaCode, FaDesktop, FaMobileAlt, FaPlay, FaStop, FaSync, FaCog, FaRocket, FaFolder, FaFolderOpen, FaFile, FaFileCode, FaCss3Alt, FaHtml5, FaJs, FaReact, FaPython, FaDocker, FaGitAlt, FaMarkdown, FaDatabase, FaPhp, FaJava, FaRust, FaVuejs, FaLock, FaHome, FaChevronUp, FaChevronRight, FaChevronDown, FaArrowLeft, FaArrowRight, FaRedo, FaFileImport, FaPuzzlePiece } from 'react-icons/fa';
-import { SiTypescript, SiGo, SiRuby, SiSvelte, SiJson, SiYaml, SiCplusplus } from 'react-icons/si';
-import { VscJson } from 'react-icons/vsc';
+import { FaCode, FaDesktop, FaMobileAlt, FaPlay, FaStop, FaCog, FaRocket, FaHome, FaArrowRight, FaRedo, FaFileImport, FaPuzzlePiece } from 'react-icons/fa';
 import ChatLog from '@/components/chat/ChatLog';
+import CodeExplorer, { type Entry } from '@/components/chat/CodeExplorer';
 import { ProjectSettings } from '@/components/settings/ProjectSettings';
 import UserMenu from '@/components/layout/UserMenu';
 import VisualEditorPanel, { type SelectedElement } from '@/components/chat/VisualEditorPanel';
@@ -19,9 +18,11 @@ import ArchitectureModal from '@/components/chat/ArchitectureModal';
 import ChatInput from '@/components/chat/ChatInput';
 import DesignImportModal from '@/components/chat/DesignImportModal';
 import SkillsModal from '@/components/chat/SkillsModal';
-import { formatTimeAgo, getFileLanguage, escapeHtml } from '@/lib/utils/format';
+import PublishPanel from '@/components/chat/PublishPanel';
+import { getFileLanguage, escapeHtml } from '@/lib/utils/format';
 import { ChatErrorBoundary } from '@/components/ErrorBoundary';
 import { useUserRequests } from '@/hooks/useUserRequests';
+import { useDeployPolling } from '@/hooks/useDeployPolling';
 import { useGlobalSettings } from '@/contexts/GlobalSettingsContext';
 import { getDefaultModelForCli, getModelDisplayName } from '@/lib/constants/cliModels';
 import {
@@ -82,7 +83,6 @@ const hexToFilter = (hex: string): string => {
   return filters[hex] || filters['#DE7356'];
 };
 
-type Entry = { path: string; type: 'file'|'dir'; size?: number };
 type ProjectStatus = 'initializing' | 'active' | 'failed';
 
 type CliStatusSnapshot = {
@@ -98,123 +98,6 @@ const buildModelOptions = (statuses: Record<string, CliStatusSnapshot>): ModelOp
     ...option,
     cli: option.cli,
   }));
-
-// TreeView component for VSCode-style file explorer
-interface TreeViewProps {
-  entries: Entry[];
-  selectedFile: string;
-  expandedFolders: Set<string>;
-  folderContents: Map<string, Entry[]>;
-  onToggleFolder: (path: string) => void;
-  onSelectFile: (path: string) => void;
-  onLoadFolder: (path: string) => Promise<void>;
-  level: number;
-  parentPath?: string;
-  getFileIcon: (entry: Entry) => React.ReactElement;
-}
-
-function TreeView({ entries, selectedFile, expandedFolders, folderContents, onToggleFolder, onSelectFile, onLoadFolder, level, parentPath = '', getFileIcon }: TreeViewProps) {
-  // Ensure entries is an array
-  if (!entries || !Array.isArray(entries)) {
-    return null;
-  }
-  
-  // Group entries by directory
-  const sortedEntries = [...entries].sort((a, b) => {
-    // Directories first
-    if (a.type === 'dir' && b.type === 'file') return -1;
-    if (a.type === 'file' && b.type === 'dir') return 1;
-    // Then alphabetical
-    return a.path.localeCompare(b.path);
-  });
-
-  return (
-    <>
-      {sortedEntries.map((entry, index) => {
-        // entry.path should already be the full path from API
-        const fullPath = entry.path;
-        let entryKey =
-          fullPath && typeof fullPath === 'string' && fullPath.trim().length > 0
-            ? fullPath.trim()
-            : (entry as any)?.name && typeof (entry as any).name === 'string' && (entry as any).name.trim().length > 0
-            ? `${parentPath || 'root'}::__named_${(entry as any).name.trim()}`
-            : '';
-        if (!entryKey || entryKey.trim().length === 0) {
-          entryKey = `${parentPath || 'root'}::__entry_${level}_${index}_${entry.type}`;
-        }
-        const isExpanded = expandedFolders.has(fullPath);
-        const indent = level * 8;
-        
-        return (
-          <div key={entryKey}>
-            <div
-              className={`group flex items-center h-[22px] px-2 cursor-pointer ${
-                selectedFile === fullPath 
-                  ? 'bg-blue-100 ' 
-                  : 'hover:bg-gray-100 dark:hover:bg-gray-800 '
-              }`}
-              style={{ paddingLeft: `${8 + indent}px` }}
-              onClick={async () => {
-                if (entry.type === 'dir') {
-                  // Load folder contents if not already loaded
-                  if (!folderContents.has(fullPath)) {
-                    await onLoadFolder(fullPath);
-                  }
-                  onToggleFolder(fullPath);
-                } else {
-                  onSelectFile(fullPath);
-                }
-              }}
-            >
-              {/* Chevron for folders */}
-              <div className="w-4 flex items-center justify-center mr-0.5">
-                {entry.type === 'dir' && (
-                  isExpanded ? 
-                    <span className="w-2.5 h-2.5 text-gray-600 dark:text-gray-300 flex items-center justify-center"><FaChevronDown size={10} /></span> : 
-                    <span className="w-2.5 h-2.5 text-gray-600 dark:text-gray-300 flex items-center justify-center"><FaChevronRight size={10} /></span>
-                )}
-              </div>
-              
-              {/* Icon */}
-              <span className="w-4 h-4 flex items-center justify-center mr-1.5">
-                {entry.type === 'dir' ? (
-                  isExpanded ? 
-                    <span className="text-amber-600 w-4 h-4 flex items-center justify-center"><FaFolderOpen size={16} /></span> : 
-                    <span className="text-amber-600 w-4 h-4 flex items-center justify-center"><FaFolder size={16} /></span>
-                ) : (
-                  getFileIcon(entry)
-                )}
-              </span>
-              
-              {/* File/Folder name */}
-              <span className={`text-[13px] leading-[22px] ${
-                selectedFile === fullPath ? 'text-blue-700 ' : 'text-gray-700 dark:text-gray-200 '
-              }`} style={{ fontFamily: "'Segoe UI', Tahoma, sans-serif" }}>
-                {level === 0 ? (entry.path.split('/').pop() || entry.path) : (entry.path.split('/').pop() || entry.path)}
-              </span>
-            </div>
-            
-            {/* Render children if expanded */}
-            {entry.type === 'dir' && isExpanded && folderContents.has(fullPath) && (
-              <TreeView
-                entries={folderContents.get(fullPath) || []}
-                selectedFile={selectedFile}
-                expandedFolders={expandedFolders}
-                folderContents={folderContents}
-                onToggleFolder={onToggleFolder}
-                onSelectFile={onSelectFile}
-                onLoadFolder={onLoadFolder}
-                level={level + 1}
-                parentPath={fullPath}
-                getFileIcon={getFileIcon}
-              />
-            )}
-          </div>
-        );
-      })}
-    </>
-  );
-}
 
 export default function ChatPage() {
   const params = useParams<{ project_id: string }>();
@@ -394,17 +277,24 @@ export default function ChatPage() {
   const [gitProvider, setGitProvider] = useState<string | null>(null);
   const [gitDeployDomain, setGitDeployDomain] = useState<string | null>(null);
   const [githubRepoName, setGithubRepoName] = useState<string | null>(null);
-  const [publishedUrl, setPublishedUrl] = useState<string | null>(null);
-  const [deploymentId, setDeploymentId] = useState<string | null>(null);
-  const [deploymentStatus, setDeploymentStatus] = useState<'idle' | 'deploying' | 'ready' | 'error'>('idle');
-  const deployPollRef = useRef<NodeJS.Timeout | null>(null);
+  // Deployment state + pollers (Vercel deployment poller, Gitea Actions run
+  // poller) — extracted verbatim into useDeployPolling.
+  const {
+    publishedUrl,
+    setPublishedUrl,
+    setDeploymentId,
+    deploymentStatus,
+    setDeploymentStatus,
+    deployRun,
+    setDeployRun,
+    giteaPollRef,
+    startGiteaDeployPolling,
+    startDeploymentPolling,
+  } = useDeployPolling({ projectId, setPublishLoading, setShowPublishPanel });
   // Set when an auto-start fails, to stop the effect from re-firing start() every
   // ~2s (a tight retry loop that floods /preview/start). Cleared on success or
   // when the user explicitly clicks the Play button.
   const previewStartFailedRef = useRef(false);
-  // Real CI deploy run details (Gitea Actions) for the publish UI.
-  const [deployRun, setDeployRun] = useState<{ state: string; runNumber?: number; url?: string; title?: string; sha?: string; updatedAt?: string } | null>(null);
-  const giteaPollRef = useRef<NodeJS.Timeout | null>(null);
   const [isStartingPreview, setIsStartingPreview] = useState(false);
   const [previewInitializationMessage, setPreviewInitializationMessage] = useState('Starting development server...');
   // Live build/start log lines, streamed into the loading panel so the wait is
@@ -843,7 +733,8 @@ const persistProjectPreferences = useCallback(
       setPublishedUrl(null);
       setDeploymentStatus('idle');
     }
-  }, [projectId]);
+    // setPublishedUrl/setDeploymentStatus are stable useState setters (from useDeployPolling).
+  }, [projectId, setPublishedUrl, setDeploymentStatus]);
 
   // Load the server's git provider config once (drives Gitea-vs-GitHub publish UI).
   useEffect(() => {
@@ -868,56 +759,7 @@ const persistProjectPreferences = useCallback(
     if (isGitea && githubConnected && githubRepoName && gitDeployDomain) {
       setPublishedUrl((prev) => prev || `https://${githubRepoName}.${gitDeployDomain}`);
     }
-  }, [isGitea, githubConnected, githubRepoName, gitDeployDomain]);
-
-  // Poll the REAL Gitea Actions deploy run (queued -> running -> success/failure)
-  // instead of guessing with a timer. Stops on a terminal state or timeout.
-  // Poll the REAL Gitea Actions deploy run. `baselineRun` is the latest run
-  // number BEFORE this publish — we only treat a run NEWER than it as "this
-  // deploy", otherwise the first poll reads the previous (already-finished) run
-  // and stops instantly (the "first click does nothing" bug).
-  const startGiteaDeployPolling = useCallback((baselineRun?: number | null) => {
-    if (giteaPollRef.current) { clearInterval(giteaPollRef.current); giteaPollRef.current = null; }
-    setDeploymentStatus('deploying');
-    const startedAt = Date.now();
-    const stop = () => { if (giteaPollRef.current) { clearInterval(giteaPollRef.current); giteaPollRef.current = null; } };
-    const poll = async () => {
-      try {
-        const r = await fetch(`${API_BASE}/api/projects/${projectId}/deploy/status`, { cache: 'no-store' });
-        if (r.ok) {
-          const d = await r.json();
-          if (d?.found) {
-            const isNewRun = baselineRun == null
-              || (typeof d.runNumber === 'number' && d.runNumber > baselineRun);
-            if (!isNewRun) {
-              // The new run hasn't registered yet — keep showing "queued".
-              setDeployRun({ state: 'queued' });
-              // If no new run appears within 40s, there was nothing to deploy
-              // (no changes) — the site is already live from the prior run.
-              if (Date.now() - startedAt > 40000) {
-                setDeploymentStatus('ready'); stop(); return;
-              }
-            } else {
-              setDeployRun({ state: d.state, runNumber: d.runNumber, url: d.url, title: d.title, sha: d.sha, updatedAt: d.updatedAt });
-              if (d.state === 'success') {
-                if (d.liveUrl) setPublishedUrl(d.liveUrl);
-                setDeploymentStatus('ready'); stop(); return;
-              }
-              if (d.state === 'failure' || d.state === 'cancelled') {
-                setDeploymentStatus('error'); stop(); return;
-              }
-            }
-          }
-        }
-      } catch {
-        // transient; keep polling
-      }
-      // Safety timeout (~6 min) so it never spins forever.
-      if (Date.now() - startedAt > 6 * 60 * 1000) stop();
-    };
-    poll();
-    giteaPollRef.current = setInterval(poll, 4000);
-  }, [projectId]);
+  }, [isGitea, githubConnected, githubRepoName, gitDeployDomain, setPublishedUrl]);
 
   // When the Publish modal opens (Gitea flow), reflect the real current/last
   // deploy run so the user always sees actual status — and resume polling if a
@@ -944,110 +786,8 @@ const persistProjectPreferences = useCallback(
       })
       .catch(() => {});
     return () => { cancelled = true; };
-  }, [showPublishPanel, isGitea, githubConnected, projectId, startGiteaDeployPolling]);
-
-  const startDeploymentPolling = useCallback((depId: string) => {
-    if (deployPollRef.current) clearInterval(deployPollRef.current);
-    setDeploymentStatus('deploying');
-    setDeploymentId(depId);
-
-    console.log('🔍 Monitoring deployment:', depId);
-    
-    deployPollRef.current = setInterval(async () => {
-      try {
-        const r = await fetch(`${API_BASE}/api/projects/${projectId}/vercel/deployment/current`);
-        if (r.status === 404) {
-          setDeploymentStatus('idle');
-          setDeploymentId(null);
-          setPublishLoading(false);
-          if (deployPollRef.current) {
-            clearInterval(deployPollRef.current);
-            deployPollRef.current = null;
-          }
-          return;
-        }
-        if (!r.ok) return;
-        const data = await r.json();
-        
-        // Stop polling if no active deployment (completed)
-        if (!data.has_deployment) {
-          console.log('🔍 Deployment completed - no active deployment');
-
-          // Set final deployment URL
-          if (data.last_deployment_url) {
-            const url = String(data.last_deployment_url).startsWith('http') ? data.last_deployment_url : `https://${data.last_deployment_url}`;
-            console.log('🔍 Deployment complete! URL:', url);
-            setPublishedUrl(url);
-            setDeploymentStatus('ready');
-          } else {
-            setDeploymentStatus('idle');
-          }
-          
-          // End publish loading state (important: release loading even if no deployment)
-          setPublishLoading(false);
-          
-          if (deployPollRef.current) {
-            clearInterval(deployPollRef.current);
-            deployPollRef.current = null;
-          }
-          return;
-        }
-        
-        // If there is an active deployment
-        const status = data.status;
-        
-        // Log only status changes
-        if (status && status !== 'QUEUED') {
-          console.log('🔍 Deployment status:', status);
-        }
-        
-        // Check if deployment is ready or failed
-        const isReady = status === 'READY';
-        const isBuilding = status === 'BUILDING' || status === 'QUEUED';
-        const isError = status === 'ERROR';
-        
-        if (isError) {
-          console.error('🔍 Deployment failed:', status);
-          setDeploymentStatus('error');
-          
-          // End publish loading state
-          setPublishLoading(false);
-          
-          // Close publish panel after error (with delay to show error message)
-          setTimeout(() => {
-            setShowPublishPanel(false);
-          }, 3000); // Show error for 3 seconds before closing
-          
-          if (deployPollRef.current) {
-            clearInterval(deployPollRef.current);
-            deployPollRef.current = null;
-          }
-          return;
-        }
-        
-        if (isReady && data.deployment_url) {
-          const url = String(data.deployment_url).startsWith('http') ? data.deployment_url : `https://${data.deployment_url}`;
-          console.log('🔍 Deployment complete! URL:', url);
-          setPublishedUrl(url);
-          setDeploymentStatus('ready');
-          
-          // End publish loading state
-          setPublishLoading(false);
-          
-          // Keep panel open to show the published URL
-          
-          if (deployPollRef.current) {
-            clearInterval(deployPollRef.current);
-            deployPollRef.current = null;
-          }
-        } else if (isBuilding) {
-          setDeploymentStatus('deploying');
-        }
-      } catch (error) {
-        console.error('🔍 Polling error:', error);
-      }
-    }, 1000); // Changed to 1 second interval
-  }, [projectId]);
+    // giteaPollRef/setDeployRun/setPublishedUrl are stable (ref + useState setters from useDeployPolling).
+  }, [showPublishPanel, isGitea, githubConnected, projectId, startGiteaDeployPolling, giteaPollRef, setDeployRun, setPublishedUrl]);
 
   const checkCurrentDeployment = useCallback(async () => {
     try {
@@ -1070,7 +810,8 @@ const persistProjectPreferences = useCallback(
     } catch (e) {
       console.warn('Failed to check current deployment', e);
     }
-  }, [projectId, startDeploymentPolling]);
+    // setDeploymentId/setDeploymentStatus are stable useState setters (from useDeployPolling).
+  }, [projectId, startDeploymentPolling, setDeploymentId, setDeploymentStatus]);
 
   const start = useCallback(async () => {
     // Any explicit start lifts the "user stopped it" latch.
@@ -1973,89 +1714,6 @@ const persistProjectPreferences = useCallback(
   // Get file extension for syntax highlighting
   // getFileLanguage / escapeHtml now live in @/lib/utils/format (tested).
 
-  // Get file icon based on type
-  function getFileIcon(entry: Entry): React.ReactElement {
-    if (entry.type === 'dir') {
-      return <span className="text-blue-500"><FaFolder size={16} /></span>;
-    }
-    
-    const ext = entry.path.split('.').pop()?.toLowerCase();
-    const filename = entry.path.split('/').pop()?.toLowerCase();
-    
-    // Special files
-    if (filename === 'package.json') return <span className="text-green-600"><VscJson size={16} /></span>;
-    if (filename === 'dockerfile') return <span className="text-blue-400"><FaDocker size={16} /></span>;
-    if (filename?.startsWith('.env')) return <span className="text-yellow-500"><FaLock size={16} /></span>;
-    if (filename === 'readme.md') return <span className="text-gray-600 dark:text-gray-300"><FaMarkdown size={16} /></span>;
-    if (filename?.includes('config')) return <span className="text-gray-500 dark:text-gray-400"><FaCog size={16} /></span>;
-    
-    switch (ext) {
-      case 'tsx':
-        return <span className="text-cyan-400"><FaReact size={16} /></span>;
-      case 'ts':
-        return <span className="text-blue-600"><SiTypescript size={16} /></span>;
-      case 'jsx':
-        return <span className="text-cyan-400"><FaReact size={16} /></span>;
-      case 'js':
-      case 'mjs':
-        return <span className="text-yellow-400"><FaJs size={16} /></span>;
-      case 'css':
-        return <span className="text-blue-500"><FaCss3Alt size={16} /></span>;
-      case 'scss':
-      case 'sass':
-        return <span className="text-pink-500"><FaCss3Alt size={16} /></span>;
-      case 'html':
-      case 'htm':
-        return <span className="text-orange-500"><FaHtml5 size={16} /></span>;
-      case 'json':
-        return <span className="text-yellow-600"><VscJson size={16} /></span>;
-      case 'md':
-      case 'markdown':
-        return <span className="text-gray-600 dark:text-gray-300"><FaMarkdown size={16} /></span>;
-      case 'py':
-        return <span className="text-blue-400"><FaPython size={16} /></span>;
-      case 'sh':
-      case 'bash':
-        return <span className="text-green-500"><FaFileCode size={16} /></span>;
-      case 'yaml':
-      case 'yml':
-        return <span className="text-red-500"><SiYaml size={16} /></span>;
-      case 'xml':
-        return <span className="text-orange-600"><FaFileCode size={16} /></span>;
-      case 'sql':
-        return <span className="text-blue-600"><FaDatabase size={16} /></span>;
-      case 'php':
-        return <span className="text-indigo-500"><FaPhp size={16} /></span>;
-      case 'java':
-        return <span className="text-red-600"><FaJava size={16} /></span>;
-      case 'c':
-        return <span className="text-blue-700"><FaFileCode size={16} /></span>;
-      case 'cpp':
-      case 'cc':
-      case 'cxx':
-        return <span className="text-blue-600"><SiCplusplus size={16} /></span>;
-      case 'rs':
-        return <span className="text-orange-700"><FaRust size={16} /></span>;
-      case 'go':
-        return <span className="text-cyan-500"><SiGo size={16} /></span>;
-      case 'rb':
-        return <span className="text-red-500"><SiRuby size={16} /></span>;
-      case 'vue':
-        return <span className="text-green-500"><FaVuejs size={16} /></span>;
-      case 'svelte':
-        return <span className="text-orange-600"><SiSvelte size={16} /></span>;
-      case 'dockerfile':
-        return <span className="text-blue-400"><FaDocker size={16} /></span>;
-      case 'toml':
-      case 'ini':
-      case 'conf':
-      case 'config':
-        return <span className="text-gray-500 dark:text-gray-400"><FaCog size={16} /></span>;
-      default:
-        return <span className="text-gray-400 dark:text-gray-500"><FaFile size={16} /></span>;
-    }
-  }
-
   // Ensure we only trigger dependency installation once per page lifecycle
   const installTriggeredRef = useRef(false);
 
@@ -2840,11 +2498,10 @@ const persistProjectPreferences = useCallback(
       canceled = true;
       window.removeEventListener('services-updated', handleServicesUpdate);
 
-      // Stop deploy/publish pollers so they don't keep hitting the API after the
-      // chat page unmounts (e.g. navigating back to the dashboard). The preview
-      // itself is deliberately left running (see note above) so it stays warm.
-      if (deployPollRef.current) { clearInterval(deployPollRef.current); deployPollRef.current = null; }
-      if (giteaPollRef.current) { clearInterval(giteaPollRef.current); giteaPollRef.current = null; }
+      // Deploy/publish pollers are stopped by useDeployPolling's own unmount
+      // cleanup so they don't keep hitting the API after the chat page unmounts
+      // (e.g. navigating back to the dashboard). The preview itself is
+      // deliberately left running (see note above) so it stays warm.
     };
   }, [projectId]);
 
@@ -3720,179 +3377,49 @@ const persistProjectPreferences = useCallback(
                 )}
                   </MotionDiv>
                 ) : (
-              <MotionDiv
+              <CodeExplorer
                 key="code"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                className="h-full flex bg-white dark:bg-gray-900 "
-              >
-                {/* Left Sidebar - File Explorer (VS Code style) */}
-                <div className="w-64 flex-shrink-0 bg-gray-50 dark:bg-gray-900 border-r border-gray-200 dark:border-gray-700 flex flex-col">
-                  {/* File Tree */}
-                  <div className="flex-1 overflow-y-auto bg-gray-50 dark:bg-gray-900 custom-scrollbar">
-                    {!tree || tree.length === 0 ? (
-                      <div className="px-3 py-8 text-center text-[11px] text-gray-600 dark:text-gray-300 select-none">
-                        No files found
-                      </div>
-                    ) : (
-                      <TreeView 
-                        entries={tree || []}
-                        selectedFile={selectedFile}
-                        expandedFolders={expandedFolders}
-                        folderContents={folderContents}
-                        onToggleFolder={toggleFolder}
-                        onSelectFile={openFile}
-                        onLoadFolder={handleLoadFolder}
-                        level={0}
-                        parentPath=""
-                        getFileIcon={getFileIcon}
-                      />
-                    )}
-                  </div>
-                </div>
-
-                {/* Right Editor Area */}
-                <div className="flex-1 flex flex-col bg-white dark:bg-gray-900 min-w-0">
-                  {selectedFile ? (
-                    <>
-                      {/* File Tab */}
-                      <div className="flex-shrink-0 bg-gray-100 dark:bg-gray-800 ">
-                        <div className="flex items-center gap-3 bg-white dark:bg-gray-900 px-3 py-1.5 border-t-2 border-t-blue-500 ">
-                          <div className="flex items-center gap-2 min-w-0">
-                            <span className="w-4 h-4 flex items-center justify-center">
-                              {getFileIcon(tree.find(e => e.path === selectedFile) || { path: selectedFile, type: 'file' })}
-                            </span>
-                            <span className="truncate text-[13px] text-gray-700 dark:text-gray-200 " style={{ fontFamily: "'Segoe UI', Tahoma, sans-serif" }}>
-                              {selectedFile.split('/').pop()}
-                            </span>
-                          </div>
-                          {hasUnsavedChanges && (
-                            <span className="text-[11px] text-amber-600 ">
-                              • Unsaved changes
-                            </span>
-                          )}
-                          {!hasUnsavedChanges && saveFeedback === 'success' && (
-                            <span className="text-[11px] text-green-600 ">
-                              Saved
-                            </span>
-                          )}
-                          {saveFeedback === 'error' && (
-                            <span
-                              className="text-[11px] text-red-600 truncate max-w-[160px]"
-                              title={saveError ?? 'Failed to save file'}
-                            >
-                              Save error
-                            </span>
-                          )}
-                          {!hasUnsavedChanges && saveFeedback !== 'success' && isFileUpdating && (
-                            <span className="text-[11px] text-green-600 ">
-                              Updated
-                            </span>
-                          )}
-                          <div className="ml-auto flex items-center gap-2">
-                            <button
-                              className="px-3 py-1 text-xs font-medium rounded bg-blue-500 text-white hover:bg-blue-600 disabled:bg-gray-300 disabled:text-gray-600 disabled:cursor-not-allowed "
-                              onClick={handleSaveFile}
-                              disabled={!hasUnsavedChanges || isSavingFile}
-                              title="Save (Ctrl+S)"
-                            >
-                              {isSavingFile ? 'Saving…' : 'Save'}
-                            </button>
-                            <button
-                              className="text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-700 px-1 rounded"
-                              onClick={() => {
-                                if (hasUnsavedChanges) {
-                                  const confirmClose =
-                                    typeof window !== 'undefined'
-                                      ? window.confirm('You have unsaved changes. Close without saving?')
-                                      : true;
-                                  if (!confirmClose) {
-                                    return;
-                                  }
-                                }
-                                setSelectedFile('');
-                                setContent('');
-                                setEditedContent('');
-                                editedContentRef.current = '';
-                                setHasUnsavedChanges(false);
-                                setSaveFeedback('idle');
-                                setSaveError(null);
-                                setIsFileUpdating(false);
-                              }}
-                            >
-                              ×
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Code Editor */}
-                      <div className="flex-1 overflow-hidden">
-                        <div className="w-full h-full flex bg-white dark:bg-gray-900 overflow-hidden">
-                          {/* Line Numbers */}
-                          <div
-                            ref={lineNumberRef}
-                            className="bg-gray-50 dark:bg-gray-900 px-3 py-4 select-none flex-shrink-0 overflow-y-auto overflow-x-hidden custom-scrollbar pointer-events-none"
-                            aria-hidden="true"
-                          >
-                            <div className="text-[13px] font-mono text-gray-500 dark:text-gray-400 leading-[19px]">
-                              {(editedContent || '').split('\n').map((_, index) => (
-                                <div key={index} className="text-right pr-2">
-                                  {index + 1}
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                          {/* Code Content */}
-                          <div className="relative flex-1">
-                            <pre
-                              ref={highlightRef}
-                              aria-hidden="true"
-                              className="absolute inset-0 m-0 p-4 overflow-hidden text-[13px] leading-[19px] font-mono text-gray-800 dark:text-gray-100 whitespace-pre pointer-events-none"
-                              style={{ fontFamily: "'Fira Code', 'Consolas', 'Monaco', monospace" }}
-                            >
-                              <code
-                                className={`language-${getFileLanguage(selectedFile)}`}
-                                dangerouslySetInnerHTML={{ __html: highlightedCode }}
-                              />
-                              <span className="block h-full min-h-[1px]" />
-                            </pre>
-                            <textarea
-                              ref={editorRef}
-                              value={editedContent}
-                              onChange={onEditorChange}
-                              onScroll={handleEditorScroll}
-                              onKeyDown={handleEditorKeyDown}
-                              spellCheck={false}
-                              autoCorrect="off"
-                              autoCapitalize="none"
-                              autoComplete="off"
-                              wrap="off"
-                              aria-label="Code editor"
-                              className="absolute inset-0 w-full h-full resize-none bg-transparent text-transparent caret-gray-800 outline-none font-mono text-[13px] leading-[19px] p-4 whitespace-pre overflow-auto custom-scrollbar"
-                              style={{ fontFamily: "'Fira Code', 'Consolas', 'Monaco', monospace" }}
-                            />
-                          </div>
-                        </div>
-                      </div>
-                    </>
-                  ) : (
-                    /* Welcome Screen */
-                    <div className="flex-1 flex items-center justify-center bg-white dark:bg-gray-900 ">
-                      <div className="text-center">
-                        <span className="w-16 h-16 mb-4 opacity-10 text-gray-400 dark:text-gray-500 mx-auto flex items-center justify-center"><FaCode size={64} /></span>
-                        <h3 className="text-lg font-medium text-gray-700 dark:text-gray-200 mb-2">
-                          Welcome to Code Editor
-                        </h3>
-                        <p className="text-sm text-gray-500 dark:text-gray-400 ">
-                          Select a file from the explorer to start viewing code
-                        </p>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </MotionDiv>
+                tree={tree}
+                selectedFile={selectedFile}
+                expandedFolders={expandedFolders}
+                folderContents={folderContents}
+                onToggleFolder={toggleFolder}
+                onSelectFile={openFile}
+                onLoadFolder={handleLoadFolder}
+                hasUnsavedChanges={hasUnsavedChanges}
+                isSavingFile={isSavingFile}
+                saveFeedback={saveFeedback}
+                saveError={saveError}
+                isFileUpdating={isFileUpdating}
+                editedContent={editedContent}
+                highlightedCode={highlightedCode}
+                onSaveFile={handleSaveFile}
+                onCloseFile={() => {
+                  if (hasUnsavedChanges) {
+                    const confirmClose =
+                      typeof window !== 'undefined'
+                        ? window.confirm('You have unsaved changes. Close without saving?')
+                        : true;
+                    if (!confirmClose) {
+                      return;
+                    }
+                  }
+                  setSelectedFile('');
+                  setContent('');
+                  setEditedContent('');
+                  editedContentRef.current = '';
+                  setHasUnsavedChanges(false);
+                  setSaveFeedback('idle');
+                  setSaveError(null);
+                  setIsFileUpdating(false);
+                }}
+                onEditorChange={onEditorChange}
+                onEditorScroll={handleEditorScroll}
+                onEditorKeyDown={handleEditorKeyDown}
+                editorRef={editorRef}
+                highlightRef={highlightRef}
+                lineNumberRef={lineNumberRef}
+              />
                 )}
                 </AnimatePresence>
               </div>
@@ -3924,234 +3451,27 @@ const persistProjectPreferences = useCallback(
       />
 
       {showPublishPanel && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/50" onClick={() => setShowPublishPanel(false)} />
-          <div className="relative w-full max-w-lg bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-2xl shadow-2xl overflow-hidden">
-              <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between bg-gray-50 dark:bg-gray-900/60 ">
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-lg flex items-center justify-center text-white bg-black border border-black/10 ">
-                  <FaRocket size={14} />
-                </div>
-                <div>
-                  <h3 className="text-base font-semibold text-gray-900 dark:text-gray-50 ">Publish Project</h3>
-                  <p className="text-xs text-gray-600 dark:text-gray-300 ">{isGitea ? 'Pushes your code to Git — auto-deploys via CI' : 'Deploy with Vercel, linked to your GitHub repo'}</p>
-                </div>
-              </div>
-              <button onClick={() => setShowPublishPanel(false)} className="text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 ">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M18 6L6 18M6 6l12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>
-              </button>
-            </div>
-
-            <div className="p-6 space-y-4">
-              {deploymentStatus === 'deploying' && (
-                <div className="p-4 rounded-xl border border-blue-200 bg-blue-50 ">
-                  <div className="flex items-center gap-2 mb-1">
-                    <div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
-                    <p className="text-sm font-medium text-blue-700 ">
-                      {deployRun?.state === 'queued' ? 'Queued — waiting for the runner…'
-                        : deployRun?.state === 'running' ? 'Building & deploying…'
-                        : 'Pushing to the repository…'}
-                    </p>
-                  </div>
-                  <p className="text-xs text-blue-700/80 ">
-                    {isGitea
-                      ? 'Live status from CI — clone, build, route, health check.'
-                      : 'Building and deploying your project. This may take a few minutes.'}
-                  </p>
-                  {isGitea && publishedUrl && (
-                    <p className="text-xs text-blue-700/80 mt-1">Will be live at <a href={publishedUrl} target="_blank" rel="noopener noreferrer" className="font-mono underline">{publishedUrl}</a></p>
-                  )}
-                  {isGitea && deployRun?.url && (
-                    <p className="text-xs text-blue-700/80 mt-1">
-                      <a href={deployRun.url} target="_blank" rel="noopener noreferrer" className="underline">
-                        View build log{deployRun.runNumber ? ` (run #${deployRun.runNumber})` : ''} →
-                      </a>
-                    </p>
-                  )}
-                </div>
-              )}
-
-              {/* Neutral "currently live" state shown when the popup opens for an
-                  already-deployed project (before the user clicks Update). */}
-              {deploymentStatus !== 'deploying' && deploymentStatus !== 'ready' && deploymentStatus !== 'error' && isGitea && publishedUrl && (
-                <div className="p-4 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 ">
-                  <p className="text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">Currently live at:</p>
-                  <div className="flex items-center gap-2">
-                    <a href={publishedUrl} target="_blank" rel="noopener noreferrer" className="text-sm font-mono text-gray-700 dark:text-gray-200 underline break-all flex-1">
-                      {publishedUrl}
-                    </a>
-                    <button
-                      onClick={() => navigator.clipboard?.writeText(publishedUrl)}
-                      className="px-2 py-1 text-xs rounded-lg border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 "
-                    >
-                      Copy
-                    </button>
-                  </div>
-                  {deployRun?.state === 'success' && (deployRun?.title || deployRun?.updatedAt) && (
-                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
-                      Last deployed{formatTimeAgo(deployRun.updatedAt) ? ` ${formatTimeAgo(deployRun.updatedAt)}` : ''}
-                      {deployRun.title ? ` · ${deployRun.title}` : ''}
-                      {deployRun.sha ? ` (${deployRun.sha})` : ''}
-                      {deployRun.url ? <> · <a href={deployRun.url} target="_blank" rel="noopener noreferrer" className="underline">log</a></> : null}
-                    </p>
-                  )}
-                  <p className="text-xs text-gray-400 dark:text-gray-500 mt-2">Click Update to deploy your latest changes.</p>
-                </div>
-              )}
-
-              {deploymentStatus === 'ready' && publishedUrl && (
-                <div className="p-4 rounded-xl border border-emerald-200 bg-emerald-50 ">
-                  <p className="text-sm font-medium text-emerald-700 mb-2">Published successfully</p>
-                  <div className="flex items-center gap-2">
-                    <a href={publishedUrl} target="_blank" rel="noopener noreferrer" className="text-sm font-mono text-emerald-700 underline break-all flex-1">
-                      {publishedUrl}
-                    </a>
-                    <button
-                      onClick={() => navigator.clipboard?.writeText(publishedUrl)}
-                      className="px-2 py-1 text-xs rounded-lg border border-emerald-300/80 text-emerald-700 hover:bg-emerald-100 "
-                    >
-                      Copy
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {deploymentStatus === 'error' && (
-                <div className="p-4 rounded-xl border border-red-200 bg-red-50 ">
-                  <p className="text-sm font-medium text-red-700 ">
-                    {deployRun?.state === 'cancelled' ? 'Deployment was cancelled.' : 'Deployment failed.'}
-                  </p>
-                  {isGitea && deployRun?.url && (
-                    <p className="text-xs text-red-600 mt-1">
-                      <a href={deployRun.url} target="_blank" rel="noopener noreferrer" className="underline">
-                        View the failed build log{deployRun.runNumber ? ` (run #${deployRun.runNumber})` : ''} →
-                      </a>
-                    </p>
-                  )}
-                </div>
-              )}
-
-              {!githubConnected || (!isGitea && !vercelConnected) ? (
-                <div className="p-4 rounded-xl border border-amber-200 bg-amber-50 ">
-                  <p className="text-sm font-medium text-gray-900 dark:text-gray-50 mb-2">Connect the following services:</p>
-                  <div className="space-y-1 text-amber-700 text-sm">
-                    {!githubConnected && (<div className="flex items-center gap-2"><span className="w-1.5 h-1.5 rounded-full bg-amber-500"/>Git repository not connected</div>)}
-                    {!isGitea && !vercelConnected && (<div className="flex items-center gap-2"><span className="w-1.5 h-1.5 rounded-full bg-amber-500"/>Vercel project not connected</div>)}
-                  </div>
-                  <button
-                    className="mt-3 w-full px-4 py-2 rounded-xl border border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-100 hover:bg-gray-50 dark:hover:bg-gray-800 "
-                    onClick={() => { setShowPublishPanel(false); setSettingsInitialTab('services'); setShowGlobalSettings(true); }}
-                  >
-                    Open Settings → Services
-                  </button>
-                </div>
-              ) : null}
-
-              <button
-                disabled={publishLoading || deploymentStatus === 'deploying' || !githubConnected || (!isGitea && !vercelConnected)}
-                onClick={async () => {
-                  // Self-hosted Gitea flow: push to the Gitea repo; the Actions
-                  // host-runner builds, deploys and routes the site. No Vercel.
-                  if (isGitea) {
-                    try {
-                      setPublishLoading(true);
-                      setDeploymentStatus('deploying');
-                      setDeployRun({ state: 'queued' });
-                      // Record the latest run number BEFORE pushing so polling
-                      // only tracks the NEW run this publish creates.
-                      let baselineRun: number | null = null;
-                      try {
-                        const s = await fetch(`${API_BASE}/api/projects/${projectId}/deploy/status`, { cache: 'no-store' }).then(r => r.ok ? r.json() : null);
-                        baselineRun = s?.found && typeof s.runNumber === 'number' ? s.runNumber : null;
-                      } catch {}
-                      const pushRes = await fetch(`${API_BASE}/api/projects/${projectId}/github/push`, { method: 'POST' });
-                      if (!pushRes.ok) {
-                        throw new Error(await pushRes.text());
-                      }
-                      const pushBody = await pushRes.json().catch(() => ({}));
-                      const url = githubRepoName && gitDeployDomain
-                        ? `https://${githubRepoName}.${gitDeployDomain}`
-                        : publishedUrl;
-                      if (url) setPublishedUrl(url);
-                      setPublishLoading(false);
-                      if (pushBody.pushed === false) {
-                        // Nothing changed since the last deploy — it's already live.
-                        setDeployRun(null);
-                        setDeploymentStatus('ready');
-                      } else {
-                        // Track the real Gitea Actions run (queued -> running ->
-                        // success/failure) instead of guessing with a timer.
-                        startGiteaDeployPolling(baselineRun);
-                      }
-                    } catch (e) {
-                      console.error('🚀 Gitea publish failed:', e);
-                      alert('Publish failed. Make sure the project is connected to Gitea in Settings → Services.');
-                      setDeploymentStatus('idle');
-                      setPublishLoading(false);
-                    }
-                    return;
-                  }
-                  try {
-                    setPublishLoading(true);
-                    setDeploymentStatus('deploying');
-                    // 1) Push to GitHub to ensure branch/commit exists
-                    try {
-                      const pushRes = await fetch(`${API_BASE}/api/projects/${projectId}/github/push`, { method: 'POST' });
-                      if (!pushRes.ok) {
-                        const err = await pushRes.text();
-                        console.error('🚀 GitHub push failed:', err);
-                        throw new Error(err);
-                      }
-                    } catch (e) {
-                      console.error('🚀 GitHub push step failed', e);
-                      throw e;
-                    }
-                    // Small grace period to let GitHub update default branch
-                    await new Promise(r => setTimeout(r, 800));
-                    // 2) Deploy to Vercel (branch auto-resolved on server)
-                    const deployUrl = `${API_BASE}/api/projects/${projectId}/vercel/deploy`;
-                    const vercelRes = await fetch(deployUrl, {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({ branch: 'main' })
-                    });
-                    if (vercelRes.ok) {
-                      const data = await vercelRes.json();
-                      setDeploymentStatus('deploying');
-                      if (data.deployment_id) startDeploymentPolling(data.deployment_id);
-                      if (data.ready && data.deployment_url) {
-                        const url = data.deployment_url.startsWith('http') ? data.deployment_url : `https://${data.deployment_url}`;
-                        setPublishedUrl(url);
-                        setDeploymentStatus('ready');
-                      }
-                    } else {
-                      const errorText = await vercelRes.text();
-                      console.error('🚀 Vercel deploy failed:', vercelRes.status, errorText);
-                      // Show the failure panel — 'idle' made the failure invisible.
-                      setDeploymentStatus('error');
-                      setPublishLoading(false);
-                    }
-                  } catch (e) {
-                    console.error('🚀 Publish failed:', e);
-                    alert('Publish failed. Check Settings and tokens.');
-                    setDeploymentStatus('idle');
-                    setPublishLoading(false);
-                    setTimeout(() => setShowPublishPanel(false), 1000);
-                  } finally {
-                    loadDeployStatus();
-                  }
-                }}
-                className={`w-full px-4 py-3 rounded-xl font-medium text-white transition ${
-                  publishLoading || deploymentStatus === 'deploying' || !githubConnected || (!isGitea && !vercelConnected)
-                    ? 'bg-gray-400 cursor-not-allowed'
-                    : 'bg-black hover:bg-gray-900 dark:hover:bg-gray-200'
-                }`}
-              >
-                {publishLoading ? 'Publishing…' : deploymentStatus === 'deploying' ? 'Deploying…' : (!githubConnected || (!isGitea && !vercelConnected)) ? 'Connect Services First' : (publishedUrl ? 'Update' : 'Publish')}
-              </button>
-            </div>
-          </div>
-        </div>
+        <PublishPanel
+          projectId={projectId}
+          isGitea={isGitea}
+          deploymentStatus={deploymentStatus}
+          setDeploymentStatus={setDeploymentStatus}
+          deployRun={deployRun}
+          setDeployRun={setDeployRun}
+          publishedUrl={publishedUrl}
+          setPublishedUrl={setPublishedUrl}
+          githubConnected={githubConnected}
+          vercelConnected={vercelConnected}
+          githubRepoName={githubRepoName}
+          gitDeployDomain={gitDeployDomain}
+          publishLoading={publishLoading}
+          setPublishLoading={setPublishLoading}
+          startGiteaDeployPolling={startGiteaDeployPolling}
+          startDeploymentPolling={startDeploymentPolling}
+          loadDeployStatus={loadDeployStatus}
+          onClose={() => setShowPublishPanel(false)}
+          onOpenServiceSettings={() => { setShowPublishPanel(false); setSettingsInitialTab('services'); setShowGlobalSettings(true); }}
+        />
       )}
 
       {/* Project Settings Modal */}
