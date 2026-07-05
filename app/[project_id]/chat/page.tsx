@@ -804,7 +804,6 @@ const persistProjectPreferences = useCallback(
           setPublishLoading(false);
           setShowPublishPanel(true);
           startDeploymentPolling(data.deployment_id);
-          console.log('🔍 Resuming deployment monitoring:', data.deployment_id);
         }
       }
     } catch (e) {
@@ -1743,13 +1742,11 @@ const persistProjectPreferences = useCallback(
 
   const loadSettings = useCallback(async (projectSettings?: { cli?: string; model?: string }) => {
     try {
-      console.log('🔧 loadSettings called with project settings:', projectSettings);
 
       const hasCliSet = projectSettings?.cli || preferredCli;
       const hasModelSet = projectSettings?.model || selectedModel;
 
       if (!hasCliSet || !hasModelSet) {
-        console.log('⚠️ Missing CLI or model, loading global settings');
         const globalResponse = await fetch(`${API_BASE}/api/settings/global`);
         if (globalResponse.ok) {
           const globalSettings = await globalResponse.json();
@@ -1757,7 +1754,6 @@ const persistProjectPreferences = useCallback(
           const cliToUse = sanitizeCli(hasCliSet || defaultCli);
 
           if (!hasCliSet) {
-            console.log('🔄 Setting CLI from global:', cliToUse);
             updatePreferredCli(cliToUse);
           }
 
@@ -1819,10 +1815,6 @@ const persistProjectPreferences = useCallback(
           ? project.selected_model
           : undefined;
 
-      console.log('📋 Loading project info:', {
-        preferredCli: rawPreferredCli,
-        selectedModel: rawSelectedModel,
-      });
 
       setProjectName(project.name || `Project ${projectId.slice(0, 8)}`);
 
@@ -1938,20 +1930,10 @@ const persistProjectPreferences = useCallback(
   // Stable message handlers with useCallback to prevent reassignment
   const createStableMessageHandlers = useCallback(() => {
     const addMessage = (message: any) => {
-      console.log('🔄 [StableHandler] Adding message via stable handler:', {
-        messageId: message.id,
-        role: message.role,
-        isOptimistic: message.isOptimistic,
-        requestId: message.requestId
-      });
 
       // Track optimistic messages by requestId
       if (message.isOptimistic && message.requestId) {
         optimisticMessagesRef.current.set(message.requestId, message);
-        console.log('🔄 [StableHandler] Tracking optimistic message:', {
-          requestId: message.requestId,
-          tempId: message.id
-        });
       }
 
       // Also call the current handlers if they exist
@@ -1961,17 +1943,12 @@ const persistProjectPreferences = useCallback(
     };
 
     const removeMessage = (messageId: string) => {
-      console.log('🔄 [StableHandler] Removing message via stable handler:', messageId);
 
       // Remove from optimistic messages tracking if it's an optimistic message
       const optimisticMessage = Array.from(optimisticMessagesRef.current.values())
         .find(msg => msg.id === messageId);
       if (optimisticMessage && optimisticMessage.requestId) {
         optimisticMessagesRef.current.delete(optimisticMessage.requestId);
-        console.log('🔄 [StableHandler] Removed optimistic message tracking:', {
-          requestId: optimisticMessage.requestId,
-          tempId: messageId
-        });
       }
 
       // Also call the current handlers if they exist
@@ -2055,7 +2032,6 @@ const persistProjectPreferences = useCallback(
 
     // Check for duplicate pending requests
     if (pendingRequestsRef.current.has(requestFingerprint)) {
-      console.log('🔄 [DEBUG] Duplicate request detected, skipping:', requestFingerprint);
       return;
     }
 
@@ -2116,22 +2092,10 @@ const persistProjectPreferences = useCallback(
         };
       };
 
-      console.log('🖼️ Processing images in runAct:', {
-          imageCount: imagesToUse.length,
-          cli: preferredCli,
-          requestId
-        });
       const processedImages: { name: string; path: string; url?: string; public_url?: string; publicUrl?: string }[] = [];
 
       for (let i = 0; i < imagesToUse.length; i += 1) {
         const image = imagesToUse[i];
-        console.log(`🖼️ Processing image ${i}:`, {
-          id: image.id,
-          filename: image.filename,
-          hasPath: !!image.path,
-          hasPublicUrl: !!image.publicUrl,
-          hasAssetUrl: !!image.assetUrl
-        });
         if (image?.path) {
           const name = image.filename || image.name || `Image ${i + 1}`;
           const candidateUrl = typeof image.assetUrl === 'string' ? image.assetUrl : undefined;
@@ -2143,7 +2107,6 @@ const persistProjectPreferences = useCallback(
             public_url: candidatePublicUrl,
             publicUrl: candidatePublicUrl,
           };
-          console.log(`🖼️ Created processed image ${i}:`, processedImage);
           processedImages.push(processedImage);
           continue;
         }
@@ -2174,18 +2137,6 @@ const persistProjectPreferences = useCallback(
         thinkingMode,
       };
 
-      console.log('📸 Sending request to act API:', {
-        messageLength: finalMessage.length,
-        imageCount: processedImages.length,
-        cli: preferredCli,
-        requestId,
-        images: processedImages.map(img => ({
-          name: img.name,
-          hasPath: !!img.path,
-          hasUrl: !!img.url,
-          hasPublicUrl: !!img.publicUrl
-        }))
-      });
 
       // Optimistically add user message to UI BEFORE API call for instant feedback
       tempUserMessageId = requestId + '-user-temp';
@@ -2215,11 +2166,6 @@ const persistProjectPreferences = useCallback(
                 }
               : undefined,
         };
-        console.log('🔄 [Optimistic] Adding optimistic user message via stable handler:', {
-          tempId: tempUserMessageId,
-          requestId,
-          content: finalMessage.substring(0, 50) + '...'
-        });
 
         // Use stable handlers instead of direct messageHandlersRef to prevent reassignment issues
         if (stableMessageHandlers.current) {
@@ -2250,7 +2196,6 @@ const persistProjectPreferences = useCallback(
           console.error('API Error:', errorText);
 
           if (tempUserMessageId) {
-            console.log('🔄 [Optimistic] Removing optimistic user message due to API error via stable handler:', tempUserMessageId);
             if (stableMessageHandlers.current) {
               stableMessageHandlers.current.remove(tempUserMessageId);
             } else if (messageHandlersRef.current) {
@@ -2265,7 +2210,6 @@ const persistProjectPreferences = useCallback(
         clearTimeout(timeoutId);
         if (fetchError.name === 'AbortError') {
           if (tempUserMessageId) {
-            console.log('🔄 [Optimistic] Removing optimistic user message due to timeout via stable handler:', tempUserMessageId);
             if (stableMessageHandlers.current) {
               stableMessageHandlers.current.remove(tempUserMessageId);
             } else if (messageHandlersRef.current) {
@@ -2281,13 +2225,6 @@ const persistProjectPreferences = useCallback(
 
       const result = await r.json();
 
-      console.log('📸 Act API response received:', {
-        success: result.success,
-        userMessageId: result.userMessageId,
-        conversationId: result.conversationId,
-        requestId: result.requestId,
-        hasAttachments: processedImages.length > 0
-      });
 
       const returnedConversationId =
         typeof result?.conversationId === 'string'
@@ -2331,7 +2268,6 @@ const persistProjectPreferences = useCallback(
       console.error('Act execution error:', error);
 
       if (tempUserMessageId) {
-        console.log('🔄 [Optimistic] Removing optimistic user message due to execution error via stable handler:', tempUserMessageId);
         if (stableMessageHandlers.current) {
           stableMessageHandlers.current.remove(tempUserMessageId);
         } else if (messageHandlersRef.current) {
@@ -2425,9 +2361,7 @@ const persistProjectPreferences = useCallback(
     if (!hasActiveRequests && !previewUrl && !isStartingPreview && !previewStartFailedRef.current
         && !userStoppedPreviewRef.current) {
       if (!previousActiveState.current) {
-        console.log('🔄 Preview not running; auto-starting');
       } else {
-        console.log('✅ Task completed, ensuring preview server is running');
       }
       start();
     }
@@ -2660,19 +2594,16 @@ const persistProjectPreferences = useCallback(
                   serverBusy={hasActiveRequests}
                   onReverted={() => { setTimeout(() => refreshPreview(), 400); }}
                   onAddUserMessage={(handlers) => {
-                    console.log('🔄 [HandlerSetup] ChatLog provided new handlers, updating references');
                     messageHandlersRef.current = handlers;
 
                     // Also update stable handlers if they exist
                     if (stableMessageHandlers.current) {
-                      console.log('🔄 [HandlerSetup] Updating stable handlers reference');
                       // Note: stableMessageHandlers.current already has its own add/remove logic
                       // We don't replace it completely, just keep the reference to handlers
                     }
                   }}
                   onSessionStatusChange={handleSessionStatusChange}
                 onSseFallbackActive={(active) => {
-                  console.log('🔄 [SSE] Fallback status:', active);
                   setIsSseFallbackActive(active);
                 }}
                 onProjectStatusUpdate={handleProjectStatusUpdate}
@@ -3158,19 +3089,19 @@ const persistProjectPreferences = useCallback(
                     {/* Gradient background similar to main page */}
                     <div className="absolute inset-0">
                       <div className="absolute inset-0 bg-white dark:bg-gray-900 " />
-                      <div 
-                        className="absolute inset-0 hidden transition-all duration-1000 ease-in-out"
+                      <div
+                        className="absolute inset-0 hidden dark:block transition-all duration-1000 ease-in-out"
                         style={{
-                          background: `radial-gradient(circle at 50% 100%, 
-                            ${activeBrandColor}66 0%, 
-                            ${activeBrandColor}4D 25%, 
-                            ${activeBrandColor}33 50%, 
+                          background: `radial-gradient(circle at 50% 100%,
+                            ${activeBrandColor}66 0%,
+                            ${activeBrandColor}4D 25%,
+                            ${activeBrandColor}33 50%,
                             transparent 70%)`
                         }}
                       />
                       {/* Light mode gradient - subtle */}
-                      <div 
-                        className="absolute inset-0 block transition-all duration-1000 ease-in-out"
+                      <div
+                        className="absolute inset-0 block dark:hidden transition-all duration-1000 ease-in-out"
                         style={{
                           background: `radial-gradient(circle at 50% 100%, 
                             ${activeBrandColor}40 0%, 

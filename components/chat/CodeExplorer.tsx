@@ -59,7 +59,7 @@ function TreeView({ entries, selectedFile, expandedFolders, folderContents, onTo
             <div
               className={`group flex items-center h-[22px] px-2 cursor-pointer ${
                 selectedFile === fullPath
-                  ? 'bg-blue-100 '
+                  ? 'bg-blue-100 dark:bg-blue-950/40 '
                   : 'hover:bg-gray-100 dark:hover:bg-gray-800 '
               }`}
               style={{ paddingLeft: `${8 + indent}px` }}
@@ -97,7 +97,7 @@ function TreeView({ entries, selectedFile, expandedFolders, folderContents, onTo
 
               {/* File/Folder name */}
               <span className={`text-[13px] leading-[22px] ${
-                selectedFile === fullPath ? 'text-blue-700 ' : 'text-gray-700 dark:text-gray-200 '
+                selectedFile === fullPath ? 'text-blue-700 dark:text-blue-300 ' : 'text-gray-700 dark:text-gray-200 '
               }`} style={{ fontFamily: "'Segoe UI', Tahoma, sans-serif" }}>
                 {level === 0 ? (entry.path.split('/').pop() || entry.path) : (entry.path.split('/').pop() || entry.path)}
               </span>

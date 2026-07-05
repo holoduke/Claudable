@@ -10,7 +10,7 @@ const config: Config = {
     extend: {
       colors: {
         brand: {
-          50: '#f2f7ff', 100: '#e6efff', 200: '#cce0ff', 300: '#99c2ff', 400: '#66a3ff', 500: '#3385ff', 600: '#1a73e8', 700: '#1557b0', 800: '#0f3b78', 900: '#0a2550',
+          50: '#fdf3f0', 100: '#fbe6df', 200: '#f5c9bb', 300: '#eda88f', 400: '#e28a6b', 500: '#DE7356', 600: '#c65f43', 700: '#a54a32', 800: '#833c2a', 900: '#6b3324',
         },
         'bolt-bg-primary': '#0c0a14',
         'bolt-bg-secondary': '#15111e',

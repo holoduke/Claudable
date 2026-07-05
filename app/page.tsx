@@ -45,6 +45,7 @@ const MODEL_OPTIONS_BY_ASSISTANT = ACTIVE_CLI_MODEL_OPTIONS;
 
 export default function HomePage() {
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
+  const [projectsLoaded, setProjectsLoaded] = useState(false);
   // Bumped after background thumbnail refreshes; cache-busts the tile images.
   const [thumbsVersion, setThumbsVersion] = useState(0);
   const [showCreate, setShowCreate] = useState(false);
@@ -345,6 +346,8 @@ export default function HomePage() {
     } catch (error) {
       console.warn('Failed to load projects:', error);
       setProjects([]);
+    } finally {
+      setProjectsLoaded(true);
     }
   }, [normalizeProjectPayload]);
   
@@ -741,19 +744,19 @@ export default function HomePage() {
       {/* Radial gradient background from bottom center */}
       <div className="absolute inset-0">
         <div className="absolute inset-0 bg-white dark:bg-gray-900 " />
-        <div 
-          className="absolute inset-0 hidden transition-all duration-1000 ease-in-out"
+        <div
+          className="absolute inset-0 hidden dark:block transition-all duration-1000 ease-in-out"
           style={{
-            background: `radial-gradient(circle at 50% 100%, 
-              ${(assistantBrandColors[selectedAssistant] || assistantBrandColors.claude)}66 0%, 
-              ${(assistantBrandColors[selectedAssistant] || assistantBrandColors.claude)}4D 25%, 
-              ${(assistantBrandColors[selectedAssistant] || assistantBrandColors.claude)}33 50%, 
+            background: `radial-gradient(circle at 50% 100%,
+              ${(assistantBrandColors[selectedAssistant] || assistantBrandColors.claude)}66 0%,
+              ${(assistantBrandColors[selectedAssistant] || assistantBrandColors.claude)}4D 25%,
+              ${(assistantBrandColors[selectedAssistant] || assistantBrandColors.claude)}33 50%,
               transparent 70%)`
           }}
         />
         {/* Light mode gradient - subtle */}
-        <div 
-          className="absolute inset-0 block transition-all duration-1000 ease-in-out"
+        <div
+          className="absolute inset-0 block dark:hidden transition-all duration-1000 ease-in-out"
           style={{
             background: `radial-gradient(circle at 50% 100%, 
               ${(assistantBrandColors[selectedAssistant] || assistantBrandColors.claude)}40 0%, 
@@ -1236,7 +1239,7 @@ export default function HomePage() {
                       setShowAssistantDropdown(!showAssistantDropdown);
                       setShowModelDropdown(false);
                     }}
-                    className="justify-center whitespace-nowrap text-sm font-medium transition-colors duration-100 ease-in-out focus-visible:outline-none disabled:pointer-events-none disabled:opacity-50 border border-gray-200 dark:border-gray-700/50 bg-transparent shadow-sm hover:bg-gray-50 dark:hover:bg-gray-800 hover:border-gray-300 dark:hover:border-gray-600/50 px-3 py-2 flex h-8 items-center gap-1 rounded-full text-gray-700 dark:text-gray-200 hover:text-gray-900 dark:hover:text-gray-100 focus-visible:ring-0"
+                    className="justify-center whitespace-nowrap text-sm font-medium transition-colors duration-100 ease-in-out disabled:pointer-events-none disabled:opacity-50 border border-gray-200 dark:border-gray-700/50 bg-transparent shadow-sm hover:bg-gray-50 dark:hover:bg-gray-800 hover:border-gray-300 dark:hover:border-gray-600/50 px-3 py-2 flex h-8 items-center gap-1 rounded-full text-gray-700 dark:text-gray-200 hover:text-gray-900 dark:hover:text-gray-100"
                   >
                     <div className="w-4 h-4 rounded overflow-hidden">
                       <Image
@@ -1294,7 +1297,7 @@ export default function HomePage() {
                       setShowModelDropdown((current) => !current);
                       setShowAssistantDropdown(false);
                     }}
-                    className="justify-center whitespace-nowrap text-sm font-medium transition-colors duration-100 ease-in-out focus-visible:outline-none disabled:pointer-events-none disabled:opacity-50 border border-gray-200 dark:border-gray-700/50 bg-transparent shadow-sm hover:bg-gray-50 dark:hover:bg-gray-800 hover:border-gray-300 dark:hover:border-gray-600/50 px-3 py-2 flex h-8 items-center gap-1 rounded-full text-gray-700 dark:text-gray-200 hover:text-gray-900 dark:hover:text-gray-100 focus-visible:ring-0 min-w-[140px]"
+                    className="justify-center whitespace-nowrap text-sm font-medium transition-colors duration-100 ease-in-out disabled:pointer-events-none disabled:opacity-50 border border-gray-200 dark:border-gray-700/50 bg-transparent shadow-sm hover:bg-gray-50 dark:hover:bg-gray-800 hover:border-gray-300 dark:hover:border-gray-600/50 px-3 py-2 flex h-8 items-center gap-1 rounded-full text-gray-700 dark:text-gray-200 hover:text-gray-900 dark:hover:text-gray-100 min-w-[140px]"
                   >
                     <span className="text-sm font-medium whitespace-nowrap">
                       {availableModels.find(m => m.id === selectedModel)?.name ?? getModelDisplayName(selectedAssistant, selectedModel)}
@@ -1420,11 +1423,33 @@ export default function HomePage() {
                             <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: projectColor }} />
                             <span className="text-sm font-medium text-gray-900 dark:text-gray-50 truncate">{project.name}</span>
                           </div>
-                          <p className="text-xs text-gray-400 dark:text-gray-500 group-hover:text-gray-600 transition-colors">Open project →</p>
+                          <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
+                            Updated {formatTime(project.lastMessageAt || project.createdAt)}
+                            {project.preferredCli && (
+                              <span> · {formatCliInfo(projectCli, project.selectedModel ?? undefined)}</span>
+                            )}
+                          </p>
                         </div>
                       </button>
                     );
                   })}
+                </div>
+              </div>
+            )}
+
+            {projects.length === 0 && projectsLoaded && (
+              <div className="mt-12 w-full max-w-3xl mx-auto">
+                <div className="rounded-2xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-6 py-12 flex flex-col items-center text-center">
+                  <div className="w-12 h-12 rounded-xl bg-[#DE7356]/10 text-[#DE7356] flex items-center justify-center mb-4">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M12 5v14" />
+                      <path d="M5 12h14" />
+                    </svg>
+                  </div>
+                  <h3 className="text-base font-semibold text-gray-900 dark:text-gray-50">Your first app is one prompt away</h3>
+                  <p className="mt-2 text-sm text-gray-500 dark:text-gray-400 max-w-md">
+                    Describe what you want to build in the box above — Claudable scaffolds it, runs it live, and you refine by chatting.
+                  </p>
                 </div>
               </div>
             )}
@@ -1453,15 +1478,7 @@ export default function HomePage() {
             initial={{ opacity: 0, scale: 0.9 }}
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.9 }}
-            style={{
-              backgroundColor: 'white',
-              borderRadius: '0.5rem',
-              padding: '1.5rem',
-              maxWidth: '28rem',
-              width: '100%',
-              margin: '0 1rem',
-              border: '1px solid rgb(229 231 235)'
-            }}
+            className="bg-white dark:bg-gray-900 rounded-lg p-6 max-w-md w-full mx-4 border border-gray-200 dark:border-gray-700"
           >
             <div className="flex items-center gap-3 mb-4">
               <div className="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center">
@@ -1518,10 +1535,10 @@ export default function HomePage() {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 50, scale: 0.9 }}
           >
-            <div className={`px-6 py-4 rounded-lg shadow-lg border flex items-center gap-3 max-w-sm backdrop-blur-lg ${
+            <div className={`px-6 py-4 rounded-lg shadow-lg border flex items-center gap-3 max-w-sm ${
               toast.type === 'success'
-                ? 'bg-green-500/20 border-green-500/30 text-green-400'
-                : 'bg-red-500/20 border-red-500/30 text-red-400'
+                ? 'bg-white dark:bg-gray-900 border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300'
+                : 'bg-white dark:bg-gray-900 border-red-200 dark:border-red-800 text-red-700 dark:text-red-300'
             }`}>
               {toast.type === 'success' ? (
                 <svg className="w-5 h-5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
