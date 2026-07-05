@@ -659,6 +659,17 @@ class PreviewManager {
       log,
     });
 
+    // Refresh the dashboard thumbnail once the app has had time to render —
+    // server-side, so tiles refill on ANY preview start (share links, API,
+    // auto-start), not only when the chat page is open. captureThumbnail
+    // quality-gates (HTTP 200) and never overwrites a good shot with a bad one.
+    // Dynamic import: thumbnail.ts imports previewManager from this module.
+    setTimeout(() => {
+      void import('./thumbnail')
+        .then((m) => m.captureThumbnail(projectId))
+        .catch(() => {});
+    }, 15_000).unref?.();
+
     return this.toInfo(previewProcess);
     } catch (err) {
       if (!committed) {
