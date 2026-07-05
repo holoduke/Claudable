@@ -74,7 +74,7 @@ export async function POST(
 ) {
   try {
     const { project_id } = await params;
-    const _gate = await denyUnlessProjectAccess(project_id);
+    const _gate = await denyUnlessProjectAccess(project_id, { write: true });
     if (_gate) return _gate;
     const payload = await request.json();
 
@@ -157,7 +157,7 @@ export async function DELETE(
 ) {
   try {
     const { project_id } = await params;
-    const _gate = await denyUnlessProjectAccess(project_id);
+    const _gate = await denyUnlessProjectAccess(project_id, { write: true });
     if (_gate) return _gate;
     const { searchParams } = new URL(request.url);
     const conversationId =

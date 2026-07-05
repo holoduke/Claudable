@@ -3,6 +3,18 @@ import { useCallback, useEffect, useState } from 'react';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? '';
 
+/** Compact "3d ago" / "just now" for the last-login line. */
+function formatLastLogin(iso: string): string {
+  const then = new Date(iso).getTime();
+  if (Number.isNaN(then)) return '';
+  const s = Math.max(0, Math.floor((Date.now() - then) / 1000));
+  if (s < 60) return 'just now';
+  if (s < 3600) return `${Math.floor(s / 60)}m ago`;
+  if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
+  if (s < 2592000) return `${Math.floor(s / 86400)}d ago`;
+  return new Date(iso).toLocaleDateString();
+}
+
 interface ManagedUser {
   id: string;
   email: string;
@@ -187,6 +199,11 @@ export default function UsersSettings({ currentUserId, onToast }: UsersSettingsP
                       )}
                     </div>
                     {u.name && <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{u.email}</p>}
+                    {u.isActive && u.lastLoginAt && (
+                      <p className="text-[11px] text-gray-400 dark:text-gray-500">
+                        Last login {formatLastLogin(u.lastLoginAt)}
+                      </p>
+                    )}
                   </div>
 
                   {/* Role */}

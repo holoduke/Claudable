@@ -20,6 +20,17 @@ export const config = {
 };
 
 export default function handler(req: NextApiRequest, res: NextApiResponseWithSocket) {
+  // Disabled by default. This deployment uses SSE for realtime (the client sets
+  // enabled:false), and the upgrade path below has NO auth check — it would
+  // broadcast a project's full agent transcript (file contents, env values) to
+  // anyone who opens ws://…/api/ws/<guessable-slug>. Do NOT flip ENABLE_WEBSOCKET
+  // on without first authenticating the upgrade (decode the Auth.js session
+  // cookie + canAccessProject) inside server.on('upgrade').
+  if (process.env.ENABLE_WEBSOCKET !== 'true') {
+    res.status(404).json({ ok: false, error: 'WebSocket transport disabled' });
+    return;
+  }
+
   // Initialize a shared WebSocket server on the underlying HTTP server once.
   const baseSocket = res.socket as any;
   if (!baseSocket?.server) {

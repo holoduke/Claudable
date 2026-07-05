@@ -7,7 +7,7 @@
 import { NextRequest } from 'next/server';
 import { getSessionUser, authEnabled } from '@/lib/auth/session';
 import { prisma } from '@/lib/db/client';
-import { canAccessProject } from '@/lib/services/project-access';
+import { canAccessProject, canManageProject } from '@/lib/services/project-access';
 import { createSuccessResponse, createErrorResponse, handleApiError } from '@/lib/utils/api-response';
 import { serviceAction, serviceLogs } from '@/lib/services/managed-containers';
 
@@ -15,13 +15,14 @@ export const runtime = 'nodejs';
 
 interface RouteContext { params: Promise<{ project_id: string; service_id: string }>; }
 
-async function gate(projectId: string) {
+async function gate(projectId: string, opts?: { manage?: boolean }) {
   const project = await prisma.project.findUnique({ where: { id: projectId } });
   if (!project) return { error: createErrorResponse('not_found', 'Project not found', 404) };
   if (authEnabled()) {
     const user = await getSessionUser();
     if (!user) return { error: createErrorResponse('unauthorized', 'Authentication required', 401) };
-    if (!(await canAccessProject(user, project))) return { error: createErrorResponse('forbidden', 'Access denied', 403) };
+    const ok = opts?.manage ? canManageProject(user, project) : await canAccessProject(user, project);
+    if (!ok) return { error: createErrorResponse('forbidden', 'Access denied', 403) };
   }
   return { project };
 }
@@ -29,7 +30,7 @@ async function gate(projectId: string) {
 export async function POST(req: NextRequest, { params }: RouteContext) {
   try {
     const { project_id, service_id } = await params;
-    const { error } = await gate(project_id);
+    const { error } = await gate(project_id, { manage: true });
     if (error) return error;
     const body = (await req.json().catch(() => ({}))) as { action?: string };
     const action = body.action;

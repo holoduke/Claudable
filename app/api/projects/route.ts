@@ -28,12 +28,14 @@ export async function GET() {
     const projects = await getAllProjects();
     if (authEnabled()) {
       const me = await getSessionUser();
-      if (me) {
-        // getAllProjects spreads the full Prisma row, so ownerId/orgId/visibility
-        // exist at runtime even though the backend Project type omits them.
-        const allowed = await accessibleProjectIds(me, projects as unknown as Parameters<typeof accessibleProjectIds>[1]);
-        return createSuccessResponse(serializeProjects(projects.filter((p) => allowed.has(p.id))));
-      }
+      // Fail CLOSED: with auth on but no resolvable session, expose nothing
+      // (middleware already 401s these, this is defense-in-depth so a middleware
+      // gap can't leak the whole project list — including restricted ones).
+      if (!me) return createSuccessResponse(serializeProjects([]));
+      // getAllProjects spreads the full Prisma row, so ownerId/orgId/visibility
+      // exist at runtime even though the backend Project type omits them.
+      const allowed = await accessibleProjectIds(me, projects as unknown as Parameters<typeof accessibleProjectIds>[1]);
+      return createSuccessResponse(serializeProjects(projects.filter((p) => allowed.has(p.id))));
     }
     return createSuccessResponse(serializeProjects(projects));
   } catch (error) {

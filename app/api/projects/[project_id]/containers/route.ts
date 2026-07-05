@@ -11,7 +11,7 @@ import { promises as fs } from 'fs';
 import path from 'path';
 import { getSessionUser, authEnabled } from '@/lib/auth/session';
 import { prisma } from '@/lib/db/client';
-import { canAccessProject } from '@/lib/services/project-access';
+import { canAccessProject, canManageProject } from '@/lib/services/project-access';
 import { createSuccessResponse, createErrorResponse, handleApiError } from '@/lib/utils/api-response';
 import { stackKind } from '@/lib/config/stacks';
 import { getBackendStack, isValidBackend } from '@/lib/config/backend-stacks';
@@ -30,13 +30,14 @@ function apiUrlFrom(previewUrl: string | null): string | null {
 function safeSettings(raw: string | null): Record<string, unknown> {
   try { return raw ? JSON.parse(raw) : {}; } catch { return {}; }
 }
-async function gate(projectId: string) {
+async function gate(projectId: string, opts?: { manage?: boolean }) {
   const project = await prisma.project.findUnique({ where: { id: projectId } });
   if (!project) return { error: createErrorResponse('not_found', 'Project not found', 404) };
   if (authEnabled()) {
     const user = await getSessionUser();
     if (!user) return { error: createErrorResponse('unauthorized', 'Authentication required', 401) };
-    if (!(await canAccessProject(user, project))) return { error: createErrorResponse('forbidden', 'Access denied', 403) };
+    const ok = opts?.manage ? canManageProject(user, project) : await canAccessProject(user, project);
+    if (!ok) return { error: createErrorResponse('forbidden', 'Access denied', 403) };
   }
   return { project };
 }
@@ -175,7 +176,7 @@ export async function GET(_req: NextRequest, { params }: RouteContext) {
 export async function POST(req: NextRequest, { params }: RouteContext) {
   try {
     const { project_id } = await params;
-    const { project, error } = await gate(project_id);
+    const { project, error } = await gate(project_id, { manage: true });
     if (error) return error;
 
     const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
@@ -251,7 +252,7 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
 export async function DELETE(req: NextRequest, { params }: RouteContext) {
   try {
     const { project_id } = await params;
-    const { project, error } = await gate(project_id);
+    const { project, error } = await gate(project_id, { manage: true });
     if (error) return error;
     const url = new URL(req.url);
     const serviceId = url.searchParams.get('serviceId');

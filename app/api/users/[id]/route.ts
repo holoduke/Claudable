@@ -104,6 +104,16 @@ export async function DELETE(
     const target = await prisma.user.findFirst({ where: { id, orgId: admin.orgId } });
     if (!target) return createErrorResponse('not_found', 'User not found', 404);
 
+    // Same last-admin guard as PATCH: never delete the org's only active admin.
+    if (target.role === 'admin' && target.isActive) {
+      const activeAdmins = await prisma.user.count({
+        where: { role: 'admin', isActive: true, orgId: target.orgId },
+      });
+      if (activeAdmins <= 1) {
+        return createErrorResponse('last_admin', 'Cannot delete the last active admin', 409);
+      }
+    }
+
     await deleteUser(id);
     return createSuccessResponse({ id });
   } catch (error) {
