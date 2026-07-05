@@ -1,4 +1,5 @@
 import type { MessageMetadata } from '@/types/backend';
+import type { AgentUsageSnapshot } from '@/types/agent-usage';
 
 export type MessageRole = 'assistant' | 'user' | 'system' | 'tool';
 
@@ -58,4 +59,5 @@ export type RealtimeEvent =
   | { type: 'connected'; data: ConnectionInfo }
   | { type: 'heartbeat'; data: HeartbeatInfo }
   | { type: 'preview_error'; data: PreviewEventInfo }
-  | { type: 'preview_success'; data: PreviewEventInfo };
+  | { type: 'preview_success'; data: PreviewEventInfo }
+  | { type: 'agent_status'; data: AgentUsageSnapshot };

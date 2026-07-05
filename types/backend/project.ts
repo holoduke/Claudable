@@ -55,7 +55,8 @@ export interface UpdateProjectInput {
   preferredCli?: string;
   selectedModel?: string;
   settings?: string;
-  activeClaudeSessionId?: string;
+  /** null clears the resume pointer (used by /clear to start a fresh context). */
+  activeClaudeSessionId?: string | null;
   activeCursorSessionId?: string;
   repoPath?: string | null;
 }

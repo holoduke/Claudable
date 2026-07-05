@@ -17,6 +17,8 @@ import ConfirmDialog from '@/components/ui/ConfirmDialog';
 import ThemeToggle from '@/components/ui/ThemeToggle';
 import ArchitectureModal from '@/components/chat/ArchitectureModal';
 import ChatInput from '@/components/chat/ChatInput';
+import AgentStatusBar from '@/components/chat/AgentStatusBar';
+import type { AgentUsageSnapshot } from '@/types/agent-usage';
 import DesignImportModal from '@/components/chat/DesignImportModal';
 import SkillsModal from '@/components/chat/SkillsModal';
 import PublishPanel from '@/components/chat/PublishPanel';
@@ -153,6 +155,9 @@ export default function ChatPage() {
   // CLI-style message queue: messages typed while a turn is running wait here and
   // auto-send (one per turn) when the current turn finishes.
   const [queuedMessages, setQueuedMessages] = useState<Array<{ message: string; images: any[] }>>([]);
+  // Agent usage panel (context %, tokens, rate limits) — fed by SSE `agent_status`.
+  const [agentStatus, setAgentStatus] = useState<AgentUsageSnapshot | null>(null);
+  const [statusPanelOpen, setStatusPanelOpen] = useState(false);
   const prevBusyRef = useRef(false);
   const [isSseFallbackActive, setIsSseFallbackActive] = useState(false);
   const [showPreview, setShowPreview] = useState(true);
@@ -415,6 +420,55 @@ export default function ChatPage() {
     }
     prevBusyRef.current = busy;
   }, [isRunning, hasActiveRequests, queuedMessages]);
+
+  // /clear — drop the agent's conversation context (server clears the resume
+  // pointer + usage counters and posts a confirmation message via SSE).
+  const clearAgentContext = useCallback(async () => {
+    if (isRunning || hasActiveRequests) {
+      toast.error('The agent is still working — stop the current turn before clearing the context.');
+      return;
+    }
+    try {
+      const response = await fetch(`${API_BASE}/api/chat/${projectId}/clear-session`, { method: 'POST' });
+      if (!response.ok) {
+        let message = 'Failed to clear the context.';
+        try {
+          const body = await response.json();
+          if (body?.message) message = body.message;
+        } catch { /* keep the default message */ }
+        toast.error(message);
+      }
+    } catch {
+      toast.error('Failed to clear the context.');
+    }
+  }, [isRunning, hasActiveRequests, projectId, toast]);
+
+  // /help — local, ephemeral message listing the built-in commands.
+  const showCommandHelp = useCallback(() => {
+    const handlers = stableMessageHandlers.current ?? messageHandlersRef.current;
+    handlers?.add({
+      id: `local-help-${Date.now()}`,
+      projectId,
+      role: 'assistant',
+      messageType: 'chat',
+      content: [
+        'Available commands:',
+        '',
+        '- `/clear` — start a fresh conversation context (chat history stays)',
+        '- `/compact` — summarize the conversation to free up context space',
+        '- `/usage` — show context usage, token spend and rate limits',
+        '- `/help` — this list',
+        '',
+        'Type `/` to see these together with your project skills.',
+      ].join('\n'),
+      conversationId: null,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      isStreaming: false,
+      isFinal: true,
+      isOptimistic: true,
+    });
+  }, [projectId]);
 
   const sendInitialPrompt = useCallback(async (initialPrompt: string) => {
     if (initialPromptSent) {
@@ -2630,6 +2684,7 @@ const persistProjectPreferences = useCallback(
                     }
                   }}
                   onSessionStatusChange={handleSessionStatusChange}
+                  onAgentStatus={setAgentStatus}
                 onSseFallbackActive={(active) => {
                   setIsSseFallbackActive(active);
                 }}
@@ -2648,8 +2703,38 @@ const persistProjectPreferences = useCallback(
                   <button onClick={() => setQueuedMessages([])} className="text-gray-400 hover:text-red-500">Clear</button>
                 </div>
               )}
+              <AgentStatusBar
+                projectId={projectId}
+                liveStatus={agentStatus}
+                open={statusPanelOpen}
+                onOpenChange={setStatusPanelOpen}
+              />
               <ChatInput
                 onSendMessage={(message, images) => {
+                  // Built-in slash commands (CLI parity) run locally, never as a prompt.
+                  const command = message.trim().toLowerCase();
+                  if (command === '/usage' || command === '/status') {
+                    setStatusPanelOpen(true);
+                    return;
+                  }
+                  if (command === '/help') {
+                    showCommandHelp();
+                    return;
+                  }
+                  if (command === '/clear') {
+                    void clearAgentContext();
+                    return;
+                  }
+                  if (command === '/compact') {
+                    if (isRunning || hasActiveRequests) {
+                      toast.error('The agent is busy — run /compact after the current turn finishes.');
+                      return;
+                    }
+                    // The Claude CLI handles /compact natively: it summarizes the
+                    // session and continues with the freed-up context.
+                    runAct('/compact', []);
+                    return;
+                  }
                   // CLI-style: you can always type. If a turn is in progress,
                   // QUEUE the message (it runs when the current turn finishes)
                   // instead of blocking. Use Stop to interrupt the current turn.
