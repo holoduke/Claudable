@@ -17,7 +17,7 @@ interface RouteContext {
 export async function PATCH(request: NextRequest, { params }: RouteContext) {
   try {
     const { project_id, name } = await params;
-    const _gate = await denyUnlessProjectAccess(project_id);
+    const _gate = await denyUnlessProjectAccess(project_id, { write: true });
     if (_gate) return _gate;
     const body = await request.json().catch(() => ({}));
     if (typeof body?.enabled !== 'boolean') {
@@ -54,7 +54,7 @@ export async function GET(_request: NextRequest, { params }: RouteContext) {
 export async function DELETE(_request: NextRequest, { params }: RouteContext) {
   try {
     const { project_id, name } = await params;
-    const _gate = await denyUnlessProjectAccess(project_id);
+    const _gate = await denyUnlessProjectAccess(project_id, { write: true });
     if (_gate) return _gate;
     const ok = await deleteSkill(project_id, name);
     return createSuccessResponse({ deleted: ok, name });

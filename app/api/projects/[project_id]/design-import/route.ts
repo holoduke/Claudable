@@ -22,7 +22,7 @@ const MAX_UPLOAD_BYTES = 600 * 1024 * 1024; // 600 MB
 export async function POST(request: Request, { params }: RouteContext) {
   try {
     const { project_id } = await params;
-    const _gate = await denyUnlessProjectAccess(project_id);
+    const _gate = await denyUnlessProjectAccess(project_id, { write: true });
     if (_gate) return _gate;
 
     const project = await getProjectById(project_id);

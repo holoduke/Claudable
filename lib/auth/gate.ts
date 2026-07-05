@@ -8,14 +8,20 @@
  * touch org-global resources.
  *
  * Usage in a handler:
- *   const denied = await denyUnlessProjectAccess(project_id);       // read
- *   const denied = await denyUnlessProjectAccess(project_id, { manage: true }); // write/manage
+ *   const denied = await denyUnlessProjectAccess(project_id);        // read  (view/open)
+ *   const denied = await denyUnlessProjectAccess(project_id, { write: true });  // write (agent/edit/deploy)
+ *   const denied = await denyUnlessProjectAccess(project_id, { manage: true }); // manage (owner/admin: secrets, DB drop, delete)
  *   const denied = await denyUnlessAdmin();                          // org-global
  *   if (denied) return denied;
+ *
+ * Three tiers: read < write < manage. `write` lets an editor member (or any
+ * org user on an org-visible project) run the agent, edit files/env values and
+ * deploy; `manage` is owner/admin only — reserved for reading/setting secrets,
+ * destroying containers/databases, and deleting/reconfiguring the project.
  */
 import { getSessionUser, getAdminUser, authEnabled } from '@/lib/auth/session';
 import { prisma } from '@/lib/db/client';
-import { canAccessProject, canManageProject } from '@/lib/services/project-access';
+import { canAccessProject, canManageProject, canWriteProject } from '@/lib/services/project-access';
 
 function deny(status: number, code: string, message: string): Response {
   return Response.json({ success: false, error: code, message }, { status });
@@ -27,14 +33,18 @@ function deny(status: number, code: string, message: string): Response {
  */
 export async function denyUnlessProjectAccess(
   projectId: string,
-  opts?: { manage?: boolean },
+  opts?: { manage?: boolean; write?: boolean },
 ): Promise<Response | null> {
   if (!authEnabled()) return null;
   const user = await getSessionUser();
   if (!user) return deny(401, 'unauthorized', 'Authentication required');
   const project = await prisma.project.findUnique({ where: { id: projectId } });
   if (!project) return deny(404, 'not_found', 'Project not found');
-  const ok = opts?.manage ? canManageProject(user, project) : await canAccessProject(user, project);
+  const ok = opts?.manage
+    ? canManageProject(user, project)
+    : opts?.write
+      ? await canWriteProject(user, project)
+      : await canAccessProject(user, project);
   if (!ok) return deny(403, 'forbidden', 'Access denied');
   return null;
 }

@@ -106,7 +106,7 @@ async function finalizeAsset(
 export async function POST(request: Request, { params }: RouteContext) {
   try {
     const { project_id } = await params;
-    const _gate = await denyUnlessProjectAccess(project_id);
+    const _gate = await denyUnlessProjectAccess(project_id, { write: true });
     if (_gate) return _gate;
     const project = await getProjectById(project_id);
     if (!project) {

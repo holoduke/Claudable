@@ -27,7 +27,7 @@ export async function GET(_req: NextRequest, { params }: Ctx) {
 export async function PUT(req: NextRequest, { params }: Ctx) {
   try {
     const { project_id } = await params;
-    const _gate = await denyUnlessProjectAccess(project_id);
+    const _gate = await denyUnlessProjectAccess(project_id, { write: true });
     if (_gate) return _gate;
     const body = (await req.json().catch(() => null)) ?? {};
     const id = body.id === null || typeof body.id === 'string' ? body.id : undefined;

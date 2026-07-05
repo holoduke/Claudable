@@ -267,7 +267,7 @@ async function normalizeImageAttachment(
 export async function POST(request: NextRequest, { params }: RouteContext) {
   try {
     const { project_id } = await params;
-    const _gate = await denyUnlessProjectAccess(project_id);
+    const _gate = await denyUnlessProjectAccess(project_id, { write: true });
     if (_gate) return _gate;
 
     // it-ops follows the USER triggering this run (not the project). Resolve it

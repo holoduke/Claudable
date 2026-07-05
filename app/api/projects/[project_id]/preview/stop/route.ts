@@ -17,7 +17,7 @@ export async function POST(
 ) {
   try {
     const { project_id } = await params;
-    const _gate = await denyUnlessProjectAccess(project_id);
+    const _gate = await denyUnlessProjectAccess(project_id, { write: true });
     if (_gate) return _gate;
     const preview = await previewManager.stop(project_id);
 

@@ -9,7 +9,7 @@ interface RouteContext {
 export async function POST(request: NextRequest, { params }: RouteContext) {
   try {
     const { project_id } = await params;
-    const _gate = await denyUnlessProjectAccess(project_id);
+    const _gate = await denyUnlessProjectAccess(project_id, { manage: true });
     if (_gate) return _gate;
     const body = (await request.json().catch(() => null)) ?? {};
     const supabaseProjectId =

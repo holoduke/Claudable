@@ -7,7 +7,7 @@ import { NextRequest } from 'next/server';
 import path from 'path';
 import { getSessionUser, authEnabled } from '@/lib/auth/session';
 import { prisma } from '@/lib/db/client';
-import { canAccessProject } from '@/lib/services/project-access';
+import { canWriteProject } from '@/lib/services/project-access';
 import { getProjectById } from '@/lib/services/project';
 import { revertToCheckpoint } from '@/lib/services/checkpoints';
 import { getActiveRequests } from '@/lib/services/user-requests';
@@ -31,7 +31,7 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
       const user = await getSessionUser();
       if (!user) return createErrorResponse('unauthorized', 'Authentication required', 401);
       const dbProject = await prisma.project.findUnique({ where: { id: project_id } });
-      if (!dbProject || !(await canAccessProject(user, dbProject))) return createErrorResponse('forbidden', 'Access denied', 403);
+      if (!dbProject || !(await canWriteProject(user, dbProject))) return createErrorResponse('forbidden', 'Access denied', 403);
     }
 
     // Don't revert while an agent turn is running: the executor's file writes

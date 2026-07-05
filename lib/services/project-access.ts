@@ -41,6 +41,26 @@ export function canManageProject(user: User, project: { ownerId: string | null }
   return user.role === 'admin' || project.ownerId === user.id;
 }
 
+/**
+ * Whether a user may WRITE to a project (run the agent, edit files/env, deploy,
+ * revert) — a middle tier between read (canAccessProject) and manage
+ * (owner/admin only). This is what finally makes the `ProjectMember.role`
+ * column meaningful: on a restricted project a `viewer` member can open it but
+ * NOT write; an `editor` member can. Org-visible projects stay collaborative
+ * (any same-org user may write), matching prior behaviour.
+ */
+export async function canWriteProject(user: User, project: AccessProject): Promise<boolean> {
+  if (user.role === 'admin') return true;
+  if (project.ownerId === user.id) return true;
+  if (project.visibility !== 'restricted') {
+    return project.orgId == null || project.orgId === user.orgId;
+  }
+  const member = await prisma.projectMember.findUnique({
+    where: { projectId_userId: { projectId: project.id, userId: user.id } },
+  });
+  return member?.role === 'editor';
+}
+
 /** Whether a user may see/open a project at all. */
 export async function canAccessProject(user: User, project: AccessProject): Promise<boolean> {
   if (user.role === 'admin') return true;

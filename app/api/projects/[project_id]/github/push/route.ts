@@ -9,7 +9,7 @@ interface RouteContext {
 export async function POST(_request: Request, { params }: RouteContext) {
   try {
     const { project_id } = await params;
-    const _gate = await denyUnlessProjectAccess(project_id);
+    const _gate = await denyUnlessProjectAccess(project_id, { write: true });
     if (_gate) return _gate;
     const pushed = await pushProjectToGitHub(project_id);
     return NextResponse.json({
