@@ -49,9 +49,26 @@ export async function captureThumbnail(projectId: string): Promise<boolean> {
 
   await fs.mkdir(THUMBS_DIR, { recursive: true });
   const out = thumbnailFile(projectId);
+  const tmp = `${out}.tmp.png`;
   const url = `http://localhost:${status.port}/`;
 
+  // Quality gate: don't screenshot a dev server that's mid-compile or erroring —
+  // a broken "loading" shot is worse than keeping the previous thumbnail.
   try {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 8_000);
+    const res = await fetch(url, { signal: ctrl.signal }).finally(() => clearTimeout(t));
+    if (!res.ok) {
+      console.log(`[thumbnail] skip capture for ${projectId}: preview returned ${res.status}`);
+      return false;
+    }
+  } catch {
+    return false; // not reachable (yet) — keep the old thumbnail
+  }
+
+  try {
+    // Shoot to a temp file and rename on success, so a failed/blank capture
+    // never clobbers a good previous thumbnail.
     await execFileP(
       CHROMIUM,
       [
@@ -62,15 +79,18 @@ export async function captureThumbnail(projectId: string): Promise<boolean> {
         '--hide-scrollbars',
         '--window-size=1280,800',
         '--virtual-time-budget=5000', // let the dev server render before the shot
-        `--screenshot=${out}`,
+        `--screenshot=${tmp}`,
         url,
       ],
       { timeout: 30_000 },
     );
-    const st = await fs.stat(out);
-    return st.size > 0;
+    const st = await fs.stat(tmp);
+    if (st.size === 0) throw new Error('empty screenshot');
+    await fs.rename(tmp, out);
+    return true;
   } catch (error) {
     console.error('[thumbnail] capture failed for', projectId, error);
+    await fs.rm(tmp, { force: true }).catch(() => {});
     return false;
   }
 }
