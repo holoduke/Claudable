@@ -4,14 +4,11 @@
 
 import { spawn } from 'child_process';
 import readline from 'node:readline';
-import path from 'path';
-import fs from 'fs/promises';
 import { randomUUID } from 'crypto';
 import type { Message } from '@/types/backend';
 import type { RealtimeMessage } from '@/types';
 import { streamManager } from '@/lib/services/stream';
 import { createMessage } from '@/lib/services/message';
-import { getProjectById } from '@/lib/services/project';
 import { getDefaultModelForCli } from '@/lib/constants/cliModels';
 import { CODEX_DEFAULT_MODEL, getCodexModelDisplayName, normalizeCodexModelId } from '@/lib/constants/codexModels';
 import {
@@ -20,6 +17,13 @@ import {
   markUserRequestAsFailed,
 } from '@/lib/services/user-requests';
 import { serializeMessage, createRealtimeMessage } from '@/lib/serializers/chat';
+import {
+  createStatusPublisher,
+  ensureProjectPath,
+  appendProjectContext,
+  resolveRepoPath,
+  buildPathEnrichedEnv,
+} from './shared';
 
 type ToolAction = 'Write' | 'Edit' | 'Delete' | 'Bash' | 'Info';
 
@@ -51,67 +55,9 @@ const STATUS_LABELS: Record<string, string> = {
   completed: 'Codex execution completed',
 };
 
-const CODEX_ENV = () => {
-  const env = { ...process.env };
-  const additionalPaths: string[] = [];
-  const npmGlobal = process.env.NPM_GLOBAL_PATH;
-  if (npmGlobal) {
-    additionalPaths.push(npmGlobal);
-  }
-  if (process.platform === 'win32') {
-    const appData = process.env.APPDATA;
-    const localApp = process.env.LOCALAPPDATA;
-    if (appData) {
-      additionalPaths.push(path.join(appData, 'npm'));
-    }
-    if (localApp) {
-      additionalPaths.push(path.join(localApp, 'Programs', 'nodejs'));
-    }
-  }
-  if (additionalPaths.length > 0) {
-    const existing = env.PATH || env.Path || '';
-    env.PATH = [...additionalPaths, existing].filter(Boolean).join(path.delimiter);
-  }
-  return env;
-};
-
 const CODEX_EXECUTABLE = process.platform === 'win32' ? 'codex.cmd' : 'codex';
 
-function publishStatus(projectId: string, status: string, requestId?: string, message?: string) {
-  streamManager.publish(projectId, {
-    type: 'status',
-    data: {
-      status,
-      message: message ?? STATUS_LABELS[status] ?? '',
-      ...(requestId ? { requestId } : {}),
-    },
-  });
-}
-
-async function ensureProjectPath(projectId: string, projectPath: string): Promise<string> {
-  const project = await getProjectById(projectId);
-  if (!project) {
-    throw new Error(`Project not found: ${projectId}`);
-  }
-
-  const absolute = path.isAbsolute(projectPath)
-    ? path.resolve(projectPath)
-    : path.resolve(process.cwd(), projectPath);
-  const allowedBasePath = path.resolve(process.cwd(), process.env.PROJECTS_DIR || './data/projects');
-  const relativeToBase = path.relative(allowedBasePath, absolute);
-  const isWithinBase = !relativeToBase.startsWith('..') && !path.isAbsolute(relativeToBase);
-  if (!isWithinBase) {
-    throw new Error(`Project path must be within ${allowedBasePath}. Got: ${absolute}`);
-  }
-
-  try {
-    await fs.access(absolute);
-  } catch {
-    await fs.mkdir(absolute, { recursive: true });
-  }
-
-  return absolute;
-}
+const publishStatus = createStatusPublisher(STATUS_LABELS);
 
 function summarizeApplyPatch(payload: CodexEvent['msg']): { content: string; metadata: Record<string, unknown> } {
   const changes = payload?.changes;
@@ -454,31 +400,6 @@ const pickFirstString = (value: unknown): string | undefined => {
   return undefined;
 };
 
-async function appendProjectContext(baseInstruction: string, repoPath: string): Promise<string> {
-  try {
-    const entries = await fs.readdir(repoPath, { withFileTypes: true });
-    const visible = entries
-      .filter((entry) => !entry.name.startsWith('.git') && entry.name !== 'AGENTS.md')
-      .map((entry) => entry.name);
-    if (visible.length === 0) {
-      return `${baseInstruction}
-
-<current_project_context>
-This is an empty project directory. Work directly in the current folder without creating extra subdirectories.
-</current_project_context>`;
-    }
-    return `${baseInstruction}
-
-<current_project_context>
-Current files in project directory: ${visible.sort().join(', ')}
-Work directly in the current directory. Do not create subdirectories unless specifically requested.
-</current_project_context>`;
-  } catch (error) {
-    console.warn('[CodexService] Failed to append project context:', error);
-    return baseInstruction;
-  }
-}
-
 async function executeCodex(
   projectId: string,
   projectPath: string,
@@ -496,23 +417,12 @@ async function executeCodex(
   }
 
   const absoluteProjectPath = await ensureProjectPath(projectId, projectPath);
-  const repoPath = await (async () => {
-    const candidate = path.join(absoluteProjectPath, 'repo');
-    try {
-      const stats = await fs.stat(candidate);
-      if (stats.isDirectory()) {
-        return candidate;
-      }
-    } catch {
-      // ignore
-    }
-    return absoluteProjectPath;
-  })();
+  const repoPath = await resolveRepoPath(absoluteProjectPath);
 
   publishStatus(projectId, 'ready', requestId, `Codex CLI detected (${modelDisplayName}). Starting execution...`);
 
   const promptBase = instruction.trim();
-  const promptWithContext = await appendProjectContext(promptBase, repoPath);
+  const promptWithContext = await appendProjectContext(promptBase, repoPath, '[CodexService]');
 
   const codexConfigArgs = [
     '-c',
@@ -557,7 +467,7 @@ async function executeCodex(
 
   const child = spawn(CODEX_EXECUTABLE, codexArgs, {
     cwd: repoPath,
-    env: CODEX_ENV(),
+    env: buildPathEnrichedEnv(),
     stdio: ['pipe', 'pipe', 'pipe'],
   });
 

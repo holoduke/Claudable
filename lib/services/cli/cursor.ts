@@ -32,6 +32,7 @@ import {
   markUserRequestAsFailed,
 } from '@/lib/services/user-requests';
 import { serializeMessage, createRealtimeMessage } from '@/lib/serializers/chat';
+import { createStatusPublisher, ensureProjectPath } from './shared';
 
 type CursorEvent = {
   type?: string;
@@ -65,44 +66,10 @@ const AUTO_INSTRUCTIONS = `Act autonomously to complete the task without asking 
 Work directly inside the provided project directory. Do not create additional top-level folders unless explicitly requested.
 Keep responses concise and focus on the code or command outputs that unblock the user.`;
 
-function publishStatus(projectId: string, status: keyof typeof STATUS_LABELS, requestId?: string, message?: string) {
-  streamManager.publish(projectId, {
-    type: 'status',
-    data: {
-      status,
-      message: message ?? STATUS_LABELS[status] ?? '',
-      ...(requestId ? { requestId } : {}),
-    },
-  });
-}
+const publishStatus = createStatusPublisher(STATUS_LABELS);
 
-async function ensureProjectPath(projectId: string, projectPath: string): Promise<string> {
-  const project = await getProjectById(projectId);
-  if (!project) {
-    throw new Error(`Project not found: ${projectId}`);
-  }
-
-  const absolute = path.isAbsolute(projectPath)
-    ? path.resolve(projectPath)
-    : path.resolve(process.cwd(), projectPath);
-
-  const allowedBasePath = path.resolve(process.cwd(), process.env.PROJECTS_DIR || './data/projects');
-  const relativeToBase = path.relative(allowedBasePath, absolute);
-  const isWithinBase = !relativeToBase.startsWith('..') && !path.isAbsolute(relativeToBase);
-
-  if (!isWithinBase) {
-    throw new Error(`Project path must be within ${allowedBasePath}. Got: ${absolute}`);
-  }
-
-  try {
-    await fs.access(absolute);
-  } catch {
-    await fs.mkdir(absolute, { recursive: true });
-  }
-
-  return absolute;
-}
-
+// NOTE: cursor keeps its own appendProjectContext — the context wording differs
+// from the shared codex/glm/qwen variant.
 async function appendProjectContext(baseInstruction: string, repoPath: string): Promise<string> {
   try {
     const entries = await fs.readdir(repoPath, { withFileTypes: true });
