@@ -197,7 +197,7 @@ const DiffView: React.FC<DiffViewProps> = ({ diff }) => {
   if (lines.length === 0) return null;
 
   return (
-    <div className="overflow-x-auto rounded-md border border-gray-200 dark:border-gray-800">
+    <div className="overflow-x-auto rounded-md border border-gray-200 dark:border-white/[0.08]">
       <div className="min-w-full font-mono text-xs leading-relaxed">
         {lines.map((line, idx) => (
           <div key={idx} className={`flex whitespace-pre ${LINE_CLASS[line.kind]}`}>
@@ -212,7 +212,7 @@ const DiffView: React.FC<DiffViewProps> = ({ diff }) => {
         ))}
       </div>
       {truncated && (
-        <div className="px-2 py-1 text-[11px] text-gray-500 dark:text-gray-400 border-t border-gray-200 dark:border-gray-800">
+        <div className="px-2 py-1 text-[11px] text-gray-500 dark:text-gray-400 border-t border-gray-200 dark:border-white/[0.08]">
           {'…'}{hidden} more line{hidden === 1 ? '' : 's'}
         </div>
       )}

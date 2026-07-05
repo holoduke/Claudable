@@ -46,6 +46,22 @@ export async function listMyCredentials(userId: string): Promise<CredentialView[
   return creds.map((c) => view(c, userId));
 }
 
+/** Every Claude account in the org (admin view). Token never returned; `isMine`
+ *  still marks the caller's own. Ordered mine-first, then by owner. */
+export async function listOrgCredentials(orgId: string, meId: string): Promise<CredentialView[]> {
+  const creds = await prisma.claudeCredential.findMany({
+    where: { owner: { orgId } },
+    include: { owner: true },
+    orderBy: [{ createdAt: 'desc' }],
+  });
+  return creds
+    .map((c) => view(c, meId))
+    .sort((a, b) => {
+      if (a.isMine !== b.isMine) return a.isMine ? -1 : 1;
+      return (a.ownerName ?? a.ownerEmail).localeCompare(b.ownerName ?? b.ownerEmail);
+    });
+}
+
 /** Credentials a user may assign to a project: their own + shareable ones in the org. */
 export async function listSelectableCredentials(user: { id: string; orgId: string }): Promise<CredentialView[]> {
   const creds = await prisma.claudeCredential.findMany({

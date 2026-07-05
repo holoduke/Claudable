@@ -6,6 +6,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import GitHubRepoModal from '@/components/modals/GitHubRepoModal';
 import VercelProjectModal from '@/components/modals/VercelProjectModal';
 import SupabaseModal from '@/components/modals/SupabaseModal';
+import ServiceConnectionModal from '@/components/modals/ServiceConnectionModal';
 import { isIntegrationVisible } from '@/lib/config/integrations';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? '';
@@ -33,10 +34,12 @@ interface Service {
 interface ServiceSettingsProps {
   projectId: string;
   projectName?: string;
-  onOpenGlobalSettings?: () => void;
 }
 
-export function ServiceSettings({ projectId, projectName, onOpenGlobalSettings }: ServiceSettingsProps) {
+export function ServiceSettings({ projectId, projectName }: ServiceSettingsProps) {
+  // Provider whose access token is being set up (was a global-settings tab; now
+  // done inline here, where the missing token actually blocks a connection).
+  const [tokenSetupProvider, setTokenSetupProvider] = useState<'github' | 'supabase' | 'vercel' | null>(null);
   const [tokenStatus, setTokenStatus] = useState<{
     github: boolean | null;
     supabase: boolean | null;
@@ -303,7 +306,7 @@ export function ServiceSettings({ projectId, projectName, onOpenGlobalSettings }
                       </button>
                     ) : tokenStatus[service.id as keyof typeof tokenStatus] === false ? (
                       <button
-                        onClick={() => { if (onOpenGlobalSettings) onOpenGlobalSettings(); }}
+                        onClick={() => setTokenSetupProvider(service.id as 'github' | 'supabase' | 'vercel')}
                         className="px-4 py-2.5 text-sm rounded-xl bg-amber-500 hover:bg-amber-600 text-white shadow-sm transition flex items-center justify-center gap-2 whitespace-nowrap w-full sm:w-auto"
                         disabled={isLoading}
                       >
@@ -357,6 +360,15 @@ export function ServiceSettings({ projectId, projectName, onOpenGlobalSettings }
           projectId={projectId}
           projectName={projectName || projectId}
           onSuccess={handleSupabaseModalSuccess}
+        />
+      )}
+
+      {/* Access-token setup (relocated from the removed global Services tab). */}
+      {tokenSetupProvider && (
+        <ServiceConnectionModal
+          isOpen={!!tokenSetupProvider}
+          onClose={() => { setTokenSetupProvider(null); checkTokens(); }}
+          provider={tokenSetupProvider}
         />
       )}
     </div>
