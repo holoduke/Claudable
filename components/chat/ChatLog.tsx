@@ -830,9 +830,11 @@ interface ChatLogProps {
   serverBusy?: boolean;
   /** Called after a successful checkpoint revert so the parent can refresh the preview. */
   onReverted?: () => void;
+  /** Live agent usage snapshots (context %, tokens, rate limits) from SSE `agent_status` events. */
+  onAgentStatus?: (snapshot: import('@/types/agent-usage').AgentUsageSnapshot) => void;
 }
 
-export default function ChatLog({ projectId, onSessionStatusChange, onProjectStatusUpdate, onSseFallbackActive, startRequest, completeRequest, onAddUserMessage, serverBusy = false, onReverted }: ChatLogProps) {
+export default function ChatLog({ projectId, onSessionStatusChange, onProjectStatusUpdate, onSseFallbackActive, startRequest, completeRequest, onAddUserMessage, serverBusy = false, onReverted, onAgentStatus }: ChatLogProps) {
   const toast = useToast();
   const [revertingSha, setRevertingSha] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
@@ -1364,6 +1366,11 @@ export default function ChatLog({ projectId, onSessionStatusChange, onProjectSta
           handleRealtimeStatus('preview_success', payload);
           break;
         }
+        case 'agent_status':
+          if (envelope.data) {
+            onAgentStatus?.(envelope.data);
+          }
+          break;
         case 'heartbeat':
           break;
         default: {
@@ -1373,7 +1380,7 @@ export default function ChatLog({ projectId, onSessionStatusChange, onProjectSta
         }
       }
     },
-    [handleRealtimeMessage, handleRealtimeStatus, handleRealtimeError]
+    [handleRealtimeMessage, handleRealtimeStatus, handleRealtimeError, onAgentStatus]
   );
 
   // Use the centralized WebSocket hook (with SSE fallback defined below)

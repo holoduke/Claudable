@@ -11,6 +11,7 @@ import { streamManager } from '../stream';
 import { serializeMessage, createRealtimeMessage } from '@/lib/serializers/chat';
 import { createMessage } from '../message';
 import { updateProject } from '../project';
+import { recordAssistantUsage, recordRateLimit, recordTurnResult } from '../agent-usage';
 import {
   type ToolAction,
   pickFirstString,
@@ -362,14 +363,29 @@ export function createAgentMessageProcessor(ctx: AgentMessageProcessorContext) {
       return 'init';
     }
 
+    if (message.type === 'rate_limit_event') {
+      // Subscription window utilization (5-hour / weekly) — account-wide.
+      recordRateLimit(projectId, (message as Record<string, unknown>).rate_limit_info);
+      return null;
+    }
+
     if (message.type === 'assistant') {
       const sessionKey = (message.session_id ?? message.uuid ?? 'default').toString();
+      const assistantMessage = message.message as {
+        content?: unknown;
+        usage?: unknown;
+        model?: unknown;
+      };
+      // Tokens currently in the context window (prompt incl. cache + output).
+      // BEFORE the stream-dedupe early-return: the in-process path handles the
+      // content via stream events, but the usage only rides the whole message.
+      recordAssistantUsage(projectId, assistantMessage?.usage, assistantMessage?.model);
+
       if (completedStreamSessions.has(sessionKey)) {
         completedStreamSessions.delete(sessionKey);
         return 'assistant';
       }
 
-      const assistantMessage = message.message as { content?: unknown };
       let content = '';
 
       // Extract content
@@ -480,6 +496,12 @@ export function createAgentMessageProcessor(ctx: AgentMessageProcessorContext) {
     if (message.type === 'result') {
       // Final result
       console.log('[ClaudeService] Task completed:', message.subtype);
+      // Per-turn tokens/cost + context window → status panel (persist + publish).
+      try {
+        await recordTurnResult(projectId, message);
+      } catch (error) {
+        console.error('[ClaudeService] Failed to record turn usage:', error);
+      }
       ctx.publishStatus('completed');
       await ctx.markCompleted();
       return 'result';

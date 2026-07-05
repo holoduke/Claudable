@@ -83,8 +83,14 @@ export default function ChatInput({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // --- Skill autocomplete: typing "/" surfaces the available skills ---
+  // --- Skill autocomplete: typing "/" surfaces built-in commands + skills ---
   interface SkillOption { name: string; description: string; scope: string }
+  const builtinCommands: SkillOption[] = useMemo(() => [
+    { name: 'clear', description: 'Start a fresh conversation context (chat history is kept)', scope: 'command' },
+    { name: 'compact', description: 'Summarize the conversation to free up context space', scope: 'command' },
+    { name: 'usage', description: 'Show context usage, token spend and rate limits', scope: 'command' },
+    { name: 'help', description: 'List the available commands', scope: 'command' },
+  ], []);
   const [skills, setSkills] = useState<SkillOption[]>([]);
   const [skillActiveIdx, setSkillActiveIdx] = useState(0);
   useEffect(() => {
@@ -109,11 +115,13 @@ export default function ChatInput({
   const skillQuery = /^\/[\w-]*$/.test(message) ? message.slice(1).toLowerCase() : null;
   const skillMatches = useMemo(() => {
     if (skillQuery === null) return [];
-    return skills
+    const commandHits = builtinCommands.filter((c) => c.name.includes(skillQuery));
+    const skillHits = skills
       .filter((s) => s.name.toLowerCase().includes(skillQuery))
-      .sort((a, b) => Number(b.name.toLowerCase().startsWith(skillQuery)) - Number(a.name.toLowerCase().startsWith(skillQuery)))
-      .slice(0, 8);
-  }, [skills, skillQuery]);
+      .sort((a, b) => Number(b.name.toLowerCase().startsWith(skillQuery)) - Number(a.name.toLowerCase().startsWith(skillQuery)));
+    // Built-in commands first — they're few and act immediately on selection+Enter.
+    return [...commandHits, ...skillHits].slice(0, 10);
+  }, [skills, skillQuery, builtinCommands]);
   const [dismissedQuery, setDismissedQuery] = useState<string | null>(null);
   const skillMenuOpen = skillQuery !== null && skillMatches.length > 0 && skillQuery !== dismissedQuery;
   useEffect(() => { setSkillActiveIdx(0); }, [skillQuery]);
@@ -640,7 +648,7 @@ export default function ChatInput({
         <div className="relative">
           {skillMenuOpen && (
             <div style={menuStyle} className="z-[200] overflow-y-auto rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-2xl py-1">
-              <div className="px-3 py-1.5 text-[11px] font-medium text-gray-400 dark:text-gray-500 border-b border-gray-100 dark:border-gray-800">Skills · ↑↓ to navigate · ↵ to insert</div>
+              <div className="px-3 py-1.5 text-[11px] font-medium text-gray-400 dark:text-gray-500 border-b border-gray-100 dark:border-gray-800">Commands & skills · ↑↓ to navigate · ↵ to insert</div>
               {skillMatches.map((s, i) => (
                 <button
                   type="button"
