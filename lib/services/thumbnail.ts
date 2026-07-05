@@ -68,7 +68,12 @@ export async function captureThumbnail(projectId: string): Promise<boolean> {
   await fs.mkdir(THUMBS_DIR, { recursive: true });
   const out = thumbnailFile(projectId);
   const tmp = `${out}.tmp.png`;
-  const url = `http://localhost:${status.port}/`;
+  // Containerized previews publish on the docker-bridge gateway (PREVIEW_PUBLISH_HOST,
+  // e.g. 10.0.1.1), NOT on localhost inside this container — probing localhost made
+  // every capture fail (and, pre-quality-gate, saved screenshots of the browser's
+  // connection-error page: the "broken" dashboard tiles).
+  const publishHost = (process.env.PREVIEW_PUBLISH_HOST || process.env.DEPLOY_HOST_GATEWAY || '').trim() || 'localhost';
+  const url = `http://${publishHost}:${status.port}/`;
 
   // Quality gate: don't screenshot a dev server that's mid-compile or erroring —
   // a broken "loading" shot is worse than keeping the previous thumbnail.
