@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { SendHorizontal, MessageSquare, Image as ImageIcon, Wrench } from 'lucide-react';
+import { useToast } from '@/components/ui/Toast';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? '';
 
@@ -67,6 +68,7 @@ export default function ChatInput({
   cliChangeDisabled = false,
   isRunning = false
 }: ChatInputProps) {
+  const toast = useToast();
   const [message, setMessage] = useState('');
   const [uploadedImages, setUploadedImages] = useState<UploadedImage[]>([]);
   const [isUploading, setIsUploading] = useState(false);
@@ -307,7 +309,7 @@ export default function ChatInput({
   const handleFiles = useCallback(async (files: FileList) => {
     if (!projectId) {
       console.error('❌ No project ID available for image upload');
-      alert('No project selected. Please choose a project first.');
+      toast.error('No project selected. Please choose a project first.');
       return;
     }
 
@@ -378,7 +380,7 @@ export default function ChatInput({
         fileInputRef.current.value = '';
       }
     }
-  }, [projectId, supportsImageUpload, preferredCli, maxUploadMb, uploadWithProgress]);
+  }, [projectId, supportsImageUpload, preferredCli, maxUploadMb, uploadWithProgress, toast]);
 
   useEffect(() => {
     adjustTextareaHeight();

@@ -13,6 +13,7 @@ import VisualEditorPanel, { type SelectedElement } from '@/components/chat/Visua
 import CommentsLayer, { type CommentPin, type ComposeAnchor } from '@/components/chat/CommentsLayer';
 import CommentsListPanel from '@/components/chat/CommentsListPanel';
 import { useToast } from '@/components/ui/Toast';
+import ConfirmDialog from '@/components/ui/ConfirmDialog';
 import ThemeToggle from '@/components/ui/ThemeToggle';
 import ArchitectureModal from '@/components/chat/ArchitectureModal';
 import ChatInput from '@/components/chat/ChatInput';
@@ -197,11 +198,22 @@ export default function ChatPage() {
   // Runtime errors reported by the preview (for one-click "fix with AI").
   const [previewErrors, setPreviewErrors] = useState<{ kind: string; message: string; at: string }[]>([]);
   const [shareCopied, setShareCopied] = useState(false);
+  const [showClearCommentsConfirm, setShowClearCommentsConfirm] = useState(false);
   const [deviceId, setDeviceId] = useState<string>('desktop');
   const [orientation, setOrientation] = useState<'portrait'|'landscape'>('portrait');
   const [deviceScale, setDeviceScale] = useState(1);
   const [deviceMenuOpen, setDeviceMenuOpen] = useState(false);
+  const [overflowMenuOpen, setOverflowMenuOpen] = useState(false);
   const [deviceViewport, setDeviceViewport] = useState<{ w: number; h: number }>({ w: 0, h: 0 });
+  // Close the topbar overflow ("⋯") menu on Escape.
+  useEffect(() => {
+    if (!overflowMenuOpen) return;
+    const onKey = (e: globalThis.KeyboardEvent) => {
+      if (e.key === 'Escape') setOverflowMenuOpen(false);
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [overflowMenuOpen]);
   const deviceViewportRef = useRef<HTMLDivElement>(null);
   // Always points at the latest runAct closure (used by persistEdits).
   const runActRef = useRef<((m?: string, i?: any[]) => Promise<void>) | null>(null);
@@ -610,12 +622,12 @@ const persistProjectPreferences = useCallback(
         console.error('Failed to update model preference:', error);
         updatePreferredCli(previousCli);
         updateSelectedModel(previousModel, previousCli);
-        alert('Failed to update model. Please try again.');
+        toast.error('Failed to update model. Please try again.');
       } finally {
         setIsUpdatingModel(false);
       }
     },
-    [projectId, preferredCli, selectedModel, conversationId, loadCliStatuses, persistProjectPreferences, updatePreferredCli, updateSelectedModel]
+    [projectId, preferredCli, selectedModel, conversationId, loadCliStatuses, persistProjectPreferences, updatePreferredCli, updateSelectedModel, toast]
   );
 
   useEffect(() => {
@@ -654,12 +666,12 @@ const persistProjectPreferences = useCallback(
         console.error('Failed to update CLI preference:', error);
         updatePreferredCli(previousCli);
         updateSelectedModel(previousModel, previousCli);
-        alert('Failed to update CLI. Please try again.');
+        toast.error('Failed to update CLI. Please try again.');
       } finally {
         setIsUpdatingModel(false);
       }
     },
-    [projectId, preferredCli, selectedModel, modelOptions, handleModelChange, loadCliStatuses, persistProjectPreferences, updatePreferredCli, updateSelectedModel]
+    [projectId, preferredCli, selectedModel, modelOptions, handleModelChange, loadCliStatuses, persistProjectPreferences, updatePreferredCli, updateSelectedModel, toast]
   );
 
   useEffect(() => {
@@ -1173,8 +1185,12 @@ const persistProjectPreferences = useCallback(
     await loadComments(currentRoute || '/');
   }, [projectId, currentRoute, loadComments]);
 
-  const clearAllComments = useCallback(async () => {
-    if (typeof window !== 'undefined' && !window.confirm('Delete ALL comments in this project (every route)?')) return;
+  const clearAllComments = useCallback(() => {
+    setShowClearCommentsConfirm(true);
+  }, []);
+
+  const confirmClearAllComments = useCallback(async () => {
+    setShowClearCommentsConfirm(false);
     await fetch(`${API_BASE}/api/projects/${projectId}/comments`, { method: 'DELETE' }).catch(() => {});
     setActivePinId(null); setComposeAnchor(null);
     await loadComments(currentRoute || '/');
@@ -2012,7 +2028,7 @@ const persistProjectPreferences = useCallback(
     const imagesToUse = externalImages || uploadedImages;
 
     if (!finalMessage.trim() && imagesToUse.length === 0) {
-      alert('Please enter a task description or upload an image.');
+      toast.info('Please enter a task description or upload an image.');
       return;
     }
 
@@ -2117,7 +2133,7 @@ const persistProjectPreferences = useCallback(
             processedImages.push(uploaded);
           } catch (uploadError) {
             console.error('Image upload failed:', uploadError);
-            alert('Failed to upload image. Please try again.');
+            toast.error('Failed to upload image. Please try again.');
             setIsRunning(false);
             // Remove from pending requests
             pendingRequestsRef.current.delete(requestFingerprint);
@@ -2203,7 +2219,7 @@ const persistProjectPreferences = useCallback(
             }
           }
 
-          alert(`Failed to send message: ${r.status} ${r.statusText}\n${errorText}`);
+          toast.error(`Failed to send message: ${r.status} ${r.statusText}`);
           return;
         }
       } catch (fetchError: any) {
@@ -2217,7 +2233,7 @@ const persistProjectPreferences = useCallback(
             }
           }
 
-          alert('Request timed out after 60 seconds. Please check your connection and try again.');
+          toast.error('Request timed out after 60 seconds. Please check your connection and try again.');
           return;
         }
         throw fetchError;
@@ -2276,7 +2292,7 @@ const persistProjectPreferences = useCallback(
       }
 
       const errorMessage = error?.message || String(error);
-      alert(`Failed to send message: ${errorMessage}\n\nPlease try again. If the problem persists, check the console for details.`);
+      toast.error(`Failed to send message: ${errorMessage}. Please try again — check the console if it persists.`);
     } finally {
       setIsRunning(false);
       // Remove from pending requests
@@ -2709,67 +2725,6 @@ const persistProjectPreferences = useCallback(
                     </button>
                   </div>
 
-                  {/* Inline visual editor toggle — only meaningful with a live preview */}
-                  {previewUrl && (
-                    <button
-                      onClick={() => { setShowPreview(true); setEditMode((v) => !v); }}
-                      disabled={bridgeAbsent}
-                      title={bridgeAbsent ? 'Visual editing needs the preview bridge (currently Nuxt only)' : editMode ? 'Exit visual editor' : 'Edit elements visually'}
-                      className={`h-9 w-9 flex items-center justify-center rounded-lg border transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
-                        editMode
-                          ? 'bg-[#DE7356] text-white border-[#DE7356]'
-                          : 'bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-200 border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800'
-                      }`}
-                    >
-                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9" /><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" /></svg>
-                    </button>
-                  )}
-
-                  {/* Comment mode toggle */}
-                  {previewUrl && (
-                    <button
-                      onClick={() => { setShowPreview(true); setCommentMode((v) => !v); }}
-                      disabled={bridgeAbsent}
-                      title={bridgeAbsent ? 'Comments need the preview bridge (currently Nuxt only)' : commentMode ? 'Exit comments' : 'Add comments to the page'}
-                      className={`relative h-9 w-9 flex items-center justify-center rounded-lg border transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
-                        commentMode
-                          ? 'bg-[#DE7356] text-white border-[#DE7356]'
-                          : 'bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-200 border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800'
-                      }`}
-                    >
-                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2Z" /></svg>
-                      {comments.length > 0 && (
-                        <span className={`absolute -top-1.5 -right-1.5 min-w-[17px] h-[17px] px-1 rounded-full text-[10px] font-semibold flex items-center justify-center ring-2 ring-white ${commentMode ? 'bg-white dark:bg-gray-900 text-[#DE7356]' : 'bg-[#DE7356] text-white'}`}>{comments.length}</span>
-                      )}
-                    </button>
-                  )}
-
-                  {/* Show all comments in a left-pane list */}
-                  {commentMode && previewUrl && (
-                    <button
-                      onClick={() => setShowCommentsList((v) => !v)}
-                      title="List all comments across the site"
-                      aria-label="List all comments"
-                      aria-pressed={showCommentsList}
-                      className={`h-9 w-9 flex items-center justify-center rounded-lg border transition-colors ${
-                        showCommentsList ? 'bg-[#DE7356] text-white border-[#DE7356]' : 'bg-white dark:bg-gray-900 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800'
-                      }`}
-                    >
-                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="8" y1="6" x2="21" y2="6" /><line x1="8" y1="12" x2="21" y2="12" /><line x1="8" y1="18" x2="21" y2="18" /><line x1="3" y1="6" x2="3.01" y2="6" /><line x1="3" y1="12" x2="3.01" y2="12" /><line x1="3" y1="18" x2="3.01" y2="18" /></svg>
-                    </button>
-                  )}
-
-                  {/* Clear all comments (project-wide) */}
-                  {commentMode && previewUrl && (
-                    <button
-                      onClick={clearAllComments}
-                      title="Delete all comments in this project"
-                      className="h-9 w-9 flex items-center justify-center rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-600 dark:text-gray-300 hover:text-red-600 hover:border-red-200 hover:bg-red-50 transition-colors"
-                    >
-                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /><line x1="10" y1="11" x2="10" y2="17" /><line x1="14" y1="11" x2="14" y2="17" /></svg>
-                    </button>
-                  )}
-
                   {/* Center Controls */}
                   {showPreview && !editMode && !commentMode && previewUrl && (
                     <div className="flex items-center gap-3">
@@ -2883,16 +2838,7 @@ const persistProjectPreferences = useCallback(
                 
                 <div className="flex items-center gap-2">
                   <ThemeToggle />
-                  {/* Architecture info */}
-                  <button
-                    onClick={() => setShowArchitecture(true)}
-                    className="h-9 w-9 flex items-center justify-center bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg transition-colors"
-                    title="Project architecture"
-                    aria-label="Project architecture"
-                  >
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10" /><line x1="12" y1="16" x2="12" y2="12" /><line x1="12" y1="8" x2="12.01" y2="8" /></svg>
-                  </button>
-                  {/* Settings Button */}
+                  {/* Settings — kept visible (common action) */}
                   <button
                     onClick={() => { setSettingsInitialTab('general'); setShowGlobalSettings(true); }}
                     className="h-9 w-9 flex items-center justify-center bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg transition-colors"
@@ -2902,37 +2848,127 @@ const persistProjectPreferences = useCallback(
                     <FaCog size={16} />
                   </button>
 
-                  {/* Skills */}
-                  <button
-                    onClick={() => setShowSkills(true)}
-                    className="h-9 w-9 flex items-center justify-center bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg transition-colors"
-                    title="Manage skills"
-                    aria-label="Manage skills"
-                  >
-                    <FaPuzzlePiece size={15} />
-                  </button>
-
-                  {/* Import from Claude Design */}
-                  <button
-                    onClick={() => setShowDesignImport(true)}
-                    className="h-9 w-9 flex items-center justify-center bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg transition-colors"
-                    title="Import from Claude Design"
-                    aria-label="Import from Claude Design"
-                  >
-                    <FaFileImport size={15} />
-                  </button>
-
-                  {/* Stop Button */}
-                  {showPreview && previewUrl && (
+                  {/* Overflow ("⋯") menu — secondary preview tools */}
+                  <div className="relative">
                     <button
-                      className="h-9 w-9 bg-red-500 hover:bg-red-600 text-white rounded-lg transition-colors flex items-center justify-center"
-                      onClick={stop}
-                      title="Stop preview server"
+                      onClick={() => setOverflowMenuOpen((v) => !v)}
+                      className={`h-9 w-9 flex items-center justify-center rounded-lg border transition-colors ${
+                        overflowMenuOpen
+                          ? 'bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-gray-100 border-gray-300 dark:border-gray-600'
+                          : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 border-transparent hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-200 dark:hover:bg-gray-700'
+                      }`}
+                      title="More tools"
+                      aria-label="More tools"
+                      aria-haspopup="menu"
+                      aria-expanded={overflowMenuOpen}
                     >
-                      <FaStop size={12} />
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.6" /><circle cx="12" cy="12" r="1.6" /><circle cx="12" cy="19" r="1.6" /></svg>
                     </button>
-                  )}
-                  
+                    {overflowMenuOpen && (
+                      <>
+                        <div className="fixed inset-0 z-40" onClick={() => setOverflowMenuOpen(false)} />
+                        <div role="menu" className="absolute right-0 top-full mt-1 z-50 w-60 max-h-[70vh] overflow-y-auto bg-white dark:bg-gray-900 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 py-1">
+                          {/* Edit elements (visual editor) */}
+                          {previewUrl && (
+                            <button
+                              role="menuitem"
+                              onClick={() => { setShowPreview(true); setEditMode((v) => !v); setOverflowMenuOpen(false); }}
+                              disabled={bridgeAbsent}
+                              title={bridgeAbsent ? 'Visual editing needs the preview bridge (currently Nuxt only)' : undefined}
+                              className={`w-full flex items-center gap-2.5 px-3 py-1.5 text-sm text-left transition-colors disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-50 dark:hover:bg-gray-800 ${editMode ? 'text-[#DE7356] font-medium' : 'text-gray-700 dark:text-gray-200'}`}
+                            >
+                              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0"><path d="M12 20h9" /><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" /></svg>
+                              <span>Edit elements</span>
+                            </button>
+                          )}
+
+                          {/* Comments */}
+                          {previewUrl && (
+                            <button
+                              role="menuitem"
+                              onClick={() => { setShowPreview(true); setCommentMode((v) => !v); setOverflowMenuOpen(false); }}
+                              disabled={bridgeAbsent}
+                              title={bridgeAbsent ? 'Comments need the preview bridge (currently Nuxt only)' : undefined}
+                              className={`w-full flex items-center gap-2.5 px-3 py-1.5 text-sm text-left transition-colors disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-50 dark:hover:bg-gray-800 ${commentMode ? 'text-[#DE7356] font-medium' : 'text-gray-700 dark:text-gray-200'}`}
+                            >
+                              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2Z" /></svg>
+                              <span>Comments{comments.length > 0 ? ` (${comments.length})` : ''}</span>
+                            </button>
+                          )}
+
+                          {/* Show all comments in a list */}
+                          {commentMode && previewUrl && (
+                            <button
+                              role="menuitem"
+                              onClick={() => { setShowCommentsList((v) => !v); setOverflowMenuOpen(false); }}
+                              className={`w-full flex items-center gap-2.5 px-3 py-1.5 text-sm text-left transition-colors hover:bg-gray-50 dark:hover:bg-gray-800 ${showCommentsList ? 'text-[#DE7356] font-medium' : 'text-gray-700 dark:text-gray-200'}`}
+                            >
+                              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0"><line x1="8" y1="6" x2="21" y2="6" /><line x1="8" y1="12" x2="21" y2="12" /><line x1="8" y1="18" x2="21" y2="18" /><line x1="3" y1="6" x2="3.01" y2="6" /><line x1="3" y1="12" x2="3.01" y2="12" /><line x1="3" y1="18" x2="3.01" y2="18" /></svg>
+                              <span>Comments list</span>
+                            </button>
+                          )}
+
+                          {/* Clear all comments */}
+                          {commentMode && previewUrl && (
+                            <button
+                              role="menuitem"
+                              onClick={() => { clearAllComments(); setOverflowMenuOpen(false); }}
+                              className="w-full flex items-center gap-2.5 px-3 py-1.5 text-sm text-left text-gray-700 dark:text-gray-200 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40 transition-colors"
+                            >
+                              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0"><polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /><line x1="10" y1="11" x2="10" y2="17" /><line x1="14" y1="11" x2="14" y2="17" /></svg>
+                              <span>Clear comments</span>
+                            </button>
+                          )}
+
+                          {/* Architecture */}
+                          <button
+                            role="menuitem"
+                            onClick={() => { setShowArchitecture(true); setOverflowMenuOpen(false); }}
+                            className="w-full flex items-center gap-2.5 px-3 py-1.5 text-sm text-left text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+                          >
+                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0"><circle cx="12" cy="12" r="10" /><line x1="12" y1="16" x2="12" y2="12" /><line x1="12" y1="8" x2="12.01" y2="8" /></svg>
+                            <span>Project architecture</span>
+                          </button>
+
+                          {/* Skills */}
+                          <button
+                            role="menuitem"
+                            onClick={() => { setShowSkills(true); setOverflowMenuOpen(false); }}
+                            className="w-full flex items-center gap-2.5 px-3 py-1.5 text-sm text-left text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+                          >
+                            <span className="shrink-0 w-[15px] flex items-center justify-center"><FaPuzzlePiece size={14} /></span>
+                            <span>Skills</span>
+                          </button>
+
+                          {/* Import from Claude Design */}
+                          <button
+                            role="menuitem"
+                            onClick={() => { setShowDesignImport(true); setOverflowMenuOpen(false); }}
+                            className="w-full flex items-center gap-2.5 px-3 py-1.5 text-sm text-left text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+                          >
+                            <span className="shrink-0 w-[15px] flex items-center justify-center"><FaFileImport size={14} /></span>
+                            <span>Import design</span>
+                          </button>
+
+                          {/* Stop preview — destructive, bottom with divider */}
+                          {showPreview && previewUrl && (
+                            <>
+                              <div className="my-1 border-t border-gray-200 dark:border-gray-700" />
+                              <button
+                                role="menuitem"
+                                onClick={() => { stop(); setOverflowMenuOpen(false); }}
+                                className="w-full flex items-center gap-2.5 px-3 py-1.5 text-sm text-left text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40 transition-colors"
+                              >
+                                <span className="shrink-0 w-[15px] flex items-center justify-center"><FaStop size={12} /></span>
+                                <span>Stop preview server</span>
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      </>
+                    )}
+                  </div>
+
                   {/* Share a review link */}
                   {showPreview && previewUrl && (
                     <button
@@ -2950,15 +2986,15 @@ const persistProjectPreferences = useCallback(
                     </button>
                   )}
 
-                  {/* Publish/Update */}
+                  {/* Publish/Update — primary CTA, labeled brand button */}
                   {showPreview && previewUrl && (
-                    <div className="relative">
                     <button
-                      className="relative h-9 w-9 flex items-center justify-center bg-black text-white rounded-lg transition-colors hover:bg-gray-900 dark:hover:bg-gray-200 border border-black/10 shadow-sm"
+                      className="relative h-9 flex items-center gap-2 px-4 bg-[#DE7356] hover:bg-[#c65f43] text-white rounded-lg transition-colors shadow-sm font-medium text-sm"
                       onClick={() => setShowPublishPanel(true)}
                       title="Publish this project"
                     >
-                      <FaRocket size={14} />
+                      <FaRocket size={13} />
+                      <span>Publish</span>
                       {deploymentStatus === 'deploying' && (
                         <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-amber-400 ring-2 ring-white"></span>
                       )}
@@ -2966,7 +3002,6 @@ const persistProjectPreferences = useCallback(
                         <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-emerald-400 ring-2 ring-white"></span>
                       )}
                     </button>
-                  </div>
                   )}
 
                   {/* My account — rightmost, so Publish stays to its left */}
@@ -3422,6 +3457,15 @@ const persistProjectPreferences = useCallback(
         projectId={projectId}
         open={showArchitecture}
         onClose={() => setShowArchitecture(false)}
+      />
+      <ConfirmDialog
+        open={showClearCommentsConfirm}
+        title="Delete all comments?"
+        message="This removes every comment in this project, across all routes. This cannot be undone."
+        confirmLabel="Delete all"
+        destructive
+        onConfirm={confirmClearAllComments}
+        onCancel={() => setShowClearCommentsConfirm(false)}
       />
     </>
   );
