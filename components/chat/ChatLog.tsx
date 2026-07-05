@@ -861,6 +861,23 @@ export default function ChatLog({ projectId, onSessionStatusChange, onProjectSta
   const [needsHistoryRefresh, setNeedsHistoryRefresh] = useState(false);
   const logsEndRef = useRef<HTMLDivElement>(null);
   const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  // Session-status polling gets its own timer so it can't clobber (or be
+  // clobbered by) the history poller above.
+  const sessionPollIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Watchdog: if the server-side busy poll says idle but we never saw the
+  // completion event (SSE dropped / backend restarted mid-turn), the "Claude is
+  // working…" indicator would stay up forever. Give the final event a grace
+  // window, then clear the local waiting flag and pull the missed history.
+  useEffect(() => {
+    if (serverBusy || !isWaitingForResponse) return;
+    const t = setTimeout(() => {
+      console.warn('[ChatLog] Completion event never arrived — clearing stale waiting state.');
+      setIsWaitingForResponse(false);
+      setNeedsHistoryRefresh(true);
+    }, 15_000);
+    return () => clearTimeout(t);
+  }, [serverBusy, isWaitingForResponse]);
   const hasLoadedInitialDataRef = useRef(false);
   const sseFallbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hasLoggedSseFallbackRef = useRef(false);
@@ -1109,11 +1126,12 @@ export default function ChatLog({ projectId, onSessionStatusChange, onProjectSta
       const data = await response.json();
       const totalMessages = data.totalCount || 0;
 
-      // If database has more messages than UI state, trigger a reload flag
+      // If database has more messages than UI state, refetch the history.
+      // (setHasLoadedOnce(false) was dead code — nothing watched it, so gaps
+      // after an SSE reconnect never healed.)
       if (totalMessages > currentMessageCount) {
-        console.log(`[ChatLog] Detected ${totalMessages - currentMessageCount} missing messages. Setting reload flag...`);
-        // Set a flag to trigger reload in the polling effect
-        setHasLoadedOnce(false);
+        console.log(`[ChatLog] Detected ${totalMessages - currentMessageCount} missing messages. Refreshing history…`);
+        setNeedsHistoryRefresh(true);
       }
     } catch (error) {
       console.error('[ChatLog] Error checking for missing messages:', error);
@@ -1563,6 +1581,10 @@ export default function ChatLog({ projectId, onSessionStatusChange, onProjectSta
   }, []);
 
   const scrollToBottom = () => {
+    // Only auto-follow when the user is already near the bottom — otherwise a
+    // streaming turn yanks them back down every chunk while they're reading.
+    const container = logsEndRef.current?.parentElement;
+    if (container && container.scrollHeight - container.scrollTop - container.clientHeight > 160) return;
     logsEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
 
@@ -1856,14 +1878,16 @@ export default function ChatLog({ projectId, onSessionStatusChange, onProjectSta
     }
   }, [projectId, hasMoreMessages, messages.length, ensureStableMessageId]);
 
-  // Poll session status periodically
+  // Poll session status periodically. NOTE: its OWN interval ref — it used to
+  // share pollIntervalRef with the history poller and each silently killed the
+  // other's timer.
   const startSessionPolling = useCallback(
     (sessionId: string) => {
-      if (pollIntervalRef.current) {
-        clearInterval(pollIntervalRef.current);
+      if (sessionPollIntervalRef.current) {
+        clearInterval(sessionPollIntervalRef.current);
       }
 
-      pollIntervalRef.current = setInterval(async () => {
+      sessionPollIntervalRef.current = setInterval(async () => {
         try {
           const response = await fetch(
             `${API_BASE}/api/chat/${projectId}/sessions/${sessionId}/status`
@@ -1875,13 +1899,14 @@ export default function ChatLog({ projectId, onSessionStatusChange, onProjectSta
               setActiveSession(null);
               onSessionStatusChange?.(false);
 
-              if (pollIntervalRef.current) {
-                clearInterval(pollIntervalRef.current);
-                pollIntervalRef.current = null;
+              if (sessionPollIntervalRef.current) {
+                clearInterval(sessionPollIntervalRef.current);
+                sessionPollIntervalRef.current = null;
               }
 
-              // Trigger reload flag instead of direct call
-          setHasLoadedOnce(false);
+              // Session ended — refetch history so its final messages appear
+              // (setHasLoadedOnce(false) was dead code; nothing watched it).
+              setNeedsHistoryRefresh(true);
             }
           }
         } catch (error) {
@@ -2021,6 +2046,10 @@ export default function ChatLog({ projectId, onSessionStatusChange, onProjectSta
       if (pollIntervalRef.current) {
         clearInterval(pollIntervalRef.current);
         pollIntervalRef.current = null;
+      }
+      if (sessionPollIntervalRef.current) {
+        clearInterval(sessionPollIntervalRef.current);
+        sessionPollIntervalRef.current = null;
       }
     };
   }, [projectId, checkActiveSession, loadChatHistory]);

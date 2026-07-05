@@ -76,6 +76,10 @@ export default function ContainersSettings({ projectId }: { projectId: string })
     finally { setBusy(false); }
   };
   const remove = async (c: Container) => {
+    const warn = c.kind === 'database'
+      ? `Remove the ${c.name} container? Its data volume is deleted too — this can't be undone.`
+      : `Remove the ${c.name} container?`;
+    if (!window.confirm(warn)) return;
     setBusy(true); setError('');
     try {
       const q = c.id ? `serviceId=${encodeURIComponent(c.id)}` : `kind=${c.kind}`;

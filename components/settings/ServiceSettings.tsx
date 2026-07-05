@@ -32,10 +32,11 @@ interface Service {
 
 interface ServiceSettingsProps {
   projectId: string;
+  projectName?: string;
   onOpenGlobalSettings?: () => void;
 }
 
-export function ServiceSettings({ projectId, onOpenGlobalSettings }: ServiceSettingsProps) {
+export function ServiceSettings({ projectId, projectName, onOpenGlobalSettings }: ServiceSettingsProps) {
   const [tokenStatus, setTokenStatus] = useState<{
     github: boolean | null;
     supabase: boolean | null;
@@ -132,28 +133,15 @@ export function ServiceSettings({ projectId, onOpenGlobalSettings }: ServiceSett
     }
   }, [projectId]);
 
-  // Check if tokens exist for all services
+  // Check if tokens exist for all services. Each probe fails independently —
+  // one transient error must not mark ALL providers "Token needed".
   const checkTokens = useCallback(async () => {
-    try {
-      const [githubRes, supabaseRes, vercelRes] = await Promise.all([
-        fetch(`${API_BASE}/api/tokens/github`),
-        fetch(`${API_BASE}/api/tokens/supabase`),
-        fetch(`${API_BASE}/api/tokens/vercel`)
-      ]);
-      
-      setTokenStatus({
-        github: githubRes.ok,
-        supabase: supabaseRes.ok,
-        vercel: vercelRes.ok
-      });
-    } catch (error) {
-      console.error('Failed to check tokens:', error);
-      setTokenStatus({
-        github: false,
-        supabase: false,
-        vercel: false,
-      });
-    }
+    const probe = (provider: string) =>
+      fetch(`${API_BASE}/api/tokens/${provider}`).then(r => r.ok).catch(() => false);
+    const [github, supabase, vercel] = await Promise.all([
+      probe('github'), probe('supabase'), probe('vercel'),
+    ]);
+    setTokenStatus({ github, supabase, vercel });
   }, []);
 
   // Load connections and check tokens on mount
@@ -350,7 +338,7 @@ export function ServiceSettings({ projectId, onOpenGlobalSettings }: ServiceSett
           isOpen={gitHubModalOpen}
           onClose={() => setGitHubModalOpen(false)}
           projectId={projectId}
-          projectName={projectId} // Use projectId as fallback project name
+          projectName={projectName || projectId}
           onSuccess={handleGitHubModalSuccess}
         />
       )}
@@ -361,7 +349,7 @@ export function ServiceSettings({ projectId, onOpenGlobalSettings }: ServiceSett
           isOpen={vercelModalOpen}
           onClose={() => setVercelModalOpen(false)}
           projectId={projectId}
-          projectName={projectId} // Use projectId as fallback project name
+          projectName={projectName || projectId}
           onSuccess={handleVercelModalSuccess}
         />
       )}
@@ -372,7 +360,7 @@ export function ServiceSettings({ projectId, onOpenGlobalSettings }: ServiceSett
           isOpen={supabaseModalOpen}
           onClose={() => setSupabaseModalOpen(false)}
           projectId={projectId}
-          projectName={projectId} // Use projectId as fallback project name
+          projectName={projectName || projectId}
           onSuccess={handleSupabaseModalSuccess}
         />
       )}
