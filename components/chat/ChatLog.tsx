@@ -1580,9 +1580,18 @@ export default function ChatLog({ projectId, onSessionStatusChange, onProjectSta
     };
   }, []);
 
+  // True until the first render WITH messages — the initial history load must
+  // always land at the bottom (newest), regardless of the near-bottom check.
+  const needsInitialScrollRef = useRef(true);
   const scrollToBottom = () => {
-    // Only auto-follow when the user is already near the bottom — otherwise a
-    // streaming turn yanks them back down every chunk while they're reading.
+    if (needsInitialScrollRef.current) {
+      if (messages.length === 0) return; // nothing loaded yet — keep waiting
+      needsInitialScrollRef.current = false;
+      logsEndRef.current?.scrollIntoView({ behavior: "auto" }); // jump, don't animate
+      return;
+    }
+    // After that: only auto-follow when the user is already near the bottom —
+    // otherwise a streaming turn yanks them back down while they're reading.
     const container = logsEndRef.current?.parentElement;
     if (container && container.scrollHeight - container.scrollTop - container.clientHeight > 160) return;
     logsEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -2056,6 +2065,7 @@ export default function ChatLog({ projectId, onSessionStatusChange, onProjectSta
 
   useEffect(() => {
     hasLoadedInitialDataRef.current = false;
+    needsInitialScrollRef.current = true; // new project → land at the newest message again
     setHasLoadedOnce(false);
     setIsLoading(true);
     setMessages([]);

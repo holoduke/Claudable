@@ -45,6 +45,8 @@ const MODEL_OPTIONS_BY_ASSISTANT = ACTIVE_CLI_MODEL_OPTIONS;
 
 export default function HomePage() {
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
+  // Bumped after background thumbnail refreshes; cache-busts the tile images.
+  const [thumbsVersion, setThumbsVersion] = useState(0);
   const [showCreate, setShowCreate] = useState(false);
   const [showGlobalSettings, setShowGlobalSettings] = useState(false);
   const [globalSettingsTab, setGlobalSettingsTab] = useState<'general' | 'ai-assistant'>('ai-assistant');
@@ -322,6 +324,24 @@ export default function HomePage() {
       });
 
       setProjects(sortedProjects);
+
+      // Refresh thumbnails for projects whose preview is RUNNING right now
+      // (the server no-ops instantly for stopped previews and never overwrites
+      // a good shot with a loading/error frame). Then cache-bust the tiles so
+      // fresh captures actually show without a hard reload.
+      void (async () => {
+        try {
+          const results = await Promise.allSettled(
+            sortedProjects.slice(0, 24).map((p) =>
+              fetchAPI(`${API_BASE}/api/projects/${p.id}/thumbnail`, { method: 'POST' })
+            )
+          );
+          const refreshed = results.some(
+            (r) => r.status === 'fulfilled' && (r.value as Response).status === 200
+          );
+          if (refreshed) setThumbsVersion(Date.now());
+        } catch { /* best-effort */ }
+      })();
     } catch (error) {
       console.warn('Failed to load projects:', error);
       setProjects([]);
@@ -1387,11 +1407,12 @@ export default function HomePage() {
                         <div className="aspect-video w-full bg-gradient-to-br from-gray-100 to-gray-200 dark:from-gray-800 dark:to-gray-900 relative">
                           {/* eslint-disable-next-line @next/next/no-img-element */}
                           <img
-                            src={`${API_BASE}/api/projects/${project.id}/thumbnail`}
+                            src={`${API_BASE}/api/projects/${project.id}/thumbnail${thumbsVersion ? `?v=${thumbsVersion}` : ''}`}
                             alt=""
                             loading="lazy"
                             className="w-full h-full object-cover object-top"
                             onError={(e) => { (e.currentTarget as HTMLImageElement).style.visibility = 'hidden'; }}
+                            onLoad={(e) => { (e.currentTarget as HTMLImageElement).style.visibility = 'visible'; }}
                           />
                         </div>
                         <div className="p-3">

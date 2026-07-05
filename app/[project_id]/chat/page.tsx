@@ -462,8 +462,9 @@ export default function ChatPage() {
     previewUrlRef.current = previewUrl;
   }, [previewUrl]);
 
-  // Capture a dashboard thumbnail once the preview is up (best-effort, once per
-  // project). Delayed so the dev server has rendered before the screenshot.
+  // Capture a dashboard thumbnail on EVERY visit once the preview is up (the
+  // server skips non-200 pages and keeps the old shot on failure, so this can't
+  // save a "loading/error" frame). Delayed so the dev server has rendered.
   const thumbCapturedForRef = useRef<string | null>(null);
   useEffect(() => {
     if (!previewUrl || thumbCapturedForRef.current === projectId) return;
@@ -473,6 +474,19 @@ export default function ChatPage() {
     }, 7000);
     return () => clearTimeout(t);
   }, [previewUrl, projectId]);
+
+  // Also capture when the user LEAVES the project (tab hide / navigate away),
+  // so the dashboard tile shows the LAST state they saw, not the first.
+  useEffect(() => {
+    const onHide = () => {
+      if (document.visibilityState !== 'hidden') return;
+      if (!previewUrlRef.current) return;
+      // sendBeacon = fire-and-forget POST that survives page unload.
+      try { navigator.sendBeacon(`${API_BASE}/api/projects/${projectId}/thumbnail`); } catch { /* best-effort */ }
+    };
+    document.addEventListener('visibilitychange', onHide);
+    return () => document.removeEventListener('visibilitychange', onHide);
+  }, [projectId]);
 
   // Re-capture the thumbnail whenever an agent run completes, so the dashboard
   // tile always reflects the latest version of the site. Fires on the
