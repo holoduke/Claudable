@@ -74,25 +74,25 @@ export default function PublishPanel({
 
         <div className="p-6 space-y-4">
           {deploymentStatus === 'deploying' && (
-            <div className="p-4 rounded-xl border border-blue-200 bg-blue-50 ">
+            <div className="p-4 rounded-xl border border-blue-200 bg-blue-50 dark:border-blue-900 dark:bg-blue-950/40 ">
               <div className="flex items-center gap-2 mb-1">
-                <div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
-                <p className="text-sm font-medium text-blue-700 ">
+                <div className="w-4 h-4 border-2 border-blue-600 dark:border-blue-400 border-t-transparent rounded-full animate-spin" />
+                <p className="text-sm font-medium text-blue-700 dark:text-blue-300 ">
                   {deployRun?.state === 'queued' ? 'Queued — waiting for the runner…'
                     : deployRun?.state === 'running' ? 'Building & deploying…'
                     : 'Pushing to the repository…'}
                 </p>
               </div>
-              <p className="text-xs text-blue-700/80 ">
+              <p className="text-xs text-blue-700/80 dark:text-blue-300/80">
                 {isGitea
                   ? 'Live status from CI — clone, build, route, health check.'
                   : 'Building and deploying your project. This may take a few minutes.'}
               </p>
               {isGitea && publishedUrl && (
-                <p className="text-xs text-blue-700/80 mt-1">Will be live at <a href={publishedUrl} target="_blank" rel="noopener noreferrer" className="font-mono underline">{publishedUrl}</a></p>
+                <p className="text-xs text-blue-700/80 dark:text-blue-300/80mt-1">Will be live at <a href={publishedUrl} target="_blank" rel="noopener noreferrer" className="font-mono underline">{publishedUrl}</a></p>
               )}
               {isGitea && deployRun?.url && (
-                <p className="text-xs text-blue-700/80 mt-1">
+                <p className="text-xs text-blue-700/80 dark:text-blue-300/80mt-1">
                   <a href={deployRun.url} target="_blank" rel="noopener noreferrer" className="underline">
                     View build log{deployRun.runNumber ? ` (run #${deployRun.runNumber})` : ''} →
                   </a>
@@ -130,15 +130,15 @@ export default function PublishPanel({
           )}
 
           {deploymentStatus === 'ready' && publishedUrl && (
-            <div className="p-4 rounded-xl border border-emerald-200 bg-emerald-50 ">
-              <p className="text-sm font-medium text-emerald-700 mb-2">Published successfully</p>
+            <div className="p-4 rounded-xl border border-emerald-200 bg-emerald-50 dark:border-emerald-900 dark:bg-emerald-950/40 ">
+              <p className="text-sm font-medium text-emerald-700 dark:text-emerald-300 mb-2">Published successfully</p>
               <div className="flex items-center gap-2">
-                <a href={publishedUrl} target="_blank" rel="noopener noreferrer" className="text-sm font-mono text-emerald-700 underline break-all flex-1">
+                <a href={publishedUrl} target="_blank" rel="noopener noreferrer" className="text-sm font-mono text-emerald-700 dark:text-emerald-300 underline break-all flex-1">
                   {publishedUrl}
                 </a>
                 <button
                   onClick={() => navigator.clipboard?.writeText(publishedUrl)}
-                  className="px-2 py-1 text-xs rounded-lg border border-emerald-300/80 text-emerald-700 hover:bg-emerald-100 "
+                  className="px-2 py-1 text-xs rounded-lg border border-emerald-300/80 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 "
                 >
                   Copy
                 </button>
@@ -147,12 +147,12 @@ export default function PublishPanel({
           )}
 
           {deploymentStatus === 'error' && (
-            <div className="p-4 rounded-xl border border-red-200 bg-red-50 ">
-              <p className="text-sm font-medium text-red-700 ">
+            <div className="p-4 rounded-xl border border-red-200 bg-red-50 dark:border-red-900 dark:bg-red-950/40 ">
+              <p className="text-sm font-medium text-red-700 dark:text-red-300 ">
                 {deployRun?.state === 'cancelled' ? 'Deployment was cancelled.' : 'Deployment failed.'}
               </p>
               {isGitea && deployRun?.url && (
-                <p className="text-xs text-red-600 mt-1">
+                <p className="text-xs text-red-600 dark:text-red-400 mt-1">
                   <a href={deployRun.url} target="_blank" rel="noopener noreferrer" className="underline">
                     View the failed build log{deployRun.runNumber ? ` (run #${deployRun.runNumber})` : ''} →
                   </a>
@@ -162,9 +162,9 @@ export default function PublishPanel({
           )}
 
           {!githubConnected || (!isGitea && !vercelConnected) ? (
-            <div className="p-4 rounded-xl border border-amber-200 bg-amber-50 ">
+            <div className="p-4 rounded-xl border border-amber-200 bg-amber-50 dark:border-amber-900 dark:bg-amber-950/40 ">
               <p className="text-sm font-medium text-gray-900 dark:text-gray-50 mb-2">Connect the following services:</p>
-              <div className="space-y-1 text-amber-700 text-sm">
+              <div className="space-y-1 text-amber-700 dark:text-amber-300 text-sm">
                 {!githubConnected && (<div className="flex items-center gap-2"><span className="w-1.5 h-1.5 rounded-full bg-amber-500"/>Git repository not connected</div>)}
                 {!isGitea && !vercelConnected && (<div className="flex items-center gap-2"><span className="w-1.5 h-1.5 rounded-full bg-amber-500"/>Vercel project not connected</div>)}
               </div>

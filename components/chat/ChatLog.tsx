@@ -535,10 +535,6 @@ const integrateMessages = (
             (!preservedAttachments || preservedAttachments.length === 0)
           ) {
             preservedAttachments = [...existingAttachments];
-            console.log('🖼️ Preserving optimistic attachments for request:', {
-              requestId: message.requestId,
-              attachments: preservedAttachments,
-            });
           }
           map.delete(key);
         }
@@ -1032,12 +1028,6 @@ export default function ChatLog({ projectId, onSessionStatusChange, onProjectSta
 
     // Log significant events
     if (event === 'received' || event === 'processed' || event === 'replaced_optimistic') {
-      console.log(`🔍 [Lifecycle] Message ${event}:`, {
-        messageId,
-        source: lifecycle.source,
-        details,
-        totalEvents: lifecycle.events.length
-      });
     }
   }, []);
 
@@ -1099,7 +1089,6 @@ export default function ChatLog({ projectId, onSessionStatusChange, onProjectSta
     const pendingIds = pendingMessageIds.current;
 
     return () => {
-      console.log('🧹 [Cleanup] Cleaning up ChatLog state for project change');
       processedIds.clear();
       processedRequests.clear();
       sources.clear();
@@ -1114,7 +1103,6 @@ export default function ChatLog({ projectId, onSessionStatusChange, onProjectSta
     if (!projectId) return;
 
     try {
-      console.log('[ChatLog] Checking for missing messages due to network interruption...');
 
       // Get current message count from UI state
       const currentMessageCount = messages.length;
@@ -1130,7 +1118,6 @@ export default function ChatLog({ projectId, onSessionStatusChange, onProjectSta
       // (setHasLoadedOnce(false) was dead code — nothing watched it, so gaps
       // after an SSE reconnect never healed.)
       if (totalMessages > currentMessageCount) {
-        console.log(`[ChatLog] Detected ${totalMessages - currentMessageCount} missing messages. Refreshing history…`);
         setNeedsHistoryRefresh(true);
       }
     } catch (error) {
@@ -1219,10 +1206,6 @@ export default function ChatLog({ projectId, onSessionStatusChange, onProjectSta
         Array.isArray((msg.metadata as any)?.attachments) &&
         (msg.metadata as any).attachments.length > 0
       ) {
-        console.log('🖼️ Realtime message includes attachments:', {
-          messageId: msg.id,
-          attachments: (msg.metadata as any).attachments,
-        });
       }
     });
 
@@ -1388,7 +1371,6 @@ export default function ChatLog({ projectId, onSessionStatusChange, onProjectSta
     onMessage: handleRealtimeMessage,
     onStatus: handleRealtimeStatus,
     onConnect: () => {
-      console.log('🔌 [Transport] WebSocket connected, switching to WebSocket transport');
       setEnableSseFallback(false);
       hasLoggedSseFallbackRef.current = false;
       onSseFallbackActive?.(false);
@@ -1401,7 +1383,6 @@ export default function ChatLog({ projectId, onSessionStatusChange, onProjectSta
       recoverMissingMessages();
     },
     onDisconnect: () => {
-      console.log('🔌 [Transport] WebSocket disconnected, preparing SSE fallback');
       setEnableSseFallback(true);
       activeTransport.current = null; // Reset transport to allow SSE to take over
     },
@@ -1492,7 +1473,6 @@ export default function ChatLog({ projectId, onSessionStatusChange, onProjectSta
 
         // Only activate SSE if WebSocket is not connected
         if (activeTransport.current === 'websocket') {
-          console.log('🔄 [Transport] WebSocket is active, skipping SSE connection');
           return;
         }
 
@@ -1513,7 +1493,6 @@ export default function ChatLog({ projectId, onSessionStatusChange, onProjectSta
         eventSource = source;
 
         source.onopen = () => {
-          console.log('🔄 [Transport] SSE connection established');
           setIsSseConnected(true);
           sseHandlersRef.current.onSseFallbackActive?.(true);
           // Recover any missing messages that might have been lost during SSE disconnection
@@ -1795,20 +1774,9 @@ export default function ChatLog({ projectId, onSessionStatusChange, onProjectSta
             ? expandMessagesList(chatMessages.map(toChatMessage), ensureStableMessageId)
             : [];
 
-          console.log('[ChatLog] Loaded messages from API:', {
-            totalMessages: normalized.length,
-            messagesWithMetadata: normalized.filter(msg => !!msg.metadata).length,
-            messagesWithAttachments: normalized.filter(msg =>
-              msg.metadata &&
-              typeof msg.metadata === 'object' &&
-              (msg.metadata as any).attachments
-            ).length,
-            sampleMessageMetadata: normalized[0]?.metadata
-          });
 
           // Update pagination state
           if (payload.pagination) {
-            console.log(`[ChatLog] Loaded ${payload.pagination.count}/${payload.totalCount} messages`);
             setHasMoreMessages(payload.pagination.hasMore || false);
             setTotalMessageCount(payload.totalCount || 0);
           } else {
@@ -1818,10 +1786,6 @@ export default function ChatLog({ projectId, onSessionStatusChange, onProjectSta
 
           normalized.forEach((message) => {
             if (Array.isArray((message.metadata as any)?.attachments) && (message.metadata as any).attachments.length > 0) {
-              console.log('🖼️ DB loaded message with attachments:', {
-                messageId: message.id,
-                attachments: (message.metadata as any).attachments,
-              });
             }
           });
 
@@ -1874,7 +1838,6 @@ export default function ChatLog({ projectId, onSessionStatusChange, onProjectSta
         if (payload.pagination) {
           setHasMoreMessages(payload.pagination.hasMore || false);
           setTotalMessageCount(payload.totalCount || 0);
-          console.log(`[ChatLog] Loaded ${payload.pagination.count} older messages (${messages.length + normalized.length}/${payload.totalCount} total)`);
         }
 
         // Prepend older messages to the existing list
@@ -1944,7 +1907,6 @@ export default function ChatLog({ projectId, onSessionStatusChange, onProjectSta
 
           if (session.status === 'active' || session.status === 'running') {
             if (process.env.NODE_ENV === 'development') {
-              console.log('Found active session:', session.sessionId);
             }
             onSessionStatusChange?.(true);
 
@@ -2290,27 +2252,27 @@ const ToolResultMessage = ({
     switch (messageType) {
       case 'tool_result':
         return {
-          bgClass: 'bg-blue-50 border border-blue-200 ',
-          textColor: 'text-blue-900 ',
-          labelColor: 'text-blue-600 '
+          bgClass: 'bg-blue-50 border border-blue-200 dark:bg-blue-950/40 dark:border-blue-900 ',
+          textColor: 'text-blue-900 dark:text-blue-100 ',
+          labelColor: 'text-blue-600 dark:text-blue-300 '
         };
       case 'system':
         return {
-          bgClass: 'bg-green-50 border border-green-200 ',
-          textColor: 'text-green-900 ',
-          labelColor: 'text-green-600 '
+          bgClass: 'bg-green-50 border border-green-200 dark:bg-green-950/40 dark:border-green-900 ',
+          textColor: 'text-green-900 dark:text-green-100 ',
+          labelColor: 'text-green-600 dark:text-green-300 '
         };
       case 'error':
         return {
-          bgClass: 'bg-red-50 border border-red-200 ',
-          textColor: 'text-red-900 ',
-          labelColor: 'text-red-600 '
+          bgClass: 'bg-red-50 border border-red-200 dark:bg-red-950/40 dark:border-red-900 ',
+          textColor: 'text-red-900 dark:text-red-100 ',
+          labelColor: 'text-red-600 dark:text-red-300 '
         };
       case 'info':
         return {
-          bgClass: 'bg-yellow-50 border border-yellow-200 ',
-          textColor: 'text-yellow-900 ',
-          labelColor: 'text-yellow-600 '
+          bgClass: 'bg-yellow-50 border border-yellow-200 dark:bg-yellow-950/40 dark:border-yellow-900 ',
+          textColor: 'text-yellow-900 dark:text-yellow-100 ',
+          labelColor: 'text-yellow-600 dark:text-yellow-300 '
         };
       default:
         // Handle by role
@@ -2323,15 +2285,15 @@ const ToolResultMessage = ({
             };
           case 'system':
             return {
-              bgClass: 'bg-green-50 border border-green-200 ',
-              textColor: 'text-green-900 ',
-              labelColor: 'text-green-600 '
+              bgClass: 'bg-green-50 border border-green-200 dark:bg-green-950/40 dark:border-green-900 ',
+              textColor: 'text-green-900 dark:text-green-100 ',
+              labelColor: 'text-green-600 dark:text-green-300 '
             };
           case 'tool':
             return {
-              bgClass: 'bg-purple-50 border border-purple-200 ',
-              textColor: 'text-purple-900 ',
-              labelColor: 'text-purple-600 '
+              bgClass: 'bg-purple-50 border border-purple-200 dark:bg-purple-950/40 dark:border-purple-900 ',
+              textColor: 'text-purple-900 dark:text-purple-100 ',
+              labelColor: 'text-purple-600 dark:text-purple-300 '
             };
           case 'assistant':
           default:
@@ -2367,7 +2329,6 @@ const ToolResultMessage = ({
 
     // **Important**: Always display messages that include attachments
     if (metadata && metadata.attachments && Array.isArray(metadata.attachments) && metadata.attachments.length > 0) {
-      console.log('🖼️ Message has attachments, displaying:', { messageId: message.id, attachments: metadata.attachments });
       return true;
     }
 
@@ -2420,7 +2381,6 @@ const ToolResultMessage = ({
 
     // **Important**: Also display messages that match the legacy image-path pattern
     if (contentText && contentText.includes('Image #') && contentText.includes('path:')) {
-      console.log('🖼️ Message contains image paths, displaying:', { messageId: message.id, content: contentText });
       return true;
     }
 
@@ -2591,17 +2551,10 @@ const ToolResultMessage = ({
   useEffect(() => {
     if (onAddUserMessage) {
       const addMessage = (message: ChatMessage) => {
-        console.log('🔄 [Parent] Adding message via parent callback:', {
-          messageId: message.id,
-          role: message.role,
-          isOptimistic: message.isOptimistic,
-          requestId: message.requestId
-        });
 
         setMessages((prev) => {
           const exists = prev.some(m => m.id === message.id);
           if (exists) {
-            console.log('🔄 [Parent] Message already exists, skipping:', message.id);
             return prev;
           }
 
@@ -2612,20 +2565,12 @@ const ToolResultMessage = ({
             );
 
             if (optimisticMessages.length > 0) {
-              console.log('🔄 [Parent] Found optimistic messages to replace via parent callback:', {
-                count: optimisticMessages.length,
-                requestId: message.requestId,
-                realId: message.id,
-                realRole: message.role,
-                optimisticIds: optimisticMessages.map(m => m.id)
-              });
 
               // Atomic operation: remove ALL optimistic messages for this requestId
               let newMessages = [...prev];
               optimisticMessages.forEach(optimisticMessage => {
                 const index = newMessages.findIndex(m => m.id === optimisticMessage.id);
                 if (index !== -1) {
-                  console.log('🔄 [Parent] Removing optimistic message:', optimisticMessage.id);
                   newMessages.splice(index, 1);
                 }
               });
@@ -2639,7 +2584,6 @@ const ToolResultMessage = ({
       };
 
       const removeMessage = (messageId: string) => {
-        console.log('🔄 [Parent] Removing message via parent callback:', messageId);
         setMessages((prev) => prev.filter(m => m.id !== messageId));
       };
 
@@ -2767,12 +2711,10 @@ const ToolResultMessage = ({
                                 const attachments = Array.isArray((messageMetadata as Record<string, any>)?.attachments)
                                   ? ((messageMetadata as Record<string, any>).attachments as any[])
                                   : [];
-                                console.log('🖼️ Message attachments:', attachments);
                                 if (attachments.length > 0) {
                                   return (
                                     <div className="mt-2 flex flex-wrap gap-2">
                                       {attachments.map((attachment: any, idx: number) => {
-                                        console.log(`🖼️ Processing attachment ${idx}:`, attachment);
                                         const candidateRawUrls: string[] = [];
                                         const pushCandidate = (value: unknown) => {
                                           if (typeof value === 'string') {
@@ -2790,7 +2732,6 @@ const ToolResultMessage = ({
 
                                         const uniqueCandidates = Array.from(new Set(candidateRawUrls));
                                         if (uniqueCandidates.length === 0) {
-                                          console.log(`🖼️ No URL found for attachment ${idx}`);
                                           return null;
                                         }
                                         const resolveUrl = (value: string) => {
@@ -2808,14 +2749,9 @@ const ToolResultMessage = ({
                                           resolvedCandidates.find(url => !failedImageUrls.has(url)) ??
                                           resolvedCandidates[0];
                                         if (!imageUrl) {
-                                          console.log(`🖼️ Failed to resolve any URL for attachment ${idx}`);
                                           return null;
                                         }
                                         const allCandidatesFailed = resolvedCandidates.every(url => failedImageUrls.has(url));
-                                        console.log(`🖼️ Resolved image URL for attachment ${idx}:`, imageUrl, {
-                                          candidates: resolvedCandidates,
-                                          allCandidatesFailed,
-                                        });
 
                                         const handleImageError = () => {
                                           console.error('❌ Image failed to load:', imageUrl);
@@ -2983,7 +2919,7 @@ const ToolResultMessage = ({
               <span className="w-1.5 h-1.5 rounded-full bg-gray-500 animate-bounce" style={{ animationDelay: '150ms' }} />
               <span className="w-1.5 h-1.5 rounded-full bg-gray-500 animate-bounce" style={{ animationDelay: '300ms' }} />
             </span>
-            <span className="text-sm font-medium">Claude is working</span>
+            <span className="text-sm font-medium">Agent is working</span>
             {busyDetail && (
               <span className="text-sm text-gray-400 dark:text-gray-500 truncate max-w-[60%]">· {busyDetail}</span>
             )}

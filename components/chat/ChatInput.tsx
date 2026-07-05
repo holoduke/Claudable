@@ -284,24 +284,12 @@ export default function ChatInput({
   };
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    console.log('📸 File input change event triggered:', {
-      hasFiles: !!e.target.files,
-      fileCount: e.target.files?.length || 0,
-      files: Array.from(e.target.files || []).map(f => ({
-        name: f.name,
-        size: f.size,
-        type: f.type,
-        lastModified: f.lastModified
-      }))
-    });
 
     const files = e.target.files;
     if (!files) {
-      console.log('📸 No files selected');
       return;
     }
 
-    console.log('📸 Calling handleFiles with files');
     await handleFiles(files);
   };
 
@@ -327,11 +315,6 @@ export default function ChatInput({
     // just dropped into the project and referenced by path, so any CLI is fine.
     // The per-file loop below enforces the image-capability check only on images.
 
-    console.log('📸 Starting upload process:', {
-      projectId,
-      cli: preferredCli,
-      fileCount: files.length
-    });
 
     setIsUploading(true);
     setUploadError(null);
@@ -366,10 +349,8 @@ export default function ChatInput({
           continue;
         }
 
-        console.log(`📸 Uploading image ${i + 1}/${files.length}:`, file.name);
         setUploadProgress({ name: file.name, pct: 0 });
         const result = await uploadWithProgress(file);
-        console.log('✅ Image upload successful:', result);
         const imageUrl = URL.createObjectURL(file);
 
         const newImage: UploadedImage = {
@@ -381,19 +362,8 @@ export default function ChatInput({
           publicUrl: typeof result.public_url === 'string' ? result.public_url : undefined
         };
 
-        console.log('📸 Created UploadedImage object:', newImage);
         setUploadedImages(prev => {
           const updatedImages = [...prev, newImage];
-          console.log('📸 Updated uploadedImages state:', {
-            totalCount: updatedImages.length,
-            images: updatedImages.map(img => ({
-              id: img.id,
-              filename: img.filename,
-              hasPath: !!img.path,
-              hasAssetUrl: !!img.assetUrl,
-              hasPublicUrl: !!img.publicUrl
-            }))
-          });
           return updatedImages;
         });
       }
@@ -465,12 +435,10 @@ export default function ChatInput({
   const handleDragEnter = (e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    console.log('📸 Drag enter event triggered:', { projectId });
     // Any file is droppable (non-image files work with any CLI); only need a project.
     if (projectId) {
       setIsDragOver(true);
     } else {
-      console.log('📸 Drag enter ignored: no project selected');
     }
   };
 
@@ -493,29 +461,15 @@ export default function ChatInput({
     e.stopPropagation();
     setIsDragOver(false);
 
-    console.log('📸 Drop event triggered:', {
-      hasFiles: !!e.dataTransfer.files,
-      fileCount: e.dataTransfer.files?.length || 0,
-      projectId,
-      supportsImageUpload,
-      files: Array.from(e.dataTransfer.files || []).map(f => ({
-        name: f.name,
-        size: f.size,
-        type: f.type
-      }))
-    });
 
     if (!projectId) {
-      console.log('📸 Drop event blocked: no project selected');
       return;
     }
 
     const files = e.dataTransfer.files;
     if (files.length > 0) {
-      console.log('📸 Calling handleFiles with dropped files');
       handleFiles(files);
     } else {
-      console.log('📸 No files in drop event');
     }
   };
 
@@ -699,7 +653,7 @@ export default function ChatInput({
             value={message}
             onChange={(e) => setMessage(e.target.value)}
             onKeyDown={handleKeyDown}
-            className="w-full ring-offset-background placeholder:text-gray-500 focus-visible:outline-none focus-visible:ring-0 disabled:cursor-not-allowed disabled:opacity-50 resize-none text-[16px] leading-snug md:text-base bg-transparent focus:bg-transparent rounded-md p-2 text-gray-900 dark:text-gray-50 border border-gray-200 dark:border-gray-700 "
+            className="w-full ring-offset-background placeholder:text-gray-500 disabled:cursor-not-allowed disabled:opacity-50 resize-none text-[16px] leading-snug md:text-base bg-transparent focus:bg-transparent rounded-md p-2 text-gray-900 dark:text-gray-50 border border-gray-200 dark:border-gray-700 "
             id="chatinput"
             placeholder={placeholder}
             disabled={disabled || isSubmitting}
