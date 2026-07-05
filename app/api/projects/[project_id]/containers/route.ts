@@ -272,7 +272,15 @@ export async function DELETE(req: NextRequest, { params }: RouteContext) {
     }
 
     const settings = safeSettings(project!.settings);
-    if (kind === 'backend') delete settings.backendType;
+    if (kind === 'backend') {
+      delete settings.backendType;
+      // Stop the running composed backend now (else the -api container keeps
+      // serving until the next preview restart).
+      try {
+        const { previewManager } = await import('@/lib/services/preview');
+        await previewManager.removeComposedBackend(project_id);
+      } catch (e) { console.error('[containers] removeComposedBackend failed:', e); }
+    }
     else if (kind === 'database') {
       if (settings.databaseType === 'postgres') {
         // Remove the per-project container DB (and its volume) if present;

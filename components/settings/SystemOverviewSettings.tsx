@@ -113,7 +113,7 @@ export default function SystemOverviewSettings() {
                   ? <span className="text-gray-500">Public: <a href={p.previewUrl} target="_blank" rel="noopener noreferrer" className="font-mono text-blue-600 dark:text-blue-400 hover:underline">{p.previewUrl.replace(/^https?:\/\//, '')}</a></span>
                   : <span className="text-gray-400">Public: — (local only)</span>}
                 {p.internalNetwork
-                  ? <span className="text-gray-500">Internal net: <span className="font-mono text-gray-600 dark:text-gray-300">{p.internalNetwork}</span> · <span className="font-mono">http://api:8080</span></span>
+                  ? <span className="text-gray-500">Internal net: <span className="font-mono text-gray-600 dark:text-gray-300">{p.internalNetwork}</span></span>
                   : <span className="text-gray-400">Internal net: —</span>}
               </div>
 

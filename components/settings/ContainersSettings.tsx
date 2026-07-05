@@ -24,7 +24,12 @@ const KIND_ICON: Record<string, string> = { frontend: '🖥️', backend: '⚙�
 function statusColor(s: string): string {
   if (s === 'running' || s === 'provisioned' || s === 'container') return 'bg-emerald-500';
   if (s === 'file') return 'bg-blue-400';
+  if (s === 'starting' || s === 'restarting' || s === 'created') return 'bg-amber-500';
   return 'bg-gray-400';
+}
+// Container is up or on its way up → the action to offer is Stop (not Start).
+function isUpish(s: string): boolean {
+  return s === 'running' || s === 'provisioned' || s === 'container' || s === 'starting' || s === 'restarting';
 }
 
 export default function ContainersSettings({ projectId }: { projectId: string }) {
@@ -35,6 +40,7 @@ export default function ContainersSettings({ projectId }: { projectId: string })
   const [addService, setAddService] = useState(false);
   const [customOpen, setCustomOpen] = useState(false);
   const [custom, setCustom] = useState({ name: '', image: '', alias: '', mountPath: '', env: '' });
+  const [error, setError] = useState('');
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -47,33 +53,48 @@ export default function ContainersSettings({ projectId }: { projectId: string })
 
   useEffect(() => { load(); }, [load]);
 
-  const add = async (payload: Record<string, unknown>) => {
-    setBusy(true);
+  // Surface the API's error text (so a failed add/action isn't silent).
+  const errText = async (r: Response): Promise<string> => {
+    try { const j = await r.json(); return j?.error || j?.message || `Request failed (${r.status})`; }
+    catch { return `Request failed (${r.status})`; }
+  };
+
+  // Returns true on success. On failure sets `error` and leaves the caller's UI
+  // (menu / form input) untouched so the user can see what went wrong and retry.
+  const add = async (payload: Record<string, unknown>): Promise<boolean> => {
+    setBusy(true); setError('');
     try {
-      await fetch(`${API_BASE}/api/projects/${projectId}/containers`, {
+      const r = await fetch(`${API_BASE}/api/projects/${projectId}/containers`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
       });
+      if (!r.ok) { setError(await errText(r)); return false; }
       setAddBackend(false); setAddService(false); setCustomOpen(false);
       setCustom({ name: '', image: '', alias: '', mountPath: '', env: '' });
       await load();
-    } finally { setBusy(false); }
+      return true;
+    } catch (e) { setError((e as Error).message || 'Network error'); return false; }
+    finally { setBusy(false); }
   };
   const remove = async (c: Container) => {
-    setBusy(true);
+    setBusy(true); setError('');
     try {
       const q = c.id ? `serviceId=${encodeURIComponent(c.id)}` : `kind=${c.kind}`;
-      await fetch(`${API_BASE}/api/projects/${projectId}/containers?${q}`, { method: 'DELETE' });
+      const r = await fetch(`${API_BASE}/api/projects/${projectId}/containers?${q}`, { method: 'DELETE' });
+      if (!r.ok) { setError(await errText(r)); return; }
       await load();
-    } finally { setBusy(false); }
+    } catch (e) { setError((e as Error).message || 'Network error'); }
+    finally { setBusy(false); }
   };
   const action = async (id: string, act: 'start' | 'stop' | 'restart') => {
-    setBusy(true);
+    setBusy(true); setError('');
     try {
-      await fetch(`${API_BASE}/api/projects/${projectId}/containers/${encodeURIComponent(id)}`, {
+      const r = await fetch(`${API_BASE}/api/projects/${projectId}/containers/${encodeURIComponent(id)}`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: act }),
       });
+      if (!r.ok) { setError(`Could not ${act} container: ${await errText(r)}`); }
       await load();
-    } finally { setBusy(false); }
+    } catch (e) { setError((e as Error).message || 'Network error'); }
+    finally { setBusy(false); }
   };
   const [logsFor, setLogsFor] = useState<string | null>(null);
   const [logsText, setLogsText] = useState('');
@@ -115,28 +136,45 @@ export default function ContainersSettings({ projectId }: { projectId: string })
   }, [projectId]);
   useEffect(() => { loadImg(); }, [loadImg]);
   const connectImg = async () => {
-    setImgBusy(true);
+    setImgBusy(true); setError('');
     try {
-      await fetch(`${API_BASE}/api/projects/${projectId}/image-capability`, {
+      const r = await fetch(`${API_BASE}/api/projects/${projectId}/image-capability`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(imgKey.trim() ? { apiKey: imgKey.trim() } : {}),
       });
+      if (!r.ok) { setError(`Could not connect image generation: ${await errText(r)}`); return; }
       setImgKey(''); await loadImg();
-    } finally { setImgBusy(false); }
+    } catch (e) { setError((e as Error).message || 'Network error'); }
+    finally { setImgBusy(false); }
   };
   const disconnectImg = async () => {
-    setImgBusy(true);
-    try { await fetch(`${API_BASE}/api/projects/${projectId}/image-capability`, { method: 'DELETE' }); await loadImg(); }
+    setImgBusy(true); setError('');
+    try {
+      const r = await fetch(`${API_BASE}/api/projects/${projectId}/image-capability`, { method: 'DELETE' });
+      if (!r.ok) { setError(await errText(r)); return; }
+      await loadImg();
+    } catch (e) { setError((e as Error).message || 'Network error'); }
     finally { setImgBusy(false); }
   };
 
   return (
     <div>
-      <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Containers</h3>
-      <p className="text-sm text-gray-500 dark:text-gray-400 mt-1 mb-5">
+      <div className="flex items-center justify-between">
+        <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Containers</h3>
+        <button onClick={load} disabled={busy || loading}
+          className="text-xs px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50">Refresh</button>
+      </div>
+      <p className="text-sm text-gray-500 dark:text-gray-400 mt-1 mb-4">
         The services that make up this project. Each runs as its own isolated, egress-locked container.
         The agent edits the code; these run it.
       </p>
+
+      {error && (
+        <div className="mb-4 flex items-start justify-between gap-3 text-xs text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg px-3 py-2">
+          <span className="break-words min-w-0">{error}</span>
+          <button onClick={() => setError('')} className="shrink-0 hover:text-red-800 dark:hover:text-red-300">✕</button>
+        </div>
+      )}
 
       {loading ? (
         <p className="text-sm text-gray-500 dark:text-gray-400">Loading…</p>
@@ -165,7 +203,7 @@ export default function ContainersSettings({ projectId }: { projectId: string })
                 <div className="flex items-center gap-2 shrink-0">
                   {c.manageable && c.id && (
                     <>
-                      {c.status === 'running' ? (
+                      {isUpish(c.status) ? (
                         <button onClick={() => action(c.id!, 'stop')} disabled={busy}
                           className="text-xs text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 disabled:opacity-50">Stop</button>
                       ) : (
@@ -214,8 +252,8 @@ export default function ContainersSettings({ projectId }: { projectId: string })
                 {addBackend && (
                   <div className="absolute z-20 mt-1 w-72 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-lg p-1">
                     {BACKEND_STACKS.map(b => (
-                      <button key={b.id} onClick={() => add({ backendId: b.id })}
-                        className="w-full text-left px-3 py-2 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800">
+                      <button key={b.id} onClick={() => add({ backendId: b.id })} disabled={busy}
+                        className="w-full text-left px-3 py-2 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50">
                         <div className="text-sm font-medium text-gray-900 dark:text-gray-50">{b.name}</div>
                         <div className="text-xs text-gray-500 dark:text-gray-400">{b.description}</div>
                       </button>
@@ -232,8 +270,8 @@ export default function ContainersSettings({ projectId }: { projectId: string })
               {addService && (
                 <div className="absolute z-20 mt-1 w-80 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-lg p-1">
                   {CONTAINER_TEMPLATES.map(t => (
-                    <button key={t.id} onClick={() => add({ templateId: t.id })}
-                      className="w-full text-left px-3 py-2 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800">
+                    <button key={t.id} onClick={() => add({ templateId: t.id })} disabled={busy}
+                      className="w-full text-left px-3 py-2 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50">
                       <div className="text-sm font-medium text-gray-900 dark:text-gray-50">{t.icon ? `${t.icon} ` : ''}{t.name}</div>
                       <div className="text-xs text-gray-500 dark:text-gray-400">{t.description}</div>
                     </button>

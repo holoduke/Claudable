@@ -2465,6 +2465,18 @@ class PreviewManager {
     return false;
   }
 
+  /**
+   * Tear down the composed backend NOW (its `-api` container + route + rebuild
+   * hook), used when the user removes the backend from a live project — else the
+   * old `-api` container keeps serving until the next preview restart. Best-effort.
+   */
+  public async removeComposedBackend(projectId: string): Promise<void> {
+    removeBackendContainer(`${backendContainerName(projectId)}-api`);
+    await removeBackendRoute(projectId).catch(() => {});
+    const p = this.processes.get(projectId);
+    if (p) { p.backendContainer = null; p.rebuildBackend = null; p.backendSrcDir = null; }
+  }
+
   public async stop(projectId: string): Promise<PreviewInfo> {
     // Withdraw the project's preview route so its subdomain stops resolving to a
     // now-dead port (leaving it would 502; worse, the port could be reused).
