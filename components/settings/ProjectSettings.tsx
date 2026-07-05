@@ -14,7 +14,6 @@ import ProjectAccessSettings from './ProjectAccessSettings';
 import DesignSettings from './DesignSettings';
 import ProjectClaudeSettings from './ProjectClaudeSettings';
 import ContainersSettings from './ContainersSettings';
-import GlobalSettings from './GlobalSettings';
 
 interface ProjectSettingsProps {
   isOpen: boolean;
@@ -116,8 +115,6 @@ export function ProjectSettings({
     setActiveTab(resolvedInitialTab);
   }, [resolvedInitialTab]);
 
-  const [showGlobalSettings, setShowGlobalSettings] = useState(false);
-
   const availableTabs = tabs.length ? tabs : [
     {
       id: 'ai-assistant' as SettingsTab,
@@ -187,11 +184,6 @@ export function ProjectSettings({
             <ServiceSettings
               projectId={projectId}
               projectName={projectName}
-              onOpenGlobalSettings={() => {
-                // Open Global Settings with services tab
-                setShowGlobalSettings(true);
-                onClose(); // Close current modal
-              }}
             />
           )}
 
@@ -213,18 +205,6 @@ export function ProjectSettings({
         </div>
       </div>
     </SettingsModal>
-    
-    {/* Global Settings Modal */}
-    {showGlobalSettings && (
-      <GlobalSettings 
-        isOpen={showGlobalSettings}
-        onClose={() => {
-          setShowGlobalSettings(false);
-          // Note: We could reopen ProjectSettings here if needed
-        }}
-        initialTab="services"
-      />
-    )}
     </>
   );
 }

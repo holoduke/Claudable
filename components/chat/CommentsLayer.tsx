@@ -113,7 +113,7 @@ export default function CommentsLayer({
       {/* New-comment compose card */}
       {compose && (
         <div
-          className="absolute pointer-events-auto w-64 bg-white dark:bg-gray-900 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 p-2"
+          className="absolute pointer-events-auto w-64 bg-white dark:bg-[#181310] rounded-lg shadow-xl border border-gray-200 dark:border-white/10 p-2"
           style={clampPopover(compose.x, compose.y, 256, 130, viewport.w, viewport.h)}
         >
           <textarea
@@ -124,7 +124,7 @@ export default function CommentsLayer({
             placeholder="Add a comment…"
             rows={3}
             disabled={submitting}
-            className="w-full text-sm border border-gray-200 dark:border-gray-700 rounded-md p-2 focus:outline-none focus:ring-2 focus:ring-[#DE7356]/30 resize-none disabled:opacity-60"
+            className="w-full text-sm border border-gray-200 dark:border-white/[0.08] rounded-md p-2 focus:outline-none focus:ring-2 focus:ring-[#DE7356]/30 resize-none disabled:opacity-60"
           />
           {submitError && <p className="text-[11px] text-red-600 mt-1 px-0.5">{submitError}</p>}
           <div className="flex items-center justify-end gap-2 mt-1">
@@ -146,7 +146,7 @@ export default function CommentsLayer({
       {/* Open thread for the active pin */}
       {active && activePos && activePos.x !== null && activePos.y !== null && (
         <div
-          className="absolute pointer-events-auto w-72 bg-white dark:bg-gray-900 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700"
+          className="absolute pointer-events-auto w-72 bg-white dark:bg-[#181310] rounded-lg shadow-xl border border-gray-200 dark:border-white/10"
           style={clampPopover(activePos.x, activePos.y, 288, 150, viewport.w, viewport.h)}
         >
           <div className="flex items-start gap-2 p-3">
@@ -161,8 +161,8 @@ export default function CommentsLayer({
             <button onClick={onCloseThread} className="text-gray-300 hover:text-gray-600 dark:hover:text-gray-300 text-sm shrink-0" aria-label="Close">✕</button>
           </div>
           {!readOnly && (
-            <div className="flex items-center justify-end gap-2 px-3 pb-2 border-t border-gray-100 dark:border-gray-800 pt-2">
-              <button onClick={() => onResolve(active.id, !active.resolved)} className="text-xs text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 px-2 py-1 rounded hover:bg-gray-100 dark:hover:bg-gray-800">
+            <div className="flex items-center justify-end gap-2 px-3 pb-2 border-t border-gray-100 dark:border-white/[0.08] pt-2">
+              <button onClick={() => onResolve(active.id, !active.resolved)} className="text-xs text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 px-2 py-1 rounded hover:bg-gray-100 dark:hover:bg-white/[0.06]">
                 {active.resolved ? 'Reopen' : 'Resolve'}
               </button>
               <button onClick={() => onDelete(active.id)} className="text-xs text-red-500 hover:text-red-700 px-2 py-1 rounded hover:bg-red-50">Delete</button>

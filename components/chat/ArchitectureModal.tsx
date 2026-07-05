@@ -57,8 +57,8 @@ export default function ArchitectureModal({
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-label="Project containers">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative w-full max-w-2xl max-h-[82vh] overflow-hidden rounded-2xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-2xl flex flex-col">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-700 bg-gradient-to-r from-gray-50 to-gray-100 dark:from-gray-800 dark:to-gray-900">
+      <div className="relative w-full max-w-2xl max-h-[82vh] overflow-hidden rounded-2xl border border-gray-200 dark:border-white/10 bg-white dark:bg-[#181310] shadow-2xl flex flex-col">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-white/[0.08] bg-gradient-to-r from-gray-50 to-gray-100 dark:from-white/[0.06] dark:to-white/[0.03]">
           <div className="flex items-center gap-2.5">
             <span className="h-8 w-8 flex items-center justify-center rounded-lg bg-[#DE7356]/15 text-[#DE7356] text-sm font-bold">i</span>
             <h2 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Containers</h2>
@@ -66,7 +66,7 @@ export default function ArchitectureModal({
           <button
             onClick={onClose}
             aria-label="Close"
-            className="h-8 w-8 flex items-center justify-center rounded-lg text-gray-500 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+            className="h-8 w-8 flex items-center justify-center rounded-lg text-gray-500 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-200 dark:hover:bg-white/[0.06] transition-colors"
           >
             ✕
           </button>
@@ -77,7 +77,7 @@ export default function ArchitectureModal({
           ) : containers.length === 0 ? (
             <p className="text-sm text-gray-500 dark:text-gray-400">No containers for this project.</p>
           ) : (
-            <div className="rounded-xl border border-gray-200 dark:border-gray-700 divide-y divide-gray-100 dark:divide-gray-800 overflow-hidden">
+            <div className="rounded-xl border border-gray-200 dark:border-white/[0.08] divide-y divide-gray-100 dark:divide-white/[0.08] overflow-hidden">
               {containers.map((c) => (
                 <div key={c.id || c.kind} className="flex items-center gap-3 px-4 py-3">
                   <span className="text-base leading-none" aria-hidden>{c.icon || KIND_ICON[c.kind] || '📦'}</span>

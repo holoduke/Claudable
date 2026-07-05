@@ -144,26 +144,46 @@ export default function ClaudeAccountSettings({ onToast }: Props) {
             {creds.map((c) => (
               <li key={c.id} className="flex items-center gap-3 p-3">
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-gray-900 dark:text-gray-50 truncate">{c.label}</p>
+                  <div className="flex items-center gap-2">
+                    <p className="text-sm font-medium text-gray-900 dark:text-gray-50 truncate">{c.label}</p>
+                    {!c.isMine && (
+                      <span className="shrink-0 rounded-full bg-gray-100 dark:bg-white/[0.06] px-2 py-0.5 text-[11px] font-medium text-gray-600 dark:text-gray-300">
+                        {c.ownerName || c.ownerEmail}
+                      </span>
+                    )}
+                  </div>
                   <p className="text-xs text-gray-500 dark:text-gray-400">
                     {c.lastUsedAt ? `Last used ${new Date(c.lastUsedAt).toLocaleDateString()}` : 'Never used'}
                   </p>
                 </div>
-                <button
-                  onClick={() => toggleShare(c)}
-                  className={`px-2.5 py-1.5 text-xs font-medium rounded-full border ${
-                    c.shareable ? 'border-green-300 text-green-700 bg-green-50' : 'border-gray-200 dark:border-white/[0.08] text-gray-600 dark:text-gray-300 bg-white dark:bg-white/[0.03] hover:bg-gray-50 dark:hover:bg-white/[0.06]'
-                  }`}
-                  title="Toggle sharing"
-                >
-                  {c.shareable ? 'Shared' : 'Private'}
-                </button>
-                <button
-                  onClick={() => remove(c)}
-                  className="px-2.5 py-1.5 text-xs font-medium border border-red-200 rounded-full bg-white dark:bg-white/[0.03] text-red-600 hover:bg-red-50"
-                >
-                  Remove
-                </button>
+                {c.isMine ? (
+                  <>
+                    <button
+                      onClick={() => toggleShare(c)}
+                      className={`px-2.5 py-1.5 text-xs font-medium rounded-full border ${
+                        c.shareable ? 'border-green-300 text-green-700 bg-green-50' : 'border-gray-200 dark:border-white/[0.08] text-gray-600 dark:text-gray-300 bg-white dark:bg-white/[0.03] hover:bg-gray-50 dark:hover:bg-white/[0.06]'
+                      }`}
+                      title="Toggle sharing"
+                    >
+                      {c.shareable ? 'Shared' : 'Private'}
+                    </button>
+                    <button
+                      onClick={() => remove(c)}
+                      className="px-2.5 py-1.5 text-xs font-medium border border-red-200 rounded-full bg-white dark:bg-white/[0.03] text-red-600 hover:bg-red-50"
+                    >
+                      Remove
+                    </button>
+                  </>
+                ) : (
+                  // Another user's account — visible to admins, read-only.
+                  <span
+                    className={`px-2.5 py-1.5 text-xs font-medium rounded-full border ${
+                      c.shareable ? 'border-green-300 text-green-700 bg-green-50' : 'border-gray-200 dark:border-white/[0.08] text-gray-500 dark:text-gray-400'
+                    }`}
+                  >
+                    {c.shareable ? 'Shared' : 'Private'}
+                  </span>
+                )}
               </li>
             ))}
           </ul>

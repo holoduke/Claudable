@@ -5,7 +5,7 @@
  */
 import { NextRequest } from 'next/server';
 import { getSessionUser } from '@/lib/auth/session';
-import { listMyCredentials, saveCredential } from '@/lib/services/claude-credentials';
+import { listMyCredentials, listOrgCredentials, saveCredential } from '@/lib/services/claude-credentials';
 import { createSuccessResponse, createErrorResponse, handleApiError } from '@/lib/utils/api-response';
 
 export const runtime = 'nodejs';
@@ -14,7 +14,13 @@ export async function GET() {
   try {
     const me = await getSessionUser();
     if (!me) return createErrorResponse('unauthorized', 'Sign in to manage your Claude account', 401);
-    return createSuccessResponse(await listMyCredentials(me.id));
+    // Admins see every Claude account in the org (incl. other admins'); a regular
+    // user sees only their own. Tokens are never returned either way.
+    const creds =
+      me.role === 'admin'
+        ? await listOrgCredentials(me.orgId, me.id)
+        : await listMyCredentials(me.id);
+    return createSuccessResponse(creds);
   } catch (error) {
     return handleApiError(error, 'API', 'Failed to list Claude credentials');
   }

@@ -2146,8 +2146,8 @@ const ToolResultMessage = ({
                 p: ({children}) => <p className="mb-2 last:mb-0 break-words">{children}</p>,
                 strong: ({children}) => <strong className="font-medium">{children}</strong>,
                 em: ({children}) => <em className="italic">{children}</em>,
-                code: ({children}) => <code className="bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded text-xs font-mono">{children}</code>,
-                pre: ({children}) => <pre className="bg-gray-100 dark:bg-gray-800 p-3 rounded-lg my-2 overflow-x-auto text-xs break-words">{children}</pre>,
+                code: ({children}) => <code className="bg-gray-100 dark:bg-white/[0.06] px-2 py-1 rounded text-xs font-mono">{children}</code>,
+                pre: ({children}) => <pre className="bg-gray-100 dark:bg-white/[0.06] p-3 rounded-lg my-2 overflow-x-auto text-xs break-words">{children}</pre>,
                 ul: ({children}) => <ul className="list-disc list-inside mb-2 space-y-1">{children}</ul>,
                 ol: ({children}) => <ol className="list-decimal list-inside mb-2 space-y-1">{children}</ol>,
                 li: ({children}) => <li className="mb-1 break-words">{children}</li>
@@ -2192,7 +2192,7 @@ const ToolResultMessage = ({
                 });
                 if (hasPlanning) {
                   return <p className="mb-2 last:mb-0 break-words">
-                    <code className="bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded text-xs font-mono">
+                    <code className="bg-gray-100 dark:bg-white/[0.06] px-2 py-1 rounded text-xs font-mono">
                       Planning for next moves...
                     </code>
                   </p>;
@@ -2201,8 +2201,8 @@ const ToolResultMessage = ({
               },
               strong: ({children}) => <strong className="font-medium">{children}</strong>,
               em: ({children}) => <em className="italic">{children}</em>,
-              code: ({children}) => <code className="bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded text-xs font-mono">{children}</code>,
-              pre: ({children}) => <pre className="bg-gray-100 dark:bg-gray-800 p-3 rounded-lg my-2 overflow-x-auto text-xs break-words">{children}</pre>,
+              code: ({children}) => <code className="bg-gray-100 dark:bg-white/[0.06] px-2 py-1 rounded text-xs font-mono">{children}</code>,
+              pre: ({children}) => <pre className="bg-gray-100 dark:bg-white/[0.06] p-3 rounded-lg my-2 overflow-x-auto text-xs break-words">{children}</pre>,
               ul: ({children}) => <ul className="list-disc list-inside mb-2 space-y-1">{children}</ul>,
               ol: ({children}) => <ol className="list-decimal list-inside mb-2 space-y-1">{children}</ol>,
               li: ({children}) => <li className="mb-1 break-words">{children}</li>
@@ -2232,7 +2232,7 @@ const ToolResultMessage = ({
               });
               if (hasPlanning) {
                 return <p className="mb-2 last:mb-0 break-words">
-                  <code className="bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded text-xs font-mono">
+                  <code className="bg-gray-100 dark:bg-white/[0.06] px-2 py-1 rounded text-xs font-mono">
                     Planning for next moves...
                   </code>
                 </p>;
@@ -2241,8 +2241,8 @@ const ToolResultMessage = ({
             },
             strong: ({children}) => <strong className="font-medium">{children}</strong>,
             em: ({children}) => <em className="italic">{children}</em>,
-            code: ({children}) => <code className="bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded text-xs font-mono">{children}</code>,
-            pre: ({children}) => <pre className="bg-gray-100 dark:bg-gray-800 p-3 rounded-lg my-2 overflow-x-auto text-xs break-words">{children}</pre>,
+            code: ({children}) => <code className="bg-gray-100 dark:bg-white/[0.06] px-2 py-1 rounded text-xs font-mono">{children}</code>,
+            pre: ({children}) => <pre className="bg-gray-100 dark:bg-white/[0.06] p-3 rounded-lg my-2 overflow-x-auto text-xs break-words">{children}</pre>,
             ul: ({children}) => <ul className="list-disc list-inside mb-2 space-y-1">{children}</ul>,
             ol: ({children}) => <ol className="list-decimal list-inside mb-2 space-y-1">{children}</ol>,
             li: ({children}) => <li className="mb-1 break-words">{children}</li>
@@ -2291,7 +2291,7 @@ const ToolResultMessage = ({
         switch (role) {
           case 'user':
             return {
-              bgClass: 'bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 ',
+              bgClass: 'bg-white dark:bg-white/[0.03] border border-gray-200 dark:border-white/[0.08]',
               textColor: 'text-gray-900 dark:text-gray-50 ',
               labelColor: 'text-gray-600 dark:text-gray-300 '
             };
@@ -2310,7 +2310,7 @@ const ToolResultMessage = ({
           case 'assistant':
           default:
             return {
-              bgClass: 'bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 ',
+              bgClass: 'bg-white dark:bg-white/[0.03] border border-gray-200 dark:border-white/[0.08]',
               textColor: 'text-gray-900 dark:text-gray-50 ',
               labelColor: 'text-gray-600 dark:text-gray-300 '
             };
@@ -2433,8 +2433,8 @@ const ToolResultMessage = ({
                 p: ({children}) => <p className="mb-2 last:mb-0 break-words">{children}</p>,
                 strong: ({children}) => <strong className="font-medium">{children}</strong>,
                 em: ({children}) => <em className="italic">{children}</em>,
-                code: ({children}) => <code className="bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded text-xs font-mono break-all">{children}</code>,
-                pre: ({children}) => <pre className="bg-gray-100 dark:bg-gray-800 p-3 rounded-lg my-2 overflow-x-auto text-xs break-words">{children}</pre>,
+                code: ({children}) => <code className="bg-gray-100 dark:bg-white/[0.06] px-2 py-1 rounded text-xs font-mono break-all">{children}</code>,
+                pre: ({children}) => <pre className="bg-gray-100 dark:bg-white/[0.06] p-3 rounded-lg my-2 overflow-x-auto text-xs break-words">{children}</pre>,
                 ul: ({children}) => <ul className="list-disc list-inside mb-2 space-y-1">{children}</ul>,
                 ol: ({children}) => <ol className="list-decimal list-inside mb-2 space-y-1">{children}</ol>,
                 li: ({children}) => <li className="mb-1 break-words">{children}</li>
@@ -2518,7 +2518,7 @@ const ToolResultMessage = ({
           animate={{ opacity: 1, scale: 1 }}
           exit={{ opacity: 0, scale: 0.9 }}
         >
-          <div className="bg-white dark:bg-gray-900 rounded-lg p-6 max-w-4xl max-h-[80vh] overflow-auto border border-gray-200 dark:border-gray-700 ">
+          <div className="bg-white dark:bg-[#181310] rounded-lg p-6 max-w-4xl max-h-[80vh] overflow-auto border border-gray-200 dark:border-white/10 ">
           <div className="flex justify-between items-center mb-4">
             <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-50 ">Log Details</h3>
             <button
@@ -2540,7 +2540,7 @@ const ToolResultMessage = ({
             {type === 'tool_result' && data.diff_info && (
               <div>
                 <strong className="text-gray-700 dark:text-gray-200 ">Changes:</strong>
-                <pre className="bg-gray-100 dark:bg-gray-800 p-3 rounded-lg overflow-x-auto text-xs font-mono">
+                <pre className="bg-gray-100 dark:bg-white/[0.06] p-3 rounded-lg overflow-x-auto text-xs font-mono">
                   {data.diff_info}
                 </pre>
               </div>
@@ -2548,7 +2548,7 @@ const ToolResultMessage = ({
 
             <div>
               <strong className="text-gray-700 dark:text-gray-200 ">Detailed Data:</strong>
-              <pre className="bg-gray-100 dark:bg-gray-800 p-3 rounded-lg overflow-x-auto text-xs font-mono">
+              <pre className="bg-gray-100 dark:bg-white/[0.06] p-3 rounded-lg overflow-x-auto text-xs font-mono">
                 {JSON.stringify(data, null, 2)}
               </pre>
             </div>
@@ -2604,7 +2604,7 @@ const ToolResultMessage = ({
   }, [onAddUserMessage]);
 
   return (
-    <div className="flex flex-col h-full bg-white dark:bg-gray-900 ">
+    <div className="flex flex-col h-full bg-white dark:bg-[#0c0a09] ">
 
       {/* Error Display */}
       {hasError && (
@@ -2667,7 +2667,7 @@ const ToolResultMessage = ({
           <div className="mb-4 flex justify-center">
             <button
               onClick={loadOlderMessages}
-              className="px-4 py-2 text-sm text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-md transition-colors"
+              className="px-4 py-2 text-sm text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-white/[0.06] hover:bg-gray-200 dark:hover:bg-white/[0.06] rounded-md transition-colors"
               disabled={isLoading}
             >
               {isLoading ? 'Loading...' : `Load older messages (${totalMessageCount - messages.length} remaining)`}
@@ -2696,7 +2696,7 @@ const ToolResultMessage = ({
                 {message.role === 'user' ? (
                   // User message - boxed on the right
                   <div className="flex justify-end">
-                    <div className="max-w-[80%] bg-gray-100 dark:bg-gray-800 rounded-lg px-4 py-3">
+                    <div className="max-w-[80%] bg-gray-100 dark:bg-white/[0.06] rounded-lg px-4 py-3">
                       <div className="text-sm text-gray-900 dark:text-gray-50 break-words">
                         {(() => {
                           const cleanedMessage = cleanUserMessage(messageText);
@@ -2776,7 +2776,7 @@ const ToolResultMessage = ({
 
                                         return (
                                           <div key={idx} className="relative group">
-                                            <div className="w-40 h-40 bg-gray-200 dark:bg-gray-800 rounded-lg overflow-hidden border border-gray-300 dark:border-gray-700 ">
+                                            <div className="w-40 h-40 bg-gray-200 dark:bg-white/[0.06] rounded-lg overflow-hidden border border-gray-300 dark:border-white/[0.08] ">
                                               {allCandidatesFailed ? (
                                                 // Show an icon when loading fails
                                                 <div className="w-full h-full flex items-center justify-center">
@@ -2817,7 +2817,7 @@ const ToolResultMessage = ({
                                         const filename = path.split('/').pop() || 'image';
                                         return (
                                           <div key={idx} className="relative group">
-                                            <div className="w-40 h-40 bg-gray-200 dark:bg-gray-800 rounded-lg overflow-hidden border border-gray-300 dark:border-gray-700 flex items-center justify-center">
+                                            <div className="w-40 h-40 bg-gray-200 dark:bg-white/[0.06] rounded-lg overflow-hidden border border-gray-300 dark:border-white/[0.08] flex items-center justify-center">
                                               <svg className="w-16 h-16 text-gray-400 dark:text-gray-500 " fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
                                               </svg>

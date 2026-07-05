@@ -2561,7 +2561,7 @@ const persistProjectPreferences = useCallback(
           mouseup register anywhere on screen. */}
       {isResizing && <div className="fixed inset-0 z-[100] cursor-col-resize select-none" />}
 
-      <div className="h-screen bg-white dark:bg-gray-900 flex relative overflow-hidden">
+      <div className="h-screen bg-white dark:bg-[#0c0a09] flex relative overflow-hidden">
         <div className="h-full w-full flex" ref={splitContainerRef}>
           {/* Left: Visual editor inspector (edit mode) or Chat window */}
           <div
@@ -2591,11 +2591,11 @@ const persistProjectPreferences = useCallback(
             ) : (
             <>
             {/* Chat header */}
-            <div className="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 p-4 h-[73px] flex items-center">
+            <div className="bg-white dark:bg-[#0c0a09] border-b border-gray-200 dark:border-white/[0.08] p-4 h-[73px] flex items-center">
               <div className="flex items-center gap-3">
                 <button 
                   onClick={() => router.push('/')}
-                  className="flex items-center justify-center w-8 h-8 text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full transition-colors"
+                  className="flex items-center justify-center w-8 h-8 text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-white/[0.06] rounded-full transition-colors"
                   title="Back to home"
                 >
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -2643,7 +2643,7 @@ const persistProjectPreferences = useCallback(
             {/* Simple input area */}
             <div className="p-4 rounded-bl-2xl">
               {queuedMessages.length > 0 && (
-                <div className="mb-2 flex items-center justify-between gap-2 px-3 py-1.5 rounded-lg bg-gray-100 dark:bg-gray-800 text-xs text-gray-600 dark:text-gray-300">
+                <div className="mb-2 flex items-center justify-between gap-2 px-3 py-1.5 rounded-lg bg-gray-100 dark:bg-white/[0.06] text-xs text-gray-600 dark:text-gray-300">
                   <span>{queuedMessages.length} message{queuedMessages.length > 1 ? 's' : ''} queued — will send after the current turn.</span>
                   <button onClick={() => setQueuedMessages([])} className="text-gray-400 hover:text-red-500">Clear</button>
                 </div>
@@ -2689,31 +2689,33 @@ const persistProjectPreferences = useCallback(
             role="separator"
             aria-orientation="vertical"
             title="Drag to resize"
-            className="group relative h-full w-px shrink-0 cursor-col-resize bg-gray-200 dark:bg-gray-800 hover:bg-[#DE7356] transition-colors"
+            className="group relative z-30 h-full w-px shrink-0 cursor-col-resize bg-gray-200 dark:bg-white/[0.06] hover:bg-[#DE7356] transition-colors"
           >
             {/* wider invisible hit area for easier grabbing */}
             <div className="absolute inset-y-0 -left-1.5 -right-1.5" />
             {/* visible grip so the divider is discoverable */}
-            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 h-8 w-3 rounded-full bg-gray-200 dark:bg-gray-800 group-hover:bg-[#DE7356] flex flex-col items-center justify-center gap-0.5 transition-colors">
+            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 h-8 w-3 rounded-full bg-gray-200 dark:bg-white/[0.06] group-hover:bg-[#DE7356] flex flex-col items-center justify-center gap-0.5 transition-colors">
               <span className="w-0.5 h-0.5 rounded-full bg-gray-400 group-hover:bg-white" />
               <span className="w-0.5 h-0.5 rounded-full bg-gray-400 group-hover:bg-white" />
               <span className="w-0.5 h-0.5 rounded-full bg-gray-400 group-hover:bg-white" />
             </div>
           </div>
 
-          {/* Right: Preview/Code area */}
-          <div className="h-full flex flex-col bg-black min-w-0" style={{ width: `${100 - chatWidthPct}%` }}>
+          {/* Right: Preview/Code area. `relative z-10` gives it its own stacking
+              context so its iframe/black panes stay BELOW the resize grip (z-30),
+              which overhangs into this column. */}
+          <div className="relative z-10 h-full flex flex-col bg-black min-w-0" style={{ width: `${100 - chatWidthPct}%` }}>
             {/* Content area */}
             <div className="flex-1 min-h-0 flex flex-col">
               {/* Controls Bar */}
-              <div className="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 px-4 h-[73px] flex items-center justify-between">
+              <div className="bg-white dark:bg-[#0c0a09] border-b border-gray-200 dark:border-white/[0.08] px-4 h-[73px] flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   {/* Toggle switch */}
-                  <div className="flex items-center bg-gray-100 dark:bg-gray-800 rounded-lg p-1">
+                  <div className="flex items-center bg-gray-100 dark:bg-white/[0.06] rounded-lg p-1">
                     <button
                       className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
                         showPreview 
-                          ? 'bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-50 ' 
+                          ? 'bg-white dark:bg-white/[0.12] text-gray-900 dark:text-gray-50 ' 
                           : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 '
                       }`}
                       onClick={() => setShowPreview(true)}
@@ -2726,7 +2728,7 @@ const persistProjectPreferences = useCallback(
                     <button
                       className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
                         !showPreview 
-                          ? 'bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-50 ' 
+                          ? 'bg-white dark:bg-white/[0.12] text-gray-900 dark:text-gray-50 ' 
                           : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 '
                       }`}
                       onClick={() => setShowPreview(false)}
@@ -2742,7 +2744,7 @@ const persistProjectPreferences = useCallback(
                   {showPreview && !editMode && !commentMode && previewUrl && (
                     <div className="flex items-center gap-3">
                       {/* Route Navigation */}
-                      <div className="h-9 flex items-center bg-gray-100 dark:bg-gray-800 rounded-lg px-3 border border-gray-200 dark:border-gray-700 ">
+                      <div className="h-9 flex items-center bg-gray-100 dark:bg-white/[0.06] rounded-lg px-3 border border-gray-200 dark:border-white/[0.08] ">
                         <span className="text-gray-400 dark:text-gray-500 mr-2">
                           <FaHome size={12} />
                         </span>
@@ -2772,7 +2774,7 @@ const persistProjectPreferences = useCallback(
                       {/* Action Buttons Group */}
                       <div className="flex items-center gap-1.5">
                         <button
-                          className="h-9 w-9 flex items-center justify-center bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg transition-colors"
+                          className="h-9 w-9 flex items-center justify-center bg-gray-100 dark:bg-white/[0.06] text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-200 dark:hover:bg-white/[0.06] rounded-lg transition-colors"
                           // refreshPreview keeps the CURRENT route (`iframe.src = iframe.src`
                           // reloaded the last parent-set URL, losing in-app navigation).
                           onClick={refreshPreview}
@@ -2784,7 +2786,7 @@ const persistProjectPreferences = useCallback(
 
                         {/* Open preview in a new tab */}
                         <button
-                          className="h-9 w-9 flex items-center justify-center bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-200 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg transition-colors"
+                          className="h-9 w-9 flex items-center justify-center bg-gray-100 dark:bg-white/[0.06] text-gray-700 dark:text-gray-200 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-200 dark:hover:bg-white/[0.06] rounded-lg transition-colors"
                           onClick={() => {
                             if (!previewUrl) return;
                             const suffix = currentRoute && currentRoute !== '/' ? currentRoute : '';
@@ -2802,7 +2804,7 @@ const persistProjectPreferences = useCallback(
 
                         {/* Device selector dropdown */}
                         <div className="relative">
-                          <div className="h-9 flex items-center bg-gray-100 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
+                          <div className="h-9 flex items-center bg-gray-100 dark:bg-white/[0.06] rounded-lg border border-gray-200 dark:border-white/[0.08]">
                             <button
                               onClick={() => setDeviceMenuOpen((v) => !v)}
                               className="h-full flex items-center gap-1 px-2.5 text-sm text-gray-700 dark:text-gray-200 hover:text-gray-900 dark:hover:text-gray-100 rounded-l-lg"
@@ -2816,7 +2818,7 @@ const persistProjectPreferences = useCallback(
                                 aria-label="Rotate orientation"
                                 onClick={() => setOrientation((o) => (o === 'portrait' ? 'landscape' : 'portrait'))}
                                 title={orientation === 'portrait' ? 'Rotate to landscape' : 'Rotate to portrait'}
-                                className="h-7 w-7 mr-0.5 flex items-center justify-center rounded text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-white transition-colors border-l border-gray-200 dark:border-gray-700"
+                                className="h-7 w-7 mr-0.5 flex items-center justify-center rounded text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-white transition-colors border-l border-gray-200 dark:border-white/[0.08]"
                               >
                                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2 12a10 10 0 0 1 10-10c2.76 0 5.26 1.12 7.07 2.93M22 12a10 10 0 0 1-10 10c-2.76 0-5.26-1.12-7.07-2.93" /><polyline points="19 2 19 5 16 5" /><polyline points="5 22 5 19 8 19" /></svg>
                               </button>
@@ -2825,12 +2827,12 @@ const persistProjectPreferences = useCallback(
                           {deviceMenuOpen && (
                             <>
                               <div className="fixed inset-0 z-40" onClick={() => setDeviceMenuOpen(false)} />
-                              <div className="absolute left-0 top-full mt-1 z-50 w-56 max-h-80 overflow-y-auto bg-white dark:bg-gray-900 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 py-1">
+                              <div className="absolute left-0 top-full mt-1 z-50 w-56 max-h-80 overflow-y-auto bg-white dark:bg-[#181310] rounded-lg shadow-xl border border-gray-200 dark:border-white/[0.08] py-1">
                                 {DEVICE_PRESETS.map((d) => (
                                   <button
                                     key={d.id}
                                     onClick={() => { setDeviceId(d.id); setDeviceMenuOpen(false); }}
-                                    className={`w-full flex items-center justify-between gap-2 px-3 py-1.5 text-sm text-left hover:bg-gray-50 dark:hover:bg-gray-800 ${d.id === deviceId ? 'text-[#DE7356] font-medium' : 'text-gray-700 dark:text-gray-200'}`}
+                                    className={`w-full flex items-center justify-between gap-2 px-3 py-1.5 text-sm text-left hover:bg-gray-50 dark:hover:bg-white/[0.06] ${d.id === deviceId ? 'text-[#DE7356] font-medium' : 'text-gray-700 dark:text-gray-200'}`}
                                   >
                                     <span className="flex items-center gap-2 min-w-0">
                                       {d.desktop ? <FaDesktop size={12} className="shrink-0 text-gray-400 dark:text-gray-500" /> : <FaMobileAlt size={12} className="shrink-0 text-gray-400 dark:text-gray-500" />}
@@ -2853,7 +2855,7 @@ const persistProjectPreferences = useCallback(
                   {/* Settings — kept visible (common action) */}
                   <button
                     onClick={() => { setSettingsInitialTab('general'); setShowGlobalSettings(true); }}
-                    className="h-9 w-9 flex items-center justify-center bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg transition-colors"
+                    className="h-9 w-9 flex items-center justify-center bg-gray-100 dark:bg-white/[0.06] text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-200 dark:hover:bg-white/[0.06] rounded-lg transition-colors"
                     title="Settings"
                     aria-label="Settings"
                   >
@@ -2866,8 +2868,8 @@ const persistProjectPreferences = useCallback(
                       onClick={() => setOverflowMenuOpen((v) => !v)}
                       className={`h-9 w-9 flex items-center justify-center rounded-lg border transition-colors ${
                         overflowMenuOpen
-                          ? 'bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-gray-100 border-gray-300 dark:border-gray-600'
-                          : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 border-transparent hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-200 dark:hover:bg-gray-700'
+                          ? 'bg-gray-200 dark:bg-white/[0.1] text-gray-900 dark:text-gray-100 border-gray-300 dark:border-white/[0.15]'
+                          : 'bg-gray-100 dark:bg-white/[0.06] text-gray-600 dark:text-gray-300 border-transparent hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-200 dark:hover:bg-white/[0.06]'
                       }`}
                       title="More tools"
                       aria-label="More tools"
@@ -2879,7 +2881,7 @@ const persistProjectPreferences = useCallback(
                     {overflowMenuOpen && (
                       <>
                         <div className="fixed inset-0 z-40" onClick={() => setOverflowMenuOpen(false)} />
-                        <div role="menu" className="absolute right-0 top-full mt-1 z-50 w-60 max-h-[70vh] overflow-y-auto bg-white dark:bg-gray-900 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 py-1">
+                        <div role="menu" className="absolute right-0 top-full mt-1 z-50 w-60 max-h-[70vh] overflow-y-auto bg-white dark:bg-[#181310] rounded-lg shadow-xl border border-gray-200 dark:border-white/[0.08] py-1">
                           {/* Edit elements (visual editor) */}
                           {previewUrl && (
                             <button
@@ -2887,7 +2889,7 @@ const persistProjectPreferences = useCallback(
                               onClick={() => { setShowPreview(true); setEditMode((v) => !v); setOverflowMenuOpen(false); }}
                               disabled={bridgeAbsent}
                               title={bridgeAbsent ? 'Visual editing needs the preview bridge (currently Nuxt only)' : undefined}
-                              className={`w-full flex items-center gap-2.5 px-3 py-1.5 text-sm text-left transition-colors disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-50 dark:hover:bg-gray-800 ${editMode ? 'text-[#DE7356] font-medium' : 'text-gray-700 dark:text-gray-200'}`}
+                              className={`w-full flex items-center gap-2.5 px-3 py-1.5 text-sm text-left transition-colors disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-50 dark:hover:bg-white/[0.06] ${editMode ? 'text-[#DE7356] font-medium' : 'text-gray-700 dark:text-gray-200'}`}
                             >
                               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0"><path d="M12 20h9" /><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" /></svg>
                               <span>Edit elements</span>
@@ -2901,7 +2903,7 @@ const persistProjectPreferences = useCallback(
                               onClick={() => { setShowPreview(true); setCommentMode((v) => !v); setOverflowMenuOpen(false); }}
                               disabled={bridgeAbsent}
                               title={bridgeAbsent ? 'Comments need the preview bridge (currently Nuxt only)' : undefined}
-                              className={`w-full flex items-center gap-2.5 px-3 py-1.5 text-sm text-left transition-colors disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-50 dark:hover:bg-gray-800 ${commentMode ? 'text-[#DE7356] font-medium' : 'text-gray-700 dark:text-gray-200'}`}
+                              className={`w-full flex items-center gap-2.5 px-3 py-1.5 text-sm text-left transition-colors disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-50 dark:hover:bg-white/[0.06] ${commentMode ? 'text-[#DE7356] font-medium' : 'text-gray-700 dark:text-gray-200'}`}
                             >
                               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2Z" /></svg>
                               <span>Comments{comments.length > 0 ? ` (${comments.length})` : ''}</span>
@@ -2913,7 +2915,7 @@ const persistProjectPreferences = useCallback(
                             <button
                               role="menuitem"
                               onClick={() => { setShowCommentsList((v) => !v); setOverflowMenuOpen(false); }}
-                              className={`w-full flex items-center gap-2.5 px-3 py-1.5 text-sm text-left transition-colors hover:bg-gray-50 dark:hover:bg-gray-800 ${showCommentsList ? 'text-[#DE7356] font-medium' : 'text-gray-700 dark:text-gray-200'}`}
+                              className={`w-full flex items-center gap-2.5 px-3 py-1.5 text-sm text-left transition-colors hover:bg-gray-50 dark:hover:bg-white/[0.06] ${showCommentsList ? 'text-[#DE7356] font-medium' : 'text-gray-700 dark:text-gray-200'}`}
                             >
                               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0"><line x1="8" y1="6" x2="21" y2="6" /><line x1="8" y1="12" x2="21" y2="12" /><line x1="8" y1="18" x2="21" y2="18" /><line x1="3" y1="6" x2="3.01" y2="6" /><line x1="3" y1="12" x2="3.01" y2="12" /><line x1="3" y1="18" x2="3.01" y2="18" /></svg>
                               <span>Comments list</span>
@@ -2936,7 +2938,7 @@ const persistProjectPreferences = useCallback(
                           <button
                             role="menuitem"
                             onClick={() => { setShowArchitecture(true); setOverflowMenuOpen(false); }}
-                            className="w-full flex items-center gap-2.5 px-3 py-1.5 text-sm text-left text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+                            className="w-full flex items-center gap-2.5 px-3 py-1.5 text-sm text-left text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-white/[0.06] transition-colors"
                           >
                             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0"><circle cx="12" cy="12" r="10" /><line x1="12" y1="16" x2="12" y2="12" /><line x1="12" y1="8" x2="12.01" y2="8" /></svg>
                             <span>Project architecture</span>
@@ -2946,7 +2948,7 @@ const persistProjectPreferences = useCallback(
                           <button
                             role="menuitem"
                             onClick={() => { setShowSkills(true); setOverflowMenuOpen(false); }}
-                            className="w-full flex items-center gap-2.5 px-3 py-1.5 text-sm text-left text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+                            className="w-full flex items-center gap-2.5 px-3 py-1.5 text-sm text-left text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-white/[0.06] transition-colors"
                           >
                             <span className="shrink-0 w-[15px] flex items-center justify-center"><FaPuzzlePiece size={14} /></span>
                             <span>Skills</span>
@@ -2956,7 +2958,7 @@ const persistProjectPreferences = useCallback(
                           <button
                             role="menuitem"
                             onClick={() => { setShowDesignImport(true); setOverflowMenuOpen(false); }}
-                            className="w-full flex items-center gap-2.5 px-3 py-1.5 text-sm text-left text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+                            className="w-full flex items-center gap-2.5 px-3 py-1.5 text-sm text-left text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-white/[0.06] transition-colors"
                           >
                             <span className="shrink-0 w-[15px] flex items-center justify-center"><FaFileImport size={14} /></span>
                             <span>Import design</span>
@@ -2965,7 +2967,7 @@ const persistProjectPreferences = useCallback(
                           {/* Stop preview — destructive, bottom with divider */}
                           {showPreview && previewUrl && (
                             <>
-                              <div className="my-1 border-t border-gray-200 dark:border-gray-700" />
+                              <div className="my-1 border-t border-gray-200 dark:border-white/[0.08]" />
                               <button
                                 role="menuitem"
                                 onClick={() => { stop(); setOverflowMenuOpen(false); }}
@@ -2987,7 +2989,7 @@ const persistProjectPreferences = useCallback(
                       onClick={shareReviewLink}
                       title={shareCopied ? 'Review link copied to clipboard' : 'Get a public link for stakeholders to review + comment'}
                       className={`h-9 w-9 flex items-center justify-center rounded-lg border transition-colors ${
-                        shareCopied ? 'bg-emerald-50 text-emerald-600 border-emerald-200' : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800'
+                        shareCopied ? 'bg-emerald-50 text-emerald-600 border-emerald-200' : 'border-gray-200 dark:border-white/[0.08] bg-white dark:bg-white/[0.03] text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-white/[0.06]'
                       }`}
                     >
                       {shareCopied ? (
@@ -3033,9 +3035,9 @@ const persistProjectPreferences = useCallback(
                     style={{ height: '100%' }}
                   >
                 {previewUrl ? (
-                  <div ref={deviceViewportRef} className="relative w-full h-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center overflow-hidden">
+                  <div ref={deviceViewportRef} className="relative w-full h-full bg-gray-100 dark:bg-white/[0.06] flex items-center justify-center overflow-hidden">
                     <div
-                      className={`relative bg-white dark:bg-gray-900 overflow-hidden shrink-0 ${
+                      className={`relative bg-white dark:bg-[#0c0a09] overflow-hidden shrink-0 ${
                         !deviceDims
                           ? 'w-full h-full'
                           : `border-gray-800 shadow-2xl ${(currentDevice.w ?? 0) < 500 ? 'rounded-[28px] border-8' : 'rounded-[18px] border-[12px]'}`
@@ -3048,7 +3050,7 @@ const persistProjectPreferences = useCallback(
                     >
                       <iframe
                         ref={iframeRef}
-                        className="w-full h-full border-none bg-white dark:bg-gray-900 "
+                        className="w-full h-full border-none bg-white dark:bg-[#0c0a09] "
                         src={previewUrl}
                         onError={() => {
                           // Show error overlay
@@ -3071,7 +3073,7 @@ const persistProjectPreferences = useCallback(
                       {/* Error overlay */}
                     <div 
                       id="iframe-error-overlay"
-                      className="absolute inset-0 bg-gray-50 dark:bg-gray-900 flex items-center justify-center z-10"
+                      className="absolute inset-0 bg-gray-50 dark:bg-[#0c0a09] flex items-center justify-center z-10"
                       style={{ display: 'none' }}
                     >
                       <div className="text-center max-w-md mx-auto p-6">
@@ -3083,7 +3085,7 @@ const persistProjectPreferences = useCallback(
                           The preview couldn&apos;t load properly. Try clicking the refresh button to reload the page.
                         </p>
                         <button
-                          className="flex items-center gap-2 mx-auto px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg transition-colors"
+                          className="flex items-center gap-2 mx-auto px-4 py-2 bg-[#DE7356] hover:bg-[#c9634a] text-white rounded-lg transition-colors"
                           onClick={() => {
                             refreshPreview();
                             const overlay = document.getElementById('iframe-error-overlay');
@@ -3125,17 +3127,17 @@ const persistProjectPreferences = useCallback(
                           <span className="text-sm truncate" title={previewErrors[previewErrors.length - 1]?.message}>
                             {previewErrors.length} runtime error{previewErrors.length > 1 ? 's' : ''} — {previewErrors[previewErrors.length - 1]?.message}
                           </span>
-                          <button onClick={fixPreviewErrors} className="shrink-0 text-xs font-semibold bg-white dark:bg-gray-900 text-red-600 rounded-lg px-3 py-1.5 hover:bg-red-50">Fix with AI</button>
+                          <button onClick={fixPreviewErrors} className="shrink-0 text-xs font-semibold bg-white dark:bg-white/[0.1] text-red-600 rounded-lg px-3 py-1.5 hover:bg-red-50">Fix with AI</button>
                           <button onClick={() => setPreviewErrors([])} className="shrink-0 text-white/80 hover:text-white text-sm px-1" aria-label="Dismiss">✕</button>
                         </div>
                       </div>
                     )}
                   </div>
                 ) : (
-                  <div className="h-full w-full flex items-center justify-center bg-gray-50 dark:bg-gray-900 relative">
+                  <div className="h-full w-full flex items-center justify-center bg-gray-50 dark:bg-[#0c0a09] relative">
                     {/* Gradient background similar to main page */}
                     <div className="absolute inset-0">
-                      <div className="absolute inset-0 bg-white dark:bg-gray-900 " />
+                      <div className="absolute inset-0 bg-white dark:bg-[#0c0a09] " />
                       <div
                         className="absolute inset-0 hidden dark:block transition-all duration-1000 ease-in-out"
                         style={{

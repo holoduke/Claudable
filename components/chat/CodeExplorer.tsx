@@ -60,7 +60,7 @@ function TreeView({ entries, selectedFile, expandedFolders, folderContents, onTo
               className={`group flex items-center h-[22px] px-2 cursor-pointer ${
                 selectedFile === fullPath
                   ? 'bg-blue-100 dark:bg-blue-950/40 '
-                  : 'hover:bg-gray-100 dark:hover:bg-gray-800 '
+                  : 'hover:bg-gray-100 dark:hover:bg-white/[0.06] '
               }`}
               style={{ paddingLeft: `${8 + indent}px` }}
               onClick={async () => {
@@ -263,12 +263,12 @@ export default function CodeExplorer({
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="h-full flex bg-white dark:bg-gray-900 "
+      className="h-full flex bg-white dark:bg-[#0c0a09] "
     >
       {/* Left Sidebar - File Explorer (VS Code style) */}
-      <div className="w-64 flex-shrink-0 bg-gray-50 dark:bg-gray-900 border-r border-gray-200 dark:border-gray-700 flex flex-col">
+      <div className="w-64 flex-shrink-0 bg-gray-50 dark:bg-white/[0.03] border-r border-gray-200 dark:border-white/[0.08] flex flex-col">
         {/* File Tree */}
-        <div className="flex-1 overflow-y-auto bg-gray-50 dark:bg-gray-900 custom-scrollbar">
+        <div className="flex-1 overflow-y-auto bg-gray-50 dark:bg-white/[0.03] custom-scrollbar">
           {!tree || tree.length === 0 ? (
             <div className="px-3 py-8 text-center text-[11px] text-gray-600 dark:text-gray-300 select-none">
               No files found
@@ -291,12 +291,12 @@ export default function CodeExplorer({
       </div>
 
       {/* Right Editor Area */}
-      <div className="flex-1 flex flex-col bg-white dark:bg-gray-900 min-w-0">
+      <div className="flex-1 flex flex-col bg-white dark:bg-[#0c0a09] min-w-0">
         {selectedFile ? (
           <>
             {/* File Tab */}
-            <div className="flex-shrink-0 bg-gray-100 dark:bg-gray-800 ">
-              <div className="flex items-center gap-3 bg-white dark:bg-gray-900 px-3 py-1.5 border-t-2 border-t-blue-500 ">
+            <div className="flex-shrink-0 bg-gray-100 dark:bg-white/[0.03] ">
+              <div className="flex items-center gap-3 bg-white dark:bg-[#0c0a09] px-3 py-1.5 border-t-2 border-t-[#DE7356] ">
                 <div className="flex items-center gap-2 min-w-0">
                   <span className="w-4 h-4 flex items-center justify-center">
                     {getFileIcon(tree.find(e => e.path === selectedFile) || { path: selectedFile, type: 'file' })}
@@ -330,7 +330,7 @@ export default function CodeExplorer({
                 )}
                 <div className="ml-auto flex items-center gap-2">
                   <button
-                    className="px-3 py-1 text-xs font-medium rounded bg-blue-500 text-white hover:bg-blue-600 disabled:bg-gray-300 disabled:text-gray-600 disabled:cursor-not-allowed "
+                    className="px-3 py-1 text-xs font-medium rounded bg-[#DE7356] text-white hover:bg-[#c9634a] disabled:bg-gray-300 disabled:text-gray-600 disabled:cursor-not-allowed "
                     onClick={onSaveFile}
                     disabled={!hasUnsavedChanges || isSavingFile}
                     title="Save (Ctrl+S)"
@@ -338,7 +338,7 @@ export default function CodeExplorer({
                     {isSavingFile ? 'Saving…' : 'Save'}
                   </button>
                   <button
-                    className="text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-700 px-1 rounded"
+                    className="text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-white/[0.06] px-1 rounded"
                     onClick={onCloseFile}
                   >
                     ×
@@ -349,11 +349,11 @@ export default function CodeExplorer({
 
             {/* Code Editor */}
             <div className="flex-1 overflow-hidden">
-              <div className="w-full h-full flex bg-white dark:bg-gray-900 overflow-hidden">
+              <div className="w-full h-full flex bg-white dark:bg-[#0c0a09] overflow-hidden">
                 {/* Line Numbers */}
                 <div
                   ref={lineNumberRef}
-                  className="bg-gray-50 dark:bg-gray-900 px-3 py-4 select-none flex-shrink-0 overflow-y-auto overflow-x-hidden custom-scrollbar pointer-events-none"
+                  className="bg-gray-50 dark:bg-[#0c0a09] px-3 py-4 select-none flex-shrink-0 overflow-y-auto overflow-x-hidden custom-scrollbar pointer-events-none"
                   aria-hidden="true"
                 >
                   <div className="text-[13px] font-mono text-gray-500 dark:text-gray-400 leading-[19px]">
@@ -399,7 +399,7 @@ export default function CodeExplorer({
           </>
         ) : (
           /* Welcome Screen */
-          <div className="flex-1 flex items-center justify-center bg-white dark:bg-gray-900 ">
+          <div className="flex-1 flex items-center justify-center bg-white dark:bg-[#0c0a09] ">
             <div className="text-center">
               <span className="w-16 h-16 mb-4 opacity-10 text-gray-400 dark:text-gray-500 mx-auto flex items-center justify-center"><FaCode size={64} /></span>
               <h3 className="text-lg font-medium text-gray-700 dark:text-gray-200 mb-2">
