@@ -1458,12 +1458,15 @@ async function waitForPreviewReady(
           return true;
         }
       }
-    } catch (error) {
+    } catch {
+      // The dev server prints "Starting…" immediately but isn't listening until
+      // it finishes its first compile, so early polls are EXPECTED to fail. Log a
+      // clear "still starting" note once (not the raw fetch error, which reads
+      // like a real failure) — a genuine timeout is reported after the loop.
       if (attempts === 1) {
         log(
           Buffer.from(
-            `[PreviewManager] Waiting for preview server at ${url} (${error instanceof Error ? error.message : String(error)
-            }).`
+            `[PreviewManager] Preview server at ${url} not up yet — waiting for the dev server to finish compiling…`
           )
         );
       }
