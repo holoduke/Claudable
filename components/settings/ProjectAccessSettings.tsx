@@ -3,7 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? '';
 
-interface Member { id: string; email: string; name: string | null; image: string | null }
+interface Member { id: string; email: string; name: string | null; image: string | null; role?: 'viewer' | 'editor' }
 interface AccessState { visibility: 'org' | 'restricted'; members: Member[] }
 
 interface Props { projectId: string }
@@ -134,6 +134,25 @@ export default function ProjectAccessSettings({ projectId }: Props) {
     }
   };
 
+  const setMemberRole = async (userId: string, role: 'viewer' | 'editor') => {
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await fetch(`${API_BASE}/api/projects/${projectId}/members/${userId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ role }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok || !json.success) throw new Error(json.message || 'Failed to update role');
+      setAccess(json.data as AccessState);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to update role');
+    } finally {
+      setBusy(false);
+    }
+  };
+
   if (loading) {
     return <div className="p-6 text-sm text-gray-500 dark:text-gray-400">Loading access settings…</div>;
   }
@@ -245,6 +264,16 @@ export default function ProjectAccessSettings({ projectId }: Props) {
                       <span className="block text-sm font-medium text-gray-900 dark:text-gray-50 truncate">{m.name || m.email}</span>
                       {m.name && <span className="block text-xs text-gray-500 dark:text-gray-400 truncate">{m.email}</span>}
                     </span>
+                    {/* Viewer = read-only; Editor = run the agent, edit files, deploy. */}
+                    <select
+                      value={m.role ?? 'viewer'}
+                      onChange={(e) => setMemberRole(m.id, e.target.value as 'viewer' | 'editor')}
+                      disabled={busy}
+                      className="text-xs border border-gray-200 dark:border-gray-700 rounded-full bg-white dark:bg-gray-900 text-gray-600 dark:text-gray-300 px-2 py-1 disabled:opacity-40"
+                    >
+                      <option value="viewer">Viewer</option>
+                      <option value="editor">Editor</option>
+                    </select>
                     <button
                       onClick={() => removeMember(m.id)}
                       disabled={busy}
