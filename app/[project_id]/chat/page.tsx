@@ -117,6 +117,10 @@ export default function ChatPage() {
   } = useUserRequests({ projectId });
   
   const [projectName, setProjectName] = useState<string>('');
+  // Inline rename of the project name in the chat header.
+  const [editingName, setEditingName] = useState(false);
+  const [nameDraft, setNameDraft] = useState('');
+  const savingNameRef = useRef(false);
   const [projectDescription, setProjectDescription] = useState<string>('');
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const previewUrlRef = useRef<string | null>(null);
@@ -426,6 +430,37 @@ export default function ChatPage() {
     }
     prevBusyRef.current = busy;
   }, [isRunning, hasActiveRequests, queuedMessages]);
+
+  // Inline project rename (header). Commit on Enter/blur, Escape cancels; the
+  // savingNameRef guards the Enter→blur double-fire (blur fires when the input
+  // unmounts after Enter already saved — the classic lost-rename race).
+  const commitProjectName = useCallback(async () => {
+    if (savingNameRef.current) return;
+    const next = nameDraft.trim();
+    setEditingName(false);
+    if (!next || next === projectName) return;
+    savingNameRef.current = true;
+    const previous = projectName;
+    setProjectName(next); // optimistic
+    try {
+      const res = await fetch(`${API_BASE}/api/projects/${projectId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: next }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok || !json.success) {
+        throw new Error(res.status === 403
+          ? 'Only the project owner or an admin can rename this project.'
+          : (json.message || 'Failed to rename project'));
+      }
+    } catch (e) {
+      setProjectName(previous);
+      toast.error(e instanceof Error ? e.message : 'Failed to rename project');
+    } finally {
+      savingNameRef.current = false;
+    }
+  }, [nameDraft, projectName, projectId, toast]);
 
   // /clear — drop the agent's conversation context (server clears the resume
   // pointer + usage counters and posts a confirmation message via SSE).
@@ -2719,8 +2754,38 @@ const persistProjectPreferences = useCallback(
                     <path d="M19 12H5M12 19L5 12L12 5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                   </svg>
                 </button>
-                <div>
-                  <h1 className="text-lg font-semibold text-gray-900 dark:text-gray-50 ">{projectName || 'Loading...'}</h1>
+                <div className="min-w-0">
+                  {editingName ? (
+                    <input
+                      value={nameDraft}
+                      onChange={(e) => setNameDraft(e.target.value)}
+                      onBlur={() => void commitProjectName()}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') { e.preventDefault(); void commitProjectName(); }
+                        if (e.key === 'Escape') { e.preventDefault(); setEditingName(false); }
+                      }}
+                      autoFocus
+                      maxLength={80}
+                      className="text-lg font-semibold text-gray-900 dark:text-gray-50 bg-transparent border-b border-[#DE7356] focus:outline-none w-full max-w-md"
+                      aria-label="Project name"
+                    />
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (!projectName) return;
+                        setNameDraft(projectName);
+                        setEditingName(true);
+                      }}
+                      title="Rename project"
+                      className="group flex items-center gap-1.5 text-left"
+                    >
+                      <h1 className="text-lg font-semibold text-gray-900 dark:text-gray-50 truncate">{projectName || 'Loading...'}</h1>
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-gray-300 dark:text-gray-600 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
+                      </svg>
+                    </button>
+                  )}
                   {projectDescription && (
                     <p className="text-sm text-gray-500 dark:text-gray-400 ">
                       {projectDescription}
