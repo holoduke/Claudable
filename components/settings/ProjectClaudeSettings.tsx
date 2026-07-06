@@ -87,7 +87,7 @@ export default function ProjectClaudeSettings({ projectId }: Props) {
         disabled={busy}
         className="w-full max-w-md px-3 py-2 rounded-lg border border-gray-200 dark:border-white/[0.08] bg-white dark:bg-white/[0.06] text-sm text-gray-800 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-gray-200 disabled:opacity-50"
       >
-        <option value="__default__">Platform default (shared Claude)</option>
+        <option value="__default__">Default — each user&apos;s own Claude account (platform token as fallback)</option>
         {current && (
           <option key={current.id} value={current.id} disabled>
             {current.label} — {current.ownerName || current.ownerEmail} (private)

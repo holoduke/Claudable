@@ -121,11 +121,16 @@ export async function setProjectCredential(projectId: string, credentialId: stri
 /**
  * Decrypted token for a project's agent runs, or null to fall back to the env token.
  *
+ * Resolution order per RUN:
+ *   1. the project's assigned credential — if the requester may use it
+ *   2. the requester's own credential — everyone runs on their own subscription
+ *      by default, no project setup needed
+ *   3. null → the platform env token
+ *
  * PRIVACY: a PRIVATE (non-shareable) credential is only used for runs triggered
- * by its OWNER. Anyone else running the agent on the same project falls back to
- * the platform token — another user must never silently consume a teammate's
- * personal Claude subscription. `requesterUserId` is unknown (undefined) only
- * when the auth gate is off, where per-user attribution doesn't exist anyway.
+ * by its OWNER — another user must never silently consume a teammate's personal
+ * Claude subscription. `requesterUserId` is unknown (undefined) only when the
+ * auth gate is off, where per-user attribution doesn't exist anyway.
  */
 export async function resolveProjectClaudeToken(
   projectId: string,
@@ -135,17 +140,42 @@ export async function resolveProjectClaudeToken(
     where: { id: projectId },
     select: { claudeCredentialId: true },
   });
-  if (!project?.claudeCredentialId) return null;
 
-  const cred = await prisma.claudeCredential.findUnique({ where: { id: project.claudeCredentialId } });
-  if (!cred) return null;
-  if (!cred.shareable && requesterUserId && cred.ownerId !== requesterUserId) {
-    console.log(
-      `[ClaudeCredentials] Project ${projectId} is assigned a PRIVATE credential (owner ${cred.ownerId}); ` +
-      `requester ${requesterUserId} is not the owner — using the platform token for this run.`,
-    );
-    return null;
+  // 1) The project's assigned credential — when the requester may use it
+  //    (shareable, their own, or requester unknown = auth off).
+  if (project?.claudeCredentialId) {
+    const cred = await prisma.claudeCredential.findUnique({ where: { id: project.claudeCredentialId } });
+    if (cred) {
+      if (!cred.shareable && requesterUserId && cred.ownerId !== requesterUserId) {
+        console.log(
+          `[ClaudeCredentials] Project ${projectId} is assigned a PRIVATE credential (owner ${cred.ownerId}); ` +
+          `requester ${requesterUserId} is not the owner — trying their own credential instead.`,
+        );
+      } else {
+        const token = decryptAndStamp(cred);
+        if (token) return token;
+      }
+    }
   }
+
+  // 2) The requester's OWN credential (most recently connected) — every user's
+  //    runs default to their own subscription without any project setup.
+  if (requesterUserId) {
+    const own = await prisma.claudeCredential.findFirst({
+      where: { ownerId: requesterUserId },
+      orderBy: { createdAt: 'desc' },
+    });
+    if (own) {
+      const token = decryptAndStamp(own);
+      if (token) return token;
+    }
+  }
+
+  // 3) Neither → the platform env token (caller falls back).
+  return null;
+}
+
+function decryptAndStamp(cred: ClaudeCredential): string | null {
   try {
     const token = decrypt(cred.token);
     if (!token) return null;
