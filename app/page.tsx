@@ -1021,7 +1021,7 @@ export default function HomePage() {
                 </div>
               </div>
               <p className="text-xl text-gray-700 dark:text-gray-200 font-light tracking-tight">
-                Describe it • Watch it build • Ship it
+                A New Story portal to build and ship
               </p>
             </div>
             
