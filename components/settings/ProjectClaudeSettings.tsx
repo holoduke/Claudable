@@ -17,6 +17,9 @@ interface Props {
 
 export default function ProjectClaudeSettings({ projectId }: Props) {
   const [options, setOptions] = useState<Option[]>([]);
+  // The assigned credential when it is NOT selectable by the viewer (someone
+  // else's private account) — shown read-only so the real assignment is visible.
+  const [current, setCurrent] = useState<Option | null>(null);
   const [credentialId, setCredentialId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [denied, setDenied] = useState<string | null>(null);
@@ -33,6 +36,7 @@ export default function ProjectClaudeSettings({ projectId }: Props) {
       }
       if (json.success) {
         setOptions(json.data.options as Option[]);
+        setCurrent((json.data.current as Option | null) ?? null);
         setCredentialId(json.data.credentialId ?? null);
         setDenied(null);
       }
@@ -84,12 +88,25 @@ export default function ProjectClaudeSettings({ projectId }: Props) {
         className="w-full max-w-md px-3 py-2 rounded-lg border border-gray-200 dark:border-white/[0.08] bg-white dark:bg-white/[0.06] text-sm text-gray-800 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-gray-200 disabled:opacity-50"
       >
         <option value="__default__">Platform default (shared Claude)</option>
+        {current && (
+          <option key={current.id} value={current.id} disabled>
+            {current.label} — {current.ownerName || current.ownerEmail} (private)
+          </option>
+        )}
         {options.map((o) => (
           <option key={o.id} value={o.id}>
             {o.label} — {o.isMine ? 'you' : (o.ownerName || o.ownerEmail)}
           </option>
         ))}
       </select>
+
+      {current && (
+        <p className="text-xs text-gray-500 dark:text-gray-400">
+          This project currently runs on <span className="font-medium">{current.label}</span> — a private
+          Claude account owned by {current.ownerName || current.ownerEmail}. Only its owner can re-select
+          it here; you can switch the project to your own account or the platform default.
+        </p>
+      )}
 
       {options.length === 0 && (
         <p className="text-xs text-gray-400 dark:text-gray-500">

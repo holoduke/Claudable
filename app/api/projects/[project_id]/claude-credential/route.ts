@@ -5,7 +5,7 @@
  */
 import { NextRequest } from 'next/server';
 import { requireProjectManager } from '@/lib/services/project-access';
-import { listSelectableCredentials, setProjectCredential } from '@/lib/services/claude-credentials';
+import { getCredentialView, listSelectableCredentials, setProjectCredential } from '@/lib/services/claude-credentials';
 import { createSuccessResponse, createErrorResponse, handleApiError } from '@/lib/utils/api-response';
 
 export const runtime = 'nodejs';
@@ -19,7 +19,16 @@ export async function GET(_req: NextRequest, { params }: Ctx) {
     if (!gate.ok) return createErrorResponse(gate.code, gate.message, gate.status);
 
     const options = await listSelectableCredentials({ id: gate.user.id, orgId: gate.user.orgId });
-    return createSuccessResponse({ credentialId: gate.project.claudeCredentialId ?? null, options });
+    // The CURRENT assignment must always be visible, even when it's another
+    // user's PRIVATE credential (not selectable): without it the picker
+    // silently displays the wrong account and the manager can't tell whose
+    // subscription the project actually runs on.
+    const credentialId = gate.project.claudeCredentialId ?? null;
+    const current =
+      credentialId && !options.some((c) => c.id === credentialId)
+        ? await getCredentialView(credentialId, { id: gate.user.id, orgId: gate.user.orgId })
+        : null;
+    return createSuccessResponse({ credentialId, options, current });
   } catch (error) {
     return handleApiError(error, 'API', 'Failed to load project Claude credential');
   }

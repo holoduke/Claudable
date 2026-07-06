@@ -62,6 +62,19 @@ export async function listOrgCredentials(orgId: string, meId: string): Promise<C
     });
 }
 
+/** A single credential's view (no token), org-scoped. Null when missing/foreign-org. */
+export async function getCredentialView(
+  credentialId: string,
+  me: { id: string; orgId: string },
+): Promise<CredentialView | null> {
+  const cred = await prisma.claudeCredential.findUnique({
+    where: { id: credentialId },
+    include: { owner: true },
+  });
+  if (!cred || cred.owner?.orgId !== me.orgId) return null;
+  return view(cred, me.id);
+}
+
 /** Credentials a user may assign to a project: their own + shareable ones in the org. */
 export async function listSelectableCredentials(user: { id: string; orgId: string }): Promise<CredentialView[]> {
   const creds = await prisma.claudeCredential.findMany({
