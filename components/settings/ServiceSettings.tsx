@@ -81,6 +81,13 @@ export function ServiceSettings({ projectId, projectName }: ServiceSettingsProps
   const [supabaseModalOpen, setSupabaseModalOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
 
+  // Per-project git settings: the branch the project operates on (push target
+  // + sync source) and the state of the manual "Sync" (pull) action.
+  const [branchInput, setBranchInput] = useState('');
+  const [branchSaving, setBranchSaving] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+  const [gitStatusMessage, setGitStatusMessage] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null);
+
   const getProviderIcon = (provider: string) => {
     switch (provider) {
       case 'github':
@@ -131,10 +138,58 @@ export function ServiceSettings({ projectId, projectName }: ServiceSettingsProps
           connection,
         };
       }));
+
+      const github = connections.find(conn => conn.provider === 'github');
+      if (github) {
+        setBranchInput(github.service_data?.branch || github.service_data?.default_branch || 'main');
+      }
     } catch (error) {
       console.error('Failed to load service connections:', error);
     }
   }, [projectId]);
+
+  const handleSaveBranch = async () => {
+    setBranchSaving(true);
+    setGitStatusMessage(null);
+    try {
+      const res = await fetch(`${API_BASE}/api/projects/${projectId}/github/settings`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ branch: branchInput }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(body.message || 'Failed to save branch');
+      }
+      setGitStatusMessage({ kind: 'ok', text: `Operating branch set to "${body.branch}"` });
+      loadServiceConnections();
+    } catch (error) {
+      setGitStatusMessage({ kind: 'error', text: error instanceof Error ? error.message : 'Failed to save branch' });
+    } finally {
+      setBranchSaving(false);
+    }
+  };
+
+  const handleSync = async () => {
+    setSyncing(true);
+    setGitStatusMessage(null);
+    try {
+      const res = await fetch(`${API_BASE}/api/projects/${projectId}/github/pull`, { method: 'POST' });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(body.message || 'Sync failed');
+      }
+      setGitStatusMessage({
+        kind: 'ok',
+        text: body.message + (body.preview_restarted ? ' — preview restarted' : ''),
+      });
+      loadServiceConnections();
+    } catch (error) {
+      setGitStatusMessage({ kind: 'error', text: error instanceof Error ? error.message : 'Sync failed' });
+    } finally {
+      setSyncing(false);
+    }
+  };
 
   // Check if tokens exist for all services. Each probe fails independently —
   // one transient error must not mark ALL providers "Token needed".
@@ -255,15 +310,49 @@ export function ServiceSettings({ projectId, projectName }: ServiceSettingsProps
                       {!service.connected ? null : (
                         <div className="text-gray-700 dark:text-gray-200 ">
                           {service.id === 'github' && service.connection?.service_data?.repo_url ? (
-                            <div className="flex items-center gap-2">
-                              <span className="shrink-0">Repository:</span>
-                              <a 
-                                href={service.connection.service_data.repo_url}
-                                target="_blank" rel="noopener noreferrer"
-                                className="truncate font-mono text-[#DE7356] hover:underline"
-                              >
-                                {service.connection.service_data.repo_name || service.connection.service_data.repo_url}
-                              </a>
+                            <div className="space-y-2">
+                              <div className="flex items-center gap-2">
+                                <span className="shrink-0">Repository:</span>
+                                <a
+                                  href={service.connection.service_data.repo_url}
+                                  target="_blank" rel="noopener noreferrer"
+                                  className="truncate font-mono text-[#DE7356] hover:underline"
+                                >
+                                  {service.connection.service_data.repo_name || service.connection.service_data.repo_url}
+                                </a>
+                              </div>
+                              <div className="flex flex-wrap items-center gap-2">
+                                <span className="shrink-0">Branch:</span>
+                                <input
+                                  value={branchInput}
+                                  onChange={(e) => setBranchInput(e.target.value)}
+                                  spellCheck={false}
+                                  className="w-36 px-2 py-1 text-sm font-mono rounded-lg border border-gray-300 dark:border-white/[0.12] bg-white dark:bg-white/[0.06] text-gray-800 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-[#DE7356]"
+                                />
+                                <button
+                                  onClick={handleSaveBranch}
+                                  disabled={branchSaving || !branchInput.trim() || branchInput.trim() === (service.connection.service_data.branch || service.connection.service_data.default_branch || 'main')}
+                                  className="px-3 py-1 text-xs rounded-lg border border-gray-300 dark:border-white/[0.12] text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-white/[0.06] disabled:opacity-40 disabled:cursor-not-allowed"
+                                >
+                                  {branchSaving ? 'Saving…' : 'Save'}
+                                </button>
+                                <button
+                                  onClick={handleSync}
+                                  disabled={syncing}
+                                  className="px-3 py-1 text-xs rounded-lg bg-[#DE7356] hover:bg-[#c9634a] text-white disabled:opacity-50 flex items-center gap-1.5"
+                                  title="Pull the latest changes from the branch into this project (restarts the preview when something changed)"
+                                >
+                                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" className={syncing ? 'animate-spin' : ''}>
+                                    <path d="M21 12a9 9 0 1 1-2.64-6.36M21 3v6h-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                                  </svg>
+                                  {syncing ? 'Syncing…' : 'Sync'}
+                                </button>
+                              </div>
+                              {gitStatusMessage && (
+                                <p className={`text-xs ${gitStatusMessage.kind === 'ok' ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
+                                  {gitStatusMessage.text}
+                                </p>
+                              )}
                             </div>
                           ) : service.id === 'vercel' && service.connection?.service_data?.project_url ? (
                             <div className="flex items-center gap-2">

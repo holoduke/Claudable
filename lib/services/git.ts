@@ -160,6 +160,57 @@ export function commitAll(repoPath: string, message: string) {
   }
 }
 
+function revParseHead(repoPath: string): string | null {
+  try {
+    return runGit(['rev-parse', 'HEAD'], repoPath);
+  } catch {
+    return null;
+  }
+}
+
+export interface PullResult {
+  /** Whether the pull changed the local tree (false = already up to date). */
+  updated: boolean;
+  before: string | null;
+  after: string | null;
+}
+
+/**
+ * Fetch `branch` from the remote and merge it into the current checkout.
+ * Fast-forwards when possible, otherwise creates a merge commit (local commits
+ * are preserved). On a merge conflict the merge is aborted so the working tree
+ * is left exactly as before, and an error is thrown for the caller to surface.
+ */
+export function pullFromRemote(
+  repoPath: string,
+  remoteName = 'origin',
+  branch = 'main',
+  remoteUrl?: string,
+): PullResult {
+  const remote = remoteUrl || remoteName;
+  runGit(['fetch', remote, branch], repoPath);
+  const before = revParseHead(repoPath);
+  try {
+    runGit(['merge', '--ff-only', 'FETCH_HEAD'], repoPath);
+  } catch {
+    try {
+      runGit(['merge', '--no-edit', '-m', `Sync with remote ${branch}`, 'FETCH_HEAD'], repoPath);
+    } catch (error) {
+      try {
+        runGit(['merge', '--abort'], repoPath);
+      } catch {
+        /* no merge in progress */
+      }
+      throw new GitError(
+        `Merge conflict while syncing branch '${branch}' — the local project and the remote branch both changed the same files. Push or revert local changes first.`,
+        error instanceof GitError ? error.output : undefined,
+      );
+    }
+  }
+  const after = revParseHead(repoPath);
+  return { updated: before !== after, before, after };
+}
+
 export function pushToRemote(
   repoPath: string,
   remoteName = 'origin',

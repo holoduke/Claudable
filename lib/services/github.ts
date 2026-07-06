@@ -3,7 +3,7 @@ import fs from 'fs/promises';
 import { getPlainServiceToken } from '@/lib/services/tokens';
 import { getProjectById, updateProject } from '@/lib/services/project';
 import { getProjectService, upsertProjectServiceConnection, updateProjectServiceData } from '@/lib/services/project-services';
-import { ensureGitRepository, ensureGitConfig, initializeMainBranch, addOrUpdateRemote, commitAll, pushToRemote } from '@/lib/services/git';
+import { ensureGitRepository, ensureGitConfig, initializeMainBranch, addOrUpdateRemote, commitAll, pushToRemote, pullFromRemote } from '@/lib/services/git';
 import { getGitProviderConfig, getEnvGitToken } from '@/lib/services/git-provider';
 import { injectDeployScaffolding } from '@/lib/services/scaffold-deploy';
 import { getDatabaseUrl } from '@/lib/services/database';
@@ -243,6 +243,126 @@ export async function connectProjectToGitHub(projectId: string, options: CreateR
   };
 }
 
+/**
+ * The branch this project operates on: push target AND sync (pull) source.
+ * Per-project override in service_data.branch, falling back to the repo's
+ * default branch, then 'main'.
+ */
+export function projectGitBranch(data: Record<string, any> | undefined): string {
+  const b = typeof data?.branch === 'string' ? data.branch.trim() : '';
+  return b || (typeof data?.default_branch === 'string' && data.default_branch) || 'main';
+}
+
+// Git's own ref rules are looser, but this covers real-world branch names and
+// blocks anything that could smuggle git options or path tricks.
+const BRANCH_NAME_RE = /^[A-Za-z0-9][A-Za-z0-9._/-]{0,200}$/;
+
+export interface ProjectGitSettings {
+  repo_url: string | null;
+  repo_name: string | null;
+  owner: string | null;
+  default_branch: string;
+  branch: string;
+  last_pushed_at: string | null;
+  last_synced_at: string | null;
+}
+
+export async function getProjectGitSettings(projectId: string): Promise<ProjectGitSettings> {
+  const service = await getProjectService(projectId, 'github');
+  const data = service?.serviceData as Record<string, any> | undefined;
+  if (!data?.clone_url) {
+    throw new GitHubError('Git repository not connected', 404);
+  }
+  return {
+    repo_url: (data.repo_url as string) ?? null,
+    repo_name: (data.repo_name as string) ?? null,
+    owner: (data.owner as string) ?? null,
+    default_branch: (data.default_branch as string) || 'main',
+    branch: projectGitBranch(data),
+    last_pushed_at: (data.last_pushed_at as string) ?? null,
+    last_synced_at: (data.last_synced_at as string) ?? null,
+  };
+}
+
+/**
+ * Set the branch this project pushes to and syncs from. Validates the name and
+ * checks the branch actually exists on the remote before saving.
+ */
+export async function setProjectGitBranch(projectId: string, branch: string): Promise<string> {
+  const trimmed = branch.trim();
+  if (!BRANCH_NAME_RE.test(trimmed) || trimmed.includes('..')) {
+    throw new GitHubError(`Invalid branch name: "${branch}"`, 400);
+  }
+  const service = await getProjectService(projectId, 'github');
+  const data = service?.serviceData as Record<string, any> | undefined;
+  if (!data?.owner || !data?.repo_name) {
+    throw new GitHubError('Git repository not connected', 404);
+  }
+  const token = await resolveGitToken();
+  try {
+    // Both GitHub and Gitea expose /repos/{owner}/{repo}/branches/{branch}.
+    await githubFetch(token, `/repos/${data.owner}/${data.repo_name}/branches/${encodeURIComponent(trimmed)}`);
+  } catch (error) {
+    if (error instanceof GitHubError && error.status === 404) {
+      throw new GitHubError(`Branch "${trimmed}" does not exist on ${data.owner}/${data.repo_name}`, 404);
+    }
+    throw error;
+  }
+  await updateProjectServiceData(projectId, 'github', { branch: trimmed });
+  return trimmed;
+}
+
+export interface SyncResult {
+  /** Whether the pull changed the local project (false = already up to date). */
+  updated: boolean;
+  branch: string;
+  message: string;
+}
+
+/**
+ * Sync (pull) the project from its remote branch: local edits are committed
+ * first, then the remote branch is fetched and merged (fast-forward when
+ * possible). A merge conflict aborts cleanly and surfaces as an error — the
+ * working tree is never left half-merged.
+ */
+export async function pullProjectFromGitHub(projectId: string): Promise<SyncResult> {
+  const project = await getProjectById(projectId);
+  if (!project) {
+    throw new Error('Project not found');
+  }
+  const token = await resolveGitToken();
+  const service = await getProjectService(projectId, 'github');
+  const data = service?.serviceData as Record<string, any> | undefined;
+  if (!data?.clone_url || !data?.owner) {
+    throw new GitHubError('Git repository not connected', 404);
+  }
+
+  const repoPath = await ensureProjectRepository(projectId, project.repoPath);
+  ensureGitRepository(repoPath);
+  const user = await getGithubUser();
+  ensureGitConfig(repoPath, user.name || user.login, user.email || `${user.login}@users.noreply.github.com`);
+
+  const branch = projectGitBranch(data);
+  // Commit local edits first so the merge weaves remote changes into them
+  // instead of refusing to run on a dirty tree.
+  commitAll(repoPath, 'Local changes before sync');
+
+  const authenticatedUrl = String(data.clone_url).replace('https://', `https://${encodeURIComponent(user.login)}:${token}@`);
+  const result = pullFromRemote(repoPath, 'origin', branch, authenticatedUrl);
+
+  await updateProjectServiceData(projectId, 'github', {
+    last_synced_at: new Date().toISOString(),
+  });
+
+  return {
+    updated: result.updated,
+    branch,
+    message: result.updated
+      ? `Synced with ${branch} (${(result.after ?? '').slice(0, 7)})`
+      : `Already up to date with ${branch}`,
+  };
+}
+
 /** @returns whether new changes were actually pushed (false = already up to date). */
 export async function pushProjectToGitHub(projectId: string): Promise<boolean> {
   try {
@@ -293,7 +413,7 @@ export async function pushProjectToGitHub(projectId: string): Promise<boolean> {
     // Basic-auth the push with the token. The username must be the token-owning
     // user (not the org) for Gitea/GitHub basic auth to succeed.
     const authenticatedUrl = String(data.clone_url).replace('https://', `https://${encodeURIComponent(user.login)}:${token}@`);
-    pushToRemote(repoPath, 'origin', data.default_branch || 'main', authenticatedUrl);
+    pushToRemote(repoPath, 'origin', projectGitBranch(data), authenticatedUrl);
 
     await updateProjectServiceData(projectId, 'github', {
       last_pushed_at: new Date().toISOString(),
