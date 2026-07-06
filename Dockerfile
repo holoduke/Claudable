@@ -3,13 +3,27 @@
 FROM node:22-bookworm-slim
 
 # Tooling the agent needs at runtime: git (push), ripgrep (claude search), ca-certs.
-# chromium + fonts-liberation power server-side project thumbnails (headless capture).
+# The lib list is chrome-headless-shell's runtime deps (thumbnails + PDF export).
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends git ca-certificates ripgrep curl chromium fonts-liberation \
+  && apt-get install -y --no-install-recommends git ca-certificates ripgrep curl unzip fonts-liberation \
+     libnss3 libnspr4 libatk1.0-0 libatk-bridge2.0-0 libcups2 libdrm2 libxkbcommon0 \
+     libxcomposite1 libxdamage1 libxfixes3 libxrandr2 libgbm1 libasound2 libpango-1.0-0 libcairo2 \
   && rm -rf /var/lib/apt/lists/*
 
-# Path to the headless browser used for thumbnail capture (lib/services/thumbnail.ts).
-ENV CHROMIUM_PATH=/usr/bin/chromium
+# PINNED headless browser (Chrome for Testing "chrome-headless-shell") for
+# thumbnails + PDF export. Debian's `chromium` package is a moving target — its
+# 150.x build SIGTRAPs on any headless run in this container, which silently
+# broke thumbnail capture and the PDF exporter. A versioned Google build keeps
+# rebuilds deterministic; bump the version deliberately, testing headless runs.
+ARG CHROME_HEADLESS_VERSION=141.0.7390.65
+RUN curl -fsSL "https://storage.googleapis.com/chrome-for-testing-public/${CHROME_HEADLESS_VERSION}/linux64/chrome-headless-shell-linux64.zip" -o /tmp/chs.zip \
+  && unzip -q /tmp/chs.zip -d /opt \
+  && mv /opt/chrome-headless-shell-linux64 /opt/chrome-headless-shell \
+  && rm /tmp/chs.zip \
+  && /opt/chrome-headless-shell/chrome-headless-shell --version
+
+# Path to the headless browser used by thumbnail capture + PDF export.
+ENV CHROMIUM_PATH=/opt/chrome-headless-shell/chrome-headless-shell
 
 # Go toolchain — lets the preview build+run a project's Go backend (the `static`
 # import mode's backend sidecar). Pinned; copied from the official image.
