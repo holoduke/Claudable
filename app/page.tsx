@@ -8,6 +8,7 @@ import { BACKEND_STACKS } from '@/lib/config/backend-stacks';
 import { DATABASES } from '@/lib/config/databases';
 import GlobalSettings from '@/components/settings/GlobalSettings';
 import UserMenu from '@/components/layout/UserMenu';
+import ConnectClaudePrompt from '@/components/auth/ConnectClaudePrompt';
 import ThemeToggle from '@/components/ui/ThemeToggle';
 import { useGlobalSettings } from '@/contexts/GlobalSettingsContext';
 import { getDefaultModelForCli, getModelDisplayName } from '@/lib/constants/cliModels';
@@ -740,6 +741,8 @@ export default function HomePage() {
 
   return (
     <div className="flex h-screen relative overflow-hidden bg-white dark:bg-[#0c0a09]">
+      {/* First-open nudge: connect your own Claude account (dismissible). */}
+      <ConnectClaudePrompt />
       {/* My account (always top-right) */}
       <div className="fixed top-3 right-4 z-50 flex items-center gap-2"><ThemeToggle /><UserMenu /></div>
       {/* Radial gradient background from bottom center */}
