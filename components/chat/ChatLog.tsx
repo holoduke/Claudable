@@ -1581,18 +1581,41 @@ export default function ChatLog({ projectId, onSessionStatusChange, onProjectSta
   // True until the first render WITH messages — the initial history load must
   // always land at the bottom (newest), regardless of the near-bottom check.
   const needsInitialScrollRef = useRef(true);
+  // Whether to auto-follow new content. Maintained from the user's OWN scrolling
+  // (the onScroll handler below), NOT measured at append time: measuring after a
+  // tall streamed chunk grows the page always reads as "far from the bottom" and
+  // silently stops following mid-turn (the "I have to scroll manually" bug).
+  const stickToBottomRef = useRef(true);
+  // Set while WE scroll programmatically, so the resulting scroll events don't
+  // get misread as the user scrolling away.
+  const programmaticScrollUntilRef = useRef(0);
+  const handleLogScroll = (e: React.UIEvent<HTMLDivElement>) => {
+    if (Date.now() < programmaticScrollUntilRef.current) return;
+    const el = e.currentTarget;
+    stickToBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
+  };
+  const lastUserSnapMessageIdRef = useRef<string | null>(null);
   const scrollToBottom = () => {
     if (needsInitialScrollRef.current) {
       if (messages.length === 0) return; // nothing loaded yet — keep waiting
       needsInitialScrollRef.current = false;
+      stickToBottomRef.current = true;
+      programmaticScrollUntilRef.current = Date.now() + 400;
       logsEndRef.current?.scrollIntoView({ behavior: "auto" }); // jump, don't animate
       return;
     }
-    // After that: only auto-follow when the user is already near the bottom —
-    // otherwise a streaming turn yanks them back down while they're reading.
-    const container = logsEndRef.current?.parentElement;
-    if (container && container.scrollHeight - container.scrollTop - container.clientHeight > 160) return;
-    logsEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    // Sending a message always re-engages following (standard chat UX): you
+    // just acted, you want to see the reply.
+    const last = messages[messages.length - 1];
+    if (last?.role === 'user' && last.id !== lastUserSnapMessageIdRef.current) {
+      lastUserSnapMessageIdRef.current = last.id ?? null;
+      stickToBottomRef.current = true;
+    }
+    if (!stickToBottomRef.current) return;
+    // 'auto' (instant), not 'smooth': queued smooth animations fall behind a
+    // busy stream and strand the view mid-scroll.
+    programmaticScrollUntilRef.current = Date.now() + 400;
+    logsEndRef.current?.scrollIntoView({ behavior: "auto" });
   };
 
   // Function to detect tool usage messages based on patterns
@@ -2650,7 +2673,7 @@ const ToolResultMessage = ({
       )}
 
       {/* Display messages and logs together */}
-      <div className="flex-1 overflow-y-auto px-8 py-3 space-y-2 custom-scrollbar ">
+      <div className="flex-1 overflow-y-auto px-8 py-3 space-y-2 custom-scrollbar " onScroll={handleLogScroll}>
         {isLoading && !hasLoadedOnce && !hasError && (
           <div className="flex items-center justify-center h-32 text-gray-400 dark:text-gray-500 text-sm">
             <div className="flex flex-col items-center">
