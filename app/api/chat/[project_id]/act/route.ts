@@ -480,6 +480,7 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
         selectedModel,
         requestId,
         requesterItopsEnabled,
+        requester?.id,
       ).then(() => {
         void checkpointTurn(project_id, projectPath, finalInstruction, requestId);
         // A compiled/production backend doesn't hot-reload — rebuild it if the agent
@@ -511,6 +512,7 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
         requestId,
         thinkingMode,
         requesterItopsEnabled,
+        requester?.id,
       ).then(() => {
         void checkpointTurn(project_id, projectPath, finalInstruction, requestId);
         // A compiled/production backend doesn't hot-reload — rebuild it if the agent
