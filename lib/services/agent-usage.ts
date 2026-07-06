@@ -251,6 +251,20 @@ export function recordRateLimit(projectId: string, info: unknown): void {
   publishSnapshot(projectId, getState(projectId));
 }
 
+/**
+ * The account behind a run answered "You've hit your limit …" — the CLI's
+ * stream-json (containerized path) carries no rate_limit_event, so peg the
+ * 5-hour meter from the reply itself. Publishes so the chips flip red at once.
+ */
+export function markRateLimitExhausted(projectId: string, resetsAtIso?: string): void {
+  globalRateLimits = {
+    ...globalRateLimits,
+    fiveHour: { utilization: 1, status: 'rejected', ...(resetsAtIso ? { resetsAt: resetsAtIso } : {}) },
+    updatedAt: nowIso(),
+  };
+  publishSnapshot(projectId, getState(projectId));
+}
+
 /** /clear: fresh context + fresh totals. Publishes and persists the reset snapshot. */
 export async function resetProjectUsage(projectId: string): Promise<void> {
   const state = getState(projectId);
