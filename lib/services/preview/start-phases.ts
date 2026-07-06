@@ -534,14 +534,18 @@ export async function buildFrontendContainerArgs(
   // Reuse the SAME per-stack dev command the in-process path builds (devArgs
   // already carries --port + the stack's host/allowed-hosts flags), so this
   // works for nuxt/next/angular without per-project config.
+  // A CUSTOM fe.dev command is arbitrary shell (env-var prefixes, `;` chains) —
+  // `exec` in front of it silently breaks both (exec replaces the shell with the
+  // FIRST word: `exec FOO=x cmd` fails outright, `exec a; b` never runs b). Only
+  // the default command we compose ourselves gets exec'd.
   const inner = fe.dev
     ? substVars(fe.dev, { PORT: String(effectivePort) })
-    : `npm ${devArgs.join(' ')}`;
+    : `exec npm ${devArgs.join(' ')}`;
   // Clear Next's dev lock first: an OOM-kill / hard stop leaves .next/dev/lock
   // behind in the bind-mounted project, and the next `next dev` refuses to start
   // ("Unable to acquire lock") — every restart would fail until someone deletes
   // it by hand. Harmless for non-Next stacks (path simply doesn't exist).
-  const devScript = `rm -rf .next/dev/lock 2>/dev/null; [ -d node_modules ] || npm install --no-audit --no-fund; exec ${inner}`;
+  const devScript = `rm -rf .next/dev/lock 2>/dev/null; [ -d node_modules ] || npm install --no-audit --no-fund; ${inner}`;
   // Inject the project's OWN Env vars (Envs tab) into the container so the
   // app's server-side code — Next API routes, Nuxt server routes, SSR data
   // loaders (e.g. a DB connection like SIMPLICATE_DB_*) — can read them.
