@@ -20,7 +20,11 @@ import { markRateLimitExhausted, recordAssistantUsage, recordRateLimit, recordTu
  * `undefined` when the reply is not a limit refusal at all.
  */
 function detectUsageLimitReply(content: string): string | null | undefined {
-  if (!/\byou'?ve hit your (usage )?limit\b/i.test(content)) return undefined;
+  // The reply must BE the refusal, not merely mention it: the CLI's message is
+  // a short line STARTING with the phrase. An agent quoting/explaining the
+  // error mid-conversation must not peg the account-wide limit meter.
+  const trimmed = content.trim();
+  if (trimmed.length > 200 || !/^you'?ve hit your (usage )?limit\b/i.test(trimmed)) return undefined;
   const m = content.match(/resets\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\s*\(?UTC\)?/i);
   if (!m) return null;
   let hour = Number(m[1]);

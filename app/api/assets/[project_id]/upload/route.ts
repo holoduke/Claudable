@@ -151,6 +151,10 @@ export async function POST(request: Request, { params }: RouteContext) {
       // leaves one behind). Runs on chunk 0 so it can't fill the disk over time.
       if (chunkIndex === 0) {
         await sweepStaleParts(tmpDir).catch(() => {});
+        // One-time migration: the PREVIOUS staging dir lived inside the project
+        // tree (assets/.uploads) — orphaned .part files there sit in Vite's
+        // watched tree and in exports. Remove it whenever this project uploads.
+        await fs.rm(path.join(projectAssetsPath, '.uploads'), { recursive: true, force: true }).catch(() => {});
       }
 
       // First chunk truncates; later chunks append (client sends them in order).
@@ -176,7 +180,10 @@ export async function POST(request: Request, { params }: RouteContext) {
       const resolvedAbsolutePath = path.resolve(path.join(projectAssetsPath, uniqueName));
       try {
         await fs.rename(partPath, resolvedAbsolutePath);
-      } catch {
+      } catch (renameError) {
+        // Only cross-device moves fall back to copy — any other rename failure
+        // (permissions, missing part) must surface, not be masked by the copy.
+        if ((renameError as NodeJS.ErrnoException)?.code !== 'EXDEV') throw renameError;
         await fs.copyFile(partPath, resolvedAbsolutePath);
         await fs.unlink(partPath).catch(() => {});
       }

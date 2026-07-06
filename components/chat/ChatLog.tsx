@@ -1581,40 +1581,49 @@ export default function ChatLog({ projectId, onSessionStatusChange, onProjectSta
   // True until the first render WITH messages — the initial history load must
   // always land at the bottom (newest), regardless of the near-bottom check.
   const needsInitialScrollRef = useRef(true);
-  // Whether to auto-follow new content. Maintained from the user's OWN scrolling
-  // (the onScroll handler below), NOT measured at append time: measuring after a
-  // tall streamed chunk grows the page always reads as "far from the bottom" and
-  // silently stops following mid-turn (the "I have to scroll manually" bug).
+  // Whether to auto-follow new content. Driven PURELY by the user's own scrolling
+  // (the onScroll handler), never measured at append time — appending content
+  // grows scrollHeight but does NOT move scrollTop or fire a scroll event, so the
+  // handler only ever runs on genuine user scrolls. Our own scrollIntoView
+  // always moves TO the bottom, so its resulting event reads at-bottom (stick stays
+  // true, harmless); the only way scrollTop leaves the bottom is the user
+  // scrolling up → stick=false. No time window needed (and a window would
+  // swallow the user's scroll-up during a fast stream — the bug this replaces).
   const stickToBottomRef = useRef(true);
-  // Set while WE scroll programmatically, so the resulting scroll events don't
-  // get misread as the user scrolling away.
-  const programmaticScrollUntilRef = useRef(0);
   const handleLogScroll = (e: React.UIEvent<HTMLDivElement>) => {
-    if (Date.now() < programmaticScrollUntilRef.current) return;
     const el = e.currentTarget;
     stickToBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
   };
-  const lastUserSnapMessageIdRef = useRef<string | null>(null);
+  // Keyed by the send's requestId (falls back to message id) so the optimistic
+  // user message → server echo swap (different id, SAME requestId) doesn't snap
+  // twice and override a scroll-up the user made right after sending.
+  const lastUserSnapKeyRef = useRef<string | null>(null);
+  const userMsgKey = (m: ChatMessage | undefined): string | null =>
+    m ? (m.requestId ?? m.id ?? null) : null;
   const scrollToBottom = () => {
     if (needsInitialScrollRef.current) {
       if (messages.length === 0) return; // nothing loaded yet — keep waiting
       needsInitialScrollRef.current = false;
       stickToBottomRef.current = true;
-      programmaticScrollUntilRef.current = Date.now() + 400;
+      // Seed the snap key with whatever trailing message exists so a loaded
+      // conversation ENDING in a user message (interrupted turn) doesn't get
+      // yanked to the bottom on the first subsequent update / load-older.
+      lastUserSnapKeyRef.current = userMsgKey(messages[messages.length - 1]);
       logsEndRef.current?.scrollIntoView({ behavior: "auto" }); // jump, don't animate
       return;
     }
     // Sending a message always re-engages following (standard chat UX): you
-    // just acted, you want to see the reply.
+    // just acted, you want to see the reply. Only fires for a genuinely NEW
+    // send (new requestId), not the optimistic→server id swap.
     const last = messages[messages.length - 1];
-    if (last?.role === 'user' && last.id !== lastUserSnapMessageIdRef.current) {
-      lastUserSnapMessageIdRef.current = last.id ?? null;
+    const key = userMsgKey(last);
+    if (last?.role === 'user' && key && key !== lastUserSnapKeyRef.current) {
+      lastUserSnapKeyRef.current = key;
       stickToBottomRef.current = true;
     }
     if (!stickToBottomRef.current) return;
     // 'auto' (instant), not 'smooth': queued smooth animations fall behind a
     // busy stream and strand the view mid-scroll.
-    programmaticScrollUntilRef.current = Date.now() + 400;
     logsEndRef.current?.scrollIntoView({ behavior: "auto" });
   };
 
@@ -2070,6 +2079,8 @@ export default function ChatLog({ projectId, onSessionStatusChange, onProjectSta
   useEffect(() => {
     hasLoadedInitialDataRef.current = false;
     needsInitialScrollRef.current = true; // new project → land at the newest message again
+    stickToBottomRef.current = true;
+    lastUserSnapKeyRef.current = null;
     setHasLoadedOnce(false);
     setIsLoading(true);
     setMessages([]);
