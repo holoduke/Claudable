@@ -139,7 +139,11 @@ export async function POST(request: Request, { params }: RouteContext) {
         return NextResponse.json({ success: false, error: 'Empty chunk body' }, { status: 400 });
       }
 
-      const tmpDir = path.join(projectAssetsPath, '.uploads');
+      // Stage chunks OUTSIDE the project tree: appending inside it (assets/ is
+      // a watched Vite dir) fired the dev server's file watcher on EVERY chunk,
+      // making the preview re-scan/reload repeatedly during large uploads. One
+      // rename into assets/ at finalize = one watcher event total.
+      const tmpDir = path.join(process.cwd(), 'data', 'tmp', 'uploads', project_id);
       await fs.mkdir(tmpDir, { recursive: true });
       const partPath = path.join(tmpDir, `${uploadId}.part`);
 
@@ -165,11 +169,17 @@ export async function POST(request: Request, { params }: RouteContext) {
         return NextResponse.json({ success: true, received: chunkIndex });
       }
 
-      // Last chunk → promote the .part file to its final UUID name.
+      // Last chunk → promote the .part file to its final UUID name (rename when
+      // same-volume, copy+unlink as the cross-device fallback).
       const extension = path.extname(originalName);
       const uniqueName = `${randomUUID()}${extension}`;
       const resolvedAbsolutePath = path.resolve(path.join(projectAssetsPath, uniqueName));
-      await fs.rename(partPath, resolvedAbsolutePath);
+      try {
+        await fs.rename(partPath, resolvedAbsolutePath);
+      } catch {
+        await fs.copyFile(partPath, resolvedAbsolutePath);
+        await fs.unlink(partPath).catch(() => {});
+      }
       return finalizeAsset(project, project_id, resolvedAbsolutePath, uniqueName, originalName, declaredType);
     }
 

@@ -1377,6 +1377,10 @@ const persistProjectPreferences = useCallback(
     }
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout> | null = null;
+    // Debounce: only overlay after TWO consecutive failed probes (fast recheck
+    // in between). A dev server briefly re-scanning (e.g. during a large file
+    // upload or HMR burst) must not flicker the overlay.
+    let failStreak = 0;
     const probe = async () => {
       let reachable: boolean | null = null;
       try {
@@ -1387,15 +1391,26 @@ const persistProjectPreferences = useCallback(
         // Claudable itself unreachable (e.g. redeploy) — keep the current state.
       }
       if (cancelled) return;
-      if (reachable === false && !previewDownRef.current) {
-        previewDownRef.current = true;
-        setPreviewDown(true);
-      } else if (reachable === true && previewDownRef.current) {
-        previewDownRef.current = false;
-        setPreviewDown(false);
-        refreshPreviewRef.current();
+      if (reachable === false) {
+        failStreak += 1;
+        if (failStreak >= 2 && !previewDownRef.current) {
+          previewDownRef.current = true;
+          setPreviewDown(true);
+        }
+      } else if (reachable === true) {
+        failStreak = 0;
+        if (previewDownRef.current) {
+          previewDownRef.current = false;
+          setPreviewDown(false);
+          refreshPreviewRef.current();
+        }
       }
-      timer = setTimeout(probe, previewDownRef.current ? 2_500 : 6_000);
+      const delay = previewDownRef.current
+        ? 2_500                       // down: poll for recovery
+        : failStreak > 0
+          ? 2_000                     // one failure seen: fast confirm
+          : 6_000;                    // healthy cadence
+      timer = setTimeout(probe, delay);
     };
     probe();
     return () => {
