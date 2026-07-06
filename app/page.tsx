@@ -319,8 +319,10 @@ export default function HomePage() {
         .map((project) => normalizeProjectPayload(project));
 
       const sortedProjects = normalized.sort((a, b) => {
-        const aTime = a.lastMessageAt ?? a.createdAt;
-        const bTime = b.lastMessageAt ?? b.createdAt;
+        // Most recently WORKED-ON first (lastMessageAt never existed in the
+        // API — sorting on it silently degraded to creation order).
+        const aTime = a.lastActiveAt ?? a.updatedAt ?? a.createdAt;
+        const bTime = b.lastActiveAt ?? b.updatedAt ?? b.createdAt;
         if (!aTime) return 1;
         if (!bTime) return -1;
         return new Date(bTime).getTime() - new Date(aTime).getTime();
@@ -924,7 +926,7 @@ export default function HomePage() {
                           </h3>
                           <div className="flex items-center gap-2 mt-1">
                             <div className="text-gray-500 dark:text-gray-400 text-xs">
-                              {formatTime(project.lastMessageAt || project.createdAt)}
+                              {formatTime(project.lastActiveAt || project.updatedAt || project.createdAt)}
                             </div>
                             {project.preferredCli && (
                               <div className="flex items-center gap-1">
@@ -1449,7 +1451,8 @@ export default function HomePage() {
                             <span className="text-sm font-medium text-gray-900 dark:text-gray-50 truncate">{project.name}</span>
                           </div>
                           <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
-                            Updated {formatTime(project.lastMessageAt || project.createdAt)}
+                            {/* lastMessageAt never existed in the API — this always showed createdAt. */}
+                            Updated {formatTime(project.lastActiveAt || project.updatedAt || project.createdAt)}
                             {project.preferredCli && (
                               <span> · {formatCliInfo(projectCli, project.selectedModel ?? undefined)}</span>
                             )}
