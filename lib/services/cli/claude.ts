@@ -358,6 +358,7 @@ async function runContainerizedTurn(args: {
     // and --resume can never find its session. Lives under DATA_DIR (not in the
     // project repo, so checkpoints stay clean); must be writable by uid 1000.
     let homeHostPath: string | undefined;
+    let homeLocalPath: string | undefined;
     try {
       const homesRoot = path.resolve(process.cwd(), 'data', 'agent-homes');
       const homeDir = path.join(homesRoot, projectId);
@@ -375,7 +376,8 @@ async function runContainerizedTurn(args: {
       const probe = path.join(homeDir, '.write-probe');
       await fs.writeFile(probe, '');
       await fs.rm(probe, { force: true });
-      homeHostPath = agentHostPath(homeDir);
+      homeHostPath = agentHostPath(homeDir); // HOST path — only valid as a docker -v source
+      homeLocalPath = homeDir;               // path WE can write (inside the Claudable container)
     } catch (e) {
       console.error('[ClaudeContainer] Agent home not writable — running amnesiac (no --resume):', e);
     }
@@ -403,7 +405,10 @@ async function runContainerizedTurn(args: {
       projectPath: absoluteProjectPath,
       imagesOn,
       itopsEnabled: args.itopsEnabled,
-      homeHostPath, // write the per-turn token file in the HOME mount, not the project tree
+      // Write the per-turn token file into the HOME dir via the LOCAL path
+      // (homeHostPath is the docker-mount source on the HOST — Claudable's own
+      // process cannot write there when DATA_HOST_DIR points outside /app).
+      homeLocalPath,
     });
 
     const processor = createAgentMessageProcessor({
