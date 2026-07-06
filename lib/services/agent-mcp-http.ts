@@ -233,7 +233,13 @@ export async function prepareAgentMcpTurnConfig(o: {
   projectPath: string;
   imagesOn: boolean;
   itopsEnabled: boolean;
-  homeHostPath?: string;   // agent HOME mount (host path) → write the token file OUTSIDE the project tree
+  /**
+   * Agent HOME dir as a path THIS process can write (container-local, e.g.
+   * /app/data/agent-homes/<id>) → the token file lives OUTSIDE the project
+   * tree. NOT the docker-mount host path — Claudable can't write that when
+   * DATA_HOST_DIR points outside its own filesystem.
+   */
+  homeLocalPath?: string;
 }): Promise<{ containerPath: string; token: string; cleanup: () => Promise<void> } | null> {
   // The container reaches Claudable via its PUBLIC url (sandbox egress allows
   // internet, not the host) — override with AGENT_MCP_BASE_URL if ever needed.
@@ -256,8 +262,8 @@ export async function prepareAgentMcpTurnConfig(o: {
   // file then lives OUTSIDE the project tree, so it can never be captured by a
   // checkpoint or the project's own git even mid-turn. Fall back to the project's
   // .claudable/ only if no home mount is available.
-  const useHome = !!(o.homeHostPath && o.homeHostPath.trim());
-  const dir = useHome ? o.homeHostPath!.trim() : path.join(o.projectPath, '.claudable');
+  const useHome = !!(o.homeLocalPath && o.homeLocalPath.trim());
+  const dir = useHome ? o.homeLocalPath!.trim() : path.join(o.projectPath, '.claudable');
   const filePath = path.join(dir, 'agent-mcp.json');
   const containerPath = useHome ? '/home/agent/agent-mcp.json' : '/work/.claudable/agent-mcp.json';
   try {

@@ -530,7 +530,11 @@ export async function buildFrontendContainerArgs(
   const inner = fe.dev
     ? substVars(fe.dev, { PORT: String(effectivePort) })
     : `npm ${devArgs.join(' ')}`;
-  const devScript = `[ -d node_modules ] || npm install --no-audit --no-fund; exec ${inner}`;
+  // Clear Next's dev lock first: an OOM-kill / hard stop leaves .next/dev/lock
+  // behind in the bind-mounted project, and the next `next dev` refuses to start
+  // ("Unable to acquire lock") — every restart would fail until someone deletes
+  // it by hand. Harmless for non-Next stacks (path simply doesn't exist).
+  const devScript = `rm -rf .next/dev/lock 2>/dev/null; [ -d node_modules ] || npm install --no-audit --no-fund; exec ${inner}`;
   // Inject the project's OWN Env vars (Envs tab) into the container so the
   // app's server-side code — Next API routes, Nuxt server routes, SSR data
   // loaders (e.g. a DB connection like SIMPLICATE_DB_*) — can read them.
@@ -555,7 +559,10 @@ export async function buildFrontendContainerArgs(
     // (unlike the backend sidecar, which Claudable's own static server
     // proxies to on loopback). Parity with the in-process 0.0.0.0 bind.
     '-p', `${previewPublishHost}:${effectivePort}:${effectivePort}`,
-    '--memory', fe.memory || '1g',
+    // 2g default: Next 16 (Turbopack) and cold Nuxt/Vite builds routinely spike
+    // past 1g during compile — at 1g the kernel OOM-kills next-server mid-start
+    // and the preview dies with "exited before it became reachable".
+    '--memory', fe.memory || '2g',
     '--cpus', String(fe.cpus || '2.0'),
     '--pids-limit', '512',
     '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges', '--user', 'node',
