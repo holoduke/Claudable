@@ -24,6 +24,7 @@ export default function ProjectClaudeSettings({ projectId }: Props) {
   const [loading, setLoading] = useState(true);
   const [denied, setDenied] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -52,16 +53,22 @@ export default function ProjectClaudeSettings({ projectId }: Props) {
   const choose = async (value: string) => {
     const credId = value === '__default__' ? null : value;
     setBusy(true);
+    setSaveError(null);
     try {
       const res = await fetch(`${API_BASE}/api/projects/${projectId}/claude-credential`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ credentialId: credId }),
       });
-      if (!res.ok) throw new Error();
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(json.message || 'The change was not saved.');
       setCredentialId(credId);
-    } catch {
-      /* keep previous */
+      // Switching away from a non-selectable (private) assignment: it no longer
+      // applies — clearing it stops the "currently runs on X (private)" note
+      // from asserting stale misinformation until a reload.
+      setCurrent(null);
+    } catch (e) {
+      setSaveError(e instanceof Error ? e.message : 'The change was not saved.');
     } finally {
       setBusy(false);
     }
@@ -99,6 +106,10 @@ export default function ProjectClaudeSettings({ projectId }: Props) {
           </option>
         ))}
       </select>
+
+      {saveError && (
+        <p className="text-xs text-red-500">{saveError}</p>
+      )}
 
       {current && (
         <p className="text-xs text-gray-500 dark:text-gray-400">

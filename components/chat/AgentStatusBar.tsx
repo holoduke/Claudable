@@ -130,9 +130,24 @@ export default function AgentStatusBar({ projectId, liveStatus, open, onOpenChan
     return parts;
   }, [contextPct, fiveHourPct, weekPct]);
 
-  // Nothing recorded yet and nothing to show — stay invisible until the agent runs.
-  if (!status || (status.contextUsedTokens === undefined && !status.totals?.turns)) {
-    return null;
+  const hasData = !!status && (status.contextUsedTokens !== undefined || !!status.totals?.turns || !!status.rateLimits);
+
+  // Nothing recorded yet: stay invisible (no strip) UNLESS the user explicitly
+  // asked to open it via /usage — then show a "nothing yet" popover so the
+  // command gives feedback instead of silently doing nothing (and later
+  // popping open uninvited when the first snapshot lands).
+  if (!hasData) {
+    if (!open) return null;
+    return (
+      <div className="relative flex justify-end mb-1.5" ref={panelRef}>
+        <div className="absolute bottom-full right-0 mb-2 w-80 z-[120] rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-2xl p-4 text-left">
+          <div className="text-sm font-semibold text-gray-900 dark:text-gray-50 mb-1">Agent status</div>
+          <p className="text-sm text-gray-500 dark:text-gray-400">
+            No usage recorded yet — run the agent once and context, token spend and rate limits appear here.
+          </p>
+        </div>
+      </div>
+    );
   }
 
   return (

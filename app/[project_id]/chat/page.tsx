@@ -2839,28 +2839,33 @@ const persistProjectPreferences = useCallback(
               />
               <ChatInput
                 onSendMessage={(message, images) => {
-                  // Built-in slash commands (CLI parity) run locally, never as a prompt.
+                  // Built-in slash commands (CLI parity) run locally, never as a
+                  // prompt. Only a BARE command (no extra words) is intercepted;
+                  // "/clear the cart" is a real prompt. Attached images mean the
+                  // user wants to send them, not run a command — skip interception.
                   const command = message.trim().toLowerCase();
-                  if (command === '/usage' || command === '/status') {
+                  const isBareCommand = !images || images.length === 0;
+                  if (isBareCommand && (command === '/usage' || command === '/status')) {
                     setStatusPanelOpen(true);
                     return;
                   }
-                  if (command === '/help') {
+                  if (isBareCommand && command === '/help') {
                     showCommandHelp();
                     return;
                   }
-                  if (command === '/clear') {
+                  if (isBareCommand && command === '/clear') {
                     void clearAgentContext();
                     return;
                   }
-                  if (command === '/compact') {
+                  if (isBareCommand && command === '/compact') {
+                    // The Claude CLI handles /compact natively. If a turn is in
+                    // progress, QUEUE it (like any message) rather than dropping
+                    // the user's typed command on the floor.
                     if (isRunning || hasActiveRequests) {
-                      toast.error('The agent is busy — run /compact after the current turn finishes.');
-                      return;
+                      setQueuedMessages((q) => [...q, { message: '/compact', images: [] }]);
+                    } else {
+                      runAct('/compact', []);
                     }
-                    // The Claude CLI handles /compact natively: it summarizes the
-                    // session and continues with the freed-up context.
-                    runAct('/compact', []);
                     return;
                   }
                   // CLI-style: you can always type. If a turn is in progress,

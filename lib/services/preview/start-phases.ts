@@ -592,7 +592,7 @@ export async function buildFrontendContainerArgs(
     image, 'sh', '-c', devScript,
   ];
   // The docker CLI needs DOCKER_HOST (already in spawnEnv via process.env).
-  log(Buffer.from(`[PreviewManager] [frontend] running dev server in isolated container ${feName} (mem ${fe.memory || '1g'}, cap-drop ALL, egress-locked)`));
+  log(Buffer.from(`[PreviewManager] [frontend] running dev server in isolated container ${feName} (mem ${fe.memory || '2g'}, cap-drop ALL, egress-locked)`));
   return { command, args };
 }
 

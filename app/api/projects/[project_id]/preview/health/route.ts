@@ -36,9 +36,12 @@ export async function GET(_request: Request, { params }: RouteContext) {
         signal: ctrl.signal,
         redirect: 'manual',
       }).finally(() => clearTimeout(timer));
-      // Any response the APP produced counts as up (401/404/redirects included);
-      // only transport failure or a 5xx from a dying server counts as down.
-      reachable = res.status < 500;
+      // ANY response counts as up — this probe talks to the dev server directly
+      // (no proxy in the path), so even a 500 means the server is alive and
+      // rendering (e.g. an app exception the user MUST see, not an overlay).
+      // Only transport failure/timeout counts as down.
+      reachable = true;
+      res.body?.cancel().catch(() => {}); // release the undici socket
     } catch {
       reachable = false;
     }

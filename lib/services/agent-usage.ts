@@ -71,29 +71,23 @@ function publishSnapshot(projectId: string, state: ProjectUsageState): void {
   });
 }
 
-/** Persist the per-project state into Project.settings.agentUsage (best-effort). */
+/**
+ * Persist the per-project state into Project.settings.agentUsage (best-effort).
+ * Single atomic json_set — a read-modify-write here raced other settings
+ * writers (the containers/composition routes) and could silently drop their
+ * keys when a turn ended mid-edit. json_set only touches $.agentUsage.
+ */
 async function persistState(projectId: string, state: ProjectUsageState): Promise<void> {
   try {
-    const project = await prisma.project.findUnique({
-      where: { id: projectId },
-      select: { settings: true },
-    });
-    if (!project) return;
-    let settings: Record<string, unknown> = {};
-    if (project.settings) {
-      try {
-        const parsed = JSON.parse(project.settings);
-        if (parsed && typeof parsed === 'object') settings = parsed;
-      } catch {
-        // Corrupt settings JSON — keep it untouched rather than clobbering it.
-        return;
-      }
-    }
-    const nextSettings = { ...settings, agentUsage: state };
-    await prisma.project.update({
-      where: { id: projectId },
-      data: { settings: JSON.stringify(nextSettings) },
-    });
+    const payload = JSON.stringify(state);
+    await prisma.$executeRaw`
+      UPDATE projects SET settings =
+        CASE
+          WHEN settings IS NULL OR json_valid(settings) = 0
+            THEN json_object('agentUsage', json(${payload}))
+          ELSE json_set(settings, '$.agentUsage', json(${payload}))
+        END
+      WHERE id = ${projectId}`;
   } catch (error) {
     console.error('[AgentUsage] Failed to persist usage snapshot:', error);
   }
@@ -173,7 +167,22 @@ export async function recordTurnResult(projectId: string, resultMessage: unknown
   const usage = (msg.usage ?? {}) as Record<string, unknown>;
   const modelUsage = (msg.modelUsage ?? {}) as Record<string, Record<string, unknown>>;
 
-  const state = getState(projectId);
+  // Cold start (fresh process): hydrate cumulative totals from the persisted
+  // copy BEFORE the first write — otherwise the first turn after a redeploy
+  // overwrites the stored totals with turns:1. The sync record paths may have
+  // already seeded a shell entry with live context/model; keep those fields.
+  let state = getState(projectId);
+  if (state.totals.turns === 0 && !state.lastTurn) {
+    const persisted = await loadPersistedState(projectId);
+    if (persisted) {
+      state = {
+        ...persisted,
+        contextUsedTokens: state.contextUsedTokens ?? persisted.contextUsedTokens,
+        model: state.model ?? persisted.model,
+      };
+      projectUsage.set(projectId, state);
+    }
+  }
 
   // Context window: prefer the entry for the model we saw on assistant
   // messages; otherwise the largest reported window (subagents may add rows).
