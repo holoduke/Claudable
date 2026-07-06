@@ -314,6 +314,12 @@ export default function ChatPage() {
   const previewStartFailedRef = useRef(false);
   const [isStartingPreview, setIsStartingPreview] = useState(false);
   const [previewInitializationMessage, setPreviewInitializationMessage] = useState('Starting development server...');
+  // Preview reachability (server-side probe): the cross-origin iframe can't
+  // distinguish a healthy page from Traefik's 502 while the dev server
+  // (re)starts. While unreachable we cover the iframe with a friendly overlay
+  // and auto-reload it the moment the preview answers again.
+  const [previewDown, setPreviewDown] = useState(false);
+  const previewDownRef = useRef(false);
   // Live build/start log lines, streamed into the loading panel so the wait is
   // informative (installing deps → compiling → starting server) not opaque.
   const [previewLogs, setPreviewLogs] = useState<string[]>([]);
@@ -1359,6 +1365,45 @@ const persistProjectPreferences = useCallback(
     }
   };
 
+  const refreshPreviewRef = useRef<() => void>(() => {});
+
+  // Reachability poll: gentle cadence while healthy, faster while down; on the
+  // down→up transition reload the iframe (it is showing Traefik's error page).
+  useEffect(() => {
+    if (!previewUrl || !showPreview) {
+      previewDownRef.current = false;
+      setPreviewDown(false);
+      return;
+    }
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const probe = async () => {
+      let reachable: boolean | null = null;
+      try {
+        const res = await fetch(`${API_BASE}/api/projects/${projectId}/preview/health`, { cache: 'no-store' });
+        const json = await res.json().catch(() => null);
+        if (json?.success) reachable = !!json.data?.reachable;
+      } catch {
+        // Claudable itself unreachable (e.g. redeploy) — keep the current state.
+      }
+      if (cancelled) return;
+      if (reachable === false && !previewDownRef.current) {
+        previewDownRef.current = true;
+        setPreviewDown(true);
+      } else if (reachable === true && previewDownRef.current) {
+        previewDownRef.current = false;
+        setPreviewDown(false);
+        refreshPreviewRef.current();
+      }
+      timer = setTimeout(probe, previewDownRef.current ? 2_500 : 6_000);
+    };
+    probe();
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+    };
+  }, [previewUrl, showPreview, projectId]);
+
   const refreshPreview = useCallback(() => {
     if (!previewUrl || !iframeRef.current) {
       return;
@@ -1380,6 +1425,9 @@ const persistProjectPreferences = useCallback(
     }
   }, [previewUrl, currentRoute]);
 
+  // Keep the reachability poll's reload handle current (the poll effect above
+  // must not re-subscribe on every route keystroke).
+  useEffect(() => { refreshPreviewRef.current = refreshPreview; }, [refreshPreview]);
 
   const stop = useCallback(async () => {
     try {
@@ -3201,6 +3249,23 @@ const persistProjectPreferences = useCallback(
                         </button>
                       </div>
                     </div>
+
+                    {/* Restarting overlay — covers Traefik's raw "Bad Gateway"
+                        while the dev server (re)starts; cleared + auto-reloaded
+                        by the reachability poll. */}
+                    {previewDown && (
+                      <div className="absolute inset-0 z-20 bg-gray-50/95 dark:bg-[#0c0a09]/95 flex items-center justify-center">
+                        <div className="text-center max-w-sm mx-auto p-6">
+                          <div className="w-8 h-8 mx-auto mb-4 border-2 border-[#DE7356] border-t-transparent rounded-full animate-spin" />
+                          <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-100 mb-1">
+                            Preview is restarting
+                          </h3>
+                          <p className="text-sm text-gray-500 dark:text-gray-400">
+                            The development server is coming back up — this view reconnects automatically.
+                          </p>
+                        </div>
+                      </div>
+                    )}
                     </div>
 
                     {/* Comment threads/compose — OUTSIDE the scaled frame so they
