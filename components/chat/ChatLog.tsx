@@ -2686,6 +2686,33 @@ const ToolResultMessage = ({
         {messages.filter(shouldDisplayMessage).map((message, index) => {
           const messageMetadata = message.metadata as Record<string, unknown> | null;
           const messageText = normalizeChatContent(message.content);
+
+          // Subscription-limit refusal — render as a prominent warning instead
+          // of an easily-missed one-line assistant bubble.
+          if (messageMetadata?.usageLimit) {
+            const resetsAt = typeof messageMetadata.resetsAt === 'string' ? messageMetadata.resetsAt : null;
+            const resetLabel = resetsAt
+              ? new Date(resetsAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+              : null;
+            return (
+              <div className="mb-4" key={message.id ?? `limit-${index}`}>
+                <div className="flex items-start gap-3 rounded-xl border border-amber-300 dark:border-amber-500/40 bg-amber-50 dark:bg-amber-950/30 px-4 py-3">
+                  <span className="text-lg leading-none mt-0.5">⏳</span>
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-amber-800 dark:text-amber-200">
+                      Claude usage limit reached
+                    </p>
+                    <p className="mt-0.5 text-sm text-amber-700 dark:text-amber-300/90">
+                      The Claude account used for your runs has exhausted its 5-hour window
+                      {resetLabel ? <> — it resets around <span className="font-medium">{resetLabel}</span> (your local time)</> : null}.
+                      Wait for the reset, or switch this project to another account in Project Settings → Claude.
+                    </p>
+                    <p className="mt-1 text-xs text-amber-600/80 dark:text-amber-400/70">{messageText}</p>
+                  </div>
+                </div>
+              </div>
+            );
+          }
           const isToolMessage = message.messageType === 'tool_result' || isToolUsageMessage(message);
           const toolMessageKey = isToolMessage
             ? ensureStableMessageId(message)

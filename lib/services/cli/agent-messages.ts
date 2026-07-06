@@ -11,7 +11,28 @@ import { streamManager } from '../stream';
 import { serializeMessage, createRealtimeMessage } from '@/lib/serializers/chat';
 import { createMessage } from '../message';
 import { updateProject } from '../project';
-import { recordAssistantUsage, recordRateLimit, recordTurnResult } from '../agent-usage';
+import { markRateLimitExhausted, recordAssistantUsage, recordRateLimit, recordTurnResult } from '../agent-usage';
+
+/**
+ * Detect the CLI's subscription-limit refusal ("You've hit your limit ·
+ * resets 2:10pm (UTC)") in an assistant reply. Returns the parsed reset time
+ * (ISO) when found, `null` for a limit reply without a parsable time, and
+ * `undefined` when the reply is not a limit refusal at all.
+ */
+function detectUsageLimitReply(content: string): string | null | undefined {
+  if (!/\byou'?ve hit your (usage )?limit\b/i.test(content)) return undefined;
+  const m = content.match(/resets\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\s*\(?UTC\)?/i);
+  if (!m) return null;
+  let hour = Number(m[1]);
+  const minute = Number(m[2] ?? 0);
+  const meridiem = m[3]?.toLowerCase();
+  if (meridiem === 'pm' && hour < 12) hour += 12;
+  if (meridiem === 'am' && hour === 12) hour = 0;
+  const now = new Date();
+  const reset = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), hour, minute));
+  if (reset.getTime() <= now.getTime()) reset.setUTCDate(reset.getUTCDate() + 1);
+  return reset.toISOString();
+}
 import {
   type ToolAction,
   pickFirstString,
@@ -474,11 +495,21 @@ export function createAgentMessageProcessor(ctx: AgentMessageProcessorContext) {
 
       // Save message to DB
       if (content) {
+        // Subscription-limit refusal → make it unmissable: flag the message for
+        // the chat's warning banner + peg the 5h meter (the containerized CLI
+        // emits no rate_limit_event, so this reply is the only signal).
+        const limitResetsAt = detectUsageLimitReply(content);
+        if (limitResetsAt !== undefined) {
+          markRateLimitExhausted(projectId, limitResetsAt ?? undefined);
+        }
         const savedMessage = await createMessage({
           projectId,
           role: 'assistant',
           messageType: 'chat',
           content,
+          ...(limitResetsAt !== undefined
+            ? { metadata: { usageLimit: true, ...(limitResetsAt ? { resetsAt: limitResetsAt } : {}) } }
+            : {}),
           // sessionId is Session table foreign key, so don't store Claude SDK session ID
           // Claude SDK session ID is stored in project.activeClaudeSessionId
           cliSource: 'claude',
