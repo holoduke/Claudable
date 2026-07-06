@@ -117,10 +117,13 @@ export default function ChatPage() {
   } = useUserRequests({ projectId });
   
   const [projectName, setProjectName] = useState<string>('');
-  // Inline rename of the project name in the chat header.
+  // Inline edit of the project name + description in the chat header.
   const [editingName, setEditingName] = useState(false);
   const [nameDraft, setNameDraft] = useState('');
   const savingNameRef = useRef(false);
+  const [editingDesc, setEditingDesc] = useState(false);
+  const [descDraft, setDescDraft] = useState('');
+  const savingDescRef = useRef(false);
   const [projectDescription, setProjectDescription] = useState<string>('');
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const previewUrlRef = useRef<string | null>(null);
@@ -461,6 +464,35 @@ export default function ChatPage() {
       savingNameRef.current = false;
     }
   }, [nameDraft, projectName, projectId, toast]);
+
+  // Inline edit of the project description (may be cleared to empty, unlike name).
+  const commitProjectDescription = useCallback(async () => {
+    if (savingDescRef.current) return;
+    const next = descDraft.trim();
+    setEditingDesc(false);
+    if (next === projectDescription) return;
+    savingDescRef.current = true;
+    const previous = projectDescription;
+    setProjectDescription(next); // optimistic
+    try {
+      const res = await fetch(`${API_BASE}/api/projects/${projectId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ description: next }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok || !json.success) {
+        throw new Error(res.status === 403
+          ? 'Only the project owner or an admin can edit this project.'
+          : (json.message || 'Failed to update description'));
+      }
+    } catch (e) {
+      setProjectDescription(previous);
+      toast.error(e instanceof Error ? e.message : 'Failed to update description');
+    } finally {
+      savingDescRef.current = false;
+    }
+  }, [descDraft, projectDescription, projectId, toast]);
 
   // /clear — drop the agent's conversation context (server clears the resume
   // pointer + usage counters and posts a confirmation message via SSE).
@@ -2786,11 +2818,36 @@ const persistProjectPreferences = useCallback(
                       </svg>
                     </button>
                   )}
-                  {projectDescription && (
-                    <p className="text-sm text-gray-500 dark:text-gray-400 ">
-                      {projectDescription}
-                    </p>
-                  )}
+                  {editingDesc ? (
+                    <input
+                      value={descDraft}
+                      onChange={(e) => setDescDraft(e.target.value)}
+                      onBlur={() => void commitProjectDescription()}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') { e.preventDefault(); void commitProjectDescription(); }
+                        if (e.key === 'Escape') { e.preventDefault(); setEditingDesc(false); }
+                      }}
+                      autoFocus
+                      maxLength={160}
+                      placeholder="Add a description…"
+                      className="text-sm text-gray-500 dark:text-gray-400 bg-transparent border-b border-[#DE7356] focus:outline-none w-full max-w-md mt-0.5"
+                      aria-label="Project description"
+                    />
+                  ) : projectName ? (
+                    <button
+                      type="button"
+                      onClick={() => { setDescDraft(projectDescription); setEditingDesc(true); }}
+                      title="Edit description"
+                      className="group flex items-center gap-1.5 text-left"
+                    >
+                      <p className={`text-sm truncate ${projectDescription ? 'text-gray-500 dark:text-gray-400' : 'text-gray-400 dark:text-gray-600 italic'}`}>
+                        {projectDescription || 'Add a description…'}
+                      </p>
+                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-gray-300 dark:text-gray-600 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
+                      </svg>
+                    </button>
+                  ) : null}
                 </div>
               </div>
             </div>
