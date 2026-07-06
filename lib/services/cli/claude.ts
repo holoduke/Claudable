@@ -322,6 +322,8 @@ async function runContainerizedTurn(args: {
   sessionId?: string;
   requestId?: string;
   itopsEnabled: boolean;
+  /** Who triggered the run — gates private-credential use (see resolveProjectClaudeToken). */
+  requesterUserId?: string;
   suppressUserError: boolean;
   publishStatus: (status: string, message?: string) => void;
   safeMarkRunning: () => Promise<void>;
@@ -345,7 +347,7 @@ async function runContainerizedTurn(args: {
     // Credential: the project's assigned Claude token, falling back to the global env.
     let oauthToken = process.env.CLAUDE_CODE_OAUTH_TOKEN || '';
     try {
-      const projectToken = await resolveProjectClaudeToken(projectId);
+      const projectToken = await resolveProjectClaudeToken(projectId, args.requesterUserId);
       if (projectToken) oauthToken = projectToken;
     } catch (e) {
       console.error('[ClaudeContainer] Failed to resolve project Claude credential:', e);
@@ -593,7 +595,7 @@ export async function executeClaude(
   model: string = CLAUDE_DEFAULT_MODEL,
   sessionId?: string,
   requestId?: string,
-  options: { suppressUserError?: boolean; thinkingMode?: ThinkingMode; requesterItopsEnabled?: boolean } = {}
+  options: { suppressUserError?: boolean; thinkingMode?: ThinkingMode; requesterItopsEnabled?: boolean; requesterUserId?: string } = {}
 ): Promise<void> {
   console.log(`\n========================================`);
   console.log(`[ClaudeService] 🚀 Starting Claude Agent SDK`);
@@ -676,6 +678,7 @@ export async function executeClaude(
       sessionId,
       requestId,
       itopsEnabled: options.requesterItopsEnabled === true,
+      requesterUserId: options.requesterUserId,
       suppressUserError: options.suppressUserError === true,
       publishStatus,
       safeMarkRunning,
@@ -756,7 +759,7 @@ export async function executeClaude(
     // CLAUDE_CODE_OAUTH_TOKEN in the agent env below.
     const agentEnv = buildAgentEnv();
     try {
-      const projectToken = await resolveProjectClaudeToken(projectId);
+      const projectToken = await resolveProjectClaudeToken(projectId, options.requesterUserId);
       if (projectToken) agentEnv.CLAUDE_CODE_OAUTH_TOKEN = projectToken;
     } catch (e) {
       console.error('[ClaudeService] Failed to resolve project Claude credential:', e);
@@ -1183,7 +1186,8 @@ export async function initializeNextJsProject(
   initialPrompt: string,
   model: string = CLAUDE_DEFAULT_MODEL,
   requestId?: string,
-  requesterItopsEnabled?: boolean
+  requesterItopsEnabled?: boolean,
+  requesterUserId?: string
 ): Promise<void> {
   console.log(`[ClaudeService] Initializing Nuxt project: ${projectId}`);
 
@@ -1196,7 +1200,7 @@ Use Nuxt 4 (Vue 3 <script setup lang="ts">, file-based routing in pages/) and Nu
 Build on the existing scaffold in the project root and implement the requested features.
 `.trim();
 
-  await executeClaude(projectId, projectPath, fullPrompt, model, undefined, requestId, { requesterItopsEnabled });
+  await executeClaude(projectId, projectPath, fullPrompt, model, undefined, requestId, { requesterItopsEnabled, requesterUserId });
 }
 
 /**
@@ -1217,7 +1221,8 @@ export async function applyChanges(
   sessionId?: string,
   requestId?: string,
   thinkingMode?: ThinkingMode,
-  requesterItopsEnabled?: boolean
+  requesterItopsEnabled?: boolean,
+  requesterUserId?: string
 ): Promise<void> {
   console.log(`[ClaudeService] Applying changes to project: ${projectId}`);
   try {
@@ -1227,6 +1232,7 @@ export async function applyChanges(
       suppressUserError: Boolean(sessionId),
       thinkingMode,
       requesterItopsEnabled,
+      requesterUserId,
     });
   } catch (error) {
     // Resuming a corrupt/incompatible session can fail immediately (exit code 1 /
@@ -1236,6 +1242,7 @@ export async function applyChanges(
       await executeClaude(projectId, projectPath, instruction, model, undefined, requestId, {
         thinkingMode,
         requesterItopsEnabled,
+        requesterUserId,
       });
     } else {
       throw error;
