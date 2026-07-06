@@ -14,6 +14,7 @@ import { CLAUDE_SYSTEM_PROMPT } from './prompts/claude-system-prompt';
 import { NEXT_SYSTEM_PROMPT } from './prompts/next-system-prompt';
 import { ANGULAR_SYSTEM_PROMPT } from './prompts/angular-system-prompt';
 import { STATIC_SYSTEM_PROMPT } from './prompts/static-system-prompt';
+import { DOCUMENT_SYSTEM_PROMPT } from './prompts/document-system-prompt';
 import { stackKind } from '@/lib/config/stacks';
 import { resolveProjectClaudeToken } from '../claude-credentials';
 import { buildItopsMcpServer } from '../itops/itops-mcp';
@@ -52,8 +53,13 @@ const AGENT_ENV_ALLOW = new Set([
   'npm_config_registry', 'COREPACK_ENABLE_DOWNLOAD_PROMPT',
 ]);
 
-/** The system prompt for a project's tech stack (Nuxt | Next.js | Angular). */
+/** The system prompt for a project's tech stack (Nuxt | Next.js | Angular | document | static import). */
 function selectSystemPrompt(templateType: string | null | undefined): string {
+  // 'document' shares the static serving path but is a print-first HTML document,
+  // not an imported site — it gets its own authoring guidance.
+  if (templateType === 'document') {
+    return DOCUMENT_SYSTEM_PROMPT;
+  }
   switch (stackKind(templateType)) {
     case 'static':
       return STATIC_SYSTEM_PROMPT;

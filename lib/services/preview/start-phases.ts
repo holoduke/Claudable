@@ -90,6 +90,13 @@ export async function resolveProjectWorkspace(projectId: string): Promise<Projec
 
     // Make the preview report its route to the URL bar (cross-origin iframe).
     await ensurePreviewRouteReporter(projectPath, projectId);
+  } else {
+    // kind-static projects skip npm/scaffold — EXCEPT 'document', which starts
+    // from a print-ready index.html (scaffoldDocumentApp is a no-op once it exists).
+    const proj = await getProjectById(projectId).catch(() => null);
+    if (proj?.templateType === 'document') {
+      await scaffoldForStack(projectPath, projectId, proj.templateType);
+    }
   }
 
   return { project, projectPath, isStatic, pendingLogs, queueLog };

@@ -4,7 +4,10 @@
 
 export type ProjectStatus = 'idle' | 'running' | 'stopped' | 'error';
 
-export type TemplateType = 'nextjs' | 'react' | 'vue' | 'custom';
+// Stack ids from lib/config/stacks (nuxt, nuxt-clean, next, angular, document)
+// plus legacy/import values (nextjs, static, custom…). Kept open: the DB stores
+// whatever the stack registry defines; `(string & {})` preserves autocomplete.
+export type TemplateType = 'nextjs' | 'react' | 'vue' | 'custom' | 'nuxt' | 'next' | 'angular' | 'document' | 'static' | (string & {});
 
 export interface Project {
   id: string;

@@ -22,6 +22,8 @@ export const STACKS: StackOption[] = [
   { id: 'nuxt-clean', name: 'Clean Nuxt', kind: 'nuxt', description: 'Minimal Nuxt — a blank canvas the agent fills from your prompt.' },
   { id: 'next', name: 'Next.js', kind: 'next', description: 'React + Next.js (App Router) with Tailwind — a blank canvas.' },
   { id: 'angular', name: 'Angular', kind: 'angular', description: 'Angular (standalone components) with Tailwind — a blank canvas.' },
+  // kind 'static': served by the plain static file server, no npm/build step.
+  { id: 'document', name: 'Document (PDF / HTML)', kind: 'static', description: 'A polished HTML document — proposition, one-pager, report. Preview it live, export as PDF.' },
 ];
 
 export const DEFAULT_STACK = 'nuxt';
