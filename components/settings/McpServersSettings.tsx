@@ -44,14 +44,19 @@ export default function McpServersSettings({ projectId }: Props) {
   const [adding, setAdding] = useState(false);
   const [form, setForm] = useState({ ...EMPTY_FORM });
   const [saving, setSaving] = useState(false);
+  const [builtin, setBuiltin] = useState<{ name: string; label: string; description: string; active: boolean }[]>([]);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
       const res = await fetch(`${API_BASE}/api/projects/${projectId}/mcp-servers`);
       const json = await res.json();
-      if (res.ok && json?.success) setServers(json.data ?? []);
-      else setError(json?.error || 'Failed to load MCP servers');
+      if (res.ok && json?.success) {
+        // Response shape: { project: McpServerView[], builtin: BuiltinMcpView[] }
+        const d = json.data ?? {};
+        setServers(Array.isArray(d) ? d : d.project ?? []);
+        setBuiltin(Array.isArray(d) ? [] : d.builtin ?? []);
+      } else setError(json?.error || 'Failed to load MCP servers');
     } catch {
       setError('Failed to load MCP servers');
     } finally {
@@ -162,9 +167,32 @@ export default function McpServersSettings({ projectId }: Props) {
       {loading ? (
         <p className="text-sm text-gray-400">Loading…</p>
       ) : (
+        <>
+        {builtin.length > 0 && (
+          <div className="mb-5">
+            <h4 className="text-xs font-medium uppercase tracking-wide text-gray-400 dark:text-gray-500 mb-2">Provided by Claudable</h4>
+            <div className="space-y-2">
+              {builtin.map((b) => (
+                <div key={b.name} className="flex items-center gap-3 rounded-lg border border-gray-200 dark:border-white/[0.06] bg-gray-50/60 dark:bg-white/[0.02] px-3 py-2.5">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-medium text-gray-700 dark:text-gray-200">{b.label}</span>
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 dark:bg-white/[0.06] text-gray-500 dark:text-gray-400 font-mono">{b.name}</span>
+                    </div>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{b.description}</p>
+                  </div>
+                  <span className={`text-xs px-2 py-1 rounded-md ${b.active ? 'text-emerald-700 dark:text-emerald-300' : 'text-gray-400 dark:text-gray-500'}`}>
+                    {b.active ? 'Active' : 'Off'}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+        <h4 className="text-xs font-medium uppercase tracking-wide text-gray-400 dark:text-gray-500 mb-2">Project servers</h4>
         <div className="space-y-2 mb-5">
           {servers.length === 0 && (
-            <p className="text-sm text-gray-400 dark:text-gray-500">No MCP servers yet.</p>
+            <p className="text-sm text-gray-400 dark:text-gray-500">No project MCP servers yet.</p>
           )}
           {servers.map((s) => (
             <div key={s.id} className="flex items-center gap-3 rounded-lg border border-gray-200 dark:border-white/[0.08] px-3 py-2.5">
@@ -208,6 +236,7 @@ export default function McpServersSettings({ projectId }: Props) {
             </div>
           ))}
         </div>
+        </>
       )}
 
       {!adding ? (

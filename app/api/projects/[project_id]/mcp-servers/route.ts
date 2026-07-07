@@ -8,8 +8,10 @@ import { denyUnlessProjectAccess } from '@/lib/auth/gate';
 import {
   listProjectMcpServers,
   createProjectMcpServer,
+  getBuiltinMcpServers,
   type McpServerInput,
 } from '@/lib/services/project-mcp';
+import { getSessionUser } from '@/lib/auth/session';
 import { createSuccessResponse, createErrorResponse, handleApiError } from '@/lib/utils/api-response';
 
 interface RouteContext {
@@ -21,7 +23,12 @@ export async function GET(_request: NextRequest, { params }: RouteContext) {
     const { project_id } = await params;
     const gate = await denyUnlessProjectAccess(project_id);
     if (gate) return gate;
-    return createSuccessResponse(await listProjectMcpServers(project_id));
+    const user = await getSessionUser();
+    const [project, builtin] = await Promise.all([
+      listProjectMcpServers(project_id),
+      getBuiltinMcpServers(project_id, !!user?.itopsEnabled),
+    ]);
+    return createSuccessResponse({ project, builtin });
   } catch (error) {
     return handleApiError(error, 'API', 'Failed to list MCP servers');
   }

@@ -15,6 +15,7 @@ import { prisma } from '@/lib/db/client';
 import { encrypt, decrypt } from '@/lib/crypto';
 import { assertHostAllowed } from '@/lib/services/itops/net';
 import { authStatusOf, getValidAccessToken, type McpAuthStatus } from '@/lib/services/mcp-oauth';
+import { imagesEnabledFor } from '@/lib/services/images-mcp';
 import type { ProjectMcpServer } from '@prisma/client';
 
 // Built-in brokered servers a project MCP must not shadow.
@@ -111,6 +112,25 @@ export async function validateMcpInput(
   } else {
     throw new Error('Transport must be http, sse or stdio.');
   }
+}
+
+/** Built-in "company" MCP servers Claudable injects into every agent run. Shown
+ *  read-only in the MCP list (like /mcp in the CLI) so users see the full set. */
+export interface BuiltinMcpView {
+  name: string;
+  label: string;
+  description: string;
+  active: boolean;
+}
+
+export async function getBuiltinMcpServers(projectId: string, itopsEnabled: boolean): Promise<BuiltinMcpView[]> {
+  let imagesOn = false;
+  try { imagesOn = await imagesEnabledFor(projectId); } catch { /* best-effort */ }
+  return [
+    { name: 'appdiag', label: 'App diagnostics', description: "Reads the running preview's console + backend errors so the agent can self-diagnose.", active: true },
+    { name: 'images', label: 'Image generation', description: 'Lets the agent generate images for the app.', active: imagesOn },
+    { name: 'itops', label: 'Infrastructure (it-ops)', description: 'Infra broker — deploys, DNS, databases. Enabled per user by an admin.', active: itopsEnabled },
+  ];
 }
 
 export async function listProjectMcpServers(projectId: string): Promise<McpServerView[]> {
