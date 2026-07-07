@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { denyUnlessProjectAccess } from '@/lib/auth/gate';
-import { getProjectGitSettings, setProjectGitBranch } from '@/lib/services/github';
+import { getProjectGitSettings, setProjectGitBranch, setProjectAutoSync } from '@/lib/services/github';
 
 interface RouteContext {
   params: Promise<{ project_id: string }>;
@@ -23,18 +23,42 @@ export async function GET(_request: Request, { params }: RouteContext) {
   }
 }
 
-/** Update the operating branch (validated against the remote). */
+/**
+ * Update per-project git settings. Each field is optional; supply any of:
+ *  - `branch` (validated against the remote)
+ *  - `auto_sync` (boolean) — enable/disable background pull
+ *  - `auto_sync_interval_minutes` (number) — cadence (clamped server-side)
+ */
 export async function PATCH(request: NextRequest, { params }: RouteContext) {
   try {
     const { project_id } = await params;
     const _gate = await denyUnlessProjectAccess(project_id, { manage: true });
     if (_gate) return _gate;
     const body = (await request.json().catch(() => null)) ?? {};
-    if (typeof body.branch !== 'string' || body.branch.trim().length === 0) {
-      return NextResponse.json({ success: false, message: 'branch is required' }, { status: 400 });
+
+    const hasBranch = typeof body.branch === 'string' && body.branch.trim().length > 0;
+    const hasAutoSync = typeof body.auto_sync === 'boolean';
+    const hasInterval = body.auto_sync_interval_minutes !== undefined;
+    if (!hasBranch && !hasAutoSync && !hasInterval) {
+      return NextResponse.json(
+        { success: false, message: 'Provide branch, auto_sync, or auto_sync_interval_minutes' },
+        { status: 400 },
+      );
     }
-    const branch = await setProjectGitBranch(project_id, body.branch);
-    return NextResponse.json({ success: true, branch });
+
+    const out: Record<string, unknown> = { success: true };
+    if (hasBranch) {
+      out.branch = await setProjectGitBranch(project_id, body.branch);
+    }
+    if (hasAutoSync || hasInterval) {
+      const auto = await setProjectAutoSync(project_id, {
+        enabled: hasAutoSync ? body.auto_sync : undefined,
+        intervalMinutes: hasInterval ? Number(body.auto_sync_interval_minutes) : undefined,
+      });
+      out.auto_sync = auto.auto_sync;
+      out.auto_sync_interval_minutes = auto.auto_sync_interval_minutes;
+    }
+    return NextResponse.json(out);
   } catch (error) {
     console.error('[API] Failed to update git settings:', error);
     const status = error instanceof Error && 'status' in error ? (error as any).status ?? 500 : 500;

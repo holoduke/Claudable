@@ -12,4 +12,9 @@ export async function register() {
     '@/lib/services/startup-recovery'
   );
   await reconcileStaleRequestsOnStartup();
+
+  // Background per-project auto-sync (opt-in via git settings). One process-wide
+  // timer; a no-op until a project turns it on.
+  const { startAutoSyncScheduler } = await import('@/lib/services/auto-sync');
+  startAutoSyncScheduler();
 }
