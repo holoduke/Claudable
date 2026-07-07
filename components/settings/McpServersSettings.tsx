@@ -25,6 +25,16 @@ interface Props {
   projectId: string;
 }
 
+interface McpCatalogEntry {
+  name: string;
+  label: string;
+  description: string;
+  transport: 'http' | 'sse';
+  url: string;
+  authType: 'none' | 'oauth';
+  source: 'company' | 'curated';
+}
+
 const EMPTY_FORM = {
   name: '',
   label: '',
@@ -45,6 +55,8 @@ export default function McpServersSettings({ projectId }: Props) {
   const [form, setForm] = useState({ ...EMPTY_FORM });
   const [saving, setSaving] = useState(false);
   const [builtin, setBuiltin] = useState<{ name: string; label: string; description: string; active: boolean }[]>([]);
+  const [catalog, setCatalog] = useState<McpCatalogEntry[]>([]);
+  const [addingCatalogName, setAddingCatalogName] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -56,6 +68,7 @@ export default function McpServersSettings({ projectId }: Props) {
         const d = json.data ?? {};
         setServers(Array.isArray(d) ? d : d.project ?? []);
         setBuiltin(Array.isArray(d) ? [] : d.builtin ?? []);
+        setCatalog(Array.isArray(d) ? [] : d.catalog ?? []);
       } else setError(json?.error || 'Failed to load MCP servers');
     } catch {
       setError('Failed to load MCP servers');
@@ -66,18 +79,31 @@ export default function McpServersSettings({ projectId }: Props) {
 
   useEffect(() => { void load(); }, [load]);
 
-  const applyRelumePreset = () => {
-    // Relume uses OAuth (sign in with your Relume account) — not a static token.
-    // Prefill the endpoint + authType=oauth; the user authenticates after adding.
-    setForm({
-      ...EMPTY_FORM,
-      name: 'relume',
-      label: 'Relume Library',
-      transport: 'http',
-      url: 'https://relume-library-mcp.relume.io/mcp',
-      authType: 'oauth',
-    });
-    setAdding(true);
+  // One-click add of a predefined catalog entry. OAuth servers then surface an
+  // "Authenticate" button in the project list (no surprise redirect).
+  const addFromCatalog = async (entry: McpCatalogEntry) => {
+    setAddingCatalogName(entry.name);
+    setError(null);
+    try {
+      const res = await fetch(`${API_BASE}/api/projects/${projectId}/mcp-servers`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: entry.name,
+          label: entry.label,
+          transport: entry.transport,
+          url: entry.url,
+          authType: entry.authType,
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok || !json?.success) throw new Error(json?.error || `Failed to add ${entry.label}`);
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : `Failed to add ${entry.label}`);
+    } finally {
+      setAddingCatalogName(null);
+    }
   };
 
   const authenticate = async (s: McpServerView) => {
@@ -236,16 +262,46 @@ export default function McpServersSettings({ projectId }: Props) {
             </div>
           ))}
         </div>
+
+        {/* Predefined catalog — company-enabled + well-known servers not yet
+            configured for this project. One click adds them. */}
+        {catalog.length > 0 && (
+          <div className="mb-5">
+            <h4 className="text-xs font-medium uppercase tracking-wide text-gray-400 dark:text-gray-500 mb-2">Available to add</h4>
+            <div className="space-y-2">
+              {catalog.map((c) => (
+                <div key={c.name} className="flex items-center gap-3 rounded-lg border border-dashed border-gray-200 dark:border-white/[0.08] px-3 py-2.5">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-medium text-gray-900 dark:text-gray-50 truncate">{c.label}</span>
+                      {c.source === 'company' && (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-sky-100 dark:bg-sky-950/40 text-sky-700 dark:text-sky-300">company</span>
+                      )}
+                      {c.authType === 'oauth' && (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 dark:bg-white/[0.06] text-gray-500 dark:text-gray-400">sign-in required</span>
+                      )}
+                    </div>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{c.description || c.url}</p>
+                  </div>
+                  <button
+                    onClick={() => addFromCatalog(c)}
+                    disabled={addingCatalogName !== null}
+                    className="text-xs px-2.5 py-1.5 rounded-md border border-gray-200 dark:border-white/[0.08] text-gray-700 dark:text-gray-200 hover:border-[#DE7356]/50 hover:text-[#DE7356] disabled:opacity-50 transition-colors"
+                  >
+                    {addingCatalogName === c.name ? 'Adding…' : 'Add'}
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
         </>
       )}
 
       {!adding ? (
         <div className="flex gap-2">
           <button onClick={() => { setForm({ ...EMPTY_FORM }); setAdding(true); }} className="text-sm px-3 py-2 rounded-lg bg-[#DE7356] text-white hover:bg-[#c9634a] transition-colors">
-            Add MCP server
-          </button>
-          <button onClick={applyRelumePreset} className="text-sm px-3 py-2 rounded-lg border border-gray-200 dark:border-white/[0.08] text-gray-700 dark:text-gray-200 hover:border-[#DE7356]/40 transition-colors">
-            + Relume Library
+            Add custom MCP server
           </button>
         </div>
       ) : (

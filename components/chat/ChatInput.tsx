@@ -131,6 +131,12 @@ export default function ChatInput({
   const [dismissedQuery, setDismissedQuery] = useState<string | null>(null);
   const skillMenuOpen = skillQuery !== null && skillMatches.length > 0 && skillQuery !== dismissedQuery;
   useEffect(() => { setSkillActiveIdx(0); }, [skillQuery]);
+  // A dismissal (Escape / running a command) only holds while the query is
+  // unchanged. Without this, running "/mcp" once suppressed the menu for every
+  // future "/mcp" — typing it showed nothing until Enter.
+  useEffect(() => {
+    if (skillQuery !== dismissedQuery && dismissedQuery !== null) setDismissedQuery(null);
+  }, [skillQuery, dismissedQuery]);
 
   const chooseSkill = (option: SkillOption) => {
     // Built-in commands (/mcp, /usage, /help, /clear, /compact) run IMMEDIATELY on

@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState, useRef, useCallback } from 'react';
+import { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
@@ -16,7 +16,7 @@ import ThemeToggle from '@/components/ui/ThemeToggle';
 import { useGlobalSettings } from '@/contexts/GlobalSettingsContext';
 import { getDefaultModelForCli, getModelDisplayName } from '@/lib/constants/cliModels';
 import Image from 'next/image';
-import { Image as ImageIcon, Palette, Layers, Server, Database } from 'lucide-react';
+import { Image as ImageIcon, Palette, Layers, Server, Database, Sparkles, Search } from 'lucide-react';
 import BrandWordmark from '@/components/ui/BrandWordmark';
 import type { Project as ProjectSummary } from '@/types/project';
 import { fetchCliStatusSnapshot, createCliStatusFallback } from '@/hooks/useCLI';
@@ -47,6 +47,12 @@ const ASSISTANT_OPTIONS = ACTIVE_CLI_OPTIONS.map(({ id, name, icon }) => ({
 const assistantBrandColors = ACTIVE_CLI_BRAND_COLORS;
 
 const MODEL_OPTIONS_BY_ASSISTANT = ACTIVE_CLI_MODEL_OPTIONS;
+
+// Image-generation utilities the agent can use. 'none' keeps the capability off.
+const IMAGE_GEN_OPTIONS: { id: string; name: string; description: string }[] = [
+  { id: '', name: 'No image generation', description: 'The agent uses placeholders / stock assets only.' },
+  { id: 'grok', name: 'Grok (xAI)', description: 'Agent can generate images for the app via the Grok image API.' },
+];
 
 export default function HomePage() {
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
@@ -103,9 +109,12 @@ export default function HomePage() {
   const [selectedStack, setSelectedStack] = useState<string>(DEFAULT_STACK);
   const [selectedBackend, setSelectedBackend] = useState<string>('');   // '' = none
   const [selectedDatabase, setSelectedDatabase] = useState<string>(''); // '' = none
+  const [selectedImageGen, setSelectedImageGen] = useState<string>(''); // '' = none, 'grok'
   const [showBackendMenu, setShowBackendMenu] = useState(false);
   const [showDatabaseMenu, setShowDatabaseMenu] = useState(false);
   const [showStackMenu, setShowStackMenu] = useState(false);
+  const [showImageGenMenu, setShowImageGenMenu] = useState(false);
+  const [projectSearch, setProjectSearch] = useState('');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [cliStatus, setCLIStatus] = useState<CLIStatus>({});
   const [isInitialLoad, setIsInitialLoad] = useState(true);
@@ -361,6 +370,15 @@ export default function HomePage() {
   }, [normalizeProjectPayload]);
   
   async function onCreated() { await load(); }
+
+  // Live search over the project tiles (sidebar history keeps the full list).
+  const visibleProjects = useMemo(() => {
+    const q = projectSearch.trim().toLowerCase();
+    if (!q) return projects;
+    return projects.filter((p) =>
+      [p.name, p.description ?? '', p.createdBy ?? ''].some((v) => (v ?? '').toLowerCase().includes(q))
+    );
+  }, [projects, projectSearch]);
   
   async function start(projectId: string) {
     try {
@@ -544,6 +562,7 @@ export default function HomePage() {
           stackId: selectedStack,
           backendId: selectedBackend || undefined,
           databaseId: selectedDatabase || undefined,
+          imageProvider: selectedImageGen || undefined,
         })
       });
       
@@ -658,6 +677,7 @@ export default function HomePage() {
       // silently inherit the last backend/database.
       setSelectedBackend('');
       setSelectedDatabase('');
+      setSelectedImageGen('');
 
       const params = new URLSearchParams();
       if (selectedAssistant) params.set('cli', selectedAssistant);
@@ -1259,6 +1279,37 @@ export default function HomePage() {
                     </>
                   )}
                 </div>
+                {/* Image-generation Selector (optional) */}
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={() => setShowImageGenMenu(v => !v)}
+                    title="Pick an image-generation utility"
+                    className="justify-center whitespace-nowrap text-sm font-medium transition-colors duration-100 ease-in-out border border-gray-200 dark:border-white/[0.09] bg-transparent shadow-sm hover:bg-gray-50 dark:hover:bg-white/[0.05] hover:border-gray-300 dark:hover:border-white/[0.18] px-3 py-2 flex h-8 items-center gap-1.5 rounded-full text-gray-700 dark:text-gray-200 hover:text-gray-900 dark:hover:text-gray-100"
+                  >
+                    <Sparkles aria-hidden className="h-3.5 w-3.5 text-[#DE7356]/80" />
+                    <span className="hidden md:flex text-sm font-medium">
+                      {IMAGE_GEN_OPTIONS.find(o => o.id === selectedImageGen)?.name.replace('No image generation', 'No image gen') ?? 'No image gen'}
+                    </span>
+                  </button>
+                  {showImageGenMenu && (
+                    <>
+                      <div className="fixed inset-0 z-[290]" onClick={() => setShowImageGenMenu(false)} />
+                      <div className="absolute bottom-full mb-2 left-0 z-[300] w-72 rounded-xl border border-gray-200 dark:border-white/10 bg-white dark:bg-[#181310] shadow-xl p-1">
+                        {IMAGE_GEN_OPTIONS.map(o => (
+                          <button key={o.id || 'none'} type="button" onClick={() => { setSelectedImageGen(o.id); setShowImageGenMenu(false); }}
+                            className={`w-full text-left px-3 py-2 rounded-lg transition-colors ${selectedImageGen === o.id ? 'bg-gray-100 dark:bg-white/[0.07]' : 'hover:bg-gray-50 dark:hover:bg-white/[0.05]'}`}>
+                            <div className="flex items-center justify-between">
+                              <span className="text-sm font-medium text-gray-900 dark:text-gray-50">{o.name}</span>
+                              {selectedImageGen === o.id && <span className="text-xs text-[#DE7356]">✓</span>}
+                            </div>
+                            <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{o.description}</p>
+                          </button>
+                        ))}
+                      </div>
+                    </>
+                  )}
+                </div>
                 {/* Agent Selector */}
                 <div className="relative z-[200]" ref={assistantDropdownRef}>
                   <button
@@ -1381,9 +1432,25 @@ export default function HomePage() {
                 user may access when the auth gate is on. */}
             {projects.length > 0 && (
               <div className="mt-12 w-full max-w-3xl mx-auto text-left">
-                <h2 className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-3 px-1">Your projects</h2>
+                {/* Live project search — centered, replaces the old heading. */}
+                <div className="relative w-full max-w-sm mx-auto mb-5">
+                  <Search aria-hidden className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 dark:text-gray-500 pointer-events-none" />
+                  <input
+                    type="search"
+                    value={projectSearch}
+                    onChange={(e) => setProjectSearch(e.target.value)}
+                    placeholder="Search projects…"
+                    aria-label="Search projects"
+                    className="w-full h-10 pl-10 pr-4 rounded-full border border-gray-200 dark:border-white/[0.09] bg-white/80 dark:bg-white/[0.04] text-sm text-gray-900 dark:text-gray-50 placeholder:text-gray-400 dark:placeholder:text-gray-500 shadow-sm focus:outline-none focus:border-[#DE7356]/50 focus:ring-2 focus:ring-[#DE7356]/15 transition-colors"
+                  />
+                </div>
+                {visibleProjects.length === 0 && (
+                  <p className="text-center text-sm text-gray-500 dark:text-gray-400 py-8">
+                    No projects match &quot;{projectSearch.trim()}&quot;
+                  </p>
+                )}
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                  {projects.map((project) => {
+                  {visibleProjects.map((project) => {
                     const projectCli = sanitizeAssistant(project.preferredCli);
                     const projectColor = assistantBrandColors[projectCli] || assistantBrandColors[DEFAULT_ASSISTANT];
                     return (
