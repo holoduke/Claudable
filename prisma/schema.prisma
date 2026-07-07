@@ -304,6 +304,37 @@ model ProjectServiceConnection {
 // Per-project MCP servers the agent gets access to (in addition to the built-in
 // brokered ones). Generic: http/sse remote servers or stdio command servers.
 // Secrets (auth headers / stdio env) are encrypted at rest via lib/crypto.
+/**
+ * Org-shared MCP servers: an admin registers a server once and every project's
+ * agent in the org (or instance-wide when orgId is null) gets it automatically —
+ * no per-project setup. Shared servers use a SHARED credential (static auth
+ * header / stdio env), not per-user OAuth, since the whole team uses them. See
+ * lib/services/shared-mcp.ts.
+ */
+model SharedMcpServer {
+  id        String   @id @default(cuid())
+  // Null = instance-wide (all projects, incl. auth-off single-tenant). Set =
+  // only projects in that org. Scalar (no relation) to keep this table isolated.
+  orgId     String?  @map("org_id")
+
+  name      String   // mcpServers map key — [a-z0-9_-]
+  label     String
+  transport String   // http | sse | stdio
+  url       String?
+  command   String?
+  argsJson  String?  @map("args_json")
+  headersEncrypted String? @map("headers_encrypted") // encrypted JSON: shared auth headers (http/sse)
+  envEncrypted     String? @map("env_encrypted")     // encrypted JSON: env (stdio)
+  enabled   Boolean  @default(true)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([orgId, name])
+  @@index([orgId])
+  @@map("shared_mcp_servers")
+}
+
 model ProjectMcpServer {
   id        String   @id @default(cuid())
   projectId String   @map("project_id")

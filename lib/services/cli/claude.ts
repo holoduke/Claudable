@@ -23,6 +23,7 @@ import { runAgentTurnContainerized, agentHostPath, defaultAgentSandboxNet, accou
 import { attachAgentAbort, unregisterAgentRun } from './run-registry';
 import { prepareAgentMcpTurnConfig } from '../agent-mcp-http';
 import { buildProjectMcpConfig } from '../project-mcp';
+import { buildSharedMcpConfig } from '../shared-mcp';
 import { previewSlug, ensureProjectNetwork } from '../preview';
 import { getInjectedEnv, ensureServicesRunning } from '../managed-containers';
 import { buildImagesMcpServer, imagesEnabledFor } from '../images-mcp';
@@ -854,9 +855,14 @@ export async function executeClaude(
     console.log(`[ClaudeService] 📁 Working Directory: ${absoluteProjectPath}`);
     attachAgentAbort(projectId, requestId, () => abortController.abort());
 
-    // Per-project user-defined MCP servers (Project Settings → MCP), merged into
+    // Per-project user-defined MCP servers (Project Settings → MCP) + org-shared
+    // servers (the "company" tier, auto-attached to every project), merged into
     // the built-in brokered ones below. Best-effort — a bad row never blocks a run.
-    const projectMcpServers = await buildProjectMcpConfig(projectId).catch(() => ({}));
+    // Project name wins over a shared one on collision.
+    const [projectMcpServers, sharedMcpServers] = await Promise.all([
+      buildProjectMcpConfig(projectId).catch(() => ({})),
+      buildSharedMcpConfig(projectId).catch(() => ({})),
+    ]);
 
     const response = query({
       prompt: instruction,
@@ -883,8 +889,10 @@ export async function executeClaude(
           appdiag: buildDiagnosticsMcpServer(projectId),
           ...(itopsEnabled ? { itops: buildItopsMcpServer() } : {}),
           ...(imagesOn ? { images: buildImagesMcpServer(projectId, absoluteProjectPath) } : {}),
-          // Project-defined external MCP servers (http/sse/stdio). Reserved names
-          // are blocked at create time, so these never shadow the brokered tools.
+          // Org-shared external MCP servers (company tier), then project-defined
+          // ones (which win on name collision). Reserved names are blocked at
+          // create time, so neither ever shadows the brokered tools.
+          ...sharedMcpServers,
           ...projectMcpServers,
         },
         // See skillSettingSources above: ['project','user'] by default (auto-load

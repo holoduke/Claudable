@@ -27,6 +27,7 @@ import { diagnosticsToolDefs } from './diagnostics-mcp';
 import { imagesToolDefs } from './images-mcp';
 import { itopsToolDefs } from './itops/itops-mcp';
 import { buildProjectMcpConfig } from './project-mcp';
+import { buildSharedMcpConfig } from './shared-mcp';
 
 export type AgentMcpServerName = 'appdiag' | 'images' | 'itops';
 
@@ -251,10 +252,18 @@ export async function prepareAgentMcpTurnConfig(o: {
   // Per-project user-defined MCP servers (Project Settings → MCP). These need no
   // callback URL — they're external http/sse/stdio servers the CLI connects to
   // directly — so they must be written even when baseUrl is absent.
-  const projectMcps = await buildProjectMcpConfig(o.projectId).catch(() => ({}));
-  const hasProjectMcps = Object.keys(projectMcps).length > 0;
+  // Per-project user-defined servers + org-shared servers (the "company" tier,
+  // auto-attached to every project). Both are external http/sse/stdio servers
+  // the CLI connects to directly, so they're written even without a baseUrl.
+  // Project name wins over a shared one on collision (project is more specific).
+  const [projectMcps, sharedMcps] = await Promise.all([
+    buildProjectMcpConfig(o.projectId).catch(() => ({})),
+    buildSharedMcpConfig(o.projectId).catch(() => ({})),
+  ]);
+  const externalMcps = { ...sharedMcps, ...projectMcps };
+  const hasExternalMcps = Object.keys(externalMcps).length > 0;
 
-  if (!baseUrl && !hasProjectMcps) {
+  if (!baseUrl && !hasExternalMcps) {
     console.warn('[AgentMCP] No AGENT_MCP_BASE_URL / NEXT_PUBLIC_APP_URL set — containerized agent runs WITHOUT appdiag/images/itops tools');
     return null;
   }
@@ -270,7 +279,7 @@ export async function prepareAgentMcpTurnConfig(o: {
     );
   }
   const config = {
-    mcpServers: { ...brokered, ...projectMcps },
+    mcpServers: { ...brokered, ...externalMcps },
   };
 
   // Prefer the agent's HOME mount (data/agent-homes/<id> → /home/agent): the token
