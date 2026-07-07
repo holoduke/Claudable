@@ -30,6 +30,10 @@ export default auth((req) => {
     // Network-MCP for the containerized agent — the unguessable per-turn token
     // in the path is the credential; the handler validates + revokes it.
     pathname.startsWith('/api/agent-mcp/') ||
+    // MCP OAuth callback — the provider redirects the user's browser here; the
+    // single-use unguessable `state` (matched to a pending server row) is the
+    // credential, so it must be reachable regardless of the session cookie.
+    pathname === '/api/mcp-oauth/callback' ||
     // Guest review endpoints — the handlers self-authorize (X-Share-Token for
     // comments; client-logs is intentionally open preview telemetry). A signed-in
     // user still needs a session there; passing them through here is safe.
