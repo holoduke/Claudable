@@ -73,6 +73,18 @@ function ensureGitignore(repoPath: string) {
   fs.writeFileSync(gitignorePath, nextContents, 'utf8');
 }
 
+/**
+ * Strip credentials out of any string before it reaches an error message or a
+ * log. We authenticate git over HTTPS by embedding `user:token@` in the remote
+ * URL, so the token can appear both in the argv we build AND in git's own
+ * stderr (which echoes the URL). Without this, a failed fetch/push surfaces the
+ * provider token verbatim to the browser via the API error response.
+ */
+export function redactGitSecrets(s: string): string {
+  // https://user:token@host → https://user:***@host
+  return s.replace(/(https?:\/\/[^\s:@/]+:)[^\s@/]+@/gu, '$1***@');
+}
+
 function runGit(args: string[], cwd: string): string {
   const result = spawnSync('git', args, {
     cwd,
@@ -82,7 +94,10 @@ function runGit(args: string[], cwd: string): string {
   });
 
   if (result.error) {
-    throw new GitError(`Git command failed: ${result.error.message}`, result.stderr || result.stdout || undefined);
+    throw new GitError(
+      redactGitSecrets(`Git command failed: ${result.error.message}`),
+      result.stderr || result.stdout ? redactGitSecrets(result.stderr || result.stdout) : undefined,
+    );
   }
 
   if (result.status !== 0) {
@@ -92,7 +107,10 @@ function runGit(args: string[], cwd: string): string {
         : typeof result.stdout === 'string'
         ? result.stdout
         : undefined);
-    throw new GitError(`Git command failed: git ${args.join(' ')}`, output);
+    throw new GitError(
+      redactGitSecrets(`Git command failed: git ${args.join(' ')}`),
+      output ? redactGitSecrets(output) : undefined,
+    );
   }
 
   return result.stdout.trim();
@@ -173,6 +191,19 @@ export interface PullResult {
   updated: boolean;
   before: string | null;
   after: string | null;
+  /** Repo-relative paths changed by the merge (empty when not updated). */
+  changedFiles: string[];
+}
+
+/** Files changed between two commits (name-only). Empty on any failure. */
+function diffNames(repoPath: string, from: string | null, to: string | null): string[] {
+  if (!from || !to || from === to) return [];
+  try {
+    const out = runGit(['diff', '--name-only', `${from}..${to}`], repoPath);
+    return out.split(/\r?\n/u).map((l) => l.trim()).filter(Boolean);
+  } catch {
+    return [];
+  }
 }
 
 /**
@@ -201,14 +232,20 @@ export function pullFromRemote(
       } catch {
         /* no merge in progress */
       }
-      throw new GitError(
-        `Merge conflict while syncing branch '${branch}' — the local project and the remote branch both changed the same files. Push or revert local changes first.`,
-        error instanceof GitError ? error.output : undefined,
-      );
+      const detail = error instanceof GitError ? error.output ?? '' : '';
+      // Only a genuine content conflict warrants the "both changed the same
+      // files" guidance; unrelated-histories / untracked-overwrite / other
+      // failures get their real cause instead of misleading advice.
+      const isConflict = /conflict|would be overwritten/iu.test(detail);
+      const message = isConflict
+        ? `Merge conflict while syncing branch '${branch}' — the local project and the remote branch both changed the same files. Resolve the divergence (or reset local changes) before syncing.`
+        : `Could not sync branch '${branch}': ${detail.trim() || 'git merge failed'}`;
+      throw new GitError(message, detail || undefined);
     }
   }
   const after = revParseHead(repoPath);
-  return { updated: before !== after, before, after };
+  const updated = before !== after;
+  return { updated, before, after, changedFiles: updated ? diffNames(repoPath, before, after) : [] };
 }
 
 export function pushToRemote(
@@ -225,12 +262,52 @@ export function pushToRemote(
   try {
     runGit(['push', '-u', remote, refspec], repoPath);
   } catch (error) {
-    if (error instanceof GitError) {
-      runGit(['push', '-u', '--force', remote, refspec], repoPath);
-    } else {
+    if (!(error instanceof GitError)) {
       throw error;
     }
+    // Retry with --force-with-lease, NOT a blanket --force. A plain non-ff
+    // reject (our local history rewrote the connect scaffold) still succeeds,
+    // but if the remote branch moved because a teammate pushed, the lease
+    // fails and we surface a clear error instead of silently clobbering their
+    // commits — which the Sync feature makes a routine divergence. The user
+    // must Sync first, then push.
+    try {
+      runGit(['push', '-u', '--force-with-lease', remote, refspec], repoPath);
+    } catch (leaseError) {
+      if (leaseError instanceof GitError) {
+        throw new GitError(
+          `Push rejected: the remote branch '${branch}' has commits your project doesn't have yet. Sync first, then push. (Refusing to force-overwrite remote history.)`,
+          leaseError.output,
+        );
+      }
+      throw leaseError;
+    }
   }
+}
+
+/**
+ * Point the local checkout at `branch` from the remote after the operating
+ * branch is changed. Without this, the checkout keeps the OLD branch's history,
+ * so the next sync/push weaves or force-rejects the wrong content across
+ * branches. Best-effort and non-destructive: it only realigns when the tree is
+ * clean AND the remote branch exists; a dirty tree or a brand-new branch is
+ * left as-is (the next Sync reconciles). Returns whether it realigned.
+ */
+export function checkoutRemoteBranch(
+  repoPath: string,
+  branch: string,
+  remoteUrl: string,
+): boolean {
+  // Refuse on a dirty tree — never silently discard the user's uncommitted work.
+  const dirty = runGit(['status', '--porcelain'], repoPath);
+  if (dirty.trim().length > 0) return false;
+  try {
+    runGit(['fetch', remoteUrl, branch], repoPath);
+  } catch {
+    return false; // branch doesn't exist on the remote yet
+  }
+  runGit(['checkout', '-B', branch, 'FETCH_HEAD'], repoPath);
+  return true;
 }
 
 export function ensureGitRepository(repoPath: string) {

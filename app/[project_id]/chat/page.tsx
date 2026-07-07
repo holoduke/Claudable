@@ -6,22 +6,31 @@ import { useRouter, useSearchParams, useParams } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import { FaCode, FaDesktop, FaMobileAlt, FaPlay, FaStop, FaCog, FaRocket, FaHome, FaArrowRight, FaRedo, FaFileImport, FaPuzzlePiece } from 'react-icons/fa';
 import ChatLog from '@/components/chat/ChatLog';
-import CodeExplorer, { type Entry } from '@/components/chat/CodeExplorer';
-import { ProjectSettings } from '@/components/settings/ProjectSettings';
+import type { Entry } from '@/components/chat/CodeExplorer';
 import UserMenu from '@/components/layout/UserMenu';
-import VisualEditorPanel, { type SelectedElement } from '@/components/chat/VisualEditorPanel';
+import type { SelectedElement } from '@/components/chat/VisualEditorPanel';
 import CommentsLayer, { type CommentPin, type ComposeAnchor } from '@/components/chat/CommentsLayer';
-import CommentsListPanel from '@/components/chat/CommentsListPanel';
 import { useToast } from '@/components/ui/Toast';
 import ConfirmDialog from '@/components/ui/ConfirmDialog';
 import ThemeToggle from '@/components/ui/ThemeToggle';
-import ArchitectureModal from '@/components/chat/ArchitectureModal';
 import ChatInput from '@/components/chat/ChatInput';
 import AgentStatusBar from '@/components/chat/AgentStatusBar';
 import type { AgentUsageSnapshot } from '@/types/agent-usage';
-import DesignImportModal from '@/components/chat/DesignImportModal';
-import SkillsModal from '@/components/chat/SkillsModal';
-import PublishPanel from '@/components/chat/PublishPanel';
+
+// On-demand UI (code view, panels, modals) is code-split out of the initial
+// chat bundle: these only download when first rendered. Everything here is
+// conditionally mounted, so the chunks load on first open — not on page load.
+const CodeExplorer = dynamic(() => import('@/components/chat/CodeExplorer'), { ssr: false });
+const ProjectSettings = dynamic(
+  () => import('@/components/settings/ProjectSettings').then((m) => m.ProjectSettings),
+  { ssr: false },
+);
+const VisualEditorPanel = dynamic(() => import('@/components/chat/VisualEditorPanel'), { ssr: false });
+const CommentsListPanel = dynamic(() => import('@/components/chat/CommentsListPanel'), { ssr: false });
+const ArchitectureModal = dynamic(() => import('@/components/chat/ArchitectureModal'), { ssr: false });
+const DesignImportModal = dynamic(() => import('@/components/chat/DesignImportModal'), { ssr: false });
+const SkillsModal = dynamic(() => import('@/components/chat/SkillsModal'), { ssr: false });
+const PublishPanel = dynamic(() => import('@/components/chat/PublishPanel'), { ssr: false });
 import { getFileLanguage, escapeHtml } from '@/lib/utils/format';
 import { ChatErrorBoundary } from '@/components/ErrorBoundary';
 import { useUserRequests } from '@/hooks/useUserRequests';
@@ -1744,13 +1753,9 @@ const persistProjectPreferences = useCallback(
   
   useEffect(() => {
     if (selectedFile && !hljs) {
+      // Theme CSS is the github-dark import in app/layout.tsx — no CDN fetch.
       import('highlight.js/lib/common').then(mod => {
         setHljs(mod.default);
-        // Load highlight.js CSS dynamically
-        const link = document.createElement('link');
-        link.rel = 'stylesheet';
-        link.href = 'https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css';
-        document.head.appendChild(link);
       });
     }
   }, [selectedFile, hljs]);
@@ -3718,25 +3723,29 @@ const persistProjectPreferences = useCallback(
       
 
       {/* Publish Modal */}
-      <DesignImportModal
-        projectId={projectId}
-        isOpen={showDesignImport}
-        onClose={() => setShowDesignImport(false)}
-        onApply={(prompt) => {
-          // Same busy rule as ChatInput: never launch a second concurrent turn.
-          if (isRunning || hasActiveRequests) {
-            setQueuedMessages(prev => [...prev, { message: prompt, images: [] }]);
-          } else {
-            runAct(prompt);
-          }
-        }}
-      />
+      {showDesignImport && (
+        <DesignImportModal
+          projectId={projectId}
+          isOpen={showDesignImport}
+          onClose={() => setShowDesignImport(false)}
+          onApply={(prompt) => {
+            // Same busy rule as ChatInput: never launch a second concurrent turn.
+            if (isRunning || hasActiveRequests) {
+              setQueuedMessages(prev => [...prev, { message: prompt, images: [] }]);
+            } else {
+              runAct(prompt);
+            }
+          }}
+        />
+      )}
 
-      <SkillsModal
-        projectId={projectId}
-        isOpen={showSkills}
-        onClose={() => setShowSkills(false)}
-      />
+      {showSkills && (
+        <SkillsModal
+          projectId={projectId}
+          isOpen={showSkills}
+          onClose={() => setShowSkills(false)}
+        />
+      )}
 
       {showPublishPanel && (
         <PublishPanel
@@ -3763,23 +3772,27 @@ const persistProjectPreferences = useCallback(
       )}
 
       {/* Project Settings Modal */}
-      <ProjectSettings
-        isOpen={showGlobalSettings}
-        onClose={() => setShowGlobalSettings(false)}
-        projectId={projectId}
-        projectName={projectName}
-        projectDescription={projectDescription}
-        initialTab={settingsInitialTab}
-        onProjectUpdated={({ name, description }) => {
-          setProjectName(name);
-          setProjectDescription(description ?? '');
-        }}
-      />
-      <ArchitectureModal
-        projectId={projectId}
-        open={showArchitecture}
-        onClose={() => setShowArchitecture(false)}
-      />
+      {showGlobalSettings && (
+        <ProjectSettings
+          isOpen={showGlobalSettings}
+          onClose={() => setShowGlobalSettings(false)}
+          projectId={projectId}
+          projectName={projectName}
+          projectDescription={projectDescription}
+          initialTab={settingsInitialTab}
+          onProjectUpdated={({ name, description }) => {
+            setProjectName(name);
+            setProjectDescription(description ?? '');
+          }}
+        />
+      )}
+      {showArchitecture && (
+        <ArchitectureModal
+          projectId={projectId}
+          open={showArchitecture}
+          onClose={() => setShowArchitecture(false)}
+        />
+      )}
       <ConfirmDialog
         open={showClearCommentsConfirm}
         title="Delete all comments?"

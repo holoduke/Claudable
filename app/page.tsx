@@ -2,11 +2,14 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { useRouter } from 'next/navigation';
-import DesignPickerModal from '@/components/modals/DesignPickerModal';
+import dynamic from 'next/dynamic';
 import { STACKS, DEFAULT_STACK } from '@/lib/config/stacks';
 import { BACKEND_STACKS } from '@/lib/config/backend-stacks';
 import { DATABASES } from '@/lib/config/databases';
-import GlobalSettings from '@/components/settings/GlobalSettings';
+
+// Modal-only UI: code-split out of the home bundle, downloads on first open.
+const DesignPickerModal = dynamic(() => import('@/components/modals/DesignPickerModal'), { ssr: false });
+const GlobalSettings = dynamic(() => import('@/components/settings/GlobalSettings'), { ssr: false });
 import UserMenu from '@/components/layout/UserMenu';
 import ConnectClaudePrompt from '@/components/auth/ConnectClaudePrompt';
 import ThemeToggle from '@/components/ui/ThemeToggle';
@@ -1486,18 +1489,22 @@ export default function HomePage() {
       </div>
 
       {/* Design Picker (new project) */}
-      <DesignPickerModal
-        isOpen={showDesignPicker}
-        selectedId={selectedDesign?.id ?? null}
-        onClose={() => setShowDesignPicker(false)}
-        onSelect={(d) => setSelectedDesign(d)}
-      />
+      {showDesignPicker && (
+        <DesignPickerModal
+          isOpen={showDesignPicker}
+          selectedId={selectedDesign?.id ?? null}
+          onClose={() => setShowDesignPicker(false)}
+          onSelect={(d) => setSelectedDesign(d)}
+        />
+      )}
 
       {/* Global Settings Modal */}
-      <GlobalSettings
-        isOpen={showGlobalSettings}
-        onClose={() => setShowGlobalSettings(false)}
-      />
+      {showGlobalSettings && (
+        <GlobalSettings
+          isOpen={showGlobalSettings}
+          onClose={() => setShowGlobalSettings(false)}
+        />
+      )}
 
       {/* Delete Project Modal */}
       {deleteModal.isOpen && deleteModal.project && (

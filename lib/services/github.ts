@@ -3,7 +3,7 @@ import fs from 'fs/promises';
 import { getPlainServiceToken } from '@/lib/services/tokens';
 import { getProjectById, updateProject } from '@/lib/services/project';
 import { getProjectService, upsertProjectServiceConnection, updateProjectServiceData } from '@/lib/services/project-services';
-import { ensureGitRepository, ensureGitConfig, initializeMainBranch, addOrUpdateRemote, commitAll, pushToRemote, pullFromRemote } from '@/lib/services/git';
+import { ensureGitRepository, ensureGitConfig, initializeMainBranch, addOrUpdateRemote, commitAll, pushToRemote, pullFromRemote, checkoutRemoteBranch } from '@/lib/services/git';
 import { getGitProviderConfig, getEnvGitToken } from '@/lib/services/git-provider';
 import { injectDeployScaffolding } from '@/lib/services/scaffold-deploy';
 import { getDatabaseUrl } from '@/lib/services/database';
@@ -13,6 +13,28 @@ class GitHubError extends Error {
   constructor(message: string, readonly status?: number) {
     super(message);
     this.name = 'GitHubError';
+  }
+}
+
+// Per-project serialization of git working-tree operations (push, pull). Push
+// (chat header / auto-push after a turn) and Sync (settings) both `git add -A`
+// + commit + merge/push in the SAME checkout; interleaving them commits
+// conflict markers or trips index.lock. Chained promise per project = a mutex
+// without a dependency. Keyed by projectId; entries are short-lived.
+const gitLocks = new Map<string, Promise<unknown>>();
+
+async function withGitLock<T>(projectId: string, fn: () => Promise<T>): Promise<T> {
+  const prev = gitLocks.get(projectId) ?? Promise.resolve();
+  // Swallow the previous op's rejection so one failure doesn't chain-reject
+  // every queued op; each caller still sees its own fn's result/throw.
+  const run = prev.catch(() => {}).then(fn);
+  gitLocks.set(projectId, run);
+  try {
+    return await run;
+  } finally {
+    if (gitLocks.get(projectId) === run) {
+      gitLocks.delete(projectId);
+    }
   }
 }
 
@@ -243,19 +265,31 @@ export async function connectProjectToGitHub(projectId: string, options: CreateR
   };
 }
 
+// Git's own ref rules are looser, but this covers real-world branch names and
+// blocks anything that could smuggle git options or path tricks. Enforced BOTH
+// at write time (setProjectGitBranch) and at every use site (projectGitBranch),
+// so a branch injected into service_data by any other path can never reach a
+// git argv as `--upload-pack=…` or similar. Starts with an alnum → never a `-`.
+const BRANCH_NAME_RE = /^[A-Za-z0-9][A-Za-z0-9._/-]{0,200}$/;
+
 /**
  * The branch this project operates on: push target AND sync (pull) source.
  * Per-project override in service_data.branch, falling back to the repo's
- * default branch, then 'main'.
+ * default branch, then 'main'. A stored value that fails validation is ignored
+ * (falls through to default_branch/main) rather than trusted — the value flows
+ * into `git fetch <url> <branch>` as bare argv.
  */
 export function projectGitBranch(data: Record<string, any> | undefined): string {
-  const b = typeof data?.branch === 'string' ? data.branch.trim() : '';
-  return b || (typeof data?.default_branch === 'string' && data.default_branch) || 'main';
+  const candidate = typeof data?.branch === 'string' ? data.branch.trim() : '';
+  if (candidate && BRANCH_NAME_RE.test(candidate) && !candidate.includes('..')) {
+    return candidate;
+  }
+  const def = typeof data?.default_branch === 'string' ? data.default_branch.trim() : '';
+  if (def && BRANCH_NAME_RE.test(def) && !def.includes('..')) {
+    return def;
+  }
+  return 'main';
 }
-
-// Git's own ref rules are looser, but this covers real-world branch names and
-// blocks anything that could smuggle git options or path tricks.
-const BRANCH_NAME_RE = /^[A-Za-z0-9][A-Za-z0-9._/-]{0,200}$/;
 
 export interface ProjectGitSettings {
   repo_url: string | null;
@@ -309,6 +343,29 @@ export async function setProjectGitBranch(projectId: string, branch: string): Pr
     throw error;
   }
   await updateProjectServiceData(projectId, 'github', { branch: trimmed });
+
+  // Realign the local checkout to the newly-selected branch so the next
+  // sync/push operates on that branch's history, not the previous one. Under
+  // the git lock (shares the working tree with push/pull); best-effort and
+  // non-destructive (skips on a dirty tree).
+  if (projectGitBranch(data) !== trimmed) {
+    await withGitLock(projectId, async () => {
+      try {
+        const project = await getProjectById(projectId);
+        if (!project) return;
+        const repoPath = await ensureProjectRepository(projectId, project.repoPath);
+        ensureGitRepository(repoPath);
+        const authenticatedUrl = String(data.clone_url).replace(
+          'https://',
+          `https://${encodeURIComponent((await getGithubUser()).login)}:${token}@`,
+        );
+        checkoutRemoteBranch(repoPath, trimmed, authenticatedUrl);
+      } catch (e) {
+        // Non-fatal: the branch setting is saved; the next Sync reconciles.
+        console.warn('[GitService] Could not realign local checkout to new branch:', e instanceof Error ? e.message : e);
+      }
+    });
+  }
   return trimmed;
 }
 
@@ -317,7 +374,15 @@ export interface SyncResult {
   updated: boolean;
   branch: string;
   message: string;
+  /** True when the merge touched a dependency manifest → deps need reinstall. */
+  dependenciesChanged: boolean;
 }
+
+// Manifests whose change means the preview needs a dependency reinstall.
+const DEP_MANIFESTS = [
+  'package.json', 'package-lock.json', 'pnpm-lock.yaml', 'yarn.lock',
+  'go.mod', 'go.sum', 'requirements.txt', 'pyproject.toml', 'poetry.lock',
+];
 
 /**
  * Sync (pull) the project from its remote branch: local edits are committed
@@ -326,6 +391,10 @@ export interface SyncResult {
  * working tree is never left half-merged.
  */
 export async function pullProjectFromGitHub(projectId: string): Promise<SyncResult> {
+  return withGitLock(projectId, () => pullProjectFromGitHubImpl(projectId));
+}
+
+async function pullProjectFromGitHubImpl(projectId: string): Promise<SyncResult> {
   const project = await getProjectById(projectId);
   if (!project) {
     throw new Error('Project not found');
@@ -354,9 +423,12 @@ export async function pullProjectFromGitHub(projectId: string): Promise<SyncResu
     last_synced_at: new Date().toISOString(),
   });
 
+  const dependenciesChanged = result.changedFiles.some((f) => DEP_MANIFESTS.includes(path.basename(f)));
+
   return {
     updated: result.updated,
     branch,
+    dependenciesChanged,
     message: result.updated
       ? `Synced with ${branch} (${(result.after ?? '').slice(0, 7)})`
       : `Already up to date with ${branch}`,
@@ -365,6 +437,10 @@ export async function pullProjectFromGitHub(projectId: string): Promise<SyncResu
 
 /** @returns whether new changes were actually pushed (false = already up to date). */
 export async function pushProjectToGitHub(projectId: string): Promise<boolean> {
+  return withGitLock(projectId, () => pushProjectToGitHubImpl(projectId));
+}
+
+async function pushProjectToGitHubImpl(projectId: string): Promise<boolean> {
   try {
     const project = await getProjectById(projectId);
     if (!project) {
