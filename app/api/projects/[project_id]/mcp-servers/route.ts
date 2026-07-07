@@ -13,6 +13,7 @@ import {
 } from '@/lib/services/project-mcp';
 import { getSessionUser } from '@/lib/auth/session';
 import { getMcpCatalog } from '@/lib/config/mcp-catalog';
+import { listSharedMcpForProject } from '@/lib/services/shared-mcp';
 import { accountMcpConnectorsEnabled } from '@/lib/services/cli/claude-container';
 import { createSuccessResponse, createErrorResponse, handleApiError } from '@/lib/utils/api-response';
 
@@ -26,10 +27,11 @@ export async function GET(_request: NextRequest, { params }: RouteContext) {
     const gate = await denyUnlessProjectAccess(project_id);
     if (gate) return gate;
     const user = await getSessionUser();
-    const [project, builtin, catalog] = await Promise.all([
+    const [project, builtin, catalog, shared] = await Promise.all([
       listProjectMcpServers(project_id),
       getBuiltinMcpServers(project_id, !!user?.itopsEnabled),
       getMcpCatalog(),
+      listSharedMcpForProject(project_id),
     ]);
     // The catalog lists predefined servers not yet configured for this project.
     const configured = new Set(project.map((s) => s.name));
@@ -42,7 +44,9 @@ export async function GET(_request: NextRequest, { params }: RouteContext) {
       ? process.env.AGENT_CONTAINERIZED.trim() === 'true'
       : Boolean(process.env.PREVIEW_ISOLATION?.trim());
     const accountConnectors = containerized && accountMcpConnectorsEnabled();
-    return createSuccessResponse({ project, builtin, catalog: available, accountConnectors });
+    // Only the enabled shared servers actually attach to this project's agent.
+    const sharedActive = shared.filter((s) => s.enabled);
+    return createSuccessResponse({ project, builtin, catalog: available, accountConnectors, shared: sharedActive });
   } catch (error) {
     return handleApiError(error, 'API', 'Failed to list MCP servers');
   }

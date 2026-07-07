@@ -58,6 +58,7 @@ export default function McpServersSettings({ projectId }: Props) {
   const [catalog, setCatalog] = useState<McpCatalogEntry[]>([]);
   const [addingCatalogName, setAddingCatalogName] = useState<string | null>(null);
   const [accountConnectors, setAccountConnectors] = useState(false);
+  const [shared, setShared] = useState<{ id: string; label: string; transport: string; url: string | null }[]>([]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -71,6 +72,7 @@ export default function McpServersSettings({ projectId }: Props) {
         setBuiltin(Array.isArray(d) ? [] : d.builtin ?? []);
         setCatalog(Array.isArray(d) ? [] : d.catalog ?? []);
         setAccountConnectors(Array.isArray(d) ? false : !!d.accountConnectors);
+        setShared(Array.isArray(d) ? [] : d.shared ?? []);
       } else setError(json?.error || 'Failed to load MCP servers');
     } catch {
       setError('Failed to load MCP servers');
@@ -215,6 +217,26 @@ export default function McpServersSettings({ projectId }: Props) {
                 </div>
               ))}
             </div>
+          </div>
+        )}
+        {shared.length > 0 && (
+          <div className="mb-5">
+            <h4 className="text-xs font-medium uppercase tracking-wide text-gray-400 dark:text-gray-500 mb-2">Shared by your team</h4>
+            <div className="space-y-2">
+              {shared.map((s) => (
+                <div key={s.id} className="flex items-center gap-3 rounded-lg border border-gray-200 dark:border-white/[0.06] bg-gray-50/60 dark:bg-white/[0.02] px-3 py-2.5">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-medium text-gray-700 dark:text-gray-200 truncate">{s.label}</span>
+                      <span className="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-gray-100 dark:bg-white/[0.06] text-gray-500 dark:text-gray-400">{s.transport}</span>
+                    </div>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{s.url || 'stdio command'}</p>
+                  </div>
+                  <span className="text-xs px-2 py-1 rounded-md text-emerald-700 dark:text-emerald-300">Active</span>
+                </div>
+              ))}
+            </div>
+            <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-1.5">Managed by an admin in Global Settings → Shared MCP. Attached to every project automatically.</p>
           </div>
         )}
         {accountConnectors && (

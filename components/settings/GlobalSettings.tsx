@@ -5,6 +5,7 @@ import { AnimatePresence } from 'framer-motion';
 import { MotionDiv } from '@/lib/motion';
 import UsersSettings from '@/components/settings/UsersSettings';
 import SystemOverviewSettings from '@/components/settings/SystemOverviewSettings';
+import SharedMcpSettings from '@/components/settings/SharedMcpSettings';
 import ClaudeAccountSettings from '@/components/settings/ClaudeAccountSettings';
 import MyAccountSettings from '@/components/settings/MyAccountSettings';
 import BrandWordmark from '@/components/ui/BrandWordmark';
@@ -16,7 +17,7 @@ import type { CLIStatus } from '@/types/cli';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? '';
 
-type SettingsTab = 'general' | 'ai-agents' | 'claude' | 'account' | 'users' | 'system' | 'about';
+type SettingsTab = 'general' | 'ai-agents' | 'claude' | 'account' | 'users' | 'shared-mcp' | 'system' | 'about';
 
 interface GlobalSettingsProps {
   isOpen: boolean;
@@ -112,6 +113,7 @@ const CLI_OPTIONS: CLIOption[] = [
 export default function GlobalSettings({ isOpen, onClose, initialTab = 'general' }: GlobalSettingsProps) {
   const [activeTab, setActiveTab] = useState<SettingsTab>(initialTab);
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
+  const [authOff, setAuthOff] = useState(false);
   const [userLoaded, setUserLoaded] = useState(false);
   const [cliStatus, setCLIStatus] = useState<CLIStatus>({});
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
@@ -181,23 +183,41 @@ export default function GlobalSettings({ isOpen, onClose, initialTab = 'general'
     }
   }, []);
 
+  const loadAuthConfig = useCallback(async () => {
+    try {
+      const res = await fetch(`${API_BASE}/api/auth/config`);
+      const json = res.ok ? await res.json() : null;
+      setAuthOff(json?.success ? json.data?.authEnabled === false : false);
+    } catch {
+      setAuthOff(false);
+    }
+  }, []);
+
   // Load all service tokens and CLI data
   useEffect(() => {
     if (isOpen) {
       loadGlobalSettings();
       checkCLIStatus();
       loadCurrentUser();
+      loadAuthConfig();
     }
-  }, [isOpen, loadGlobalSettings, checkCLIStatus, loadCurrentUser]);
+  }, [isOpen, loadGlobalSettings, checkCLIStatus, loadCurrentUser, loadAuthConfig]);
 
   const isAdmin = currentUser?.role === 'admin';
+  // Org-global infra (Shared MCP): manageable by an admin, OR by the local
+  // operator when the auth gate is OFF (single-tenant) — the API gates are
+  // no-ops then too. Kept separate from `isAdmin` so the user-account tabs
+  // (Users) still require a real signed-in admin.
+  const canManageOrg = isAdmin || authOff;
 
   // If a non-admin somehow lands on the Users tab, fall back to General — but
   // only once we actually know who the user is, so an initialTab='users' isn't
   // wrongly redirected during the brief window before /api/users/me resolves.
   useEffect(() => {
-    if (userLoaded && activeTab === 'users' && !isAdmin) setActiveTab('general');
-  }, [userLoaded, activeTab, isAdmin]);
+    if (userLoaded && ((!isAdmin && (activeTab === 'users' || activeTab === 'system')) || (!canManageOrg && activeTab === 'shared-mcp'))) {
+      setActiveTab('general');
+    }
+  }, [userLoaded, activeTab, isAdmin, canManageOrg]);
 
   const saveGlobalSettings = async () => {
     setIsLoading(true);
@@ -352,6 +372,7 @@ export default function GlobalSettings({ isOpen, onClose, initialTab = 'general'
                 ...(currentUser ? [{ id: 'claude' as const, label: 'Claude' }] : []),
                 ...(currentUser ? [{ id: 'account' as const, label: 'My Account' }] : []),
                 ...(isAdmin ? [{ id: 'users' as const, label: 'Users' }] : []),
+                ...(canManageOrg ? [{ id: 'shared-mcp' as const, label: 'Shared MCP' }] : []),
                 ...(isAdmin ? [{ id: 'system' as const, label: 'Network' }] : []),
                 { id: 'about' as const, label: 'About' }
               ] as { id: SettingsTab; label: string }[]).map(tab => (
@@ -604,6 +625,7 @@ export default function GlobalSettings({ isOpen, onClose, initialTab = 'general'
               <MyAccountSettings user={currentUser} onToast={showToast} onChanged={loadCurrentUser} />
             )}
 
+            {activeTab === 'shared-mcp' && canManageOrg && <SharedMcpSettings />}
             {activeTab === 'system' && isAdmin && <SystemOverviewSettings />}
             {activeTab === 'users' && isAdmin && currentUser && (
               <UsersSettings currentUserId={currentUser.id} onToast={showToast} />
