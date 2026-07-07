@@ -24,19 +24,35 @@ export async function POST(
 
     const { interrupted, requestId } = interruptAgentRun(projectId);
 
-    await prisma.userRequest.updateMany({
-      where: { projectId, status: { in: ['pending', 'processing', 'active', 'running'] } },
-      data: { status: 'failed', errorMessage: 'Stopped by user', completedAt: new Date() },
-    });
+    // Only fail the interrupted turn's own row when we know which one it was.
+    // The previous blanket updateMany would fail a concurrent freshly-queued
+    // 'pending' request too (which still launches — its executor never re-checks
+    // status), and would stamp a just-finished successful turn as failed. Fall
+    // back to the project-wide sweep only when no specific run was identified.
+    if (interrupted && requestId) {
+      await prisma.userRequest.updateMany({
+        where: { id: requestId, status: { in: ['pending', 'processing', 'active', 'running'] } },
+        data: { status: 'failed', errorMessage: 'Stopped by user', completedAt: new Date() },
+      });
+    } else if (interrupted) {
+      await prisma.userRequest.updateMany({
+        where: { projectId, status: { in: ['pending', 'processing', 'active', 'running'] } },
+        data: { status: 'failed', errorMessage: 'Stopped by user', completedAt: new Date() },
+      });
+    }
 
-    streamManager.publish(projectId, {
-      type: 'status',
-      data: {
-        status: 'completed',
-        message: 'Stopped by user',
-        ...(requestId ? { requestId } : {}),
-      },
-    });
+    // Only announce a terminal state when we actually stopped something. Publishing
+    // 'completed' when nothing was running confuses a client mid-startup-phase.
+    if (interrupted) {
+      streamManager.publish(projectId, {
+        type: 'status',
+        data: {
+          status: 'completed',
+          message: 'Stopped by user',
+          ...(requestId ? { requestId } : {}),
+        },
+      });
+    }
 
     return NextResponse.json({ success: true, data: { interrupted } });
   } catch (error) {

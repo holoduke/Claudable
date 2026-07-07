@@ -53,6 +53,10 @@ model Project {
   ownerId    String? @map("owner_id")
   visibility String  @default("org") // org | restricted
 
+  // Who last ran an agent turn / edit on this project (for the homepage tile).
+  // Distinct from ownerId (the creator). Null until the first turn under auth.
+  lastEditedById String? @map("last_edited_by_id")
+
   // Which Claude credential the agent runs with (null = global env token).
   claudeCredentialId String? @map("claude_credential_id")
 
@@ -69,8 +73,10 @@ model Project {
   userRequests          UserRequest[]
   comments              Comment[]
   shares                ProjectShare[]
+  mcpServers            ProjectMcpServer[]
   organization          Organization?  @relation(fields: [orgId], references: [id])
   owner                 User?          @relation("OwnedProjects", fields: [ownerId], references: [id], onDelete: SetNull)
+  lastEditedBy          User?          @relation("EditedProjects", fields: [lastEditedById], references: [id], onDelete: SetNull)
   members               ProjectMember[]
   claudeCredential      ClaudeCredential? @relation("ProjectClaudeCredential", fields: [claudeCredentialId], references: [id], onDelete: SetNull)
 
@@ -145,6 +151,7 @@ model User {
 
   organization  Organization    @relation(fields: [orgId], references: [id])
   ownedProjects Project[]       @relation("OwnedProjects")
+  editedProjects Project[]      @relation("EditedProjects")
   memberships   ProjectMember[]
   claudeCredentials ClaudeCredential[]
   comments      Comment[]
@@ -292,6 +299,33 @@ model ProjectServiceConnection {
   @@index([projectId])
   @@index([provider])
   @@map("project_service_connections")
+}
+
+// Per-project MCP servers the agent gets access to (in addition to the built-in
+// brokered ones). Generic: http/sse remote servers or stdio command servers.
+// Secrets (auth headers / stdio env) are encrypted at rest via lib/crypto.
+model ProjectMcpServer {
+  id        String   @id @default(cuid())
+  projectId String   @map("project_id")
+
+  name      String   // mcpServers map key, e.g. "relume" — [a-z0-9_-]
+  label     String   // human label shown in the UI
+  transport String   // http | sse | stdio
+  url       String?  // http/sse endpoint
+  command   String?  // stdio command, e.g. "npx"
+  argsJson  String?  @map("args_json")           // JSON string[] for stdio args
+  headersEncrypted String? @map("headers_encrypted") // encrypted JSON: auth headers (http/sse)
+  envEncrypted     String? @map("env_encrypted")     // encrypted JSON: env (stdio)
+  enabled   Boolean  @default(true)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, name])
+  @@index([projectId])
+  @@map("project_mcp_servers")
 }
 
 model EnvVar {

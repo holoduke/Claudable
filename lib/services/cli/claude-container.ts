@@ -185,7 +185,12 @@ export function runAgentTurnContainerized(
       buf = buf.slice(nl + 1);
     }
   });
-  child.stderr?.on('data', (c: Buffer) => { stderr += c.toString(); });
+  child.stderr?.on('data', (c: Buffer) => {
+    stderr += c.toString();
+    // Only the tail is ever surfaced (slice(-500)); cap to avoid unbounded growth
+    // over a 30-minute chatty run.
+    if (stderr.length > 64 * 1024) stderr = stderr.slice(-32 * 1024);
+  });
 
   // Stop the turn HARD. Killing the `docker run` CLIENT (SIGTERM to `child`) does
   // NOT reliably stop the container — the client can detach and leave the agent
@@ -197,9 +202,25 @@ export function runAgentTurnContainerized(
     try { child.kill('SIGTERM'); } catch { /* already gone */ }
     if (o.containerName) {
       try {
-        const rm = spawn('docker', ['rm', '-f', o.containerName], { env: process.env, stdio: 'ignore' });
+        // Capture the outcome instead of firing blind: if the daemon rejects the
+        // delete (e.g. a delete-restricted docker socket-proxy), the agent would
+        // keep editing files while the UI reads "stopped" — surface that in logs
+        // so the failure is diagnosable rather than silent.
+        const rm = spawn('docker', ['rm', '-f', o.containerName], { env: process.env });
+        let rmErr = '';
+        rm.stderr?.on('data', (c: Buffer) => { rmErr += c.toString(); });
+        rm.on('exit', (code) => {
+          if (code !== 0) {
+            console.error(`[ClaudeContainer] Failed to force-remove ${o.containerName} (exit ${code}). The agent may still be running. ${rmErr.slice(-300)}`);
+          }
+        });
+        rm.on('error', (e) => {
+          console.error(`[ClaudeContainer] docker rm -f ${o.containerName} could not spawn:`, e.message);
+        });
         rm.unref();
-      } catch { /* best-effort */ }
+      } catch (e) {
+        console.error(`[ClaudeContainer] Failed to invoke docker rm for ${o.containerName}:`, e);
+      }
     }
   };
 

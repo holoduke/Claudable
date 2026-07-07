@@ -26,6 +26,7 @@ import { z } from 'zod';
 import { diagnosticsToolDefs } from './diagnostics-mcp';
 import { imagesToolDefs } from './images-mcp';
 import { itopsToolDefs } from './itops/itops-mcp';
+import { buildProjectMcpConfig } from './project-mcp';
 
 export type AgentMcpServerName = 'appdiag' | 'images' | 'itops';
 
@@ -246,16 +247,30 @@ export async function prepareAgentMcpTurnConfig(o: {
   const baseUrl = (process.env.AGENT_MCP_BASE_URL || process.env.NEXT_PUBLIC_APP_URL || '')
     .trim()
     .replace(/\/+$/, '');
-  if (!baseUrl) {
+
+  // Per-project user-defined MCP servers (Project Settings → MCP). These need no
+  // callback URL — they're external http/sse/stdio servers the CLI connects to
+  // directly — so they must be written even when baseUrl is absent.
+  const projectMcps = await buildProjectMcpConfig(o.projectId).catch(() => ({}));
+  const hasProjectMcps = Object.keys(projectMcps).length > 0;
+
+  if (!baseUrl && !hasProjectMcps) {
     console.warn('[AgentMCP] No AGENT_MCP_BASE_URL / NEXT_PUBLIC_APP_URL set — containerized agent runs WITHOUT appdiag/images/itops tools');
     return null;
   }
 
-  const { token, servers } = registerAgentMcpTurn(o);
+  // Brokered built-in tools (appdiag/images/itops) only work with a callback URL.
+  let token = '';
+  let brokered: Record<string, unknown> = {};
+  if (baseUrl) {
+    const reg = registerAgentMcpTurn(o);
+    token = reg.token;
+    brokered = Object.fromEntries(
+      reg.servers.map((s) => [s, { type: 'http', url: `${baseUrl}/api/agent-mcp/${token}/${s}` }]),
+    );
+  }
   const config = {
-    mcpServers: Object.fromEntries(
-      servers.map((s) => [s, { type: 'http', url: `${baseUrl}/api/agent-mcp/${token}/${s}` }]),
-    ),
+    mcpServers: { ...brokered, ...projectMcps },
   };
 
   // Prefer the agent's HOME mount (data/agent-homes/<id> → /home/agent): the token
@@ -270,7 +285,7 @@ export async function prepareAgentMcpTurnConfig(o: {
     await fs.mkdir(dir, { recursive: true });
     await fs.writeFile(filePath, JSON.stringify(config, null, 2), { mode: 0o600 });
   } catch (error) {
-    releaseAgentMcpTurn(token);
+    if (token) releaseAgentMcpTurn(token);
     console.error('[AgentMCP] Failed to write per-turn mcp-config:', error);
     return null;
   }
@@ -279,7 +294,7 @@ export async function prepareAgentMcpTurnConfig(o: {
     containerPath,
     token,
     cleanup: async () => {
-      releaseAgentMcpTurn(token);
+      if (token) releaseAgentMcpTurn(token);
       await fs.rm(filePath, { force: true });
     },
   };

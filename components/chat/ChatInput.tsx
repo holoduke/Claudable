@@ -49,6 +49,10 @@ interface ChatInputProps {
   isRunning?: boolean;
   /** Interrupt the running turn (CLI parity: Esc). Shown as a Stop button while running. */
   onStop?: () => void;
+  /** Draft handed back to the composer after an interrupt (queued text/images).
+   *  ChatInput owns its text/image state, so the parent pushes it here; the nonce
+   *  makes each restore apply exactly once. */
+  restoreDraft?: { text: string; images?: UploadedImage[]; nonce: number } | null;
 }
 
 export default function ChatInput({
@@ -69,7 +73,8 @@ export default function ChatInput({
   onCliChange,
   cliChangeDisabled = false,
   isRunning = false,
-  onStop
+  onStop,
+  restoreDraft
 }: ChatInputProps) {
   const toast = useToast();
   const [message, setMessage] = useState('');
@@ -301,6 +306,22 @@ export default function ChatInput({
       textarea.style.height = `${Math.min(scrollHeight, 200)}px`;
     }
   };
+
+  // Apply a restored draft (queued text/images handed back after an interrupt).
+  // Nonce-guarded so a re-render doesn't re-apply it, and appended to whatever the
+  // user may have already typed.
+  const lastRestoreNonceRef = useRef(0);
+  useEffect(() => {
+    if (!restoreDraft || restoreDraft.nonce === lastRestoreNonceRef.current) return;
+    lastRestoreNonceRef.current = restoreDraft.nonce;
+    if (restoreDraft.text) {
+      setMessage((cur) => (cur.trim() ? `${cur.trim()}\n\n${restoreDraft.text}` : restoreDraft.text));
+    }
+    if (restoreDraft.images && restoreDraft.images.length > 0) {
+      setUploadedImages((cur) => [...cur, ...restoreDraft.images!]);
+    }
+    setTimeout(() => { textareaRef.current?.focus(); adjustTextareaHeight(); }, 0);
+  }, [restoreDraft]);
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
 

@@ -104,7 +104,9 @@ export async function captureThumbnail(projectId: string): Promise<boolean> {
         '--disable-gpu',
         '--disable-dev-shm-usage',
         '--hide-scrollbars',
-        '--window-size=1280,800',
+        // 16:9 to match the tile's aspect-video, and smaller than 1280 so the PNG
+        // is ~40% lighter — still crisp for the small grid tiles (retina 3x).
+        '--window-size=1024,576',
         '--virtual-time-budget=5000', // let the dev server render before the shot
         `--screenshot=${tmp}`,
         url,

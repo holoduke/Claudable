@@ -91,6 +91,8 @@ export default function HomePage() {
       preferredCli: preferred as ProjectSummary['preferredCli'],
       selectedModel: selected,
       fallbackEnabled: project.fallbackEnabled ?? project.fallback_enabled ?? false,
+      createdBy: project.createdBy ?? project.created_by ?? null,
+      lastEditedBy: project.lastEditedBy ?? project.last_edited_by ?? null,
     };
   }, [sanitizeAssistant, normalizeModelForAssistant]);
   const [selectedAssistant, setSelectedAssistant] = useState<ActiveCliId>(DEFAULT_ASSISTANT);
@@ -1374,41 +1376,6 @@ export default function HomePage() {
               </div>
             </form>
             
-            {/* Example Cards */}
-            <div className="flex flex-wrap gap-2 justify-center mt-8">
-              {[
-                { 
-                  text: 'Landing Page',
-                  prompt: 'Design a modern, elegant, and visually stunning landing page for claudable with a clean, minimalistic aesthetic and a strong focus on user experience and conversion. Use a harmonious color palette, smooth gradients, soft shadows, and subtle animations to create a premium feel. Include a bold hero section with a clear headline and CTA, feature highlights with simple icons, social proof like testimonials or logos, and a final call-to-action at the bottom. Use large, impactful typography, balanced white space, and a responsive grid-based layout for a polished, pixel-perfect design optimized for both desktop and mobile.'
-                },
-                { 
-                  text: 'Gaming Platform',
-                  prompt: 'Design a modern, clean, and visually engaging game platform UI for Lunaris Play, focusing on simplicity, usability, and an immersive user experience. Use a minimalistic yet dynamic aesthetic with smooth gradients, soft shadows, and subtle animations to create a premium, gamer-friendly vibe. Include a hero section highlighting trending and featured games, a game catalog grid with attractive thumbnails, quick-access filter and search options, and a user dashboard for profile, achievements, and recent activity. Typography should be bold yet clean, the layout responsive and intuitive, and the overall design polished, pixel-perfect, and optimized for both desktop and mobile.'
-                },
-                { 
-                  text: 'Onboarding Portal',
-                  prompt: 'Design a modern, intuitive, and visually appealing onboarding portal for new users, focusing on simplicity, clarity, and a smooth step-by-step experience. Use a clean layout with soft gradients, subtle shadows, and minimalistic icons to guide users through the process. Include a welcome hero section, an interactive progress tracker, and easy-to-follow forms. Typography should be bold yet friendly, and the overall design must feel welcoming, polished, and optimized for both desktop and mobile.'
-                },
-                { 
-                  text: 'Networking App',
-                  prompt: 'Design a sleek, modern, and user-friendly networking app interface for professionals to connect, chat, and collaborate. Use a vibrant yet minimal aesthetic with smooth animations, clean typography, and an elegant color palette to create an engaging social experience. Include a profile showcase, smart connection recommendations, real-time messaging, and a personalized activity feed. The layout should be intuitive, responsive, and optimized for seamless interaction across devices.'
-                },
-                { 
-                  text: 'Room Visualizer',
-                  prompt: 'Design a modern, immersive, and highly interactive room visualizer platform where users can preview furniture and decor in a 3D virtual environment. Use a clean, minimal design with elegant gradients, realistic visuals, and smooth transitions for a premium feel. Include a drag-and-drop furniture catalog, real-time 3D previews, color and style customization tools, and an intuitive save-and-share feature. Ensure the interface feels intuitive, responsive, and optimized for desktop and mobile experiences.'
-                }
-              ].map((example) => (
-                <button
-                  key={example.text}
-                  onClick={() => setPrompt(example.prompt)}
-                  disabled={isCreatingProject}
-                  className="px-4 py-2 text-sm font-medium text-gray-500 dark:text-gray-400 bg-transparent border border-gray-200 dark:border-white/[0.08] rounded-full hover:bg-gray-50 dark:hover:bg-white/[0.04] hover:border-[#DE7356]/40 dark:hover:border-[#DE7356]/40 hover:text-gray-700 dark:hover:text-gray-200 hover:-translate-y-px transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {example.text}
-                </button>
-              ))}
-            </div>
-
             {/* Your projects — tiles below the prompt. The list comes from
                 /api/projects, which already filters to the projects the signed-in
                 user may access when the auth gate is on. */}
@@ -1454,12 +1421,18 @@ export default function HomePage() {
                             <span className="text-sm font-medium text-gray-900 dark:text-gray-50 truncate">{project.name}</span>
                           </div>
                           <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
-                            {/* lastMessageAt never existed in the API — this always showed createdAt. */}
                             Updated {formatTime(project.lastActiveAt || project.updatedAt || project.createdAt)}
                             {project.preferredCli && (
                               <span> · {formatCliInfo(projectCli, project.selectedModel ?? undefined)}</span>
                             )}
                           </p>
+                          {(project.createdBy || project.lastEditedBy) && (
+                            <p className="mt-1 text-[11px] leading-tight text-gray-400 dark:text-gray-500 truncate">
+                              {project.createdBy && <span>Created by {project.createdBy}</span>}
+                              {project.createdBy && project.lastEditedBy && <span> · </span>}
+                              {project.lastEditedBy && <span>Last edited by {project.lastEditedBy}</span>}
+                            </p>
+                          )}
                         </div>
                       </button>
                     );

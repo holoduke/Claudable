@@ -38,6 +38,10 @@ export interface Project {
   preferredCli?: CLIType | null;
   selectedModel?: string | null;
   fallbackEnabled?: boolean;
+  /** Creator (project owner) display label — homepage tiles. */
+  createdBy?: string | null;
+  /** Who last ran an agent turn on the project — homepage tiles. */
+  lastEditedBy?: string | null;
 }
 
 export interface ProjectSettings {
