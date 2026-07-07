@@ -5,6 +5,7 @@
  */
 import { NextRequest } from 'next/server';
 import { denyUnlessProjectAccess } from '@/lib/auth/gate';
+import { getSessionUser } from '@/lib/auth/session';
 import {
   updateProjectMcpServer,
   deleteProjectMcpServer,
@@ -22,7 +23,9 @@ export async function PATCH(request: NextRequest, { params }: RouteContext) {
     const gate = await denyUnlessProjectAccess(project_id, { write: true });
     if (gate) return gate;
     const body = (await request.json().catch(() => ({}))) as Partial<McpServerInput>;
-    const updated = await updateProjectMcpServer(project_id, id, body);
+    // A user may only edit shared servers or their OWN private ones.
+    const actor = await getSessionUser();
+    const updated = await updateProjectMcpServer(project_id, id, body, actor?.id);
     if (!updated) return createErrorResponse('MCP server not found', undefined, 404);
     return createSuccessResponse(updated);
   } catch (error) {
@@ -38,7 +41,8 @@ export async function DELETE(_request: NextRequest, { params }: RouteContext) {
     const { project_id, id } = await params;
     const gate = await denyUnlessProjectAccess(project_id, { write: true });
     if (gate) return gate;
-    const ok = await deleteProjectMcpServer(project_id, id);
+    const actor = await getSessionUser();
+    const ok = await deleteProjectMcpServer(project_id, id, actor?.id);
     if (!ok) return createErrorResponse('MCP server not found', undefined, 404);
     return createSuccessResponse({ deleted: true });
   } catch (error) {

@@ -242,6 +242,8 @@ export async function prepareAgentMcpTurnConfig(o: {
    * DATA_HOST_DIR points outside its own filesystem.
    */
   homeLocalPath?: string;
+  /** Acting user — attaches their private project MCP servers (shared attach for all). */
+  requesterUserId?: string;
 }): Promise<{ containerPath: string; token: string; cleanup: () => Promise<void> } | null> {
   // The container reaches Claudable via its PUBLIC url (sandbox egress allows
   // internet, not the host) — override with AGENT_MCP_BASE_URL if ever needed.
@@ -257,7 +259,7 @@ export async function prepareAgentMcpTurnConfig(o: {
   // the CLI connects to directly, so they're written even without a baseUrl.
   // Project name wins over a shared one on collision (project is more specific).
   const [projectMcps, sharedMcps] = await Promise.all([
-    buildProjectMcpConfig(o.projectId).catch(() => ({})),
+    buildProjectMcpConfig(o.projectId, o.requesterUserId).catch(() => ({})),
     buildSharedMcpConfig(o.projectId).catch(() => ({})),
   ]);
   const externalMcps = { ...sharedMcps, ...projectMcps };

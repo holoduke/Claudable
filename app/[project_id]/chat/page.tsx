@@ -1560,8 +1560,18 @@ const persistProjectPreferences = useCallback(
 
   // Cold-start latch: forget the "loaded" state whenever the preview URL changes
   // (new project / stop→start assigns a fresh URL), so the building overlay +
-  // retry loop run for that URL until it truly renders.
-  useEffect(() => { setPreviewLoaded(false); }, [previewUrl]);
+  // retry loop run for that URL until it truly renders. EXCEPTION: a warm page
+  // REFRESH re-mounts with the SAME url that already rendered earlier this
+  // session — replaying the "Building your app" cold-start overlay every refresh
+  // is wrong. So start `loaded` from a per-URL sessionStorage flag; if the dev
+  // server is actually down, the reachability poll flips previewDown and shows
+  // the restarting overlay (and reloads on recovery) instead.
+  useEffect(() => {
+    if (!previewUrl) { setPreviewLoaded(false); return; }
+    let seen = false;
+    try { seen = sessionStorage.getItem(`previewLoaded:${previewUrl}`) === '1'; } catch { /* private mode */ }
+    setPreviewLoaded(seen);
+  }, [previewUrl]);
 
   // The app confirmed a real render once its plugin reports (previewReady) or,
   // for stacks without the bridge, once a loaded document sat without a report
@@ -1570,8 +1580,12 @@ const persistProjectPreferences = useCallback(
   // loaded. Latch it so subsequent per-reload previewReady resets don't re-open
   // the overlay.
   useEffect(() => {
-    if (previewReady || (bridgeAbsent && !previewDown)) setPreviewLoaded(true);
-  }, [previewReady, bridgeAbsent, previewDown]);
+    if (previewReady || (bridgeAbsent && !previewDown)) {
+      setPreviewLoaded(true);
+      // Remember this URL rendered, so a later refresh skips the cold-start overlay.
+      try { if (previewUrl) sessionStorage.setItem(`previewLoaded:${previewUrl}`, '1'); } catch { /* private mode */ }
+    }
+  }, [previewReady, bridgeAbsent, previewDown, previewUrl]);
 
   // Auto-retry the iframe while it hasn't confirmed a load. This is the missing
   // piece for NEW apps: the first load hits a not-ready subdomain/dev server and

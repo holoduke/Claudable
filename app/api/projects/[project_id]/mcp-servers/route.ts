@@ -27,8 +27,9 @@ export async function GET(_request: NextRequest, { params }: RouteContext) {
     const gate = await denyUnlessProjectAccess(project_id);
     if (gate) return gate;
     const user = await getSessionUser();
+    // The viewer sees shared servers + their OWN private ones (not others').
     const [project, builtin, catalog, shared] = await Promise.all([
-      listProjectMcpServers(project_id),
+      listProjectMcpServers(project_id, user?.id),
       getBuiltinMcpServers(project_id, !!user?.itopsEnabled),
       getMcpCatalog(),
       listSharedMcpForProject(project_id),
@@ -61,7 +62,9 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
     if (!body || typeof body.name !== 'string' || !body.transport) {
       return createErrorResponse('name and transport are required', undefined, 400);
     }
-    const created = await createProjectMcpServer(project_id, body as McpServerInput);
+    // A 'private' server is owned by the adding user (only their runs get it).
+    const actor = await getSessionUser();
+    const created = await createProjectMcpServer(project_id, body as McpServerInput, actor?.id);
     return createSuccessResponse(created, 201);
   } catch (error) {
     // Validation errors are user-facing 400s.

@@ -439,6 +439,9 @@ async function runContainerizedTurn(args: {
       projectPath: absoluteProjectPath,
       imagesOn,
       itopsEnabled: args.itopsEnabled,
+      // Who's running — so their PRIVATE project MCP servers attach (shared ones
+      // attach for everyone).
+      requesterUserId: args.requesterUserId,
       // Write the per-turn token file into the HOME dir via the LOCAL path
       // (homeHostPath is the docker-mount source on the HOST — Claudable's own
       // process cannot write there when DATA_HOST_DIR points outside /app).
@@ -866,7 +869,7 @@ export async function executeClaude(
     // the built-in brokered ones below. Best-effort — a bad row never blocks a run.
     // Project name wins over a shared one on collision.
     const [projectMcpServers, sharedMcpServers] = await Promise.all([
-      buildProjectMcpConfig(projectId).catch(() => ({})),
+      buildProjectMcpConfig(projectId, options.requesterUserId).catch(() => ({})),
       buildSharedMcpConfig(projectId).catch(() => ({})),
     ]);
 
