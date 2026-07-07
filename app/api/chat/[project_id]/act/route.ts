@@ -57,7 +57,13 @@ import {
   markUserRequestAsProcessing,
   markUserRequestAsFailed,
   getActiveRequests,
+  getUserRequestProjectId,
 } from '@/lib/services/user-requests';
+import {
+  tryReserveAgentRun,
+  setReservedRequestId,
+  releaseAgentRun,
+} from '@/lib/services/cli/run-registry';
 
 interface RouteContext {
   params: Promise<{ project_id: string }>;
@@ -85,14 +91,16 @@ function ensureAbsoluteAssetPath(projectId: string, inputPath: string): string {
   const candidate = path.isAbsolute(normalized)
     ? normalized
     : path.resolve(projectBase, normalized);
-  // Security: the path MUST stay inside the projects directory. Without this an
-  // attacker could pass an absolute path like "/etc/passwd" (or "../../..") and
-  // the app would stat/copy arbitrary files.
+  // Security: the path MUST stay inside THIS project's directory — not merely the
+  // shared projects root. Confining only to the root let an attachment path like
+  // "../<other-project>/.env" (or an absolute sibling path) resolve into another
+  // project and get stat'd + copied into public/uploads (served unauthenticated),
+  // leaking every other project's files. Scope to the caller's own project.
   if (
-    candidate !== PROJECTS_DIR_ABSOLUTE &&
-    !candidate.startsWith(PROJECTS_DIR_ABSOLUTE + path.sep)
+    candidate !== projectBase &&
+    !candidate.startsWith(projectBase + path.sep)
   ) {
-    throw new Error('Asset path is outside the projects directory');
+    throw new Error('Asset path is outside the project directory');
   }
   return candidate;
 }
@@ -293,12 +301,27 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
       );
     }
 
-    // One turn at a time. The single authoritative busy check — the client's
-    // event-driven isRunning flips false right after this POST returns (the API
-    // replies "started" immediately), so without this a second prompt (or a
-    // prompt after a mid-run reload) would launch a concurrent agent run that
-    // races file writes with the first. Reject instead.
+    // One turn at a time — atomic in-process reservation. This runs synchronously
+    // (no await between the registry's has-check and set), so two near-simultaneous
+    // POSTs (double-click, two tabs, a queue flush racing completion) cannot both
+    // pass: exactly one reserves the slot, the other is rejected as busy. The old
+    // check read getActiveRequests() and then launched many awaits later, leaving a
+    // wide window where both requests passed and two agents raced file writes.
+    if (!tryReserveAgentRun(project_id)) {
+      return NextResponse.json(
+        { success: false, error: 'busy', message: 'The agent is still working on the previous request — wait for it to finish.' },
+        { status: 409 },
+      );
+    }
+
+    // From here the slot is held; every early return must release it. Only a
+    // successful launch hands ownership to the run (whose finally releases it).
+    let launched = false;
+    try {
+    // Durable backstop: a run still active from before a server restart won't be
+    // in THIS process's in-memory registry, so also honor the DB signal.
     if ((await getActiveRequests(project_id)).hasActiveRequests) {
+      releaseAgentRun(project_id);
       return NextResponse.json(
         { success: false, error: 'busy', message: 'The agent is still working on the previous request — wait for it to finish.' },
         { status: 409 },
@@ -369,6 +392,22 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
       coerceString(legacyBody['request_id']) ??
       generateProjectId();
 
+    // requestId is a global primary key but is client-supplied. Reject one that
+    // already belongs to ANOTHER project — otherwise the upsert below would
+    // overwrite that project's request row and flip its busy gate, corrupting a
+    // different project's state.
+    const existingOwner = await getUserRequestProjectId(requestId);
+    if (existingOwner && existingOwner !== project_id) {
+      releaseAgentRun(project_id);
+      return NextResponse.json(
+        { success: false, error: 'Invalid requestId' },
+        { status: 400 },
+      );
+    }
+
+    // Tag the reserved slot so a Stop lands on THIS turn (and cleanup is scoped).
+    setReservedRequestId(project_id, requestId);
+
     const isInitialPrompt =
       body.isInitialPrompt === true ||
       legacyBody['is_initial_prompt'] === true ||
@@ -386,14 +425,6 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
           }
         : undefined;
 
-    console.log('📸 Creating message with attachments:', {
-      projectId: project_id,
-      hasAttachments: processedImages.length > 0,
-      attachmentsCount: processedImages.length,
-      metadataKeys: metadata ? Object.keys(metadata) : [],
-      metadataString: JSON.stringify(metadata, null, 2)
-    });
-
     const userMessage = await createMessage({
       projectId: project_id,
       role: 'user',
@@ -403,15 +434,6 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
       cliSource: cliPreference,
       metadata,
       requestId: requestId,
-    });
-
-    console.log('📸 Message created successfully:', {
-      messageId: userMessage.id,
-      hasMetadata: Boolean(metadata),
-      metadataType: metadata ? typeof metadata : 'undefined',
-      metadataKeys: metadata ? Object.keys(metadata) : [],
-      metadataString: metadata ? JSON.stringify(metadata, null, 2) : undefined,
-      metadataJsonLength: userMessage.metadataJson ? userMessage.metadataJson.length : 0,
     });
 
     if (requestId) {
@@ -438,7 +460,7 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
       data: serializeMessage(userMessage, { requestId }),
     });
 
-    await updateProjectActivity(project_id);
+    await updateProjectActivity(project_id, requester?.id);
 
     const projectPath = project.repoPath || path.join(process.cwd(), 'projects', project_id);
 
@@ -499,6 +521,13 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
             console.error('[API] Failed to mark request failed:', markError);
           });
         }
+      })
+       .finally(() => {
+        // Belt-and-suspenders: the executor's own finally releases the slot, but a
+        // failure between reserve and the executor's try (e.g. container prep) would
+        // otherwise leak the reservation and lock the project. Scoped by requestId
+        // so a newer turn isn't clobbered.
+        releaseAgentRun(project_id, requestId);
       });
     } else {
       const sessionId = project.activeClaudeSessionId || undefined;
@@ -532,9 +561,16 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
             console.error('[API] Failed to mark request failed:', markError);
           });
         }
+      })
+       .finally(() => {
+        // See init path: release the reservation even if the executor died before
+        // its own finally could. Scoped by requestId so a newer turn survives.
+        releaseAgentRun(project_id, requestId);
       });
     }
 
+    // The run now owns the reservation; its lifecycle (finally above) releases it.
+    launched = true;
     return NextResponse.json({
       success: true,
       message: 'AI execution started',
@@ -542,6 +578,12 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
       userMessageId: userMessage.id,
       conversationId: conversationId ?? null,
     });
+    } finally {
+      // Any path that DIDN'T hand off to a running turn (validation 400, DB-busy
+      // 409, requestId conflict, a thrown error) must free the slot so the project
+      // isn't permanently locked.
+      if (!launched) releaseAgentRun(project_id);
+    }
   } catch (error) {
     console.error('[API] Failed to execute AI:', error);
     return NextResponse.json(

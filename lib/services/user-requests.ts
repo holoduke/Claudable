@@ -12,8 +12,14 @@ export interface ActiveRequestSummary {
  * anything older is a zombie left by a crash/abort that never hit its
  * terminal-status finally block. Acts as a backstop to startup reconciliation
  * for processes that stay up but lose a run.
+ *
+ * MUST exceed the agent turn's own hang-timeout (30 min in claude-container.ts),
+ * else a legitimate long turn loses its DB lock while the container is still
+ * running and a second turn could start alongside it. The in-memory run registry
+ * is the real per-turn concurrency gate now; this is only the cross-restart
+ * backstop, so we keep a comfortable margin over the container cap.
  */
-const ACTIVE_REQUEST_STALE_MS = 20 * 60 * 1000; // 20 minutes
+const ACTIVE_REQUEST_STALE_MS = 35 * 60 * 1000; // 35 minutes (> 30-min container cap)
 
 export async function getActiveRequests(projectId: string): Promise<ActiveRequestSummary> {
   const staleCutoff = new Date(Date.now() - ACTIVE_REQUEST_STALE_MS);
@@ -33,6 +39,19 @@ export async function getActiveRequests(projectId: string): Promise<ActiveReques
     hasActiveRequests: count > 0,
     activeCount: count,
   };
+}
+
+/**
+ * The project a request row belongs to, or null if the id is unknown. Used by the
+ * act route to reject a client-supplied requestId that collides with another
+ * project's request (the id is a global PK).
+ */
+export async function getUserRequestProjectId(id: string): Promise<string | null> {
+  const row = await prisma.userRequest.findUnique({
+    where: { id },
+    select: { projectId: true },
+  });
+  return row?.projectId ?? null;
 }
 
 export type UserRequestStatus =

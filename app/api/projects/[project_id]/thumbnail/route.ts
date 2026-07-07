@@ -24,8 +24,12 @@ export async function GET(_req: NextRequest, { params }: Ctx) {
     status: 200,
     headers: {
       'Content-Type': 'image/png',
-      // Short cache: thumbnails update as the project changes.
-      'Cache-Control': 'public, max-age=60',
+      // The tile URL carries a ?v=<thumbsVersion> that the homepage bumps whenever
+      // thumbnails are refreshed, so we can cache hard and let the version param
+      // bust it — instead of re-downloading every screenshot every 60s (the old
+      // max-age=60 was the main homepage slowdown). stale-while-revalidate keeps
+      // tiles instant while a fresher shot loads in the background.
+      'Cache-Control': 'public, max-age=86400, stale-while-revalidate=604800',
     },
   });
 }

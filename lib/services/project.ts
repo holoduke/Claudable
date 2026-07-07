@@ -21,11 +21,16 @@ export async function getAllProjects(): Promise<Project[]> {
     orderBy: {
       lastActiveAt: 'desc',
     },
+    // Creator + last-editor for the homepage tile (name/email only).
+    include: {
+      owner: { select: { name: true, email: true } },
+      lastEditedBy: { select: { name: true, email: true } },
+    },
   });
   return projects.map(project => ({
     ...project,
     selectedModel: normalizeModelId(project.preferredCli ?? 'claude', project.selectedModel ?? undefined),
-  })) as Project[];
+  })) as unknown as Project[];
 }
 
 /**
@@ -173,11 +178,14 @@ export async function deleteProject(id: string): Promise<void> {
 /**
  * Update project activity time
  */
-export async function updateProjectActivity(id: string): Promise<void> {
+export async function updateProjectActivity(id: string, editedById?: string | null): Promise<void> {
   await prisma.project.update({
     where: { id },
     data: {
       lastActiveAt: new Date(),
+      // Stamp who ran this turn (homepage "last edited by"). Only when known
+      // (auth on); left unchanged otherwise.
+      ...(editedById ? { lastEditedById: editedById } : {}),
     },
   });
 }

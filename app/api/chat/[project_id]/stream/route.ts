@@ -23,10 +23,29 @@ export async function GET(
   const _gate = await denyUnlessProjectAccess(project_id);
   if (_gate) return _gate;
 
+  // Held across start/cancel so BOTH teardown paths clean up the same objects.
+  // (The `cancel` callback's argument is the cancellation *reason*, NOT the
+  // controller — passing it to removeStream removed nothing, and the heartbeat
+  // kept firing into a dead controller. Capture them here instead.)
+  let streamController: ReadableStreamDefaultController | null = null;
+  let heartbeatInterval: ReturnType<typeof setInterval> | null = null;
+
+  const cleanup = () => {
+    if (heartbeatInterval) {
+      clearInterval(heartbeatInterval);
+      heartbeatInterval = null;
+    }
+    if (streamController) {
+      streamManager.removeStream(project_id, streamController);
+      streamController = null;
+    }
+  };
+
   // Create ReadableStream
   const stream = new ReadableStream({
     start(controller) {
       console.log(`[SSE] Client connected to project: ${project_id}`);
+      streamController = controller;
 
       // Add connection to StreamManager
       streamManager.addStream(project_id, controller);
@@ -48,7 +67,7 @@ export async function GET(
       }
 
       // Heartbeat (every 30 seconds)
-      const heartbeatInterval = setInterval(() => {
+      heartbeatInterval = setInterval(() => {
         try {
           const heartbeat = `data: ${JSON.stringify({
             type: 'heartbeat',
@@ -59,21 +78,20 @@ export async function GET(
           controller.enqueue(new TextEncoder().encode(heartbeat));
         } catch (error) {
           console.error('[SSE] Failed to send heartbeat:', error);
-          clearInterval(heartbeatInterval);
+          cleanup();
         }
       }, 30000);
 
       // Cleanup on connection close
       request.signal.addEventListener('abort', () => {
         console.log(`[SSE] Client disconnected from project: ${project_id}`);
-        clearInterval(heartbeatInterval);
-        streamManager.removeStream(project_id, controller);
+        cleanup();
       });
     },
 
-    cancel(controller) {
-      console.log(`[SSE] Stream cancelled for project: ${project_id}`);
-      streamManager.removeStream(project_id, controller);
+    cancel(reason) {
+      console.log(`[SSE] Stream cancelled for project: ${project_id}`, reason ?? '');
+      cleanup();
     },
   });
 

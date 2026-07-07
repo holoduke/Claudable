@@ -70,6 +70,20 @@ export class StreamManager {
 
     projectStreams.forEach((controller) => {
       try {
+        // Backpressure guard: a stalled client (tab backgrounded, slow network)
+        // that stops reading would otherwise let us buffer the entire agent
+        // transcript in server memory unboundedly. The SSE stream uses the default
+        // count-based queue, so desiredSize goes increasingly negative as unread
+        // events pile up. Past a threshold, drop the connection — the browser's
+        // EventSource auto-reconnects and the client re-syncs missed messages from
+        // the DB — rather than grow memory without bound.
+        const desired = controller.desiredSize;
+        if (desired !== null && desired < -100) {
+          console.warn('[StreamManager] Dropping backpressured SSE client (desiredSize', desired, ')');
+          try { controller.close(); } catch { /* already closed */ }
+          deadControllers.push(controller);
+          return;
+        }
         controller.enqueue(encodedMessage);
       } catch (error) {
         console.error(`[StreamManager] Failed to send message:`, error);

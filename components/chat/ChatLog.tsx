@@ -813,6 +813,31 @@ interface ActiveSession {
   durationSeconds?: number;
 }
 
+// Module-scope (was defined inside ChatLog's body, which created a NEW component
+// type on every render → React remounted every tool row on every streamed chunk,
+// restarting collapse animations and resetting ToolMessage's internal state).
+// Memoized so an unaffected tool row doesn't re-render when siblings stream.
+const ToolResultMessage = React.memo(function ToolResultMessage({
+  message,
+  metadata,
+  isExpanded,
+  onToggle,
+}: {
+  message: ChatMessage;
+  metadata?: Record<string, unknown> | null;
+  isExpanded?: boolean;
+  onToggle?: (nextExpanded: boolean) => void;
+}) {
+  return (
+    <ToolMessage
+      content={normalizeChatContent(message.content)}
+      metadata={metadata ?? undefined}
+      isExpanded={isExpanded}
+      onToggle={onToggle}
+    />
+  );
+});
+
 interface ChatLogProps {
   projectId: string;
   onSessionStatusChange?: (isRunning: boolean) => void;
@@ -1006,6 +1031,11 @@ export default function ChatLog({ projectId, onSessionStatusChange, onProjectSta
   }, []);
   const [hasMoreMessages, setHasMoreMessages] = useState(false);
   const [totalMessageCount, setTotalMessageCount] = useState(0);
+  // Number of raw DB rows fetched so far. This — NOT messages.length — is the
+  // pagination offset: the UI list is inflated by optimistic + split tool rows and
+  // deflated by dedupe, so using it made "Load older" skip or duplicate pages.
+  const loadedRowCountRef = useRef(0);
+  const [loadedRowCount, setLoadedRowCount] = useState(0);
 
   // Enhanced deduplication system to prevent duplicate messages
   const processedMessageIds = useRef(new Set<string>());
@@ -1023,25 +1053,31 @@ export default function ChatLog({ projectId, onSessionStatusChange, onProjectSta
     events: Array<{timestamp: number; event: string; details?: any}>;
   }>>(new Map());
 
-  // Debug function to track message lifecycle
+  // Debug function to track message lifecycle. Bounded: this fires on EVERY
+  // realtime event (including every streaming update), so both the per-message
+  // event list and the map itself are capped — otherwise a long session leaks
+  // memory steadily (nothing reads these events; they're diagnostic only).
+  const LIFECYCLE_MAX_MESSAGES = 500;
+  const LIFECYCLE_MAX_EVENTS = 20;
   const trackMessageLifecycle = useCallback((messageId: string, event: string, details?: any) => {
-    if (!messageLifecycleRef.current.has(messageId)) {
-      messageLifecycleRef.current.set(messageId, {
+    const map = messageLifecycleRef.current;
+    if (!map.has(messageId)) {
+      // Evict the oldest entry once over the cap (Map preserves insertion order).
+      if (map.size >= LIFECYCLE_MAX_MESSAGES) {
+        const oldest = map.keys().next().value;
+        if (oldest !== undefined) map.delete(oldest);
+      }
+      map.set(messageId, {
         createdAt: Date.now(),
         source: details?.source || 'unknown',
         events: []
       });
     }
 
-    const lifecycle = messageLifecycleRef.current.get(messageId)!;
-    lifecycle.events.push({
-      timestamp: Date.now(),
-      event,
-      details
-    });
-
-    // Log significant events
-    if (event === 'received' || event === 'processed' || event === 'replaced_optimistic') {
+    const lifecycle = map.get(messageId)!;
+    lifecycle.events.push({ timestamp: Date.now(), event, details });
+    if (lifecycle.events.length > LIFECYCLE_MAX_EVENTS) {
+      lifecycle.events.splice(0, lifecycle.events.length - LIFECYCLE_MAX_EVENTS);
     }
   }, []);
 
@@ -1835,10 +1871,11 @@ export default function ChatLog({ projectId, onSessionStatusChange, onProjectSta
             setTotalMessageCount(normalized.length);
           }
 
-          normalized.forEach((message) => {
-            if (Array.isArray((message.metadata as any)?.attachments) && (message.metadata as any).attachments.length > 0) {
-            }
-          });
+          // Reset the offset basis to the raw rows just fetched (this is a fresh
+          // load from offset 0).
+          const rawCount = Array.isArray(chatMessages) ? chatMessages.length : 0;
+          loadedRowCountRef.current = rawCount;
+          setLoadedRowCount(rawCount);
 
           setMessages((prev) => integrateMessages(prev, normalized));
         }
@@ -1873,7 +1910,8 @@ export default function ChatLog({ projectId, onSessionStatusChange, onProjectSta
     if (!projectId || !hasMoreMessages) return;
 
     try {
-      const currentOffset = messages.length;
+      // Offset by DB rows already fetched, not the UI message count.
+      const currentOffset = loadedRowCountRef.current;
       const response = await fetch(`${API_BASE}/api/chat/${projectId}/messages?limit=100&offset=${currentOffset}`);
 
       if (response.ok) {
@@ -1884,6 +1922,11 @@ export default function ChatLog({ projectId, onSessionStatusChange, onProjectSta
         const normalized = Array.isArray(chatMessages)
           ? expandMessagesList(chatMessages.map(toChatMessage), ensureStableMessageId)
           : [];
+
+        // Advance the offset basis by the raw rows returned.
+        const rawCount = Array.isArray(chatMessages) ? chatMessages.length : 0;
+        loadedRowCountRef.current += rawCount;
+        setLoadedRowCount((c) => c + rawCount);
 
         // Update pagination state
         if (payload.pagination) {
@@ -1899,7 +1942,7 @@ export default function ChatLog({ projectId, onSessionStatusChange, onProjectSta
     } catch (error) {
       console.error('[ChatLog] Failed to load older messages:', error);
     }
-  }, [projectId, hasMoreMessages, messages.length, ensureStableMessageId]);
+  }, [projectId, hasMoreMessages, ensureStableMessageId]);
 
   // Poll session status periodically. NOTE: its OWN interval ref — it used to
   // share pollIntervalRef with the history poller and each silently killed the
@@ -2130,27 +2173,6 @@ export default function ChatLog({ projectId, onSessionStatusChange, onProjectSta
     return toRelativePath(text);
   };
 
-const ToolResultMessage = ({
-  message,
-  metadata,
-  isExpanded,
-  onToggle,
-}: {
-  message: ChatMessage;
-  metadata?: Record<string, unknown> | null;
-  isExpanded?: boolean;
-  onToggle?: (nextExpanded: boolean) => void;
-}) => {
-  return (
-    <ToolMessage
-      content={normalizeChatContent(message.content)}
-      metadata={metadata ?? undefined}
-      isExpanded={isExpanded}
-      onToggle={onToggle}
-    />
-  );
-};
-
   // Function to clean user messages by removing think hard instruction and chat mode instructions
   const cleanUserMessage = (content: string) => {
     if (!content) return content;
@@ -2298,67 +2320,6 @@ const ToolResultMessage = ({
   };
 
   // Function to get message type label and styling
-  const getMessageTypeInfo = (message: ChatMessage) => {
-    const { role, messageType } = message;
-    
-    // Handle different message types
-    switch (messageType) {
-      case 'tool_result':
-        return {
-          bgClass: 'bg-blue-50 border border-blue-200 dark:bg-blue-950/40 dark:border-blue-900 ',
-          textColor: 'text-blue-900 dark:text-blue-100 ',
-          labelColor: 'text-blue-600 dark:text-blue-300 '
-        };
-      case 'system':
-        return {
-          bgClass: 'bg-green-50 border border-green-200 dark:bg-green-950/40 dark:border-green-900 ',
-          textColor: 'text-green-900 dark:text-green-100 ',
-          labelColor: 'text-green-600 dark:text-green-300 '
-        };
-      case 'error':
-        return {
-          bgClass: 'bg-red-50 border border-red-200 dark:bg-red-950/40 dark:border-red-900 ',
-          textColor: 'text-red-900 dark:text-red-100 ',
-          labelColor: 'text-red-600 dark:text-red-300 '
-        };
-      case 'info':
-        return {
-          bgClass: 'bg-yellow-50 border border-yellow-200 dark:bg-yellow-950/40 dark:border-yellow-900 ',
-          textColor: 'text-yellow-900 dark:text-yellow-100 ',
-          labelColor: 'text-yellow-600 dark:text-yellow-300 '
-        };
-      default:
-        // Handle by role
-        switch (role) {
-          case 'user':
-            return {
-              bgClass: 'bg-white dark:bg-white/[0.03] border border-gray-200 dark:border-white/[0.08]',
-              textColor: 'text-gray-900 dark:text-gray-50 ',
-              labelColor: 'text-gray-600 dark:text-gray-300 '
-            };
-          case 'system':
-            return {
-              bgClass: 'bg-green-50 border border-green-200 dark:bg-green-950/40 dark:border-green-900 ',
-              textColor: 'text-green-900 dark:text-green-100 ',
-              labelColor: 'text-green-600 dark:text-green-300 '
-            };
-          case 'tool':
-            return {
-              bgClass: 'bg-purple-50 border border-purple-200 dark:bg-purple-950/40 dark:border-purple-900 ',
-              textColor: 'text-purple-900 dark:text-purple-100 ',
-              labelColor: 'text-purple-600 dark:text-purple-300 '
-            };
-          case 'assistant':
-          default:
-            return {
-              bgClass: 'bg-white dark:bg-white/[0.03] border border-gray-200 dark:border-white/[0.08]',
-              textColor: 'text-gray-900 dark:text-gray-50 ',
-              labelColor: 'text-gray-600 dark:text-gray-300 '
-            };
-        }
-    }
-  };
-
   // Message filtering function - hide internal tool results and system messages
   const shouldDisplayMessage = (message: ChatMessage) => {
     const metadata = message.metadata as Record<string, unknown> | null | undefined;
@@ -2711,7 +2672,7 @@ const ToolResultMessage = ({
               className="px-4 py-2 text-sm text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-white/[0.06] hover:bg-gray-200 dark:hover:bg-white/[0.06] rounded-md transition-colors"
               disabled={isLoading}
             >
-              {isLoading ? 'Loading...' : `Load older messages (${totalMessageCount - messages.length} remaining)`}
+              {isLoading ? 'Loading...' : `Load older messages (${Math.max(0, totalMessageCount - loadedRowCount)} remaining)`}
             </button>
           </div>
         )}

@@ -84,17 +84,6 @@ const sanitizeModel = (cli: string, model?: string | null) => normalizeModelForC
 
 // Function to convert hex to CSS filter for tinting white images
 // Since the original image is white (#FFFFFF), we can apply filters more accurately
-const hexToFilter = (hex: string): string => {
-  // For white source images, we need to invert and adjust
-  const filters: { [key: string]: string } = {
-    '#DE7356': 'brightness(0) saturate(100%) invert(52%) sepia(73%) saturate(562%) hue-rotate(336deg) brightness(95%) contrast(91%)',
-    '#000000': 'brightness(0) saturate(100%)',
-    '#11A97D': 'brightness(0) saturate(100%) invert(57%) sepia(30%) saturate(747%) hue-rotate(109deg) brightness(90%) contrast(92%)',
-    '#1677FF': 'brightness(0) saturate(100%) invert(40%) sepia(86%) saturate(1806%) hue-rotate(201deg) brightness(98%) contrast(98%)',
-  };
-  return filters[hex] || filters['#DE7356'];
-};
-
 type ProjectStatus = 'initializing' | 'active' | 'failed';
 
 type CliStatusSnapshot = {
@@ -171,6 +160,11 @@ export default function ChatPage() {
   // CLI-style message queue: messages typed while a turn is running wait here and
   // auto-send (one per turn) when the current turn finishes.
   const [queuedMessages, setQueuedMessages] = useState<Array<{ message: string; images: any[] }>>([]);
+  // On interrupt, queued input is handed BACK to the composer. ChatInput owns its
+  // own text/image state, so we push a draft to it imperatively (nonce-guarded) —
+  // setting page-level `prompt` alone did nothing because the input never read it.
+  const [draftRestore, setDraftRestore] = useState<{ text: string; images: any[]; nonce: number } | null>(null);
+  const draftRestoreNonceRef = useRef(0);
   // Agent usage panel (context %, tokens, rate limits) — fed by SSE `agent_status`.
   const [agentStatus, setAgentStatus] = useState<AgentUsageSnapshot | null>(null);
   const [statusPanelOpen, setStatusPanelOpen] = useState(false);
@@ -241,7 +235,7 @@ export default function ChatPage() {
   }, [overflowMenuOpen]);
   const deviceViewportRef = useRef<HTMLDivElement>(null);
   // Always points at the latest runAct closure (used by persistEdits).
-  const runActRef = useRef<((m?: string, i?: any[]) => Promise<void>) | null>(null);
+  const runActRef = useRef<((m?: string, i?: any[]) => Promise<{ ok: boolean; busy: boolean } | void>) | null>(null);
   const currentRouteRef = useRef<string>('/');
   // User explicitly stopped the preview — suppress the auto-start effect until
   // they act again, else stop() (previewUrl→null) immediately re-triggered
@@ -457,15 +451,23 @@ export default function ChatPage() {
         interruptedRef.current = false;
         if (queuedMessages.length > 0) {
           const text = queuedMessages.map((q) => q.message).join('\n\n');
-          setPrompt((cur) => [cur.trim(), text].filter(Boolean).join('\n\n'));
           const imgs = queuedMessages.flatMap((q) => q.images || []);
-          if (imgs.length) setUploadedImages((cur) => [...cur, ...imgs]);
+          // Hand the queued text + images back to ChatInput's own composer state.
+          draftRestoreNonceRef.current += 1;
+          setDraftRestore({ text, images: imgs, nonce: draftRestoreNonceRef.current });
           setQueuedMessages([]);
         }
       } else if (queuedMessages.length > 0) {
         const next = queuedMessages[0];
         setQueuedMessages((q) => q.slice(1));
-        runActRef.current?.(next.message, next.images);
+        void Promise.resolve(runActRef.current?.(next.message, next.images)).then((res) => {
+          // If the send lost a race (another tab/turn grabbed the slot → 409) or
+          // failed, put the message back at the FRONT so the next idle edge retries
+          // it instead of silently dropping it.
+          if (res && !res.ok && res.busy) {
+            setQueuedMessages((q) => [next, ...q]);
+          }
+        });
       }
     }
     prevBusyRef.current = busy;
@@ -614,7 +616,12 @@ export default function ChatPage() {
       if (!r.ok) {
         const errorText = await r.text();
         console.error('❌ API Error:', errorText);
+        // Reset BOTH the state and the ref — triggerInitialPromptIfNeeded gates on
+        // the ref, so leaving it set would strand the project's creation prompt
+        // with no retry and no user feedback.
         setInitialPromptSent(false);
+        initialPromptSentRef.current = false;
+        toast.error('Could not start building — please try sending your prompt again.');
         return;
       }
 
@@ -651,10 +658,12 @@ export default function ChatPage() {
     } catch (error) {
       console.error('Error sending initial prompt:', error);
       setInitialPromptSent(false);
+      initialPromptSentRef.current = false;
+      toast.error('Could not start building — please try sending your prompt again.');
     } finally {
       setIsRunning(false);
     }
-  }, [initialPromptSent, preferredCli, conversationId, projectId, selectedModel, thinkingMode, createRequest]);
+  }, [initialPromptSent, preferredCli, conversationId, projectId, selectedModel, thinkingMode, createRequest, toast]);
 
   // Guarded trigger that can be called from multiple places safely
   const triggerInitialPromptIfNeeded = useCallback(() => {
@@ -733,10 +742,10 @@ const persistProjectPreferences = useCallback(
 );
 
   const handleModelChange = useCallback(
-    async (option: ModelOption, opts?: { skipCliUpdate?: boolean; overrideCli?: string }) => {
+    async (option: ModelOption, opts?: { skipCliUpdate?: boolean; overrideCli?: string; silent?: boolean }) => {
       if (!projectId || !option) return;
 
-      const { skipCliUpdate = false, overrideCli } = opts || {};
+      const { skipCliUpdate = false, overrideCli, silent = false } = opts || {};
       const targetCli = sanitizeCli(overrideCli ?? option.cli);
       const sanitizedModelId = sanitizeModel(targetCli, option.id);
 
@@ -765,20 +774,25 @@ const persistProjectPreferences = useCallback(
 
         const cliLabel = CLI_LABELS[targetCli] || targetCli;
         const modelLabel = getModelDisplayName(targetCli, sanitizedModelId);
-        try {
-          await fetch(`${API_BASE}/api/chat/${projectId}/messages`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              content: `Switched to ${cliLabel} (${modelLabel})`,
-              role: 'system',
-              message_type: 'info',
-              cli_source: targetCli,
-              conversation_id: conversationId || undefined,
-            }),
-          });
-        } catch (messageError) {
-          console.warn('Failed to record model switch message:', messageError);
+        // Silent switches (auto-correcting a stale/renamed stored model on load)
+        // must NOT post a "Switched to…" system message — otherwise every page
+        // open spams the transcript. Only a user-initiated switch records it.
+        if (!silent) {
+          try {
+            await fetch(`${API_BASE}/api/chat/${projectId}/messages`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                content: `Switched to ${cliLabel} (${modelLabel})`,
+                role: 'system',
+                message_type: 'info',
+                cli_source: targetCli,
+                conversation_id: conversationId || undefined,
+              }),
+            });
+          } catch (messageError) {
+            console.warn('Failed to record model switch message:', messageError);
+          }
         }
 
         loadCliStatuses();
@@ -847,7 +861,9 @@ const persistProjectPreferences = useCallback(
         || modelOptions.find(option => option.available)
         || modelOptions[0];
       if (fallbackOption) {
-        void handleModelChange(fallbackOption);
+        // Auto-correction on load, not a user action: persist silently so we don't
+        // post a "Switched to…" message into the chat on every page open.
+        void handleModelChange(fallbackOption, { silent: true });
       }
     }
   }, [modelOptions, preferredCli, selectedModel, handleModelChange]);
@@ -1702,33 +1718,6 @@ const persistProjectPreferences = useCallback(
     });
   }
 
-  // Build tree structure from flat list
-  function buildTreeStructure(entries: Entry[]): Map<string, Entry[]> {
-    const structure = new Map<string, Entry[]>();
-    
-    // Initialize with root
-    structure.set('', []);
-    
-    entries.forEach(entry => {
-      const parts = entry.path.split('/');
-      const parentPath = parts.slice(0, -1).join('/');
-      
-      if (!structure.has(parentPath)) {
-        structure.set(parentPath, []);
-      }
-      structure.get(parentPath)?.push(entry);
-      
-      // If it's a directory, ensure it exists in the structure
-      if (entry.type === 'dir') {
-        if (!structure.has(entry.path)) {
-          structure.set(entry.path, []);
-        }
-      }
-    });
-    
-    return structure;
-  }
-
   const openFile = useCallback(async (path: string) => {
     try {
       if (hasUnsavedChanges && path !== selectedFile) {
@@ -2243,40 +2232,6 @@ const persistProjectPreferences = useCallback(
     };
   }, [createStableMessageHandlers]);
 
-  // Handle image upload with base64 conversion
-  const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const files = event.target.files;
-    if (files) {
-      Array.from(files).forEach(file => {
-        if (file.type.startsWith('image/')) {
-          const url = URL.createObjectURL(file);
-          
-          // Convert to base64
-          const reader = new FileReader();
-          reader.onload = (e) => {
-            const base64 = e.target?.result as string;
-            setUploadedImages(prev => [...prev, {
-              name: file.name,
-              url,
-              base64
-            }]);
-          };
-          reader.readAsDataURL(file);
-        }
-      });
-    }
-  };
-
-  // Remove uploaded image
-  const removeUploadedImage = (index: number) => {
-    setUploadedImages(prev => {
-      const newImages = [...prev];
-      URL.revokeObjectURL(newImages[index].url);
-      newImages.splice(index, 1);
-      return newImages;
-    });
-  };
-
   runActRef.current = (m, i) => runAct(m, i);
   currentRouteRef.current = currentRoute;
 
@@ -2286,11 +2241,16 @@ const persistProjectPreferences = useCallback(
     // Mark this as a user interrupt so the busy->idle flush returns queued
     // messages to the input instead of auto-sending them (CLI parity). Only when
     // actually busy, so the flag can't linger and mis-handle a later turn.
-    if (isRunning || hasActiveRequests) interruptedRef.current = true;
+    if (!(isRunning || hasActiveRequests)) return;
+    interruptedRef.current = true;
     try {
-      await fetch(`${API_BASE}/api/chat/${projectId}/act/stop`, { method: 'POST' });
+      const r = await fetch(`${API_BASE}/api/chat/${projectId}/act/stop`, { method: 'POST' });
+      // If the stop didn't land, the turn keeps streaming and will finish
+      // NATURALLY — clear the interrupt flag so that natural completion auto-sends
+      // the queue instead of being mistaken for an interrupt.
+      if (!r.ok) interruptedRef.current = false;
     } catch {
-      /* best-effort — the turn keeps streaming if the stop didn't land */
+      interruptedRef.current = false;
     }
   }
 
@@ -2300,7 +2260,7 @@ const persistProjectPreferences = useCallback(
 
     if (!finalMessage.trim() && imagesToUse.length === 0) {
       toast.info('Please enter a task description or upload an image.');
-      return;
+      return { ok: false, busy: false };
     }
 
     // Add additional instructions in Chat Mode
@@ -2319,7 +2279,7 @@ const persistProjectPreferences = useCallback(
 
     // Check for duplicate pending requests
     if (pendingRequestsRef.current.has(requestFingerprint)) {
-      return;
+      return { ok: false, busy: false };
     }
 
     setIsRunning(true);
@@ -2490,8 +2450,15 @@ const persistProjectPreferences = useCallback(
             }
           }
 
+          // 409 = another turn is already running (e.g. a race with another tab,
+          // or a queue flush that beat this one). Signal 'busy' so a queue-flush
+          // caller can re-queue instead of dropping the message; stay quiet on the
+          // toast for that case since it's transient and self-healing.
+          if (r.status === 409) {
+            return { ok: false, busy: true };
+          }
           toast.error(`Failed to send message: ${r.status} ${r.statusText}`);
-          return;
+          return { ok: false, busy: false };
         }
       } catch (fetchError: any) {
         clearTimeout(timeoutId);
@@ -2505,7 +2472,7 @@ const persistProjectPreferences = useCallback(
           }
 
           toast.error('Request timed out after 60 seconds. Please check your connection and try again.');
-          return;
+          return { ok: false, busy: false };
         }
         throw fetchError;
       }
@@ -2550,7 +2517,8 @@ const persistProjectPreferences = useCallback(
         });
         setUploadedImages([]);
       }
-      
+
+      return { ok: true, busy: false };
     } catch (error: any) {
       console.error('Act execution error:', error);
 
@@ -2564,6 +2532,7 @@ const persistProjectPreferences = useCallback(
 
       const errorMessage = error?.message || String(error);
       toast.error(`Failed to send message: ${errorMessage}. Please try again — check the console if it persists.`);
+      return { ok: false, busy: false };
     } finally {
       setIsRunning(false);
       // Remove from pending requests
@@ -3014,6 +2983,7 @@ const persistProjectPreferences = useCallback(
                 disabled={false}
                 isRunning={isRunning || hasActiveRequests}
                 onStop={stopTurn}
+                restoreDraft={draftRestore}
                 placeholder={mode === 'act' ? "Ask Claudable..." : "Chat with Claudable..."}
                 mode={mode}
                 onModeChange={setMode}

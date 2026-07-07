@@ -20,8 +20,9 @@ import { resolveProjectClaudeToken } from '../claude-credentials';
 import { buildItopsMcpServer } from '../itops/itops-mcp';
 import { buildDiagnosticsMcpServer } from '../diagnostics-mcp';
 import { runAgentTurnContainerized, agentHostPath, defaultAgentSandboxNet, type AgentStreamEvent } from './claude-container';
-import { registerAgentRun, unregisterAgentRun } from './run-registry';
+import { attachAgentAbort, unregisterAgentRun } from './run-registry';
 import { prepareAgentMcpTurnConfig } from '../agent-mcp-http';
+import { buildProjectMcpConfig } from '../project-mcp';
 import { previewSlug, ensureProjectNetwork } from '../preview';
 import { getInjectedEnv, ensureServicesRunning } from '../managed-containers';
 import { buildImagesMcpServer, imagesEnabledFor } from '../images-mcp';
@@ -31,6 +32,30 @@ import { CLAUDE_DEFAULT_MODEL, normalizeClaudeModelId, getClaudeModelDisplayName
 import path from 'path';
 import os from 'os';
 import { realpathSync } from 'fs';
+
+/**
+ * Persist + stream a visible "interrupted" marker so a stopped turn leaves a
+ * trace in the transcript (CLI parity: Esc records that the turn was interrupted)
+ * and it survives a reload. Best-effort — never throws into the caller.
+ */
+async function persistInterruptedMarker(projectId: string, requestId?: string): Promise<void> {
+  try {
+    const marker = await createMessage({
+      projectId,
+      role: 'system',
+      messageType: 'info',
+      content: '⏹ Request interrupted by user',
+      cliSource: 'claude',
+      ...(requestId ? { requestId } : {}),
+    });
+    streamManager.publish(projectId, {
+      type: 'message',
+      data: serializeMessage(marker, requestId ? { requestId } : undefined),
+    });
+  } catch (error) {
+    console.error('[ClaudeService] Failed to persist interrupted marker:', error);
+  }
+}
 
 /**
  * The environment handed to the agent subprocess. The SDK REPLACES the child
@@ -502,12 +527,9 @@ async function runContainerizedTurn(args: {
 
     // Expose this turn to the Stop endpoint (Esc-style interrupt). The flag lets
     // the failure path below tell "user pressed Stop" apart from a real crash.
-    registerAgentRun(projectId, {
-      requestId,
-      abort: () => {
-        interruptedByUser = true;
-        abort();
-      },
+    attachAgentAbort(projectId, requestId, () => {
+      interruptedByUser = true;
+      abort();
     });
 
     let result: Awaited<typeof done>;
@@ -519,6 +541,7 @@ async function runContainerizedTurn(args: {
     await queue; // flush in-flight message handling before finishing the turn
 
     if (interruptedByUser) {
+      await persistInterruptedMarker(projectId, requestId);
       await args.safeMarkFailed('Stopped by user');
       args.publishStatus('completed', 'Stopped by user');
       console.log('[ClaudeContainer] Turn stopped by user');
@@ -714,6 +737,18 @@ export async function executeClaude(
   const { markPlaceholderHandled, persistedToolMessageSignatures, completedStreamSessions } = processor;
   void currentSessionId; // kept for parity/debugging (assigned via onSessionId)
 
+  interface AssistantStreamState {
+    messageId: string;
+    content: string;
+    hasSentUpdate: boolean;
+    finalized: boolean;
+  }
+
+  // Hoisted to function scope so the abort (Stop) handler can flush partial
+  // streamed text that message_stop never got to persist — otherwise text the
+  // user already saw vanishes on reload.
+  const assistantStreamStates = new Map<string, AssistantStreamState>();
+
   try {
     // Verify project exists (prevents foreign key constraint errors)
     console.log(`[ClaudeService] 🔍 Verifying project exists...`);
@@ -812,7 +847,11 @@ export async function executeClaude(
     // Start Claude Agent SDK query
     console.log(`[ClaudeService] 🤖 Querying Claude Agent SDK...`);
     console.log(`[ClaudeService] 📁 Working Directory: ${absoluteProjectPath}`);
-    registerAgentRun(projectId, { requestId, abort: () => abortController.abort() });
+    attachAgentAbort(projectId, requestId, () => abortController.abort());
+
+    // Per-project user-defined MCP servers (Project Settings → MCP), merged into
+    // the built-in brokered ones below. Best-effort — a bad row never blocks a run.
+    const projectMcpServers = await buildProjectMcpConfig(projectId).catch(() => ({}));
 
     const response = query({
       prompt: instruction,
@@ -839,6 +878,9 @@ export async function executeClaude(
           appdiag: buildDiagnosticsMcpServer(projectId),
           ...(itopsEnabled ? { itops: buildItopsMcpServer() } : {}),
           ...(imagesOn ? { images: buildImagesMcpServer(projectId, absoluteProjectPath) } : {}),
+          // Project-defined external MCP servers (http/sse/stdio). Reserved names
+          // are blocked at create time, so these never shadow the brokered tools.
+          ...projectMcpServers,
         },
         // See skillSettingSources above: ['project','user'] by default (auto-load
         // all skills), or ['project'] once any skill is disabled (load only the
@@ -864,15 +906,6 @@ export async function executeClaude(
         },
       } as any,
     });
-
-    interface AssistantStreamState {
-      messageId: string;
-      content: string;
-      hasSentUpdate: boolean;
-      finalized: boolean;
-    }
-
-    const assistantStreamStates = new Map<string, AssistantStreamState>();
 
     // Handle streaming response
     for await (const message of response) {
@@ -1039,6 +1072,9 @@ export async function executeClaude(
                 messageType: 'chat',
                 content: streamState.content,
                 cliSource: 'claude',
+                // Stamp the turn's requestId so checkpointTurn can locate this
+                // assistant message to attach the commit sha ("Revert to here").
+                ...(requestId ? { requestId } : {}),
               });
 
               streamManager.publish(projectId, {
@@ -1082,6 +1118,30 @@ export async function executeClaude(
     // the transcript keeps whatever streamed before the interrupt).
     if (abortController.signal.aborted) {
       console.log('[ClaudeService] Turn stopped by user');
+      // Flush any partial assistant text that message_stop never persisted, so
+      // what the user already saw survives a reload (CLI parity).
+      for (const state of assistantStreamStates.values()) {
+        if (state.finalized) continue;
+        if (!state.content.trim()) continue;
+        try {
+          const saved = await createMessage({
+            id: state.messageId,
+            projectId,
+            role: 'assistant',
+            messageType: 'chat',
+            content: state.content,
+            cliSource: 'claude',
+            ...(requestId ? { requestId } : {}),
+          });
+          streamManager.publish(projectId, {
+            type: 'message',
+            data: serializeMessage(saved, { isStreaming: false, isFinal: true, requestId }),
+          });
+        } catch (persistError) {
+          console.error('[ClaudeService] Failed to persist partial text on stop:', persistError);
+        }
+      }
+      await persistInterruptedMarker(projectId, requestId);
       await safeMarkFailed('Stopped by user');
       if (!emittedCompletedStatus) {
         publishStatus('completed', 'Stopped by user');

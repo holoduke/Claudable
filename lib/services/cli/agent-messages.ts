@@ -517,6 +517,9 @@ export function createAgentMessageProcessor(ctx: AgentMessageProcessorContext) {
           // sessionId is Session table foreign key, so don't store Claude SDK session ID
           // Claude SDK session ID is stored in project.activeClaudeSessionId
           cliSource: 'claude',
+          // Stamp the turn's requestId so checkpointTurn can find THIS turn's
+          // assistant message to attach the commit sha (enables "Revert to here").
+          ...(requestId ? { requestId } : {}),
         });
 
         // Send via SSE in real-time
@@ -537,8 +540,12 @@ export function createAgentMessageProcessor(ctx: AgentMessageProcessorContext) {
       } catch (error) {
         console.error('[ClaudeService] Failed to record turn usage:', error);
       }
-      ctx.publishStatus('completed');
+      // Commit the terminal DB status BEFORE announcing completion. The client's
+      // busy→idle edge auto-sends the next queued message on this 'completed'
+      // event; if we published first, that POST's DB backstop check could still
+      // see this row as 'running' → 409 → the queued message is silently dropped.
       await ctx.markCompleted();
+      ctx.publishStatus('completed');
       return 'result';
     }
 
