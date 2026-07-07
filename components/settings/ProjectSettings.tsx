@@ -14,6 +14,7 @@ import ProjectAccessSettings from './ProjectAccessSettings';
 import DesignSettings from './DesignSettings';
 import ProjectClaudeSettings from './ProjectClaudeSettings';
 import ContainersSettings from './ContainersSettings';
+import McpServersSettings from './McpServersSettings';
 
 interface ProjectSettingsProps {
   isOpen: boolean;
@@ -25,7 +26,7 @@ interface ProjectSettingsProps {
   onProjectUpdated?: (update: { name: string; description?: string | null }) => void;
 }
 
-type SettingsTab = 'general' | 'ai-assistant' | 'environment' | 'services' | 'containers' | 'skills' | 'design' | 'claude' | 'access';
+type SettingsTab = 'general' | 'ai-assistant' | 'environment' | 'services' | 'containers' | 'skills' | 'mcp' | 'design' | 'claude' | 'access';
 
 export function ProjectSettings({
   isOpen,
@@ -77,6 +78,12 @@ export function ProjectSettings({
           id: 'skills' as SettingsTab,
           label: 'Skills',
           icon: <span className="w-4 h-4 inline-flex"><FaMagic /></span>,
+          hidden: !isProjectScoped,
+        },
+        {
+          id: 'mcp' as SettingsTab,
+          label: 'MCP',
+          icon: <span className="w-4 h-4 inline-flex"><FaPlug /></span>,
           hidden: !isProjectScoped,
         },
         {
@@ -189,6 +196,10 @@ export function ProjectSettings({
 
           {activeTab === 'skills' && (
             <SkillsSettings projectId={projectId} />
+          )}
+
+          {activeTab === 'mcp' && isProjectScoped && (
+            <McpServersSettings projectId={projectId} />
           )}
 
           {activeTab === 'design' && isProjectScoped && (

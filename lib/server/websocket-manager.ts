@@ -73,6 +73,17 @@ class WebSocketManager {
         continue;
       }
 
+      // Backpressure: a stalled socket accumulates unsent bytes in bufferedAmount.
+      // Past a cap, terminate it (client reconnects + re-syncs) rather than let the
+      // agent transcript grow in server memory without bound.
+      const buffered = (socket as { bufferedAmount?: number }).bufferedAmount ?? 0;
+      if (buffered > 8 * 1024 * 1024) {
+        console.warn('[WebSocketManager] Dropping backpressured socket (bufferedAmount', buffered, ')');
+        try { (socket as { terminate?: () => void }).terminate?.(); } catch { /* already gone */ }
+        projectConnections.delete(socket);
+        continue;
+      }
+
       try {
         socket.send(payload);
       } catch (error) {

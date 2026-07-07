@@ -29,6 +29,22 @@ export async function requireProjectManager(projectId: string): Promise<ManagerG
   return { ok: true, user, project };
 }
 
+/** Resolve the signed-in WRITER for a project (owner/admin/org-member/editor),
+ *  or a typed denial. Same tier required to run the agent — used so any project
+ *  writer (not just the owner) can pick which of THEIR selectable credentials a
+ *  project runs under. Credential validation is re-checked server-side against
+ *  listSelectableCredentials, so this never exposes another user's private token. */
+export async function requireProjectWriter(projectId: string): Promise<ManagerGate> {
+  const user = await getSessionUser();
+  if (!user) return { ok: false, status: 401, code: 'unauthorized', message: 'Sign in required' };
+  const project = await prisma.project.findUnique({ where: { id: projectId } });
+  if (!project) return { ok: false, status: 404, code: 'not_found', message: 'Project not found' };
+  if (!(await canWriteProject(user, project))) {
+    return { ok: false, status: 403, code: 'forbidden', message: 'You need write access to this project' };
+  }
+  return { ok: true, user, project };
+}
+
 type AccessProject = {
   id: string;
   ownerId: string | null;
