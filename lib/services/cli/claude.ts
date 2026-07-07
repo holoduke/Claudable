@@ -19,7 +19,7 @@ import { stackKind } from '@/lib/config/stacks';
 import { resolveProjectClaudeToken } from '../claude-credentials';
 import { buildItopsMcpServer } from '../itops/itops-mcp';
 import { buildDiagnosticsMcpServer } from '../diagnostics-mcp';
-import { runAgentTurnContainerized, agentHostPath, defaultAgentSandboxNet, type AgentStreamEvent } from './claude-container';
+import { runAgentTurnContainerized, agentHostPath, defaultAgentSandboxNet, accountMcpConnectorsEnabled, type AgentStreamEvent } from './claude-container';
 import { attachAgentAbort, unregisterAgentRun } from './run-registry';
 import { prepareAgentMcpTurnConfig } from '../agent-mcp-http';
 import { buildProjectMcpConfig } from '../project-mcp';
@@ -511,7 +511,12 @@ async function runContainerizedTurn(args: {
         projectNet,
         systemPrompt,
         mcpConfigPath: mcp?.containerPath,
-        strictMcpConfig: Boolean(mcp),
+        // Strict = ONLY our brokered config. When account-connector passthrough
+        // is on (default), stay non-strict so the CLI also loads the user's
+        // Claude account managed connectors (Gmail/Drive/Atlassian/…), matching
+        // `claude mcp list`. Unapproved project `.mcp.json` servers remain
+        // pending (not auto-run), so this doesn't let a generated app inject tools.
+        strictMcpConfig: Boolean(mcp) && !accountMcpConnectorsEnabled(),
         homeHostPath,
         skillsHostPath,
         skillsContainerPath,

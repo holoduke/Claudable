@@ -254,6 +254,26 @@ export function runAgentTurnContainerized(
 export function defaultAgentSandboxNet(): string | undefined {
   return process.env.PREVIEW_SANDBOX_NETWORK?.trim() || undefined;
 }
+
+/**
+ * Whether the containerized agent inherits the Claude account's MANAGED
+ * CONNECTORS (Gmail, Drive, Calendar, Atlassian, …) in addition to Claudable's
+ * own brokered tools — i.e. parity with `claude mcp list` in the CLI.
+ *
+ * When true we do NOT pass `--strict-mcp-config`, so the CLI merges the account
+ * connectors with our `--mcp-config`. The sandbox net already allows public
+ * internet (needed for the Anthropic API), so the connector endpoints are
+ * reachable; the box's private network stays blocked. This intentionally
+ * loosens the agent's isolation to the user's own account connectors.
+ *
+ * Default ON. Set AGENT_ACCOUNT_MCP_CONNECTORS=0 to restore strict isolation
+ * (only Claudable's brokered tools + explicit per-project MCP servers).
+ */
+export function accountMcpConnectorsEnabled(): boolean {
+  const v = process.env.AGENT_ACCOUNT_MCP_CONNECTORS;
+  if (v === undefined || v.trim() === '') return true;
+  return !/^(0|false|off|no)$/i.test(v.trim());
+}
 /** Translate an in-container /app/data path to the real host path for bind mounts. */
 export function agentHostPath(p: string): string {
   const hostData = process.env.DATA_HOST_DIR;

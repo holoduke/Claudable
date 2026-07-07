@@ -57,6 +57,7 @@ export default function McpServersSettings({ projectId }: Props) {
   const [builtin, setBuiltin] = useState<{ name: string; label: string; description: string; active: boolean }[]>([]);
   const [catalog, setCatalog] = useState<McpCatalogEntry[]>([]);
   const [addingCatalogName, setAddingCatalogName] = useState<string | null>(null);
+  const [accountConnectors, setAccountConnectors] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -69,6 +70,7 @@ export default function McpServersSettings({ projectId }: Props) {
         setServers(Array.isArray(d) ? d : d.project ?? []);
         setBuiltin(Array.isArray(d) ? [] : d.builtin ?? []);
         setCatalog(Array.isArray(d) ? [] : d.catalog ?? []);
+        setAccountConnectors(Array.isArray(d) ? false : !!d.accountConnectors);
       } else setError(json?.error || 'Failed to load MCP servers');
     } catch {
       setError('Failed to load MCP servers');
@@ -213,6 +215,17 @@ export default function McpServersSettings({ projectId }: Props) {
                 </div>
               ))}
             </div>
+          </div>
+        )}
+        {accountConnectors && (
+          <div className="mb-5 rounded-lg border border-sky-200 dark:border-sky-900/50 bg-sky-50/60 dark:bg-sky-950/20 px-3 py-2.5">
+            <p className="text-sm font-medium text-sky-800 dark:text-sky-300">Your Claude account connectors</p>
+            <p className="text-xs text-sky-700/80 dark:text-sky-400/80 mt-0.5">
+              The agent also inherits the managed connectors from your Claude subscription
+              (Gmail, Drive, Calendar, Atlassian, and any others you&apos;ve connected) — the same
+              set <code className="px-1 py-0.5 rounded bg-sky-100 dark:bg-sky-900/40 text-[11px]">claude mcp list</code> shows.
+              Manage or disconnect those in your Claude account settings.
+            </p>
           </div>
         )}
         <h4 className="text-xs font-medium uppercase tracking-wide text-gray-400 dark:text-gray-500 mb-2">Project servers</h4>

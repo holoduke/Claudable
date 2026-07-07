@@ -13,6 +13,7 @@ import {
 } from '@/lib/services/project-mcp';
 import { getSessionUser } from '@/lib/auth/session';
 import { getMcpCatalog } from '@/lib/config/mcp-catalog';
+import { accountMcpConnectorsEnabled } from '@/lib/services/cli/claude-container';
 import { createSuccessResponse, createErrorResponse, handleApiError } from '@/lib/utils/api-response';
 
 interface RouteContext {
@@ -33,7 +34,15 @@ export async function GET(_request: NextRequest, { params }: RouteContext) {
     // The catalog lists predefined servers not yet configured for this project.
     const configured = new Set(project.map((s) => s.name));
     const available = catalog.filter((c) => !configured.has(c.name));
-    return createSuccessResponse({ project, builtin, catalog: available });
+    // Account managed connectors (Gmail/Drive/Atlassian/…) are only actually
+    // inherited on the CONTAINERIZED agent path with passthrough on — the same
+    // set `claude mcp list` shows. Only claim it when both hold, so the in-process
+    // dev path doesn't over-promise.
+    const containerized = process.env.AGENT_CONTAINERIZED?.trim()
+      ? process.env.AGENT_CONTAINERIZED.trim() === 'true'
+      : Boolean(process.env.PREVIEW_ISOLATION?.trim());
+    const accountConnectors = containerized && accountMcpConnectorsEnabled();
+    return createSuccessResponse({ project, builtin, catalog: available, accountConnectors });
   } catch (error) {
     return handleApiError(error, 'API', 'Failed to list MCP servers');
   }
