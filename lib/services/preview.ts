@@ -383,10 +383,12 @@ class PreviewManager {
       killProcessTree(previewProcess.backendProcess);
       removeBackendContainer(previewProcess.backendContainer);
       removeBackendContainer(previewProcess.frontendContainer);
+      previewProcess.frontendEnvFileCleanup?.();
       void removeProjectNetwork(projectId); // Phase 1: drop the per-project net
       previewProcess.backendProcess = null;
       previewProcess.backendContainer = null;
       previewProcess.frontendContainer = null;
+      previewProcess.frontendEnvFileCleanup = null;
       this.processes.delete(projectId);
       // Withdraw the per-project route — a crash must not leave it pointing at a
       // now-dead port that another project can reuse (the cross-project leak).
@@ -417,10 +419,12 @@ class PreviewManager {
       killProcessTree(previewProcess.backendProcess);
       removeBackendContainer(previewProcess.backendContainer);
       removeBackendContainer(previewProcess.frontendContainer);
+      previewProcess.frontendEnvFileCleanup?.();
       void removeProjectNetwork(projectId); // Phase 1: drop the per-project net
       previewProcess.backendProcess = null;
       previewProcess.backendContainer = null;
       previewProcess.frontendContainer = null;
+      previewProcess.frontendEnvFileCleanup = null;
       if (this.processes.get(projectId) === previewProcess) {
         this.processes.delete(projectId);
       }
@@ -584,6 +588,7 @@ class PreviewManager {
       });
       command = fe.command;
       args = fe.args;
+      previewProcess.frontendEnvFileCleanup = fe.envFileCleanup;
     }
 
     // SECURITY: the IN-PROCESS framework dev server runs the PROJECT's own server
@@ -676,6 +681,7 @@ class PreviewManager {
         killProcessTree(backendChild);
         removeBackendContainer(backendContainer);
         removeBackendContainer(frontendContainer);
+        previewProcess.frontendEnvFileCleanup?.();
         this.reservedPorts.delete(preferredPort);
       }
       throw err;
@@ -742,6 +748,8 @@ class PreviewManager {
       killProcessTree(processInfo.backendProcess);
       removeBackendContainer(processInfo.backendContainer);
       removeBackendContainer(processInfo.frontendContainer);
+      processInfo.frontendEnvFileCleanup?.();
+      processInfo.frontendEnvFileCleanup = null;
       void removeProjectNetwork(projectId); // Phase 1: drop the per-project net
     } catch (error) {
       console.error('[PreviewManager] Failed to stop preview process:', error);

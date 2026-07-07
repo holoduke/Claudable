@@ -28,6 +28,7 @@ import {
   ensureProjectNetwork,
   connectToProjectNet,
   toHostPath,
+  writeContainerEnvFile,
 } from './docker';
 import {
   substVars,
@@ -524,7 +525,7 @@ export interface FrontendContainerContext {
  */
 export async function buildFrontendContainerArgs(
   ctx: FrontendContainerContext
-): Promise<{ command: string; args: string[] }> {
+): Promise<{ command: string; args: string[]; envFileCleanup: () => void }> {
   const { projectId, projectPath, cfg, feName, effectivePort, devArgs, previewPublishHost, sandboxNet, composedBackendUrl, composedInternalUrl, injectedEnv, log } = ctx;
 
   const fe = cfg?.frontend ?? {}; // config optional — isolation is agnostic
@@ -546,21 +547,40 @@ export async function buildFrontendContainerArgs(
   // ("Unable to acquire lock") — every restart would fail until someone deletes
   // it by hand. Harmless for non-Next stacks (path simply doesn't exist).
   const devScript = `rm -rf .next/dev/lock 2>/dev/null; [ -d node_modules ] || npm install --no-audit --no-fund; ${inner}`;
-  // Inject the project's OWN Env vars (Envs tab) into the container so the
-  // app's server-side code — Next API routes, Nuxt server routes, SSR data
-  // loaders (e.g. a DB connection like SIMPLICATE_DB_*) — can read them.
-  // These are the PROJECT's secrets, meant for its own code; Claudable's own
-  // secrets are never passed (only NODE_ENV/PORT/HOST + these below).
-  const feEnvArgs: string[] = [];
-  // Managed-service connection env (DATABASE_URL, REDIS_URL, …) FIRST, so the
-  // app's server-side code (Next API routes, Nuxt server routes, Prisma, SSR
-  // loaders) reaches this project's OWN containers over the project net — the
-  // frontend container joins that net below. A project's own Env-tab var of the
-  // same name overrides it (added after).
-  for (const [k, v] of Object.entries(injectedEnv)) feEnvArgs.push('-e', `${k}=${v}`);
+  // Build the container's env as an ordered record, then pass it via a single
+  // 0600 env-file (writeContainerEnvFile) instead of `-e` on the argv. These
+  // carry the PROJECT's secrets (DATABASE_URL, its own Env-tab values), and argv
+  // is world-readable via /proc/<pid>/cmdline — the same exposure the agent-turn
+  // path already closed. Claudable's own secrets are never included.
+  //
+  // Insertion order encodes precedence (env-file is last-wins per key, matching
+  // the previous `-e` ordering): base runtime vars, then the composed-backend
+  // URLs, then managed-service connection env (DATABASE_URL, REDIS_URL, … reached
+  // over the project net the container joins below), then the project's own
+  // Env-tab vars — so a project var of the same name wins.
+  const feEnv: Record<string, string> = {
+    NODE_ENV: 'development',
+    PORT: String(effectivePort),
+    HOST: '0.0.0.0',
+  };
+  if (composedBackendUrl) {
+    // Composed backend URL (model B): PUBLIC url for the BROWSER (client-side).
+    feEnv.NUXT_PUBLIC_API_BASE = composedBackendUrl;
+    feEnv.NEXT_PUBLIC_API_BASE = composedBackendUrl;
+    feEnv.API_BASE_URL = composedBackendUrl;
+  }
+  if (composedInternalUrl) {
+    // Phase 1: INTERNAL direct url for SERVER-SIDE calls (SSR / API routes / proxy)
+    // — reaches the backend over the project net, no public round-trip.
+    feEnv.API_INTERNAL_BASE = composedInternalUrl;
+    feEnv.NUXT_API_BASE = composedInternalUrl;
+    feEnv.INTERNAL_API_BASE = composedInternalUrl;
+  }
+  for (const [k, v] of Object.entries(injectedEnv)) feEnv[k] = v;
   try {
-    for (const ev of await listEnvVars(projectId)) feEnvArgs.push('-e', `${ev.key}=${ev.value}`);
+    for (const ev of await listEnvVars(projectId)) feEnv[ev.key] = ev.value;
   } catch { /* env vars are best-effort */ }
+  const cenvFile = writeContainerEnvFile(feEnv);
   const command = 'docker';
   const args = [
     'run', '--rm', '--name', feName,
@@ -578,22 +598,12 @@ export async function buildFrontendContainerArgs(
     '--pids-limit', '512',
     '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges', '--user', 'node',
     ...(sandboxNet ? ['--network', sandboxNet] : []),
-    '-e', 'NODE_ENV=development', '-e', `PORT=${effectivePort}`, '-e', 'HOST=0.0.0.0',
-    // Composed backend URL (model B): PUBLIC url for the BROWSER (client-side).
-    ...(composedBackendUrl
-      ? ['-e', `NUXT_PUBLIC_API_BASE=${composedBackendUrl}`, '-e', `NEXT_PUBLIC_API_BASE=${composedBackendUrl}`, '-e', `API_BASE_URL=${composedBackendUrl}`]
-      : []),
-    // Phase 1: INTERNAL direct url for SERVER-SIDE calls (SSR / API routes / proxy)
-    // — reaches the backend over the project net, no public round-trip.
-    ...(composedInternalUrl
-      ? ['-e', `API_INTERNAL_BASE=${composedInternalUrl}`, '-e', `NUXT_API_BASE=${composedInternalUrl}`, '-e', `INTERNAL_API_BASE=${composedInternalUrl}`]
-      : []),
-    ...feEnvArgs,
+    ...cenvFile.args,
     image, 'sh', '-c', devScript,
   ];
   // The docker CLI needs DOCKER_HOST (already in spawnEnv via process.env).
   log(Buffer.from(`[PreviewManager] [frontend] running dev server in isolated container ${feName} (mem ${fe.memory || '2g'}, cap-drop ALL, egress-locked)`));
-  return { command, args };
+  return { command, args, envFileCleanup: cenvFile.cleanup };
 }
 
 export interface ScrubbedEnvContext {
