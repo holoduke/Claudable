@@ -1,5 +1,9 @@
 import './globals.css'
 import 'highlight.js/styles/github-dark.css'
+// Side-effect import (nodejs-only server component): starts the background git
+// auto-sync scheduler on first server load. See auto-sync-boot for why it lives
+// here and not in instrumentation.ts.
+import '@/lib/services/auto-sync-boot'
 import GlobalSettingsProvider from '@/contexts/GlobalSettingsContext'
 import { AuthProvider } from '@/contexts/AuthContext'
 import AppShell from '@/components/layout/AppShell'

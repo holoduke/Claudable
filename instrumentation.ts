@@ -12,9 +12,8 @@ export async function register() {
     '@/lib/services/startup-recovery'
   );
   await reconcileStaleRequestsOnStartup();
-
-  // Background per-project auto-sync (opt-in via git settings). One process-wide
-  // timer; a no-op until a project turns it on.
-  const { startAutoSyncScheduler } = await import('@/lib/services/auto-sync');
-  startAutoSyncScheduler();
+  // NOTE: the git auto-sync scheduler is NOT started here. instrumentation.ts is
+  // compiled for the Edge runtime too (middleware.ts forces an edge bundle), and
+  // the scheduler's node-only chain (preview → child_process/fs/crypto) can't be
+  // bundled for edge. It's started from the root layout instead (nodejs-only).
 }
