@@ -18,11 +18,14 @@
  * key is never entered through the UI and never stored in the database.
  */
 import { zipSync, type Zippable } from 'fflate';
+import { shouldKeep } from '@/lib/utils/design-keep';
 
 const RPC_BASE = 'https://claude.ai/design/anthropic.omelette.api.v1alpha.OmeletteService';
-// Cap the archive so a runaway project can't exhaust server memory.
+// Cap the archive so a runaway project can't exhaust server memory. We only
+// fetch the design files we keep (screens/fonts/assets), not screenshots/uploads,
+// so the real footprint is far smaller than a raw export.
 const MAX_FILES = 400;
-const MAX_TOTAL_BYTES = 400 * 1024 * 1024; // 400 MB
+const MAX_TOTAL_BYTES = 150 * 1024 * 1024; // 150 MB of KEPT files
 
 export interface RemoteDesignProject {
   id: string;
@@ -129,6 +132,10 @@ export async function buildRemoteDesignArchive(designProjectId: string): Promise
     // out; reject traversal here as a first line of defence (the extractor also
     // contains writes to design-reference/).
     if (path.includes('..') || path.startsWith('/')) continue;
+    // Only fetch the files the importer keeps (screens/fonts/assets). Skipping
+    // design-process noise (screenshots, raw uploads) here avoids downloading and
+    // buffering hundreds of MB the extractor would just drop.
+    if (!shouldKeep(path)) continue;
     const gf = await rpc<GetFileResp>('GetFile', { projectId: designProjectId, path });
     if (typeof gf.content !== 'string') continue;
     let bytes: Buffer;

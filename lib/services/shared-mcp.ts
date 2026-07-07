@@ -104,22 +104,29 @@ export async function listSharedMcpServers(orgId: string | null): Promise<Shared
 }
 
 export async function createSharedMcpServer(orgId: string | null, input: SharedMcpInput): Promise<SharedMcpView> {
-  const existing = await prisma.sharedMcpServer.findMany({ where: { orgId }, select: { name: true } });
-  await validateSharedMcpInput(input, new Set(existing.map((e) => e.name)));
+  // Validate URL/SSRF outside the txn (it does DNS) so the txn stays short.
+  await validateSharedMcpInput(input, new Set());
   const name = input.name.trim().toLowerCase();
-  const row = await prisma.sharedMcpServer.create({
-    data: {
-      orgId,
-      name,
-      label: (input.label || name).trim(),
-      transport: input.transport,
-      url: input.transport === 'stdio' ? null : (input.url || '').trim(),
-      command: input.transport === 'stdio' ? (input.command || '').trim() : null,
-      argsJson: input.transport === 'stdio' && input.args?.length ? JSON.stringify(input.args) : null,
-      headersEncrypted: input.headers && Object.keys(input.headers).length ? encrypt(JSON.stringify(input.headers)) : null,
-      envEncrypted: input.env && Object.keys(input.env).length ? encrypt(JSON.stringify(input.env)) : null,
-      enabled: input.enabled ?? true,
-    },
+  // The DB @@unique([orgId,name]) does NOT dedup instance-wide rows: SQLite treats
+  // NULL orgId as distinct. So enforce the name check + insert atomically in a txn
+  // (SQLite serializes writes) to close the read-then-write race.
+  const row = await prisma.$transaction(async (tx) => {
+    const clash = await tx.sharedMcpServer.findFirst({ where: { orgId, name }, select: { id: true } });
+    if (clash) throw new Error(`A shared server named "${name}" already exists.`);
+    return tx.sharedMcpServer.create({
+      data: {
+        orgId,
+        name,
+        label: (input.label || name).trim(),
+        transport: input.transport,
+        url: input.transport === 'stdio' ? null : (input.url || '').trim(),
+        command: input.transport === 'stdio' ? (input.command || '').trim() : null,
+        argsJson: input.transport === 'stdio' && input.args?.length ? JSON.stringify(input.args) : null,
+        headersEncrypted: input.headers && Object.keys(input.headers).length ? encrypt(JSON.stringify(input.headers)) : null,
+        envEncrypted: input.env && Object.keys(input.env).length ? encrypt(JSON.stringify(input.env)) : null,
+        enabled: input.enabled ?? true,
+      },
+    });
   });
   return toView(row);
 }
@@ -168,7 +175,13 @@ export async function buildSharedMcpConfig(projectId: string): Promise<Record<st
   const orgId = await projectOrgId(projectId);
   // Instance-wide (null) always applies; the project's org applies when it has one.
   const orgFilter = orgId ? [{ orgId: null }, { orgId }] : [{ orgId: null }];
-  const rows = await prisma.sharedMcpServer.findMany({ where: { enabled: true, OR: orgFilter } });
+  // A `(null,'x')` and `(org,'x')` can legitimately coexist. Order so instance-wide
+  // (null orgId) is applied FIRST and the org-specific row overwrites it in the
+  // map below — org-specific wins, deterministically (SQLite sorts NULL first asc).
+  const rows = await prisma.sharedMcpServer.findMany({
+    where: { enabled: true, OR: orgFilter },
+    orderBy: { orgId: 'asc' },
+  });
   const out: Record<string, McpEntry> = {};
   for (const row of rows) {
     if (RESERVED_NAMES.has(row.name)) continue; // defensive

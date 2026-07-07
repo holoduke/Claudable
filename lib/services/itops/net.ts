@@ -11,11 +11,15 @@
 import { lookup } from 'dns/promises';
 
 function isBlockedHost(host: string): boolean {
-  const h = host.trim().toLowerCase().replace(/^\[|\]$/gu, '');
+  let h = host.trim().toLowerCase().replace(/^\[|\]$/gu, '');
   if (!h) return true;
   if (h === 'localhost' || h.endsWith('.localhost') || h.endsWith('.local') || h.endsWith('.internal')) return true;
   // IPv6 loopback / link-local / unique-local
-  if (h === '::1' || h.startsWith('fe80:') || h.startsWith('fc') || h.startsWith('fd')) return true;
+  if (h === '::1' || h === '::' || h.startsWith('fe80:') || h.startsWith('fc') || h.startsWith('fd')) return true;
+  // IPv4-mapped/compat IPv6 (e.g. ::ffff:127.0.0.1, ::127.0.0.1): unwrap to the
+  // embedded IPv4 and let the IPv4 rules below catch a private/loopback target.
+  const mapped = h.match(/^::(?:ffff:)?(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})$/u);
+  if (mapped) h = mapped[1];
   const m = h.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/u);
   if (m) {
     const a = Number(m[1]);
