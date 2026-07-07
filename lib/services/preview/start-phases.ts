@@ -546,7 +546,22 @@ export async function buildFrontendContainerArgs(
   // behind in the bind-mounted project, and the next `next dev` refuses to start
   // ("Unable to acquire lock") — every restart would fail until someone deletes
   // it by hand. Harmless for non-Next stacks (path simply doesn't exist).
-  const devScript = `rm -rf .next/dev/lock 2>/dev/null; [ -d node_modules ] || npm install --no-audit --no-fund; ${inner}`;
+  // --prefer-offline: reuse the shared npm cache (mounted below) instead of
+  // re-downloading packages on every project's first install.
+  const devScript = `rm -rf .next/dev/lock 2>/dev/null; [ -d node_modules ] || npm install --prefer-offline --no-audit --no-fund; ${inner}`;
+
+  // Shared npm cache across ALL preview containers: a project's FIRST `npm install`
+  // (the slowest part of a cold start) reuses packages any other project already
+  // pulled. Subsequent starts already skip install (node_modules persists in the
+  // bind-mounted project). Dir lives under the data root so it's node-owned (the
+  // container runs --user node); npm cacache is content-addressed → concurrent
+  // installs are safe. Best-effort: never block a preview start on it.
+  let npmCacheArgs: string[] = [];
+  try {
+    const cacheDir = path.resolve(path.dirname(process.env.PROJECTS_DIR || './data/projects'), '.npm-cache');
+    await fs.mkdir(cacheDir, { recursive: true });
+    npmCacheArgs = ['-v', `${toHostPath(cacheDir)}:/npm-cache`];
+  } catch { /* cache is an optimization only */ }
   // Build the container's env as an ordered record, then pass it via a single
   // 0600 env-file (writeContainerEnvFile) instead of `-e` on the argv. These
   // carry the PROJECT's secrets (DATABASE_URL, its own Env-tab values), and argv
@@ -562,6 +577,8 @@ export async function buildFrontendContainerArgs(
     NODE_ENV: 'development',
     PORT: String(effectivePort),
     HOST: '0.0.0.0',
+    // Point npm at the shared cache volume mounted below (node-owned bind mount).
+    ...(npmCacheArgs.length ? { npm_config_cache: '/npm-cache' } : {}),
   };
   if (composedBackendUrl) {
     // Composed backend URL (model B): PUBLIC url for the BROWSER (client-side).
@@ -597,6 +614,7 @@ export async function buildFrontendContainerArgs(
     '--cpus', String(fe.cpus || '2.0'),
     '--pids-limit', '512',
     '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges', '--user', 'node',
+    ...npmCacheArgs,
     ...(sandboxNet ? ['--network', sandboxNet] : []),
     ...cenvFile.args,
     image, 'sh', '-c', devScript,

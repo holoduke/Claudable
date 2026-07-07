@@ -32,7 +32,7 @@ export default function ProjectClaudeSettings({ projectId }: Props) {
       const res = await fetch(`${API_BASE}/api/projects/${projectId}/claude-credential`);
       const json = await res.json().catch(() => ({}));
       if (res.status === 401 || res.status === 403) {
-        setDenied(json.message || 'Only the project owner or an admin can change this.');
+        setDenied(json.message || 'You need write access to this project to change this.');
         return;
       }
       if (json.success) {

@@ -4,7 +4,7 @@
  *   PUT /api/projects/:id/claude-credential -> { credentialId: string | null }
  */
 import { NextRequest } from 'next/server';
-import { requireProjectManager } from '@/lib/services/project-access';
+import { requireProjectWriter } from '@/lib/services/project-access';
 import { getCredentialView, listSelectableCredentials, setProjectCredential } from '@/lib/services/claude-credentials';
 import { createSuccessResponse, createErrorResponse, handleApiError } from '@/lib/utils/api-response';
 
@@ -15,7 +15,7 @@ interface Ctx { params: Promise<{ project_id: string }> }
 export async function GET(_req: NextRequest, { params }: Ctx) {
   try {
     const { project_id } = await params;
-    const gate = await requireProjectManager(project_id);
+    const gate = await requireProjectWriter(project_id);
     if (!gate.ok) return createErrorResponse(gate.code, gate.message, gate.status);
 
     const options = await listSelectableCredentials({ id: gate.user.id, orgId: gate.user.orgId });
@@ -37,7 +37,7 @@ export async function GET(_req: NextRequest, { params }: Ctx) {
 export async function PUT(req: NextRequest, { params }: Ctx) {
   try {
     const { project_id } = await params;
-    const gate = await requireProjectManager(project_id);
+    const gate = await requireProjectWriter(project_id);
     if (!gate.ok) return createErrorResponse(gate.code, gate.message, gate.status);
 
     const body = (await req.json().catch(() => null)) ?? {};
