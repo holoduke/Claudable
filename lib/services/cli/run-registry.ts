@@ -34,6 +34,13 @@ export function unregisterAgentRun(projectId: string, requestId?: string): void 
   store.delete(projectId);
 }
 
+/** Whether an agent turn is currently in-flight for this project (read-only).
+ *  Used by auto-sync to skip a project mid-turn (committing/merging under it
+ *  would fight the running agent). */
+export function isAgentRunActive(projectId: string): boolean {
+  return store.has(projectId);
+}
+
 /** Abort the project's live turn, if any. Returns what was interrupted. */
 export function interruptAgentRun(projectId: string): { interrupted: boolean; requestId?: string } {
   const current = store.get(projectId);

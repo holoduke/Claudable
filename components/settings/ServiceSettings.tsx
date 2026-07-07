@@ -91,6 +91,12 @@ export function ServiceSettings({ projectId, projectName }: ServiceSettingsProps
   const [branchSaving, setBranchSaving] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [gitStatusMessage, setGitStatusMessage] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null);
+  // Background auto-sync: periodic pull of the operating branch. Interval field
+  // is dirty-tracked like the branch so a reload can't wipe in-progress typing.
+  const [autoSync, setAutoSync] = useState(false);
+  const [autoSyncMinutes, setAutoSyncMinutes] = useState(5);
+  const autoSyncMinutesDirty = useRef(false);
+  const [autoSyncSaving, setAutoSyncSaving] = useState(false);
 
   const getProviderIcon = (provider: string) => {
     switch (provider) {
@@ -147,6 +153,12 @@ export function ServiceSettings({ projectId, projectName }: ServiceSettingsProps
       if (github && !branchDirty.current) {
         setBranchInput(github.service_data?.branch || github.service_data?.default_branch || 'main');
       }
+      if (github) {
+        setAutoSync(github.service_data?.auto_sync === true);
+        if (!autoSyncMinutesDirty.current) {
+          setAutoSyncMinutes(Number(github.service_data?.auto_sync_interval_minutes) || 5);
+        }
+      }
     } catch (error) {
       console.error('Failed to load service connections:', error);
     }
@@ -199,6 +211,35 @@ export function ServiceSettings({ projectId, projectName }: ServiceSettingsProps
       setGitStatusMessage({ kind: 'error', text: error instanceof Error ? error.message : 'Sync failed' });
     } finally {
       setSyncing(false);
+    }
+  };
+
+  // Persist the auto-sync toggle and/or interval. `nextEnabled` lets the toggle
+  // save the new value immediately (state updates are async).
+  const saveAutoSync = async (nextEnabled: boolean, nextMinutes: number) => {
+    setAutoSyncSaving(true);
+    setGitStatusMessage(null);
+    try {
+      const res = await fetch(`${API_BASE}/api/projects/${projectId}/github/settings`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ auto_sync: nextEnabled, auto_sync_interval_minutes: nextMinutes }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.message || 'Failed to update auto-sync');
+      setAutoSync(body.auto_sync === true);
+      setAutoSyncMinutes(Number(body.auto_sync_interval_minutes) || nextMinutes);
+      autoSyncMinutesDirty.current = false;
+      setGitStatusMessage({
+        kind: 'ok',
+        text: body.auto_sync
+          ? `Auto-sync on — pulling ${body.branch || branchInput || 'the branch'} every ${body.auto_sync_interval_minutes} min`
+          : 'Auto-sync off',
+      });
+    } catch (error) {
+      setGitStatusMessage({ kind: 'error', text: error instanceof Error ? error.message : 'Failed to update auto-sync' });
+    } finally {
+      setAutoSyncSaving(false);
     }
   };
 
@@ -358,6 +399,41 @@ export function ServiceSettings({ projectId, projectName }: ServiceSettingsProps
                                   </svg>
                                   {syncing ? 'Syncing…' : 'Sync'}
                                 </button>
+                              </div>
+                              {/* Auto-sync: background pull of the operating branch on a cadence. */}
+                              <div className="flex flex-wrap items-center gap-2">
+                                <label className="inline-flex items-center gap-2 cursor-pointer select-none">
+                                  <input
+                                    type="checkbox"
+                                    checked={autoSync}
+                                    disabled={autoSyncSaving}
+                                    onChange={(e) => saveAutoSync(e.target.checked, autoSyncMinutes)}
+                                    className="h-4 w-4 rounded border-gray-300 dark:border-white/[0.2] text-[#DE7356] focus:ring-[#DE7356] accent-[#DE7356]"
+                                  />
+                                  <span className="shrink-0">Auto-sync from remote</span>
+                                </label>
+                                {autoSync && (
+                                  <span className="flex items-center gap-1.5">
+                                    <span className="text-gray-500 dark:text-gray-400">every</span>
+                                    <input
+                                      type="number"
+                                      min={1}
+                                      max={1440}
+                                      value={autoSyncMinutes}
+                                      disabled={autoSyncSaving}
+                                      onChange={(e) => { autoSyncMinutesDirty.current = true; setAutoSyncMinutes(Number(e.target.value)); }}
+                                      className="w-16 px-2 py-1 text-sm font-mono rounded-lg border border-gray-300 dark:border-white/[0.12] bg-white dark:bg-white/[0.06] text-gray-800 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-[#DE7356]"
+                                    />
+                                    <span className="text-gray-500 dark:text-gray-400">min</span>
+                                    <button
+                                      onClick={() => saveAutoSync(true, Math.min(1440, Math.max(1, Math.round(autoSyncMinutes) || 5)))}
+                                      disabled={autoSyncSaving || !autoSyncMinutesDirty.current}
+                                      className="px-3 py-1 text-xs rounded-lg border border-gray-300 dark:border-white/[0.12] text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-white/[0.06] disabled:opacity-40 disabled:cursor-not-allowed"
+                                    >
+                                      {autoSyncSaving ? 'Saving…' : 'Save'}
+                                    </button>
+                                  </span>
+                                )}
                               </div>
                               {gitStatusMessage && (
                                 <p className={`text-xs ${gitStatusMessage.kind === 'ok' ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>

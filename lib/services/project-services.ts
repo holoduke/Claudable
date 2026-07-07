@@ -54,6 +54,15 @@ export async function listProjectServices(projectId: string) {
   return connections.map(deserializeServiceData);
 }
 
+/** Every connection for a given provider across ALL projects (deserialized).
+ *  Used by the auto-sync scheduler to find projects with git auto-sync on. */
+export async function listServiceConnectionsByProvider(provider: string) {
+  const connections = await prisma.projectServiceConnection.findMany({
+    where: { provider },
+  });
+  return connections.map(deserializeServiceData);
+}
+
 export async function getProjectService(projectId: string, provider: string) {
   const connection = await prisma.projectServiceConnection.findFirst({
     where: { projectId, provider },

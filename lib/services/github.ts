@@ -3,6 +3,7 @@ import fs from 'fs/promises';
 import { getPlainServiceToken } from '@/lib/services/tokens';
 import { getProjectById, updateProject } from '@/lib/services/project';
 import { getProjectService, upsertProjectServiceConnection, updateProjectServiceData } from '@/lib/services/project-services';
+import { clampAutoSyncMinutes, AUTO_SYNC_DEFAULT_MINUTES } from '@/lib/services/auto-sync-schedule';
 import { ensureGitRepository, ensureGitConfig, initializeMainBranch, addOrUpdateRemote, commitAll, pushToRemote, pullFromRemote, checkoutRemoteBranch } from '@/lib/services/git';
 import { getGitProviderConfig, getEnvGitToken } from '@/lib/services/git-provider';
 import { injectDeployScaffolding } from '@/lib/services/scaffold-deploy';
@@ -299,6 +300,8 @@ export interface ProjectGitSettings {
   branch: string;
   last_pushed_at: string | null;
   last_synced_at: string | null;
+  auto_sync: boolean;
+  auto_sync_interval_minutes: number;
 }
 
 export async function getProjectGitSettings(projectId: string): Promise<ProjectGitSettings> {
@@ -315,6 +318,41 @@ export async function getProjectGitSettings(projectId: string): Promise<ProjectG
     branch: projectGitBranch(data),
     last_pushed_at: (data.last_pushed_at as string) ?? null,
     last_synced_at: (data.last_synced_at as string) ?? null,
+    auto_sync: data.auto_sync === true,
+    auto_sync_interval_minutes: clampAutoSyncMinutes(
+      data.auto_sync_interval_minutes ?? AUTO_SYNC_DEFAULT_MINUTES,
+    ),
+  };
+}
+
+/**
+ * Toggle background auto-sync (periodic pull) for a project and/or set its
+ * cadence. Only the fields provided are changed. Requires a connected repo.
+ * Returns the effective settings.
+ */
+export async function setProjectAutoSync(
+  projectId: string,
+  opts: { enabled?: boolean; intervalMinutes?: number },
+): Promise<{ auto_sync: boolean; auto_sync_interval_minutes: number }> {
+  const service = await getProjectService(projectId, 'github');
+  const data = service?.serviceData as Record<string, any> | undefined;
+  if (!data?.clone_url) {
+    throw new GitHubError('Git repository not connected', 404);
+  }
+  const patch: Record<string, unknown> = {};
+  if (typeof opts.enabled === 'boolean') patch.auto_sync = opts.enabled;
+  if (opts.intervalMinutes !== undefined) {
+    patch.auto_sync_interval_minutes = clampAutoSyncMinutes(opts.intervalMinutes);
+  }
+  if (Object.keys(patch).length > 0) {
+    await updateProjectServiceData(projectId, 'github', patch);
+  }
+  const next = { ...data, ...patch };
+  return {
+    auto_sync: next.auto_sync === true,
+    auto_sync_interval_minutes: clampAutoSyncMinutes(
+      next.auto_sync_interval_minutes ?? AUTO_SYNC_DEFAULT_MINUTES,
+    ),
   };
 }
 
