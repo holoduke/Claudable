@@ -187,12 +187,28 @@ export function runAgentTurnContainerized(
   });
   child.stderr?.on('data', (c: Buffer) => { stderr += c.toString(); });
 
+  // Stop the turn HARD. Killing the `docker run` CLIENT (SIGTERM to `child`) does
+  // NOT reliably stop the container — the client can detach and leave the agent
+  // (and its tool subprocesses, e.g. a running Bash/build) alive, so the UI shows
+  // "stopped" while the agent keeps editing. Force-remove the NAMED container so
+  // Stop/Esc (and the hang-timeout) actually halt the agent. Best-effort; the
+  // docker CLI reaches the daemon via DOCKER_HOST (already in process.env).
+  const killContainer = () => {
+    try { child.kill('SIGTERM'); } catch { /* already gone */ }
+    if (o.containerName) {
+      try {
+        const rm = spawn('docker', ['rm', '-f', o.containerName], { env: process.env, stdio: 'ignore' });
+        rm.unref();
+      } catch { /* best-effort */ }
+    }
+  };
+
   // Hang safety net: a wedged CLI/container must not pin the turn forever.
   const timeoutMs = o.timeoutMs ?? 30 * 60 * 1000;
   let timedOut = false;
   const timer = setTimeout(() => {
     timedOut = true;
-    try { child.kill('SIGTERM'); } catch { /* already gone */ }
+    killContainer();
   }, timeoutMs);
 
   const done = new Promise<ContainerTurnResult>((resolve) => {
@@ -209,7 +225,7 @@ export function runAgentTurnContainerized(
     });
   });
 
-  return { done, abort: () => { try { child.kill('SIGTERM'); } catch { /* already gone */ } } };
+  return { done, abort: () => killContainer() };
 }
 
 /** Convenience: the sandbox-net default + the host path helper live here so callers
