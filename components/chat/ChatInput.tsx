@@ -132,8 +132,18 @@ export default function ChatInput({
   const skillMenuOpen = skillQuery !== null && skillMatches.length > 0 && skillQuery !== dismissedQuery;
   useEffect(() => { setSkillActiveIdx(0); }, [skillQuery]);
 
-  const chooseSkill = (name: string) => {
-    setMessage(`/${name} `);
+  const chooseSkill = (option: SkillOption) => {
+    // Built-in commands (/mcp, /usage, /help, /clear, /compact) run IMMEDIATELY on
+    // selection — like the Claude CLI — instead of just filling the input (which
+    // left "nothing happens" when you clicked one). Skills prefill "/name " so you
+    // can add the rest of the prompt.
+    if (option.scope === 'command') {
+      setMessage('');
+      if (skillQuery !== null) setDismissedQuery(skillQuery); // close the menu
+      onSendMessage(`/${option.name}`, []);
+      return;
+    }
+    setMessage(`/${option.name} `);
     setTimeout(() => { textareaRef.current?.focus(); adjustTextareaHeight(); }, 0);
   };
 
@@ -281,7 +291,7 @@ export default function ChatInput({
     if (skillMenuOpen) {
       if (e.key === 'ArrowDown') { e.preventDefault(); setSkillActiveIdx((i) => (i + 1) % skillMatches.length); return; }
       if (e.key === 'ArrowUp') { e.preventDefault(); setSkillActiveIdx((i) => (i - 1 + skillMatches.length) % skillMatches.length); return; }
-      if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); const s = skillMatches[skillActiveIdx]; if (s) chooseSkill(s.name); return; }
+      if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); const s = skillMatches[skillActiveIdx]; if (s) chooseSkill(s); return; }
       if (e.key === 'Escape') { e.preventDefault(); setDismissedQuery(skillQuery); return; }
     }
     // CLI parity: Esc interrupts the running turn.
@@ -676,7 +686,7 @@ export default function ChatInput({
                   type="button"
                   key={s.name}
                   // onMouseDown (not onClick) so we select before the textarea blurs.
-                  onMouseDown={(e) => { e.preventDefault(); chooseSkill(s.name); }}
+                  onMouseDown={(e) => { e.preventDefault(); chooseSkill(s); }}
                   onMouseEnter={() => setSkillActiveIdx(i)}
                   className={`w-full text-left px-3 py-2 flex flex-col gap-0.5 ${i === skillActiveIdx ? 'bg-[#DE7356]/10' : 'hover:bg-gray-50 dark:hover:bg-gray-800'}`}
                 >
