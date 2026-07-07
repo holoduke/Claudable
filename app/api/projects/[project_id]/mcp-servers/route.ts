@@ -12,6 +12,7 @@ import {
   type McpServerInput,
 } from '@/lib/services/project-mcp';
 import { getSessionUser } from '@/lib/auth/session';
+import { getMcpCatalog } from '@/lib/config/mcp-catalog';
 import { createSuccessResponse, createErrorResponse, handleApiError } from '@/lib/utils/api-response';
 
 interface RouteContext {
@@ -24,11 +25,15 @@ export async function GET(_request: NextRequest, { params }: RouteContext) {
     const gate = await denyUnlessProjectAccess(project_id);
     if (gate) return gate;
     const user = await getSessionUser();
-    const [project, builtin] = await Promise.all([
+    const [project, builtin, catalog] = await Promise.all([
       listProjectMcpServers(project_id),
       getBuiltinMcpServers(project_id, !!user?.itopsEnabled),
+      getMcpCatalog(),
     ]);
-    return createSuccessResponse({ project, builtin });
+    // The catalog lists predefined servers not yet configured for this project.
+    const configured = new Set(project.map((s) => s.name));
+    const available = catalog.filter((c) => !configured.has(c.name));
+    return createSuccessResponse({ project, builtin, catalog: available });
   } catch (error) {
     return handleApiError(error, 'API', 'Failed to list MCP servers');
   }

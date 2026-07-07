@@ -96,6 +96,19 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Optional image-generation utility picked on the start screen. 'grok'
+    // connects the per-project images capability (shared xAI key unless the
+    // project later sets its own). Best-effort — never fails project creation.
+    const imageProvider = typeof body.imageProvider === 'string' ? body.imageProvider : (typeof body.image_provider === 'string' ? body.image_provider : '');
+    if (imageProvider === 'grok') {
+      try {
+        const { connectImages } = await import('@/lib/services/capabilities/images');
+        await connectImages(project.id);
+      } catch (e) {
+        console.error('[API] Failed to connect image generation to new project:', e);
+      }
+    }
+
     // Optional backend + database composition. Stored in the project's settings
     // JSON (no schema change); the backend is scaffolded into the repo now, and
     // the preview runs it as its own isolated service.

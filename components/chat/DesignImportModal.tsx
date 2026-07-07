@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { unzipSync, zipSync } from 'fflate';
 import { FaFileImport, FaTimes, FaCheckCircle, FaMagic } from 'react-icons/fa';
 import { shouldKeep } from '@/lib/utils/design-keep';
@@ -26,7 +26,26 @@ interface DesignImportModalProps {
 
 type Phase = 'idle' | 'preparing' | 'uploading' | 'done' | 'error';
 
+interface RemoteDesignProject {
+  id: string;
+  name: string;
+  updatedAt: string | null;
+  ownerName: string | null;
+}
+
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? '';
+
+function timeAgo(iso: string | null): string {
+  if (!iso) return '';
+  const then = new Date(iso).getTime();
+  if (Number.isNaN(then)) return '';
+  const mins = Math.floor((Date.now() - then) / 60000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  return `${Math.floor(hrs / 24)}d ago`;
+}
 
 export default function DesignImportModal({
   projectId,
@@ -42,6 +61,11 @@ export default function DesignImportModal({
   const [fileName, setFileName] = useState('');
   const [dragOver, setDragOver] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  // Remote Claude Design projects (only when the server has the admin opt-in).
+  const [remoteProjects, setRemoteProjects] = useState<RemoteDesignProject[]>([]);
+  const [remoteEnabled, setRemoteEnabled] = useState(false);
+  const [remoteLoading, setRemoteLoading] = useState(false);
+  const [importingId, setImportingId] = useState<string | null>(null);
 
   const reset = useCallback(() => {
     setPhase('idle');
@@ -51,7 +75,57 @@ export default function DesignImportModal({
     setPrompt('');
     setFileName('');
     setDragOver(false);
+    setImportingId(null);
   }, []);
+
+  // Load the remote design list once when the modal opens.
+  useEffect(() => {
+    if (!isOpen) return;
+    let cancelled = false;
+    setRemoteLoading(true);
+    fetch(`${API_BASE}/api/design-remote/projects`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => {
+        if (cancelled || !j?.success) return;
+        setRemoteEnabled(!!j.data?.enabled);
+        setRemoteProjects(Array.isArray(j.data?.projects) ? j.data.projects : []);
+      })
+      .catch(() => {})
+      .finally(() => { if (!cancelled) setRemoteLoading(false); });
+    return () => { cancelled = true; };
+  }, [isOpen]);
+
+  // Import a claude.ai/design project directly (server fetches + stages it).
+  const importRemote = useCallback(
+    async (proj: RemoteDesignProject) => {
+      setError(null);
+      setImportingId(proj.id);
+      setFileName(proj.name);
+      setPhase('preparing');
+      try {
+        const res = await fetch(`${API_BASE}/api/projects/${projectId}/design-import/remote`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sourceProjectId: proj.id }),
+        });
+        const payload = await res.json().catch(() => null);
+        if (res.ok && payload?.success) {
+          setManifest(payload.data.manifest);
+          setPrompt(payload.data.suggestedPrompt || '');
+          setPhase('done');
+        } else {
+          setPhase('error');
+          setError(payload?.error || `Import failed (${res.status})`);
+        }
+      } catch {
+        setPhase('error');
+        setError('Network error while importing the design project.');
+      } finally {
+        setImportingId(null);
+      }
+    },
+    [projectId]
+  );
 
   const handleClose = useCallback(() => {
     reset();
@@ -192,6 +266,45 @@ export default function DesignImportModal({
                 <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">Design-process noise (screenshots, raw uploads) is skipped automatically.</p>
               </div>
               <input ref={inputRef} type="file" accept=".zip,application/zip" className="hidden" onChange={onPick} />
+
+              {/* Remote list: pick one of your Claude Design projects and import
+                  it directly — the server downloads + processes it for you.
+                  Only shown when the admin opt-in is configured. */}
+              {remoteEnabled && (
+                <div className="mt-5">
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="h-px flex-1 bg-gray-100 dark:bg-white/[0.08]" />
+                    <span className="text-[11px] uppercase tracking-wide text-gray-400 dark:text-gray-500">or pick from your designs</span>
+                    <span className="h-px flex-1 bg-gray-100 dark:bg-white/[0.08]" />
+                  </div>
+                  {remoteLoading ? (
+                    <p className="text-xs text-gray-400 dark:text-gray-500 py-3 text-center">Loading your designs…</p>
+                  ) : remoteProjects.length === 0 ? (
+                    <p className="text-xs text-gray-400 dark:text-gray-500 py-3 text-center">No Claude Design projects found.</p>
+                  ) : (
+                    <div className="max-h-52 overflow-y-auto space-y-1.5 pr-0.5">
+                      {remoteProjects.map((p) => (
+                        <button
+                          key={p.id}
+                          onClick={() => importRemote(p)}
+                          disabled={importingId !== null}
+                          className="w-full flex items-center gap-3 text-left rounded-lg border border-gray-200 dark:border-white/[0.08] px-3 py-2.5 hover:border-[#DE7356]/40 hover:bg-[#DE7356]/[0.03] disabled:opacity-50 transition-colors"
+                        >
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-medium text-gray-900 dark:text-gray-50 truncate">{p.name}</p>
+                            <p className="text-xs text-gray-400 dark:text-gray-500 truncate">
+                              {[p.ownerName, timeAgo(p.updatedAt)].filter(Boolean).join(' · ') || 'Claude Design'}
+                            </p>
+                          </div>
+                          <span className="text-xs text-[#DE7356] font-medium shrink-0">
+                            {importingId === p.id ? 'Importing…' : 'Import'}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
             </>
           )}
 
