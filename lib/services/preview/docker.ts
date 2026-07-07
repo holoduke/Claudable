@@ -1,7 +1,10 @@
 // Docker helpers: orphan sweep, per-project internal networks, isolated backend containers, mtime scan.
 import { spawn } from 'child_process';
+import { writeFileSync, unlinkSync } from 'fs';
+import os from 'os';
 import path from 'path';
 import fs from 'fs/promises';
+import { randomUUID } from 'crypto';
 import { previewSlug } from './routes';
 import { appendCommandLogs } from './process-utils';
 import type { PreviewBackendConfig } from './config';
@@ -116,6 +119,34 @@ export async function latestMtimeMs(dir: string, depth = 0): Promise<number> {
   }
   return newest;
 }
+/**
+ * Write container env vars to a PRIVATE (0600) env-file so their VALUES stay OFF
+ * the `docker run` argv. argv is world-readable via /proc/<pid>/cmdline (and gets
+ * echoed into command-failure logs), and these vars carry project secrets —
+ * DATABASE_URL / REDIS_URL and the project's own Env-tab values. The docker CLI
+ * reads --env-file client-side at launch, so the secrets travel to the daemon
+ * over the API, never as process arguments. Returns the `--env-file <path>` args
+ * (empty when there's nothing to write) + a cleanup that unlinks the file; the
+ * caller runs cleanup once docker has launched (or on teardown). Mirrors the
+ * env-file hardening already used for containerized agent turns.
+ */
+export function writeContainerEnvFile(
+  env: Record<string, string>,
+): { args: string[]; cleanup: () => void } {
+  const entries = Object.entries(env);
+  if (entries.length === 0) return { args: [], cleanup: () => {} };
+  const filePath = path.join(os.tmpdir(), `claudable-cenv-${randomUUID().slice(0, 12)}`);
+  // env-file is line-based KEY=VALUE; docker takes the value literally to EOL (no
+  // quoting, no $-expansion). Strip newlines so a multi-line value can't smuggle
+  // in extra vars; everything after the first '=' is the value.
+  const body = entries.map(([k, v]) => `${k}=${String(v).replace(/\r?\n/g, ' ')}`).join('\n') + '\n';
+  writeFileSync(filePath, body, { mode: 0o600 });
+  return {
+    args: ['--env-file', filePath],
+    cleanup: () => { try { unlinkSync(filePath); } catch { /* already gone */ } },
+  };
+}
+
 /** Translate a container path under /app/data to its real host path (for Docker
  *  bind mounts, which the daemon resolves on the HOST). DATA_HOST_DIR is the host
  *  path that the compose mounts at /app/data. */
@@ -181,10 +212,18 @@ export async function runBackendContainer(
   // previews, cloud metadata (enforced by DOCKER-USER + INPUT firewall rules).
   const sandboxNet = process.env.PREVIEW_SANDBOX_NETWORK;
   if (sandboxNet && sandboxNet.trim()) runArgs.push('--network', sandboxNet.trim());
-  for (const [k, v] of Object.entries(containerEnv)) runArgs.push('-e', `${k}=${v}`);
+  // Project env (DATABASE_URL, the project's own secrets) via a 0600 env-file —
+  // never as `-e` on the argv, which any host process can read via /proc and
+  // which appendCommandLogs echoes into its failure message.
+  const cenvFile = writeContainerEnvFile(containerEnv);
+  runArgs.push(...cenvFile.args);
   runArgs.push(name); // image tag == container name
 
   log(Buffer.from(`[PreviewManager] [backend] starting container on 127.0.0.1:${hostPort} (mem ${c.memory || '512m'}, cpus ${c.cpus || '1.0'}, cap-drop ALL)`));
-  await appendCommandLogs('docker', runArgs, projectPath, dockerEnv, log);
+  try {
+    await appendCommandLogs('docker', runArgs, projectPath, dockerEnv, log);
+  } finally {
+    cenvFile.cleanup(); // docker read the env-file client-side at launch
+  }
   return name;
 }

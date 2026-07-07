@@ -11,6 +11,9 @@ export interface PreviewProcess {
   backendContainer?: string | null;
   // Name of the isolated frontend dev-server container (Phase 2 opt-in).
   frontendContainer?: string | null;
+  // Unlinks the 0600 env-file that carried the frontend container's project env
+  // (kept off the docker argv). Called on teardown; docker read the file at launch.
+  frontendEnvFileCleanup?: (() => void) | null;
   // A COMPILED/production backend container is built from the project's Dockerfile
   // and does NOT hot-reload the agent's source edits. These let us rebuild+restart
   // it after a turn that changed backend files: the dir to watch, the last build
