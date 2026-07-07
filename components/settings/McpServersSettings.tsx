@@ -19,6 +19,7 @@ interface McpServerView {
   enabled: boolean;
   authType: 'none' | 'oauth';
   authStatus: 'none' | 'needs-auth' | 'connected' | 'expired';
+  visibility: 'shared' | 'private';
 }
 
 interface Props {
@@ -45,6 +46,7 @@ const EMPTY_FORM = {
   headerKey: 'Authorization',
   headerValue: '',
   authType: 'none' as 'none' | 'oauth',
+  visibility: 'shared' as 'shared' | 'private',
 };
 
 export default function McpServersSettings({ projectId }: Props) {
@@ -135,6 +137,7 @@ export default function McpServersSettings({ projectId }: Props) {
         name: form.name.trim(),
         label: form.label.trim() || form.name.trim(),
         transport: form.transport,
+        visibility: form.visibility,
       };
       if (form.transport === 'stdio') {
         body.command = form.command.trim();
@@ -251,6 +254,7 @@ export default function McpServersSettings({ projectId }: Props) {
           </div>
         )}
         <h4 className="text-xs font-medium uppercase tracking-wide text-gray-400 dark:text-gray-500 mb-2">Project servers</h4>
+        <p className="text-[11px] text-gray-400 dark:text-gray-500 -mt-1 mb-2">Shared servers apply to everyone on this project; private ones only to your own agent runs.</p>
         <div className="space-y-2 mb-5">
           {servers.length === 0 && (
             <p className="text-sm text-gray-400 dark:text-gray-500">No project MCP servers yet.</p>
@@ -261,6 +265,9 @@ export default function McpServersSettings({ projectId }: Props) {
                 <div className="flex items-center gap-2">
                   <span className="text-sm font-medium text-gray-900 dark:text-gray-50 truncate">{s.label}</span>
                   <span className="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-gray-100 dark:bg-white/[0.06] text-gray-500 dark:text-gray-400">{s.transport}</span>
+                  <span className={`text-[10px] px-1.5 py-0.5 rounded ${s.visibility === 'private' ? 'bg-purple-100 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300' : 'bg-blue-100 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300'}`}>
+                    {s.visibility === 'private' ? 'private' : 'shared'}
+                  </span>
                   {(s.hasHeaders || s.hasEnv) && (
                     <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300">secret</span>
                   )}
@@ -351,14 +358,23 @@ export default function McpServersSettings({ projectId }: Props) {
               <input value={form.label} onChange={(e) => setForm({ ...form, label: e.target.value })} placeholder="Relume Library" className="mt-1 w-full px-2.5 py-2 rounded-md border border-gray-200 dark:border-white/[0.08] bg-transparent text-sm text-gray-900 dark:text-gray-50" />
             </label>
           </div>
-          <label className="block text-xs text-gray-500 dark:text-gray-400">
-            Transport
-            <select value={form.transport} onChange={(e) => setForm({ ...form, transport: e.target.value as Transport })} className="mt-1 w-full px-2.5 py-2 rounded-md border border-gray-200 dark:border-white/[0.08] bg-transparent text-sm text-gray-900 dark:text-gray-50">
-              <option value="http">Remote (HTTP)</option>
-              <option value="sse">Remote (SSE)</option>
-              <option value="stdio">Command (stdio)</option>
-            </select>
-          </label>
+          <div className="grid grid-cols-2 gap-3">
+            <label className="block text-xs text-gray-500 dark:text-gray-400">
+              Transport
+              <select value={form.transport} onChange={(e) => setForm({ ...form, transport: e.target.value as Transport })} className="mt-1 w-full px-2.5 py-2 rounded-md border border-gray-200 dark:border-white/[0.08] bg-transparent text-sm text-gray-900 dark:text-gray-50">
+                <option value="http">Remote (HTTP)</option>
+                <option value="sse">Remote (SSE)</option>
+                <option value="stdio">Command (stdio)</option>
+              </select>
+            </label>
+            <label className="block text-xs text-gray-500 dark:text-gray-400">
+              Visibility
+              <select value={form.visibility} onChange={(e) => setForm({ ...form, visibility: e.target.value as 'shared' | 'private' })} className="mt-1 w-full px-2.5 py-2 rounded-md border border-gray-200 dark:border-white/[0.08] bg-transparent text-sm text-gray-900 dark:text-gray-50">
+                <option value="shared">Shared (whole project)</option>
+                <option value="private">Private (only me)</option>
+              </select>
+            </label>
+          </div>
           {form.transport === 'stdio' ? (
             <div className="grid grid-cols-2 gap-3">
               <label className="text-xs text-gray-500 dark:text-gray-400">

@@ -338,6 +338,11 @@ model SharedMcpServer {
 model ProjectMcpServer {
   id        String   @id @default(cuid())
   projectId String   @map("project_id")
+  // Visibility within the project. Null = SHARED: every project member's agent
+  // runs get it. Set = PRIVATE: only that user's own agent runs get it (added by
+  // them, invisible to other members). Lets a user wire a personal account (e.g.
+  // their own Gmail MCP) without exposing it to the whole team.
+  ownerId   String?  @map("owner_id")
 
   name      String   // mcpServers map key, e.g. "relume" — [a-z0-9_-]
   label     String   // human label shown in the UI
@@ -365,6 +370,10 @@ model ProjectMcpServer {
 
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
+  // Names are unique within a project across ALL visibilities (shared + every
+  // user's private), so a run never has two servers mapping to the same key and
+  // precedence is a non-issue. Trade-off: two users can't both name a private
+  // server the same thing — the second picks a different name.
   @@unique([projectId, name])
   @@index([projectId])
   @@map("project_mcp_servers")

@@ -35,6 +35,9 @@ export interface McpServerInput {
   env?: Record<string, string> | null;      // stdio env
   enabled?: boolean;
   authType?: 'none' | 'oauth' | null;        // 'oauth' = authenticate via MCP OAuth flow
+  /** 'shared' (default): all project members' runs get it. 'private': only the
+   *  adding user's own runs. */
+  visibility?: 'shared' | 'private';
 }
 
 /** UI-safe view — never includes decrypted secrets, only whether they are set. */
@@ -51,6 +54,9 @@ export interface McpServerView {
   enabled: boolean;
   authType: 'none' | 'oauth';
   authStatus: McpAuthStatus; // none | needs-auth | connected | expired
+  /** Null = shared with the project; set = private to that user. */
+  ownerId: string | null;
+  visibility: 'shared' | 'private';
   createdAt: string;
   updatedAt: string;
 }
@@ -73,6 +79,8 @@ function toView(row: ProjectMcpServer): McpServerView {
     enabled: row.enabled,
     authType: row.authType === 'oauth' ? 'oauth' : 'none',
     authStatus: authStatusOf(row),
+    ownerId: row.ownerId,
+    visibility: row.ownerId ? 'private' : 'shared',
     createdAt: row.createdAt.toISOString(), updatedAt: row.updatedAt.toISOString(),
   };
 }
@@ -133,21 +141,33 @@ export async function getBuiltinMcpServers(projectId: string, itopsEnabled: bool
   ];
 }
 
-export async function listProjectMcpServers(projectId: string): Promise<McpServerView[]> {
+/**
+ * Servers visible to `viewerId` in this project: all SHARED servers plus the
+ * viewer's OWN private ones (another user's private servers are never returned).
+ * With no viewer (auth off) only shared servers exist.
+ */
+export async function listProjectMcpServers(projectId: string, viewerId?: string | null): Promise<McpServerView[]> {
   const rows = await prisma.projectMcpServer.findMany({
-    where: { projectId },
+    where: { projectId, OR: [{ ownerId: null }, ...(viewerId ? [{ ownerId: viewerId }] : [])] },
     orderBy: { createdAt: 'asc' },
   });
   return rows.map(toView);
 }
 
-export async function createProjectMcpServer(projectId: string, input: McpServerInput): Promise<McpServerView> {
+export async function createProjectMcpServer(
+  projectId: string, input: McpServerInput, ownerId?: string | null,
+): Promise<McpServerView> {
+  // Name must be unique within the project across ALL visibilities (the map key
+  // must be unique per run), so check every existing name.
   const existing = await prisma.projectMcpServer.findMany({ where: { projectId }, select: { name: true } });
   await validateMcpInput(input, new Set(existing.map((e) => e.name)));
   const name = input.name.trim().toLowerCase();
+  // Private only when explicitly requested AND we know who's adding it.
+  const owner = input.visibility === 'private' && ownerId ? ownerId : null;
   const row = await prisma.projectMcpServer.create({
     data: {
       projectId,
+      ownerId: owner,
       name,
       label: (input.label || name).trim(),
       transport: input.transport,
@@ -163,10 +183,15 @@ export async function createProjectMcpServer(projectId: string, input: McpServer
   return toView(row);
 }
 
+/** Scope so `actorId` can only reach SHARED servers or their OWN private ones. */
+function actorScope(actorId?: string | null) {
+  return { OR: [{ ownerId: null }, ...(actorId ? [{ ownerId: actorId }] : [])] };
+}
+
 export async function updateProjectMcpServer(
-  projectId: string, id: string, patch: Partial<McpServerInput>,
+  projectId: string, id: string, patch: Partial<McpServerInput>, actorId?: string | null,
 ): Promise<McpServerView | null> {
-  const row = await prisma.projectMcpServer.findFirst({ where: { id, projectId } });
+  const row = await prisma.projectMcpServer.findFirst({ where: { id, projectId, ...actorScope(actorId) } });
   if (!row) return null;
   // Only `enabled` toggles are common; other edits re-validate the merged result.
   const data: Record<string, unknown> = {};
@@ -191,18 +216,20 @@ export async function updateProjectMcpServer(
   return toView(updated);
 }
 
-export async function deleteProjectMcpServer(projectId: string, id: string): Promise<boolean> {
-  const res = await prisma.projectMcpServer.deleteMany({ where: { id, projectId } });
+export async function deleteProjectMcpServer(projectId: string, id: string, actorId?: string | null): Promise<boolean> {
+  const res = await prisma.projectMcpServer.deleteMany({ where: { id, projectId, ...actorScope(actorId) } });
   return res.count > 0;
 }
 
 /**
- * Build the enabled project MCP servers as a `{ name: McpEntry }` map, ready to
- * merge into the agent's mcpServers (both agent paths use the same shape).
- * Decrypts secrets — server-side only, never sent to the client.
+ * Build the enabled project MCP servers for a run as a `{ name: McpEntry }` map.
+ * Includes SHARED servers plus the acting user's OWN private ones; another
+ * user's private servers never attach. Decrypts secrets — server-side only.
  */
-export async function buildProjectMcpConfig(projectId: string): Promise<Record<string, McpEntry>> {
-  const rows = await prisma.projectMcpServer.findMany({ where: { projectId, enabled: true } });
+export async function buildProjectMcpConfig(projectId: string, userId?: string | null): Promise<Record<string, McpEntry>> {
+  const rows = await prisma.projectMcpServer.findMany({
+    where: { projectId, enabled: true, OR: [{ ownerId: null }, ...(userId ? [{ ownerId: userId }] : [])] },
+  });
   const out: Record<string, McpEntry> = {};
   for (const row of rows) {
     if (RESERVED_NAMES.has(row.name)) continue; // defensive
