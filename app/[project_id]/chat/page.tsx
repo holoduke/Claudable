@@ -175,6 +175,10 @@ export default function ChatPage() {
   const [agentStatus, setAgentStatus] = useState<AgentUsageSnapshot | null>(null);
   const [statusPanelOpen, setStatusPanelOpen] = useState(false);
   const prevBusyRef = useRef(false);
+  // Set when the user interrupts (Stop/Esc). CLI parity: an interrupt must NOT
+  // fire the queued messages — instead they return to the input box. Consumed by
+  // the queue-flush effect on the busy->idle edge the interrupt causes.
+  const interruptedRef = useRef(false);
   const [isSseFallbackActive, setIsSseFallbackActive] = useState(false);
   const [showPreview, setShowPreview] = useState(true);
   const toast = useToast();
@@ -336,6 +340,16 @@ export default function ChatPage() {
   // and auto-reload it the moment the preview answers again.
   const [previewDown, setPreviewDown] = useState(false);
   const previewDownRef = useRef(false);
+  // Cold start: whether the app has CONFIRMED a real render in the browser for
+  // the current preview URL. On a brand-new app the iframe first loads a not-yet-
+  // ready subdomain (Traefik 502 / DNS+cert still warming → Chrome's "site can't
+  // be reached"), and nothing reloads it. `previewLoaded` latches true on the
+  // first plugin report (previewReady) or bridge-absent grace (non-Nuxt loaded),
+  // and gates a friendly "building" overlay + an auto-retry loop below.
+  const [previewLoaded, setPreviewLoaded] = useState(false);
+  // Delayed so a warm preview (opening an already-running project) doesn't flash
+  // the overlay before it loads.
+  const [showColdStart, setShowColdStart] = useState(false);
   // Live build/start log lines, streamed into the loading panel so the wait is
   // informative (installing deps → compiling → starting server) not opaque.
   const [previewLogs, setPreviewLogs] = useState<string[]>([]);
@@ -431,14 +445,28 @@ export default function ChatPage() {
     return () => clearTimeout(t);
   }, [isRunning, projectId]);
 
-  // Flush the queued messages one at a time: when a turn finishes (busy -> idle),
-  // send the next queued message. Edge-detected so we send exactly one per turn.
+  // Queue handling on the busy -> idle edge, matching the Claude CLI:
+  //  - turn finished NATURALLY -> auto-send the next queued message (one per turn);
+  //  - turn was INTERRUPTED (Stop/Esc) -> do NOT fire the queue; return the queued
+  //    text (and images) to the input so the user stays in control (like Esc in
+  //    the CLI, which moves queued input back into the prompt rather than sending).
   useEffect(() => {
     const busy = isRunning || hasActiveRequests;
-    if (prevBusyRef.current && !busy && queuedMessages.length > 0) {
-      const next = queuedMessages[0];
-      setQueuedMessages((q) => q.slice(1));
-      runActRef.current?.(next.message, next.images);
+    if (prevBusyRef.current && !busy) {
+      if (interruptedRef.current) {
+        interruptedRef.current = false;
+        if (queuedMessages.length > 0) {
+          const text = queuedMessages.map((q) => q.message).join('\n\n');
+          setPrompt((cur) => [cur.trim(), text].filter(Boolean).join('\n\n'));
+          const imgs = queuedMessages.flatMap((q) => q.images || []);
+          if (imgs.length) setUploadedImages((cur) => [...cur, ...imgs]);
+          setQueuedMessages([]);
+        }
+      } else if (queuedMessages.length > 0) {
+        const next = queuedMessages[0];
+        setQueuedMessages((q) => q.slice(1));
+        runActRef.current?.(next.message, next.images);
+      }
     }
     prevBusyRef.current = busy;
   }, [isRunning, hasActiveRequests, queuedMessages]);
@@ -1495,6 +1523,45 @@ const persistProjectPreferences = useCallback(
     };
   }, [previewUrl, showPreview, projectId]);
 
+  // Cold-start latch: forget the "loaded" state whenever the preview URL changes
+  // (new project / stop→start assigns a fresh URL), so the building overlay +
+  // retry loop run for that URL until it truly renders.
+  useEffect(() => { setPreviewLoaded(false); }, [previewUrl]);
+
+  // The app confirmed a real render once its plugin reports (previewReady) or,
+  // for stacks without the bridge, once a loaded document sat without a report
+  // (bridgeAbsent) AND the server probe says the dev server is up — so a
+  // Traefik 502 page (dev server still down → previewDown) doesn't count as
+  // loaded. Latch it so subsequent per-reload previewReady resets don't re-open
+  // the overlay.
+  useEffect(() => {
+    if (previewReady || (bridgeAbsent && !previewDown)) setPreviewLoaded(true);
+  }, [previewReady, bridgeAbsent, previewDown]);
+
+  // Auto-retry the iframe while it hasn't confirmed a load. This is the missing
+  // piece for NEW apps: the first load hits a not-ready subdomain/dev server and
+  // sticks on the error page; reloading on a cadence picks the app up the moment
+  // its subdomain (cert/DNS/route) and dev server are ready — then the plugin
+  // reports and the loop stops. (The reachability poll handles later restarts.)
+  // 6s > the 5s bridge-detect grace, so a successful load of a bridge-less stack
+  // can settle (bridgeAbsent → previewLoaded) before the next reload.
+  useEffect(() => {
+    if (!previewUrl || !showPreview || previewLoaded) return;
+    const t = setInterval(() => { refreshPreviewRef.current?.(); }, 6000);
+    return () => clearInterval(t);
+  }, [previewUrl, showPreview, previewLoaded]);
+
+  // Show the "building" overlay only after a short grace, so a warm preview that
+  // loads immediately doesn't flash it.
+  useEffect(() => {
+    if (!previewUrl || !showPreview || previewLoaded || editMode || commentMode) {
+      setShowColdStart(false);
+      return;
+    }
+    const t = setTimeout(() => setShowColdStart(true), 1200);
+    return () => clearTimeout(t);
+  }, [previewUrl, showPreview, previewLoaded, editMode, commentMode]);
+
   const refreshPreview = useCallback(() => {
     if (!previewUrl || !iframeRef.current) {
       return;
@@ -2216,6 +2283,10 @@ const persistProjectPreferences = useCallback(
   // CLI parity: Stop/Esc interrupts the running turn server-side. The SSE
   // 'completed' status it triggers flips isRunning; queued messages then flow.
   async function stopTurn() {
+    // Mark this as a user interrupt so the busy->idle flush returns queued
+    // messages to the input instead of auto-sending them (CLI parity). Only when
+    // actually busy, so the flag can't linger and mis-handle a later turn.
+    if (isRunning || hasActiveRequests) interruptedRef.current = true;
     try {
       await fetch(`${API_BASE}/api/chat/${projectId}/act/stop`, { method: 'POST' });
     } catch {
@@ -3397,10 +3468,35 @@ const persistProjectPreferences = useCallback(
                       </div>
                     </div>
 
+                    {/* Cold-start overlay — a NEW app's subdomain/dev server isn't
+                        ready on first load, so the iframe underneath is showing
+                        Chrome's "site can't be reached". Cover it with a friendly
+                        building state; the retry loop reloads until the app renders,
+                        then previewLoaded latches and this clears automatically. */}
+                    {showColdStart && !previewLoaded && (
+                      <div className="absolute inset-0 z-20 bg-gray-50/95 dark:bg-[#0c0a09]/95 flex items-center justify-center">
+                        <div className="text-center max-w-sm mx-auto p-6">
+                          <div className="w-8 h-8 mx-auto mb-4 border-2 border-[#DE7356] border-t-transparent rounded-full animate-spin" />
+                          <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-100 mb-1">
+                            Building your app
+                          </h3>
+                          <p className="text-sm text-gray-500 dark:text-gray-400">
+                            Setting up the preview — the first load of a new app can take a moment. This view opens automatically when it&apos;s ready.
+                          </p>
+                          {previewLogs.length > 0 && (
+                            <p className="mt-3 text-xs font-mono text-gray-400 dark:text-gray-500 truncate" title={previewLogs[previewLogs.length - 1]}>
+                              {previewLogs[previewLogs.length - 1]}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
                     {/* Restarting overlay — covers Traefik's raw "Bad Gateway"
-                        while the dev server (re)starts; cleared + auto-reloaded
-                        by the reachability poll. */}
-                    {previewDown && (
+                        while an ALREADY-LOADED preview's dev server restarts;
+                        cleared + auto-reloaded by the reachability poll. (The
+                        first-ever load is handled by the cold-start overlay above.) */}
+                    {previewDown && previewLoaded && (
                       <div className="absolute inset-0 z-20 bg-gray-50/95 dark:bg-[#0c0a09]/95 flex items-center justify-center">
                         <div className="text-center max-w-sm mx-auto p-6">
                           <div className="w-8 h-8 mx-auto mb-4 border-2 border-[#DE7356] border-t-transparent rounded-full animate-spin" />
