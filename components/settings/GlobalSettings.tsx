@@ -114,6 +114,7 @@ export default function GlobalSettings({ isOpen, onClose, initialTab = 'general'
   const [activeTab, setActiveTab] = useState<SettingsTab>(initialTab);
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
   const [authOff, setAuthOff] = useState(false);
+  const [authConfigLoaded, setAuthConfigLoaded] = useState(false);
   const [userLoaded, setUserLoaded] = useState(false);
   const [cliStatus, setCLIStatus] = useState<CLIStatus>({});
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
@@ -190,6 +191,8 @@ export default function GlobalSettings({ isOpen, onClose, initialTab = 'general'
       setAuthOff(json?.success ? json.data?.authEnabled === false : false);
     } catch {
       setAuthOff(false);
+    } finally {
+      setAuthConfigLoaded(true);
     }
   }, []);
 
@@ -214,10 +217,17 @@ export default function GlobalSettings({ isOpen, onClose, initialTab = 'general'
   // only once we actually know who the user is, so an initialTab='users' isn't
   // wrongly redirected during the brief window before /api/users/me resolves.
   useEffect(() => {
-    if (userLoaded && ((!isAdmin && (activeTab === 'users' || activeTab === 'system')) || (!canManageOrg && activeTab === 'shared-mcp'))) {
+    // The shared-mcp guard also waits on authConfigLoaded: canManageOrg depends
+    // on authOff, which loads from a SEPARATE fetch than the user. Without this,
+    // a single-tenant (auth-off) user opening initialTab='shared-mcp' gets bounced
+    // to General if /api/users/me resolves before /api/auth/config.
+    if (
+      (userLoaded && !isAdmin && (activeTab === 'users' || activeTab === 'system')) ||
+      (userLoaded && authConfigLoaded && !canManageOrg && activeTab === 'shared-mcp')
+    ) {
       setActiveTab('general');
     }
-  }, [userLoaded, activeTab, isAdmin, canManageOrg]);
+  }, [userLoaded, authConfigLoaded, activeTab, isAdmin, canManageOrg]);
 
   const saveGlobalSettings = async () => {
     setIsLoading(true);

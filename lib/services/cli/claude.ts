@@ -515,8 +515,14 @@ async function runContainerizedTurn(args: {
         // Strict = ONLY our brokered config. When account-connector passthrough
         // is on (default), stay non-strict so the CLI also loads the user's
         // Claude account managed connectors (Gmail/Drive/Atlassian/…), matching
-        // `claude mcp list`. Unapproved project `.mcp.json` servers remain
-        // pending (not auto-run), so this doesn't let a generated app inject tools.
+        // `claude mcp list`. NOTE: non-strict + settingSources 'project,user' also
+        // lets a project's own `.mcp.json` / `.claude` settings load MCP servers.
+        // That is NOT a new privilege: this agent already runs bypassPermissions
+        // with Bash, so any stdio server it could plant runs at a privilege it
+        // already holds, and http servers use the same egress its `curl` already
+        // has. Isolation is enforced at the CONTAINER/NETWORK layer (egress-locked
+        // sandbox net, per-project FS, scrubbed secrets), not by this flag. Set
+        // AGENT_ACCOUNT_MCP_CONNECTORS=0 to restore strict (brokered-only) mode.
         strictMcpConfig: Boolean(mcp) && !accountMcpConnectorsEnabled(),
         homeHostPath,
         skillsHostPath,
