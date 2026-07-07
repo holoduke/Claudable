@@ -1426,13 +1426,20 @@ export default function HomePage() {
                               <span> · {formatCliInfo(projectCli, project.selectedModel ?? undefined)}</span>
                             )}
                           </p>
-                          {(project.createdBy || project.lastEditedBy) && (
-                            <p className="mt-1 text-[11px] leading-tight text-gray-400 dark:text-gray-500 truncate">
-                              {project.createdBy && <span>Created by {project.createdBy}</span>}
-                              {project.createdBy && project.lastEditedBy && <span> · </span>}
-                              {project.lastEditedBy && <span>Last edited by {project.lastEditedBy}</span>}
-                            </p>
-                          )}
+                          {(() => {
+                            // Only surface "Last edited by" when a DIFFERENT person than the
+                            // creator last edited it — otherwise it redundantly repeats the
+                            // creator and reads as "creator is always the last editor".
+                            const showEdited = !!project.lastEditedBy && project.lastEditedBy !== project.createdBy;
+                            if (!project.createdBy && !showEdited) return null;
+                            return (
+                              <p className="mt-1 text-[11px] leading-tight text-gray-400 dark:text-gray-500 truncate">
+                                {project.createdBy && <span>Created by {project.createdBy}</span>}
+                                {project.createdBy && showEdited && <span> · </span>}
+                                {showEdited && <span>Last edited by {project.lastEditedBy}</span>}
+                              </p>
+                            );
+                          })()}
                         </div>
                       </button>
                     );

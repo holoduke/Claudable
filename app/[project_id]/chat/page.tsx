@@ -244,7 +244,26 @@ export default function ChatPage() {
   const [showGlobalSettings, setShowGlobalSettings] = useState(false);
   // Which tab the settings modal opens on: the gear opens General; the publish
   // panel's "Open Settings → Services" jumps straight to the Deploy tab.
-  const [settingsInitialTab, setSettingsInitialTab] = useState<'general' | 'services'>('general');
+  const [settingsInitialTab, setSettingsInitialTab] = useState<'general' | 'services' | 'mcp'>('general');
+  // The MCP OAuth callback redirects back here with ?mcp_auth=success|error.
+  // Surface the result and open the MCP tab so the user sees "authenticated".
+  useEffect(() => {
+    const result = searchParams?.get('mcp_auth');
+    if (!result) return;
+    if (result === 'success') {
+      toast.success('MCP server authenticated.');
+      setSettingsInitialTab('mcp');
+      setShowGlobalSettings(true);
+    } else {
+      toast.error(`MCP authentication failed${searchParams?.get('mcp_auth_msg') ? `: ${searchParams.get('mcp_auth_msg')}` : ''}`);
+    }
+    // Strip the params so a reload doesn't re-fire the toast.
+    const url = new URL(window.location.href);
+    url.searchParams.delete('mcp_auth');
+    url.searchParams.delete('mcp_auth_msg');
+    window.history.replaceState({}, '', url.toString());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
   const [uploadedImages, setUploadedImages] = useState<{name: string; url: string; base64?: string; path?: string}[]>([]);
   const [isInitializing, setIsInitializing] = useState(true);
   // Initialize states with default values, will be loaded from localStorage in useEffect
@@ -2957,6 +2976,13 @@ const persistProjectPreferences = useCallback(
                   }
                   if (isBareCommand && command === '/clear') {
                     void clearAgentContext();
+                    return;
+                  }
+                  if (isBareCommand && command === '/mcp') {
+                    // Like `/mcp` in the Claude CLI: open the project's MCP servers
+                    // + their auth status, where you can authenticate.
+                    setSettingsInitialTab('mcp');
+                    setShowGlobalSettings(true);
                     return;
                   }
                   if (isBareCommand && command === '/compact') {

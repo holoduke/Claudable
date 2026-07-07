@@ -94,6 +94,7 @@ export default function ChatInput({
     { name: 'clear', description: 'Start a fresh conversation context (chat history is kept)', scope: 'command' },
     { name: 'compact', description: 'Summarize the conversation to free up context space', scope: 'command' },
     { name: 'usage', description: 'Show context usage, token spend and rate limits', scope: 'command' },
+    { name: 'mcp', description: 'List MCP servers and their authentication status', scope: 'command' },
     { name: 'help', description: 'List the available commands', scope: 'command' },
   ], []);
   const [skills, setSkills] = useState<SkillOption[]>([]);

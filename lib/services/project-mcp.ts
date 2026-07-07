@@ -14,6 +14,8 @@
 import { prisma } from '@/lib/db/client';
 import { encrypt, decrypt } from '@/lib/crypto';
 import { assertHostAllowed } from '@/lib/services/itops/net';
+import { authStatusOf, getValidAccessToken, type McpAuthStatus } from '@/lib/services/mcp-oauth';
+import type { ProjectMcpServer } from '@prisma/client';
 
 // Built-in brokered servers a project MCP must not shadow.
 const RESERVED_NAMES = new Set(['appdiag', 'images', 'itops']);
@@ -31,6 +33,7 @@ export interface McpServerInput {
   headers?: Record<string, string> | null; // http/sse auth headers
   env?: Record<string, string> | null;      // stdio env
   enabled?: boolean;
+  authType?: 'none' | 'oauth' | null;        // 'oauth' = authenticate via MCP OAuth flow
 }
 
 /** UI-safe view — never includes decrypted secrets, only whether they are set. */
@@ -45,6 +48,8 @@ export interface McpServerView {
   hasHeaders: boolean;
   hasEnv: boolean;
   enabled: boolean;
+  authType: 'none' | 'oauth';
+  authStatus: McpAuthStatus; // none | needs-auth | connected | expired
   createdAt: string;
   updatedAt: string;
 }
@@ -59,16 +64,15 @@ function parseJson<T>(raw: string | null | undefined, fallback: T): T {
   try { return JSON.parse(raw) as T; } catch { return fallback; }
 }
 
-function toView(row: {
-  id: string; name: string; label: string; transport: string; url: string | null;
-  command: string | null; argsJson: string | null; headersEncrypted: string | null;
-  envEncrypted: string | null; enabled: boolean; createdAt: Date; updatedAt: Date;
-}): McpServerView {
+function toView(row: ProjectMcpServer): McpServerView {
   return {
     id: row.id, name: row.name, label: row.label, transport: row.transport as McpTransport,
     url: row.url, command: row.command, args: parseJson<string[]>(row.argsJson, []),
     hasHeaders: Boolean(row.headersEncrypted), hasEnv: Boolean(row.envEncrypted),
-    enabled: row.enabled, createdAt: row.createdAt.toISOString(), updatedAt: row.updatedAt.toISOString(),
+    enabled: row.enabled,
+    authType: row.authType === 'oauth' ? 'oauth' : 'none',
+    authStatus: authStatusOf(row),
+    createdAt: row.createdAt.toISOString(), updatedAt: row.updatedAt.toISOString(),
   };
 }
 
@@ -133,6 +137,7 @@ export async function createProjectMcpServer(projectId: string, input: McpServer
       headersEncrypted: input.headers && Object.keys(input.headers).length ? encrypt(JSON.stringify(input.headers)) : null,
       envEncrypted: input.env && Object.keys(input.env).length ? encrypt(JSON.stringify(input.env)) : null,
       enabled: input.enabled ?? true,
+      authType: input.authType === 'oauth' ? 'oauth' : null,
     },
   });
   return toView(row);
@@ -183,8 +188,16 @@ export async function buildProjectMcpConfig(projectId: string): Promise<Record<s
     if (RESERVED_NAMES.has(row.name)) continue; // defensive
     if (row.transport === 'http' || row.transport === 'sse') {
       if (!row.url) continue;
-      const headers = row.headersEncrypted ? parseJson<Record<string, string>>(decrypt(row.headersEncrypted), {}) : undefined;
-      out[row.name] = { type: row.transport, url: row.url, ...(headers && Object.keys(headers).length ? { headers } : {}) };
+      const headers: Record<string, string> = row.headersEncrypted
+        ? parseJson<Record<string, string>>(decrypt(row.headersEncrypted), {}) : {};
+      // OAuth: inject a fresh Bearer token (refreshed if near expiry). If not yet
+      // authenticated we still emit the server (headerless) so the agent surfaces
+      // it as needs-auth rather than silently dropping it.
+      if (row.authType === 'oauth') {
+        const token = await getValidAccessToken(row).catch(() => null);
+        if (token) headers['Authorization'] = `Bearer ${token}`;
+      }
+      out[row.name] = { type: row.transport, url: row.url, ...(Object.keys(headers).length ? { headers } : {}) };
     } else if (row.transport === 'stdio') {
       if (!row.command) continue;
       const env = row.envEncrypted ? parseJson<Record<string, string>>(decrypt(row.envEncrypted), {}) : undefined;
