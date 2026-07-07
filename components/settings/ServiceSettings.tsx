@@ -2,7 +2,7 @@
  * Service Settings Component
  * Manage service integrations
  */
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import GitHubRepoModal from '@/components/modals/GitHubRepoModal';
 import VercelProjectModal from '@/components/modals/VercelProjectModal';
 import SupabaseModal from '@/components/modals/SupabaseModal';
@@ -84,6 +84,10 @@ export function ServiceSettings({ projectId, projectName }: ServiceSettingsProps
   // Per-project git settings: the branch the project operates on (push target
   // + sync source) and the state of the manual "Sync" (pull) action.
   const [branchInput, setBranchInput] = useState('');
+  // Once the user edits the field, stop overwriting it with the server value on
+  // reload (Sync/connect-modal close call loadServiceConnections) — otherwise
+  // their unsaved typing silently reverts.
+  const branchDirty = useRef(false);
   const [branchSaving, setBranchSaving] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [gitStatusMessage, setGitStatusMessage] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null);
@@ -140,7 +144,7 @@ export function ServiceSettings({ projectId, projectName }: ServiceSettingsProps
       }));
 
       const github = connections.find(conn => conn.provider === 'github');
-      if (github) {
+      if (github && !branchDirty.current) {
         setBranchInput(github.service_data?.branch || github.service_data?.default_branch || 'main');
       }
     } catch (error) {
@@ -162,6 +166,7 @@ export function ServiceSettings({ projectId, projectName }: ServiceSettingsProps
         throw new Error(body.message || 'Failed to save branch');
       }
       setGitStatusMessage({ kind: 'ok', text: `Operating branch set to "${body.branch}"` });
+      branchDirty.current = false; // saved value is now canonical again
       loadServiceConnections();
     } catch (error) {
       setGitStatusMessage({ kind: 'error', text: error instanceof Error ? error.message : 'Failed to save branch' });
@@ -179,10 +184,16 @@ export function ServiceSettings({ projectId, projectName }: ServiceSettingsProps
       if (!res.ok) {
         throw new Error(body.message || 'Sync failed');
       }
-      setGitStatusMessage({
-        kind: 'ok',
-        text: body.message + (body.preview_restarted ? ' — preview restarted' : ''),
-      });
+      if (body.preview_error) {
+        // Sync succeeded but the preview couldn't come back up — surface it as
+        // an error so the user knows their preview is down.
+        setGitStatusMessage({ kind: 'error', text: `${body.message}, but the preview failed to restart: ${body.preview_error}` });
+      } else {
+        setGitStatusMessage({
+          kind: 'ok',
+          text: body.message + (body.preview_restarted ? ' — preview restarted' : ''),
+        });
+      }
       loadServiceConnections();
     } catch (error) {
       setGitStatusMessage({ kind: 'error', text: error instanceof Error ? error.message : 'Sync failed' });
@@ -325,7 +336,7 @@ export function ServiceSettings({ projectId, projectName }: ServiceSettingsProps
                                 <span className="shrink-0">Branch:</span>
                                 <input
                                   value={branchInput}
-                                  onChange={(e) => setBranchInput(e.target.value)}
+                                  onChange={(e) => { branchDirty.current = true; setBranchInput(e.target.value); }}
                                   spellCheck={false}
                                   className="w-36 px-2 py-1 text-sm font-mono rounded-lg border border-gray-300 dark:border-white/[0.12] bg-white dark:bg-white/[0.06] text-gray-800 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-[#DE7356]"
                                 />
