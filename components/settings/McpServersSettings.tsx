@@ -17,6 +17,8 @@ interface McpServerView {
   hasHeaders: boolean;
   hasEnv: boolean;
   enabled: boolean;
+  authType: 'none' | 'oauth';
+  authStatus: 'none' | 'needs-auth' | 'connected' | 'expired';
 }
 
 interface Props {
@@ -32,6 +34,7 @@ const EMPTY_FORM = {
   argsText: '',
   headerKey: 'Authorization',
   headerValue: '',
+  authType: 'none' as 'none' | 'oauth',
 };
 
 export default function McpServersSettings({ projectId }: Props) {
@@ -59,18 +62,34 @@ export default function McpServersSettings({ projectId }: Props) {
   useEffect(() => { void load(); }, [load]);
 
   const applyRelumePreset = () => {
-    // Prefill name/label/transport; leave URL blank — paste Relume's real MCP
-    // endpoint + auth token (from relume.io/relume-library-mcp) into the fields.
+    // Relume uses OAuth (sign in with your Relume account) — not a static token.
+    // Prefill the endpoint + authType=oauth; the user authenticates after adding.
     setForm({
       ...EMPTY_FORM,
       name: 'relume',
       label: 'Relume Library',
       transport: 'http',
-      url: '',
-      headerKey: 'Authorization',
-      headerValue: '',
+      url: 'https://relume-library-mcp.relume.io/mcp',
+      authType: 'oauth',
     });
     setAdding(true);
+  };
+
+  const authenticate = async (s: McpServerView) => {
+    setError(null);
+    try {
+      const res = await fetch(`${API_BASE}/api/projects/${projectId}/mcp-servers/${s.id}/oauth/start`, { method: 'POST' });
+      const json = await res.json();
+      if (!res.ok || !json?.success || !json.data?.authUrl) throw new Error(json?.error || 'Could not start authentication');
+      window.location.href = json.data.authUrl; // redirect to the provider's consent screen
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Authentication failed to start');
+    }
+  };
+
+  const disconnect = async (s: McpServerView) => {
+    await fetch(`${API_BASE}/api/projects/${projectId}/mcp-servers/${s.id}/oauth/disconnect`, { method: 'POST' });
+    await load();
   };
 
   const submit = async () => {
@@ -87,7 +106,9 @@ export default function McpServersSettings({ projectId }: Props) {
         body.args = form.argsText.split(/\s+/).filter(Boolean);
       } else {
         body.url = form.url.trim();
-        if (form.headerValue.trim() && form.headerKey.trim()) {
+        body.authType = form.authType;
+        // OAuth servers get their token via the auth flow — no manual header.
+        if (form.authType !== 'oauth' && form.headerValue.trim() && form.headerKey.trim()) {
           body.headers = { [form.headerKey.trim()]: form.headerValue.trim() };
         }
       }
@@ -154,9 +175,27 @@ export default function McpServersSettings({ projectId }: Props) {
                   {(s.hasHeaders || s.hasEnv) && (
                     <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300">secret</span>
                   )}
+                  {s.authType === 'oauth' && (
+                    s.authStatus === 'connected' ? (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-100 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300">authenticated</span>
+                    ) : (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-orange-100 dark:bg-orange-950/40 text-orange-700 dark:text-orange-300">{s.authStatus === 'expired' ? 'auth expired' : 'needs auth'}</span>
+                    )
+                  )}
                 </div>
                 <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{s.url || `${s.command ?? ''} ${s.args.join(' ')}`.trim()}</p>
               </div>
+              {s.authType === 'oauth' && (
+                s.authStatus === 'connected' ? (
+                  <button onClick={() => disconnect(s)} className="text-xs px-2 py-1 rounded-md border border-gray-200 dark:border-white/[0.08] text-gray-500 hover:text-gray-700 dark:hover:text-gray-200">
+                    Disconnect
+                  </button>
+                ) : (
+                  <button onClick={() => authenticate(s)} className="text-xs px-2 py-1 rounded-md bg-[#DE7356] text-white hover:bg-[#c9634a] transition-colors">
+                    Authenticate
+                  </button>
+                )
+              )}
               <button
                 onClick={() => toggle(s)}
                 className={`text-xs px-2 py-1 rounded-md border transition-colors ${s.enabled ? 'border-emerald-300 text-emerald-700 dark:text-emerald-300 dark:border-emerald-800' : 'border-gray-200 dark:border-white/[0.08] text-gray-400'}`}
@@ -217,6 +256,18 @@ export default function McpServersSettings({ projectId }: Props) {
                 URL (https)
                 <input value={form.url} onChange={(e) => setForm({ ...form, url: e.target.value })} placeholder="https://mcp.relume.io/mcp" className="mt-1 w-full px-2.5 py-2 rounded-md border border-gray-200 dark:border-white/[0.08] bg-transparent text-sm text-gray-900 dark:text-gray-50" />
               </label>
+              <label className="block text-xs text-gray-500 dark:text-gray-400">
+                Authentication
+                <select value={form.authType} onChange={(e) => setForm({ ...form, authType: e.target.value as 'none' | 'oauth' })} className="mt-1 w-full px-2.5 py-2 rounded-md border border-gray-200 dark:border-white/[0.08] bg-transparent text-sm text-gray-900 dark:text-gray-50">
+                  <option value="none">None / static header</option>
+                  <option value="oauth">OAuth (sign in after adding)</option>
+                </select>
+              </label>
+              {form.authType === 'oauth' ? (
+                <p className="text-[11px] text-gray-400 dark:text-gray-500">
+                  You&apos;ll get an <span className="font-medium">Authenticate</span> button after adding — it opens the provider&apos;s sign-in and stores the token securely.
+                </p>
+              ) : (
               <div className="grid grid-cols-2 gap-3">
                 <label className="text-xs text-gray-500 dark:text-gray-400">
                   Auth header (optional)
@@ -227,6 +278,7 @@ export default function McpServersSettings({ projectId }: Props) {
                   <input value={form.headerValue} onChange={(e) => setForm({ ...form, headerValue: e.target.value })} placeholder="Bearer …" className="mt-1 w-full px-2.5 py-2 rounded-md border border-gray-200 dark:border-white/[0.08] bg-transparent text-sm text-gray-900 dark:text-gray-50" />
                 </label>
               </div>
+              )}
             </>
           )}
           <div className="flex gap-2 pt-1">

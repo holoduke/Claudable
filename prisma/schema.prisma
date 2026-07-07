@@ -318,6 +318,17 @@ model ProjectMcpServer {
   envEncrypted     String? @map("env_encrypted")     // encrypted JSON: env (stdio)
   enabled   Boolean  @default(true)
 
+  // OAuth (MCP authorization spec, OAuth 2.1 + PKCE + DCR). When authType='oauth'
+  // the agent gets `Authorization: Bearer <token>` injected at turn build time.
+  authType             String? @map("auth_type")               // null|"none"|"oauth"
+  oauthMetadataJson    String? @map("oauth_metadata_json")     // {authorization_endpoint, token_endpoint, registration_endpoint, resource, scopes}
+  oauthClientId        String? @map("oauth_client_id")
+  oauthClientSecretEnc String? @map("oauth_client_secret_enc") // encrypted (confidential clients only)
+  oauthTokensEnc       String? @map("oauth_tokens_enc")        // encrypted JSON {access_token, refresh_token, expires_at, scope, token_type}
+  oauthPkceEnc         String? @map("oauth_pkce_enc")          // encrypted in-flight PKCE verifier (cleared after callback)
+  oauthState           String? @map("oauth_state")             // in-flight CSRF state (single-use, cleared after callback)
+  oauthConnectedAt     DateTime? @map("oauth_connected_at")
+
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
