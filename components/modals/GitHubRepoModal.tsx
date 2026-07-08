@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? '';
@@ -44,6 +44,13 @@ export default function GitHubRepoModal({
       // Limit to 100 characters
       .substring(0, 100);
   }, []);
+
+  // Memoized so the displayed suggestion is stable across renders and the
+  // click applies exactly the name shown.
+  const suggestedRepoName = useMemo(
+    () => sanitizeRepoName(`${projectName || 'project'}-${Math.random().toString(36).substring(7)}`),
+    [projectName, sanitizeRepoName]
+  );
 
   const validateRepoName = (name: string): string => {
     if (!name.trim()) {
@@ -304,10 +311,9 @@ export default function GitHubRepoModal({
                 {!nameError && !isCheckingAvailability && (
                   <p className="mt-1 text-xs text-gray-500 dark:text-gray-400 ">
                     Great repository names are short and memorable. Need inspiration? How about <button type="button" className="text-gray-900 dark:text-gray-50 hover:underline" onClick={() => {
-                      const suggestion = sanitizeRepoName(`${projectName || 'project'}-${Math.random().toString(36).substring(7)}`);
-                      handleRepoNameChange(suggestion);
+                      handleRepoNameChange(suggestedRepoName);
                     }}>
-                      {sanitizeRepoName(`${projectName || 'project'}-${Math.random().toString(36).substring(7)}`)}
+                      {suggestedRepoName}
                     </button>?
                   </p>
                 )}
