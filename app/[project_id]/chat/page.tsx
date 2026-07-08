@@ -2401,7 +2401,8 @@ const persistProjectPreferences = useCallback(
             setIsRunning(false);
             // Remove from pending requests
             pendingRequestsRef.current.delete(requestFingerprint);
-            return;
+            // Signal failure so the caller restores the message (don't lose it).
+            return { ok: false, busy: false };
           }
         }
       }
@@ -3016,7 +3017,21 @@ const persistProjectPreferences = useCallback(
                   if (isRunning || hasActiveRequests) {
                     setQueuedMessages((q) => [...q, { message, images: images || [] }]);
                   } else {
-                    runAct(message, images);
+                    // Fire the turn. ChatInput has already cleared the composer, so
+                    // if the server was actually busy (409 — our idle state was
+                    // stale, e.g. after an SSE drop during a preview restart) or the
+                    // send failed, the message must NOT be lost: re-queue it (busy →
+                    // flushes when the running turn ends) or hand it back to the
+                    // composer so the user can retry.
+                    void Promise.resolve(runAct(message, images)).then((res) => {
+                      if (!res || res.ok) return;
+                      if (res.busy) {
+                        setQueuedMessages((q) => [...q, { message, images: images || [] }]);
+                      } else {
+                        draftRestoreNonceRef.current += 1;
+                        setDraftRestore({ text: message, images: images || [], nonce: draftRestoreNonceRef.current });
+                      }
+                    });
                   }
                 }}
                 // Never disabled — always allow typing/sending (queued while busy).
