@@ -16,7 +16,7 @@ import { ANGULAR_SYSTEM_PROMPT } from './prompts/angular-system-prompt';
 import { STATIC_SYSTEM_PROMPT } from './prompts/static-system-prompt';
 import { DOCUMENT_SYSTEM_PROMPT } from './prompts/document-system-prompt';
 import { stackKind } from '@/lib/config/stacks';
-import { resolveProjectClaudeToken } from '../claude-credentials';
+import { resolveProjectClaudeToken, runUsesRequestersOwnAccount } from '../claude-credentials';
 import { buildItopsMcpServer } from '../itops/itops-mcp';
 import { buildDiagnosticsMcpServer } from '../diagnostics-mcp';
 import { runAgentTurnContainerized, agentHostPath, defaultAgentSandboxNet, accountMcpConnectorsEnabled, type AgentStreamEvent } from './claude-container';
@@ -434,6 +434,14 @@ async function runContainerizedTurn(args: {
 
     // The 3 in-process tools become NETWORK tools: registered under a per-turn
     // capability token, served by /api/agent-mcp/<token>/<server>, revoked below.
+    // Account-connector passthrough is per-run: allowed only when passthrough is
+    // enabled AND the run uses the acting user's OWN Claude account, so a
+    // teammate on a project using a shared/global token never inherits another
+    // user's Gmail/Drive/etc. Best-effort → deny (strict) on any lookup error.
+    const connectorsOk =
+      accountMcpConnectorsEnabled() &&
+      (await runUsesRequestersOwnAccount(projectId, args.requesterUserId).catch(() => false));
+
     mcp = await prepareAgentMcpTurnConfig({
       projectId,
       projectPath: absoluteProjectPath,
@@ -516,17 +524,18 @@ async function runContainerizedTurn(args: {
         systemPrompt,
         mcpConfigPath: mcp?.containerPath,
         // Strict = ONLY our brokered config. When account-connector passthrough
-        // is on (default), stay non-strict so the CLI also loads the user's
-        // Claude account managed connectors (Gmail/Drive/Atlassian/…), matching
-        // `claude mcp list`. NOTE: non-strict + settingSources 'project,user' also
-        // lets a project's own `.mcp.json` / `.claude` settings load MCP servers.
-        // That is NOT a new privilege: this agent already runs bypassPermissions
-        // with Bash, so any stdio server it could plant runs at a privilege it
-        // already holds, and http servers use the same egress its `curl` already
-        // has. Isolation is enforced at the CONTAINER/NETWORK layer (egress-locked
-        // sandbox net, per-project FS, scrubbed secrets), not by this flag. Set
-        // AGENT_ACCOUNT_MCP_CONNECTORS=0 to restore strict (brokered-only) mode.
-        strictMcpConfig: Boolean(mcp) && !accountMcpConnectorsEnabled(),
+        // is on (default) AND this run uses the acting user's OWN Claude account
+        // (see connectorsOk above), stay non-strict so the CLI also loads their
+        // account managed connectors (Gmail/Drive/Atlassian/…), matching
+        // `claude mcp list`. When the run uses a SHARED or GLOBAL token owned by
+        // someone else, force strict so a teammate never inherits another user's
+        // connectors. NOTE: non-strict + settingSources 'project,user' also lets
+        // a project's own `.mcp.json` load MCP servers — NOT a new privilege: the
+        // agent already runs bypassPermissions with Bash, so any server it plants
+        // runs at a privilege it already holds. Isolation is at the container/
+        // network layer, not this flag. AGENT_ACCOUNT_MCP_CONNECTORS=0 disables
+        // passthrough entirely.
+        strictMcpConfig: Boolean(mcp) && !connectorsOk,
         homeHostPath,
         skillsHostPath,
         skillsContainerPath,
