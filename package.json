@@ -3,20 +3,13 @@
   "version": "2.0.0",
   "description": "AI-Powered Web App Builder - Build apps with natural language using Claude Code, Cursor, and more",
   "private": true,
-  "main": "index.js",
   "scripts": {
     "dev": "node scripts/run-web.js",
     "dev:web": "node scripts/run-web.js",
-    "dev:desktop": "node scripts/run-desktop.js",
-    "dev:electron": "npm run dev:desktop",
     "ensure:env": "node scripts/setup-env.js",
     "test": "vitest run",
     "test:watch": "vitest",
     "build": "next build",
-    "build:desktop": "npm run build && electron-builder",
-    "package:mac": "npm run build && electron-builder --mac",
-    "package:win": "npm run build && electron-builder --win",
-    "package:linux": "npm run build && electron-builder --linux",
     "start": "next start",
     "lint": "next lint",
     "type-check": "tsc --noEmit",
@@ -52,8 +45,6 @@
     "@types/react-dom": "^19.0.0",
     "@types/ws": "^8.18.1",
     "autoprefixer": "^10.4.20",
-    "electron": "^39.0.0",
-    "electron-builder": "^25.1.6",
     "eslint": "^9.17.0",
     "eslint-config-next": "15.1.0",
     "postcss": "^8.4.49",
@@ -81,56 +72,6 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/yourusername/claudable.git"
-  },
-  "build": {
-    "appId": "com.claudable.desktop",
-    "productName": "Claudable",
-    "files": [
-      "index.js",
-      "electron/**/*",
-      ".next/standalone/**/*",
-      ".next/static/**/*",
-      "public/**/*",
-      "package.json"
-    ],
-    "extraResources": [
-      {
-        "from": ".next/static",
-        "to": ".next/static"
-      },
-      {
-        "from": "public",
-        "to": "public"
-      }
-    ],
-    "asar": true,
-    "directories": {
-      "buildResources": "resources",
-      "output": "dist"
-    },
-    "mac": {
-      "target": [
-        "dmg",
-        "zip"
-      ],
-      "category": "public.app-category.developer-tools"
-    },
-    "win": {
-      "target": [
-        {
-          "target": "nsis",
-          "arch": [
-            "x64"
-          ]
-        }
-      ]
-    },
-    "linux": {
-      "target": [
-        "AppImage"
-      ],
-      "category": "Development"
-    }
+    "url": "https://github.com/holoduke/Claudable.git"
   }
 }
