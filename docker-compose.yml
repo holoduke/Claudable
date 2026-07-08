@@ -119,3 +119,8 @@ services:
       - "127.0.0.1:2375:2375"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
+      # Custom config: the stock 10m idle timeouts severed every quiet preview's
+      # docker-run attach stream, which Claudable's exit handler read as a dead
+      # dev server and tore the healthy container down ("Preview is restarting"
+      # every 10-20 min). See the file header for details.
+      - ./docker/socket-proxy/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
