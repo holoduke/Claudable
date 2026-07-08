@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? '';
@@ -45,12 +45,12 @@ export default function GitHubRepoModal({
       .substring(0, 100);
   }, []);
 
-  // Memoized so the displayed suggestion is stable across renders and the
-  // click applies exactly the name shown.
-  const suggestedRepoName = useMemo(
-    () => sanitizeRepoName(`${projectName || 'project'}-${Math.random().toString(36).substring(7)}`),
-    [projectName, sanitizeRepoName]
-  );
+  // Generate the random suggestion in an effect (not render) so the component
+  // stays pure — the displayed hint is stable and the click applies exactly it.
+  const [suggestedRepoName, setSuggestedRepoName] = useState('');
+  useEffect(() => {
+    setSuggestedRepoName(sanitizeRepoName(`${projectName || 'project'}-${Math.random().toString(36).substring(7)}`));
+  }, [projectName, sanitizeRepoName]);
 
   const validateRepoName = (name: string): string => {
     if (!name.trim()) {

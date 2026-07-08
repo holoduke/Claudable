@@ -418,6 +418,53 @@ async function pathExists(p: string): Promise<boolean> {
   try { await fs.access(p); return true; } catch { return false; }
 }
 
+export interface PluginCommand {
+  plugin: string;      // marketplace plugin name
+  command: string;     // command file basename (no .md)
+  invocation: string;  // how to type it: "<plugin>:<command>" (matches the CLI)
+  description?: string;
+}
+
+/** Pull the `description:` from a command file's YAML frontmatter, if present. */
+function frontmatterDescription(md: string): string | undefined {
+  const m = md.match(/^---\s*\n([\s\S]*?)\n---/);
+  if (!m) return undefined;
+  const line = m[1].split('\n').find((l) => /^description\s*:/.test(l));
+  return line ? line.replace(/^description\s*:\s*/, '').replace(/^["']|["']$/g, '').trim() || undefined : undefined;
+}
+
+/**
+ * The slash-commands contributed by the plugins effective+enabled in a project,
+ * enumerated from each plugin's commands/ dir. Powers the chat autocomplete so
+ * a user can type /<plugin>:<command>, exactly like the CLI. Best-effort: a
+ * plugin with no commands/ dir simply contributes none.
+ */
+export async function listProjectPluginCommands(projectId: string): Promise<PluginCommand[]> {
+  const effective = await listEffectivePlugins(projectId);
+  const orgId = await projectOrgId(projectId);
+  const orgFilter = orgId ? [{ orgId: null }, { orgId }] : [{ orgId: null }];
+  const rows = await prisma.pluginMarketplace.findMany({ where: { enabled: true, OR: orgFilter } });
+  const byName = new Map(rows.map((m) => [m.name, m]));
+  const out: PluginCommand[] = [];
+  for (const p of effective) {
+    if (!p.enabled || !p.synced) continue;
+    const m = byName.get(p.marketplace);
+    if (!m) continue;
+    const source = parseCatalog(m.catalogJson).find((c) => c.name === p.name)?.source;
+    if (!source) continue;
+    const cmdDir = path.join(pluginHostDir(m.name, m.subpath, source), 'commands');
+    let entries: string[] = [];
+    try { entries = (await fs.readdir(cmdDir)).filter((f) => f.endsWith('.md')); } catch { continue; }
+    for (const file of entries) {
+      const command = file.replace(/\.md$/, '');
+      let description: string | undefined;
+      try { description = frontmatterDescription(await fs.readFile(path.join(cmdDir, file), 'utf8')); } catch { /* ignore */ }
+      out.push({ plugin: p.name, command, invocation: `${p.name}:${command}`, description });
+    }
+  }
+  return out;
+}
+
 /**
  * The `--plugin-dir` container paths for every plugin effective in a project.
  * Used at agent-turn build time. Only returns plugins whose clone is present on

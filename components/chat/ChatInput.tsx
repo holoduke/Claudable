@@ -95,9 +95,14 @@ export default function ChatInput({
     { name: 'compact', description: 'Summarize the conversation to free up context space', scope: 'command' },
     { name: 'usage', description: 'Show context usage, token spend and rate limits', scope: 'command' },
     { name: 'mcp', description: 'List MCP servers and their authentication status', scope: 'command' },
+    { name: 'plugin', description: 'Manage plugins (marketplaces + which are enabled)', scope: 'command' },
     { name: 'help', description: 'List the available commands', scope: 'command' },
   ], []);
   const [skills, setSkills] = useState<SkillOption[]>([]);
+  // Plugin-contributed commands (/<plugin>:<command>). Prefill on select so the
+  // user can add arguments; the agent expands them (the plugin is loaded via
+  // --plugin-dir). scope 'plugin' → treated like a skill (prefill, not run).
+  const [pluginCmds, setPluginCmds] = useState<SkillOption[]>([]);
   const [skillActiveIdx, setSkillActiveIdx] = useState(0);
   useEffect(() => {
     if (!projectId) return;
@@ -116,18 +121,37 @@ export default function ChatInput({
     return () => { cancelled = true; };
   }, [projectId]);
 
+  useEffect(() => {
+    if (!projectId) return;
+    let cancelled = false;
+    fetch(`${API_BASE}/api/projects/${projectId}/plugins/commands`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => {
+        if (cancelled || !j?.success || !Array.isArray(j.data)) return;
+        setPluginCmds(j.data.map((c: { invocation: string; description?: string }) => ({
+          name: String(c.invocation), description: String(c.description ?? ''), scope: 'plugin',
+        })));
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [projectId]);
+
   // The menu opens only while the whole message is a bare "/token" (a command
   // being typed) — never mid-sentence. Query = the text after the slash.
-  const skillQuery = /^\/[\w-]*$/.test(message) ? message.slice(1).toLowerCase() : null;
+  // Allow ':' in the query so plugin commands (/<plugin>:<command>) open the menu.
+  const skillQuery = /^\/[\w:-]*$/.test(message) ? message.slice(1).toLowerCase() : null;
   const skillMatches = useMemo(() => {
     if (skillQuery === null) return [];
     const commandHits = builtinCommands.filter((c) => c.name.includes(skillQuery));
+    const pluginHits = pluginCmds
+      .filter((c) => c.name.toLowerCase().includes(skillQuery))
+      .sort((a, b) => Number(b.name.toLowerCase().startsWith(skillQuery)) - Number(a.name.toLowerCase().startsWith(skillQuery)));
     const skillHits = skills
       .filter((s) => s.name.toLowerCase().includes(skillQuery))
       .sort((a, b) => Number(b.name.toLowerCase().startsWith(skillQuery)) - Number(a.name.toLowerCase().startsWith(skillQuery)));
     // Built-in commands first — they're few and act immediately on selection+Enter.
-    return [...commandHits, ...skillHits].slice(0, 10);
-  }, [skills, skillQuery, builtinCommands]);
+    return [...commandHits, ...pluginHits, ...skillHits].slice(0, 12);
+  }, [skills, pluginCmds, skillQuery, builtinCommands]);
   const [dismissedQuery, setDismissedQuery] = useState<string | null>(null);
   const skillMenuOpen = skillQuery !== null && skillMatches.length > 0 && skillQuery !== dismissedQuery;
   useEffect(() => { setSkillActiveIdx(0); }, [skillQuery]);
