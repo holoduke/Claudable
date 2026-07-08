@@ -88,6 +88,10 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
       body: body.body.trim().slice(0, 4000),
       authorId: g.user?.id ?? null,
       authorName,
+      // Guests have no user list, so mentions are signed-in-only; the service
+      // re-validates every id against the author's org.
+      mentions: g.user ? body.mentions : undefined,
+      authorOrgId: g.user?.orgId,
     });
     return createSuccessResponse(created);
   } catch (error) {

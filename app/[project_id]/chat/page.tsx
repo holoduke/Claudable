@@ -1353,7 +1353,27 @@ const persistProjectPreferences = useCallback(
     runActRef.current?.(instruction, []);
   }, [previewErrors]);
 
-  const submitNewComment = useCallback(async (body: string): Promise<boolean> => {
+  // People picker for @-mentions in comments — the same org-scoped search that
+  // powers project-access assignment (signed-in users only; empty on failure).
+  const searchMentionUsers = useCallback(async (q: string) => {
+    try {
+      const r = await fetch(`${API_BASE}/api/users/search?q=${encodeURIComponent(q)}`);
+      const j = await r.json().catch(() => null);
+      if (!j?.success || !Array.isArray(j.data)) return [];
+      return j.data
+        .map((u: { id: string; name?: string | null; email?: string | null; image?: string | null }) => ({
+          id: u.id,
+          name: u.name || (u.email ? u.email.split('@')[0] : ''),
+          email: u.email ?? undefined,
+          image: u.image ?? null,
+        }))
+        .filter((u: { name: string }) => u.name);
+    } catch {
+      return [];
+    }
+  }, []);
+
+  const submitNewComment = useCallback(async (body: string, mentions: { id: string; name: string }[]): Promise<boolean> => {
     if (!composeAnchor) return false;
     const route = currentRoute || '/';
     const ctrl = new AbortController();
@@ -1361,7 +1381,7 @@ const persistProjectPreferences = useCallback(
     try {
       const r = await fetch(`${API_BASE}/api/projects/${projectId}/comments`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: ctrl.signal,
-        body: JSON.stringify({ route, anchorSelector: composeAnchor.anchorSelector, relX: composeAnchor.relX, relY: composeAnchor.relY, body }),
+        body: JSON.stringify({ route, anchorSelector: composeAnchor.anchorSelector, relX: composeAnchor.relX, relY: composeAnchor.relY, body, mentions }),
       });
       const j = await r.json().catch(() => null);
       if (j?.success) { setComposeAnchor(null); await loadComments(route); return true; }
@@ -3550,6 +3570,7 @@ const persistProjectPreferences = useCallback(
                         onResolve={resolveCommentById}
                         onDelete={deleteCommentById}
                         onCloseThread={() => setActivePinId(null)}
+                        searchMentionUsers={searchMentionUsers}
                       />
                     )}
 

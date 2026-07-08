@@ -1,5 +1,10 @@
 "use client";
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import {
+  activeMentionQuery,
+  splitBodyByMentions,
+  type CommentMention,
+} from '@/lib/utils/mentions';
 
 export interface CommentPin {
   id: string;
@@ -12,7 +17,15 @@ export interface CommentPin {
   resolved: boolean;
   authorName: string;
   authorImage: string | null;
+  mentions?: CommentMention[];
   createdAt: string;
+}
+
+export interface MentionCandidate {
+  id: string;
+  name: string;
+  email?: string;
+  image?: string | null;
 }
 
 export interface ComposeAnchor {
@@ -30,13 +43,16 @@ interface CommentsLayerProps {
   compose: ComposeAnchor | null;
   viewport: { w: number; h: number };
   /** Return true on success, false on failure — drives the inline error state. */
-  onSubmitNew: (body: string) => Promise<boolean> | boolean | void;
+  onSubmitNew: (body: string, mentions: CommentMention[]) => Promise<boolean> | boolean | void;
   onCancelCompose: () => void;
   onResolve: (id: string, resolved: boolean) => void;
   onDelete: (id: string) => void;
   onCloseThread: () => void;
   /** Hide Resolve/Delete (e.g. guests on the share page can't manage). */
   readOnly?: boolean;
+  /** When provided, typing @ in the compose box opens a people picker fed by
+   *  this search (signed-in surface only — share-page guests get no user list). */
+  searchMentionUsers?: (query: string) => Promise<MentionCandidate[]>;
 }
 
 /** Keep a popover of size (w,h) fully inside the viewport, anchored near (x,y). */
@@ -65,14 +81,41 @@ function Avatar({ name, image }: { name: string; image: string | null }) {
   );
 }
 
+/** Render a comment body with its @-mentions highlighted. */
+export function MentionedBody({ body, mentions }: { body: string; mentions?: CommentMention[] }) {
+  const segments = splitBodyByMentions(body, mentions ?? []);
+  return (
+    <>
+      {segments.map((seg, i) =>
+        seg.type === 'mention' ? (
+          <span key={i} className="text-[#DE7356] font-medium bg-[#DE7356]/8 rounded px-0.5">
+            {seg.text}
+          </span>
+        ) : (
+          <span key={i}>{seg.text}</span>
+        ),
+      )}
+    </>
+  );
+}
+
 /** Absolute overlay sized to the iframe; pin coords are iframe-viewport coords. */
 export default function CommentsLayer({
-  comments, positions, activeId, compose, viewport, onSubmitNew, onCancelCompose, onResolve, onDelete, onCloseThread, readOnly = false,
+  comments, positions, activeId, compose, viewport, onSubmitNew, onCancelCompose, onResolve, onDelete, onCloseThread, readOnly = false, searchMentionUsers,
 }: CommentsLayerProps) {
   const [draft, setDraft] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const composeRef = useRef<HTMLTextAreaElement>(null);
+
+  // @-mention picker state. `draftMentions` accumulates every person picked;
+  // on submit only those whose @Name literal is still present in the text are
+  // sent (deleting the text un-tags them).
+  const [draftMentions, setDraftMentions] = useState<CommentMention[]>([]);
+  const [mentionQuery, setMentionQuery] = useState<{ start: number; query: string } | null>(null);
+  const [mentionResults, setMentionResults] = useState<MentionCandidate[]>([]);
+  const [mentionIndex, setMentionIndex] = useState(0);
+  const mentionFetchSeq = useRef(0);
 
   // Reset ONLY when a genuinely new comment is placed — key on the placement
   // identity (anchor + rel position), NOT the `compose` object, whose identity
@@ -84,9 +127,55 @@ export default function CommentsLayer({
     setDraft('');
     setSubmitError(null);
     setSubmitting(false);
+    setDraftMentions([]);
+    setMentionQuery(null);
+    setMentionResults([]);
     const t = setTimeout(() => composeRef.current?.focus(), 30);
     return () => clearTimeout(t);
   }, [composeKey]);
+
+  // Debounced people search while an @-token is active at the caret.
+  useEffect(() => {
+    if (!searchMentionUsers || !mentionQuery) {
+      setMentionResults([]);
+      return;
+    }
+    const seq = ++mentionFetchSeq.current;
+    const t = setTimeout(async () => {
+      try {
+        const users = await searchMentionUsers(mentionQuery.query);
+        if (mentionFetchSeq.current === seq) {
+          setMentionResults(users.slice(0, 6));
+          setMentionIndex(0);
+        }
+      } catch {
+        if (mentionFetchSeq.current === seq) setMentionResults([]);
+      }
+    }, 150);
+    return () => clearTimeout(t);
+  }, [mentionQuery, searchMentionUsers]);
+
+  const refreshMentionQuery = useCallback((text: string, caret: number) => {
+    setMentionQuery(searchMentionUsers ? activeMentionQuery(text, caret) : null);
+  }, [searchMentionUsers]);
+
+  /** Replace the active @-token with the picked person's `@Name ` literal. */
+  const pickMention = (candidate: MentionCandidate) => {
+    if (!mentionQuery) return;
+    const el = composeRef.current;
+    const caret = el?.selectionStart ?? draft.length;
+    const inserted = `@${candidate.name} `;
+    const next = draft.slice(0, mentionQuery.start) + inserted + draft.slice(caret);
+    setDraft(next);
+    setDraftMentions((prev) => (prev.some((m) => m.id === candidate.id) ? prev : [...prev, { id: candidate.id, name: candidate.name }]));
+    setMentionQuery(null);
+    setMentionResults([]);
+    const newCaret = mentionQuery.start + inserted.length;
+    requestAnimationFrame(() => {
+      el?.focus();
+      el?.setSelectionRange(newCaret, newCaret);
+    });
+  };
 
   // One submit at a time. Awaits the parent's POST, surfaces failures inline, and
   // guards against a second click adding the comment twice.
@@ -96,7 +185,9 @@ export default function CommentsLayer({
     setSubmitting(true);
     setSubmitError(null);
     try {
-      const ok = await onSubmitNew(text);
+      // Only send mentions whose @Name text survived editing.
+      const mentions = draftMentions.filter((m) => text.includes(`@${m.name}`));
+      const ok = await onSubmitNew(text, mentions);
       if (ok === false) setSubmitError('Couldn’t add your comment — check your connection and try again.');
     } catch {
       setSubmitError('Couldn’t add your comment — check your connection and try again.');
@@ -119,13 +210,41 @@ export default function CommentsLayer({
           <textarea
             ref={composeRef}
             value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); void doSubmit(); } if (e.key === 'Escape') onCancelCompose(); }}
-            placeholder="Add a comment…"
+            onChange={(e) => { setDraft(e.target.value); refreshMentionQuery(e.target.value, e.target.selectionStart ?? e.target.value.length); }}
+            onClick={(e) => refreshMentionQuery(draft, (e.target as HTMLTextAreaElement).selectionStart ?? draft.length)}
+            onKeyDown={(e) => {
+              if (mentionQuery && mentionResults.length) {
+                if (e.key === 'ArrowDown') { e.preventDefault(); setMentionIndex((i) => (i + 1) % mentionResults.length); return; }
+                if (e.key === 'ArrowUp') { e.preventDefault(); setMentionIndex((i) => (i - 1 + mentionResults.length) % mentionResults.length); return; }
+                if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); pickMention(mentionResults[mentionIndex]); return; }
+                if (e.key === 'Escape') { e.preventDefault(); setMentionQuery(null); setMentionResults([]); return; }
+              }
+              if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); void doSubmit(); }
+              if (e.key === 'Escape') onCancelCompose();
+            }}
+            placeholder={searchMentionUsers ? 'Add a comment… (@ to tag someone)' : 'Add a comment…'}
             rows={3}
             disabled={submitting}
             className="w-full text-sm border border-gray-200 dark:border-white/8 rounded-md p-2 focus:outline-hidden focus:ring-2 focus:ring-[#DE7356]/30 resize-none disabled:opacity-60"
           />
+          {mentionQuery && mentionResults.length > 0 && (
+            <div className="border border-gray-200 dark:border-white/10 rounded-md mt-1 max-h-40 overflow-y-auto bg-white dark:bg-[#181310] shadow-lg">
+              {mentionResults.map((u, i) => (
+                <button
+                  key={u.id}
+                  onMouseDown={(e) => { e.preventDefault(); pickMention(u); }}
+                  onMouseEnter={() => setMentionIndex(i)}
+                  className={`w-full flex items-center gap-2 px-2 py-1.5 text-left ${i === mentionIndex ? 'bg-[#DE7356]/10' : ''}`}
+                >
+                  <Avatar name={u.name} image={u.image ?? null} />
+                  <span className="min-w-0">
+                    <span className="block text-xs font-medium text-gray-900 dark:text-gray-50 truncate">{u.name}</span>
+                    {u.email && <span className="block text-[10px] text-gray-400 dark:text-gray-500 truncate">{u.email}</span>}
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
           {submitError && <p className="text-[11px] text-red-600 mt-1 px-0.5">{submitError}</p>}
           <div className="flex items-center justify-end gap-2 mt-1">
             <button onClick={onCancelCompose} disabled={submitting} className="text-xs text-gray-500 dark:text-gray-400 hover:text-gray-800 px-2 py-1 disabled:opacity-40">Cancel</button>
@@ -156,7 +275,7 @@ export default function CommentsLayer({
                 <span className="text-sm font-medium text-gray-900 dark:text-gray-50 truncate">{active.authorName}</span>
                 <span className="text-[11px] text-gray-400 dark:text-gray-500">{timeAgo(active.createdAt)}</span>
               </div>
-              <p className={`text-sm text-gray-700 dark:text-gray-200 mt-1 whitespace-pre-wrap wrap-break-word ${active.resolved ? 'line-through text-gray-400 dark:text-gray-500' : ''}`}>{active.body}</p>
+              <p className={`text-sm text-gray-700 dark:text-gray-200 mt-1 whitespace-pre-wrap wrap-break-word ${active.resolved ? 'line-through text-gray-400 dark:text-gray-500' : ''}`}><MentionedBody body={active.body} mentions={active.mentions} /></p>
             </div>
             <button onClick={onCloseThread} className="text-gray-300 hover:text-gray-600 dark:hover:text-gray-300 text-sm shrink-0" aria-label="Close">✕</button>
           </div>
