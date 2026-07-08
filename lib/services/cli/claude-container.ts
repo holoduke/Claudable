@@ -18,6 +18,7 @@ import path from 'path';
 import fs from 'fs';
 import os from 'os';
 import { randomUUID } from 'crypto';
+import { CONTAINER_PLUGINS_MOUNT } from '@/lib/services/plugins';
 
 /** A parsed stream-json event from the CLI (system/assistant/tool_use/result …). */
 export interface AgentStreamEvent {
@@ -39,6 +40,8 @@ export interface ContainerTurnOptions {
   homeHostPath?: string;                // persistent per-project HOME (CLI session transcripts → --resume works across turns)
   skillsHostPath?: string;              // HOST path of the global skills dir
   skillsContainerPath?: string;         // where to mount them — MUST equal the /work/.claude/skills symlink target
+  pluginsHostPath?: string;             // HOST path of the shared plugins dir (marketplace clones), mounted read-only
+  pluginDirs?: string[];                // in-container plugin roots → one --plugin-dir each (loaded for this turn only)
   settingSources?: string;              // --setting-sources value (e.g. "project,user"); enables skill loading
   systemPrompt?: string;                // REPLACES the CLI default (parity with the SDK's systemPrompt option)
   env?: Record<string, string>;         // extra project env (already secret-free)
@@ -100,6 +103,13 @@ export function buildAgentContainerArgs(o: ContainerTurnOptions): string[] {
   if (o.skillsHostPath && o.skillsHostPath.trim() && o.skillsContainerPath && o.skillsContainerPath.trim()) {
     args.push('-v', `${o.skillsHostPath.trim()}:${o.skillsContainerPath.trim()}:ro`);
   }
+  // Company plugins (read-only): the shared marketplace-clone dir is mounted at a
+  // fixed path and each enabled plugin is loaded via the CLI's own --plugin-dir
+  // (appended below). Only mount when both the host dir and at least one enabled
+  // plugin dir are present, so an unconfigured instance changes nothing.
+  if (o.pluginsHostPath && o.pluginsHostPath.trim() && o.pluginDirs && o.pluginDirs.length) {
+    args.push('-v', `${o.pluginsHostPath.trim()}:${CONTAINER_PLUGINS_MOUNT}:ro`);
+  }
   if (!o.envFilePath) {
     for (const [k, v] of Object.entries(o.env ?? {})) args.push('-e', `${k}=${v}`);
   }
@@ -127,6 +137,10 @@ export function buildAgentContainerArgs(o: ContainerTurnOptions): string[] {
   // Load skills: 'project' → /work/.claude/skills, 'user' → ~/.claude/skills (the
   // mounted global catalog). Without this the containerized CLI loads no skills.
   if (o.settingSources && o.settingSources.trim()) args.push('--setting-sources', o.settingSources.trim());
+  // Company plugins — loaded from the read-only mount for THIS session only
+  // (repeatable flag). Independent of --setting-sources; the CLI substitutes
+  // ${CLAUDE_PLUGIN_ROOT} to each dir. Their commands become /<plugin>:<cmd>.
+  for (const dir of o.pluginDirs ?? []) args.push('--plugin-dir', dir);
   if (o.systemPrompt) args.push('--system-prompt', o.systemPrompt);
   return args;
 }

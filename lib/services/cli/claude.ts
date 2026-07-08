@@ -10,6 +10,7 @@ import { streamManager } from '../stream';
 import { serializeMessage, createRealtimeMessage } from '@/lib/serializers/chat';
 import { getProjectById } from '../project';
 import { syncProjectSkills, hasDisabledSkills } from '../skills';
+import { pluginsHostDir, resolveEnabledPluginDirs } from '../plugins';
 import { isTechnicalNoise, toUserFacingAgentError } from './agent-error';
 import { CLAUDE_SYSTEM_PROMPT } from './prompts/claude-system-prompt';
 import { NEXT_SYSTEM_PROMPT } from './prompts/next-system-prompt';
@@ -433,6 +434,14 @@ async function runContainerizedTurn(args: {
     else if (dataHost) skillsHostPath = path.join(path.dirname(dataHost), 'global-skills');
     if (skillsHostPath) await syncProjectSkills(projectId).catch(() => {});
 
+    // Company plugins: the shared marketplace-clone dir is mounted read-only and
+    // each enabled plugin loaded via --plugin-dir. Resolve the host mount path
+    // (same env-vs-DATA_HOST_DIR sibling pattern as skills) and the per-project
+    // enabled plugin dirs; both best-effort so a plugin failure never breaks a turn.
+    const pluginsHostPath = pluginsHostDir();
+    let pluginDirs: string[] = [];
+    if (pluginsHostPath) pluginDirs = await resolveEnabledPluginDirs(projectId).catch(() => []);
+
     // The 3 in-process tools become NETWORK tools: registered under a per-turn
     // capability token, served by /api/agent-mcp/<token>/<server>, revoked below.
     // Account-connector passthrough is per-run: allowed only when passthrough is
@@ -540,6 +549,8 @@ async function runContainerizedTurn(args: {
         homeHostPath,
         skillsHostPath,
         skillsContainerPath,
+        pluginsHostPath,
+        pluginDirs,
         // 'project' loads /work/.claude/skills (real project skills + the staged
         // global symlinks that now resolve to the mounted skills); 'user' is a
         // harmless belt-and-suspenders for anything in the agent HOME.
