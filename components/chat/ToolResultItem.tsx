@@ -121,11 +121,11 @@ const ToolResultItem: React.FC<ToolResultItemProps> = ({
         <div className="mb-px mr-1 flex shrink-0 items-center">
           {getIcon()}
         </div>
-        <span className="flex-shrink-0 font-normal text-gray-600 dark:text-gray-300 ">
+        <span className="shrink-0 font-normal text-gray-600 dark:text-gray-300 ">
           {action}
         </span>
         <span
-          className="relative w-fit max-w-xs truncate rounded-md bg-gray-100 dark:bg-white/[0.06] px-2 py-0 text-start text-xs font-normal text-gray-600 dark:text-gray-300 transition-colors hover:bg-gray-200 dark:hover:bg-white/[0.06] "
+          className="relative w-fit max-w-xs truncate rounded-md bg-gray-100 dark:bg-white/6 px-2 py-0 text-start text-xs font-normal text-gray-600 dark:text-gray-300 transition-colors hover:bg-gray-200 dark:hover:bg-white/6 "
           title={displayPath}
         >
           <span className="truncate">
@@ -160,7 +160,7 @@ const ToolResultItem: React.FC<ToolResultItemProps> = ({
           aria-hidden={!isExpanded}
           id={contentId}
         >
-          <div className="mt-2 ml-6 p-3 bg-gray-50 dark:bg-white/[0.03] rounded-lg">
+          <div className="mt-2 ml-6 p-3 bg-gray-50 dark:bg-white/3 rounded-lg">
             <div className="mb-2 flex items-center justify-between gap-2">
               <span
                 className="truncate text-[11px] font-mono text-gray-500 dark:text-gray-400"
@@ -172,7 +172,7 @@ const ToolResultItem: React.FC<ToolResultItemProps> = ({
                 <button
                   type="button"
                   onClick={handleCopy}
-                  className="shrink-0 rounded px-1.5 py-0.5 text-[11px] text-gray-500 hover:bg-gray-200 dark:text-gray-400 dark:hover:bg-white/[0.06] transition-colors"
+                  className="shrink-0 rounded-sm px-1.5 py-0.5 text-[11px] text-gray-500 hover:bg-gray-200 dark:text-gray-400 dark:hover:bg-white/6 transition-colors"
                   aria-label="Copy to clipboard"
                 >
                   {copied ? 'Copied' : 'Copy'}
@@ -182,7 +182,7 @@ const ToolResultItem: React.FC<ToolResultItemProps> = ({
             {showDiff && diff ? (
               <DiffView diff={diff} />
             ) : (
-              <pre className="text-xs text-gray-700 dark:text-gray-200 font-mono whitespace-pre-wrap break-words">
+              <pre className="text-xs text-gray-700 dark:text-gray-200 font-mono whitespace-pre-wrap wrap-break-word">
                 {content}
               </pre>
             )}

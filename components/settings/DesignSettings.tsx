@@ -88,13 +88,13 @@ export default function DesignSettings({ projectId }: Props) {
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Search designs…"
-          className="flex-1 px-3 py-2 rounded-lg border border-gray-200 dark:border-white/[0.08] bg-white dark:bg-white/[0.06] text-sm text-gray-800 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-[#DE7356]"
+          className="flex-1 px-3 py-2 rounded-lg border border-gray-200 dark:border-white/8 bg-white dark:bg-white/6 text-sm text-gray-800 dark:text-gray-100 focus:outline-hidden focus:ring-2 focus:ring-[#DE7356]"
         />
         {activeId && (
           <button
             onClick={() => choose(null)}
             disabled={busy}
-            className="px-3 py-2 text-sm font-medium border border-gray-200 dark:border-white/[0.08] rounded-lg bg-white dark:bg-white/[0.03] text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-white/[0.06] disabled:opacity-50 whitespace-nowrap"
+            className="px-3 py-2 text-sm font-medium border border-gray-200 dark:border-white/8 rounded-lg bg-white dark:bg-white/3 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-white/6 disabled:opacity-50 whitespace-nowrap"
           >
             Clear design
           </button>
@@ -118,10 +118,10 @@ export default function DesignSettings({ projectId }: Props) {
                 disabled={busy}
                 title={d.description}
                 className={`group text-left rounded-xl border overflow-hidden transition-all disabled:opacity-60 ${
-                  selected ? 'border-[#DE7356] ring-2 ring-[#DE7356]/30' : 'border-gray-200 dark:border-white/[0.08] hover:border-gray-300 dark:hover:border-white/[0.18]'
+                  selected ? 'border-[#DE7356] ring-2 ring-[#DE7356]/30' : 'border-gray-200 dark:border-white/8 hover:border-gray-300 dark:hover:border-white/18'
                 }`}
               >
-                <div className="aspect-[4/3] bg-gray-100 dark:bg-white/[0.06] overflow-hidden relative">
+                <div className="aspect-4/3 bg-gray-100 dark:bg-white/6 overflow-hidden relative">
                   {d.preview ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img src={d.preview} alt={d.name} loading="lazy" className="w-full h-full object-cover" />

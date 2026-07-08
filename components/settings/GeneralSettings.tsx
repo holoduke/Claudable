@@ -141,7 +141,7 @@ export function GeneralSettings({
         <h3 className="text-lg font-medium text-gray-900 dark:text-gray-50 mb-4">General Settings</h3>
 
         {!isProjectScoped ? (
-          <div className="rounded-lg border border-gray-200 dark:border-white/[0.08] bg-gray-50 dark:bg-white/[0.03] px-4 py-3 text-sm text-gray-600 dark:text-gray-300">
+          <div className="rounded-lg border border-gray-200 dark:border-white/8 bg-gray-50 dark:bg-white/3 px-4 py-3 text-sm text-gray-600 dark:text-gray-300">
             Select a project to edit its general settings.
           </div>
         ) : (
@@ -155,7 +155,7 @@ export function GeneralSettings({
                   setName(event.target.value);
                   if (status?.type) setStatus(null);
                 }}
-                className="w-full rounded-lg border border-gray-300 dark:border-white/[0.08] px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#DE7356]"
+                className="w-full rounded-lg border border-gray-300 dark:border-white/8 px-3 py-2 focus:outline-hidden focus:ring-2 focus:ring-[#DE7356]"
                 placeholder="Enter project name"
               />
               {nameError && (
@@ -171,7 +171,7 @@ export function GeneralSettings({
                 type="text"
                 value={projectId}
                 disabled
-                className="w-full cursor-not-allowed rounded-lg border border-gray-300 dark:border-white/[0.08] bg-gray-50 dark:bg-white/[0.06] px-3 py-2 text-gray-500 dark:text-gray-400"
+                className="w-full cursor-not-allowed rounded-lg border border-gray-300 dark:border-white/8 bg-gray-50 dark:bg-white/6 px-3 py-2 text-gray-500 dark:text-gray-400"
               />
             </div>
 
@@ -184,7 +184,7 @@ export function GeneralSettings({
                   if (status?.type) setStatus(null);
                 }}
                 rows={4}
-                className="w-full rounded-lg border border-gray-300 dark:border-white/[0.08] px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#DE7356]"
+                className="w-full rounded-lg border border-gray-300 dark:border-white/8 px-3 py-2 focus:outline-hidden focus:ring-2 focus:ring-[#DE7356]"
                 placeholder="Describe your project..."
               />
             </div>

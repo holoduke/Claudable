@@ -23,15 +23,15 @@ export default async function LoginPage({
       {/* Aurora — soft warm gradients drifting slowly. */}
       <div aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden">
         <div
-          className="absolute left-1/2 top-[-16%] h-[46rem] w-[46rem] -translate-x-1/2 rounded-full blur-[140px] opacity-[0.30]"
+          className="absolute left-1/2 top-[-16%] h-184 w-184 -translate-x-1/2 rounded-full blur-[140px] opacity-[0.30]"
           style={{ background: 'radial-gradient(circle at 50% 50%, #DE7356, transparent 70%)', animation: 'loginAurora 26s ease-in-out infinite' }}
         />
         <div
-          className="absolute bottom-[-22%] right-[-8%] h-[40rem] w-[40rem] rounded-full blur-[150px] opacity-[0.20]"
+          className="absolute bottom-[-22%] right-[-8%] h-160 w-160 rounded-full blur-[150px] opacity-[0.20]"
           style={{ background: 'radial-gradient(circle at 50% 50%, #E8A87C, transparent 70%)', animation: 'loginAurora 32s ease-in-out infinite reverse' }}
         />
         <div
-          className="absolute left-[-10%] top-1/3 h-[32rem] w-[32rem] rounded-full blur-[150px] opacity-[0.15]"
+          className="absolute left-[-10%] top-1/3 h-128 w-lg rounded-full blur-[150px] opacity-[0.15]"
           style={{ background: 'radial-gradient(circle at 50% 50%, #8f2f1c, transparent 70%)', animation: 'loginAurora 38s ease-in-out infinite' }}
         />
       </div>
@@ -91,7 +91,7 @@ export default async function LoginPage({
           </p>
 
           {error && (
-            <div className="mt-5 flex items-start gap-2.5 rounded-xl border border-red-400/25 bg-red-500/[0.08] px-3.5 py-3 text-left text-[13px] text-red-200/90">
+            <div className="mt-5 flex items-start gap-2.5 rounded-xl border border-red-400/25 bg-red-500/8 px-3.5 py-3 text-left text-[13px] text-red-200/90">
               <svg className="mt-px h-4 w-4 shrink-0 text-red-300" viewBox="0 0 24 24" fill="none" aria-hidden>
                 <path d="M12 8v5m0 3h.01M10.3 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.7 3.86a2 2 0 0 0-3.42 0Z" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
@@ -113,7 +113,7 @@ export default async function LoginPage({
             <GoogleSignInButton />
           </form>
 
-          <div className="mt-6 border-t border-white/[0.06] pt-4">
+          <div className="mt-6 border-t border-white/6 pt-4">
             <div className="flex items-center justify-center gap-1.5 text-[12px] text-white/30">
               <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" aria-hidden>
                 <path d="M12 2 4 5v6c0 5 3.4 8.5 8 11 4.6-2.5 8-6 8-11V5l-8-3Z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />

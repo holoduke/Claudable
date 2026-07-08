@@ -3,6 +3,7 @@ const nextConfig = {
   reactStrictMode: true,
   productionBrowserSourceMaps: false,
   output: 'standalone',
+  outputFileTracingRoot: __dirname,
   // Disable critters optimizeCss to avoid missing module during build
   experimental: {
     optimizeCss: false,
@@ -12,10 +13,13 @@ const nextConfig = {
   env: {
     NEXT_PUBLIC_PROJECT_ROOT: process.cwd(),
   },
-  // Add webpack configuration to handle server-side code properly
+  // Turbopack (default since Next 16) resolves Node builtins in client
+  // bundles itself; no fallback stubs needed.
+  turbopack: {},
+  // Kept for `next build --webpack`: exclude server-only modules from the
+  // client bundle.
   webpack: (config, { isServer }) => {
     if (!isServer) {
-      // Exclude server-only modules from client bundle
       config.resolve.fallback = {
         ...config.resolve.fallback,
         fs: false,

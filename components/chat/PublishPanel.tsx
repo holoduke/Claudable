@@ -56,10 +56,10 @@ export default function PublishPanel({
 }: PublishPanelProps) {
   const toast = useToast();
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-60 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/50" onClick={onClose} />
       <div className="relative w-full max-w-lg bg-white dark:bg-[#181310] border border-gray-200 dark:border-white/10 rounded-2xl shadow-2xl overflow-hidden">
-          <div className="px-6 py-4 border-b border-gray-200 dark:border-white/[0.08] flex items-center justify-between bg-gray-50 dark:bg-white/[0.03] ">
+          <div className="px-6 py-4 border-b border-gray-200 dark:border-white/8 flex items-center justify-between bg-gray-50 dark:bg-white/3 ">
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 rounded-lg flex items-center justify-center text-white bg-black border border-black/10 ">
               <FaRocket size={14} />
@@ -106,7 +106,7 @@ export default function PublishPanel({
           {/* Neutral "currently live" state shown when the popup opens for an
               already-deployed project (before the user clicks Update). */}
           {deploymentStatus !== 'deploying' && deploymentStatus !== 'ready' && deploymentStatus !== 'error' && isGitea && publishedUrl && (
-            <div className="p-4 rounded-xl border border-gray-200 dark:border-white/[0.08] bg-gray-50 dark:bg-white/[0.03] ">
+            <div className="p-4 rounded-xl border border-gray-200 dark:border-white/8 bg-gray-50 dark:bg-white/3 ">
               <p className="text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">Currently live at:</p>
               <div className="flex items-center gap-2">
                 <a href={publishedUrl} target="_blank" rel="noopener noreferrer" className="text-sm font-mono text-gray-700 dark:text-gray-200 underline break-all flex-1">
@@ -114,7 +114,7 @@ export default function PublishPanel({
                 </a>
                 <button
                   onClick={() => navigator.clipboard?.writeText(publishedUrl)}
-                  className="px-2 py-1 text-xs rounded-lg border border-gray-300 dark:border-white/[0.08] text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-white/[0.06] "
+                  className="px-2 py-1 text-xs rounded-lg border border-gray-300 dark:border-white/8 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-white/6 "
                 >
                   Copy
                 </button>
@@ -171,7 +171,7 @@ export default function PublishPanel({
                 {!isGitea && !vercelConnected && (<div className="flex items-center gap-2"><span className="w-1.5 h-1.5 rounded-full bg-amber-500"/>Vercel project not connected</div>)}
               </div>
               <button
-                className="mt-3 w-full px-4 py-2 rounded-xl border border-gray-200 dark:border-white/[0.08] text-gray-800 dark:text-gray-100 hover:bg-gray-50 dark:hover:bg-white/[0.06] "
+                className="mt-3 w-full px-4 py-2 rounded-xl border border-gray-200 dark:border-white/8 text-gray-800 dark:text-gray-100 hover:bg-gray-50 dark:hover:bg-white/6 "
                 onClick={onOpenServiceSettings}
               >
                 Open Settings → Services

@@ -331,12 +331,12 @@ export function ServiceSettings({ projectId, projectName }: ServiceSettingsProps
           {services.map(service => (
             <div
               key={service.id}
-              className="relative group overflow-hidden rounded-2xl border border-gray-200 dark:border-white/[0.08] bg-white dark:bg-white/[0.03] backdrop-blur supports-[backdrop-filter]:bg-white/60 transition-all duration-200 hover:shadow-lg"
+              className="relative group overflow-hidden rounded-2xl border border-gray-200 dark:border-white/8 bg-white dark:bg-white/3 backdrop-blur-sm supports-backdrop-filter:bg-white/60 transition-all duration-200 hover:shadow-lg"
             >
-              <div className="absolute inset-x-0 -top-px h-px bg-gradient-to-r from-transparent via-gray-200 to-transparent" />
+              <div className="absolute inset-x-0 -top-px h-px bg-linear-to-r from-transparent via-gray-200 to-transparent" />
               <div className="p-5 flex flex-col sm:flex-row sm:items-center gap-4 sm:gap-6 justify-between">
                 <div className="flex items-center gap-4 flex-1 min-w-0">
-                  <div className="w-10 h-10 rounded-xl ring-1 ring-inset ring-gray-200 dark:ring-white/[0.08] bg-gray-50 dark:bg-white/[0.06] text-gray-700 dark:text-gray-200 flex items-center justify-center">
+                  <div className="w-10 h-10 rounded-xl ring-1 ring-inset ring-gray-200 dark:ring-white/8 bg-gray-50 dark:bg-white/6 text-gray-700 dark:text-gray-200 flex items-center justify-center">
                     {getProviderIcon(service.icon)}
                   </div>
                   <div className="min-w-0">
@@ -379,12 +379,12 @@ export function ServiceSettings({ projectId, projectName }: ServiceSettingsProps
                                   value={branchInput}
                                   onChange={(e) => { branchDirty.current = true; setBranchInput(e.target.value); }}
                                   spellCheck={false}
-                                  className="w-36 px-2 py-1 text-sm font-mono rounded-lg border border-gray-300 dark:border-white/[0.12] bg-white dark:bg-white/[0.06] text-gray-800 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-[#DE7356]"
+                                  className="w-36 px-2 py-1 text-sm font-mono rounded-lg border border-gray-300 dark:border-white/12 bg-white dark:bg-white/6 text-gray-800 dark:text-gray-100 focus:outline-hidden focus:ring-1 focus:ring-[#DE7356]"
                                 />
                                 <button
                                   onClick={handleSaveBranch}
                                   disabled={branchSaving || !branchInput.trim() || branchInput.trim() === (service.connection.service_data.branch || service.connection.service_data.default_branch || 'main')}
-                                  className="px-3 py-1 text-xs rounded-lg border border-gray-300 dark:border-white/[0.12] text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-white/[0.06] disabled:opacity-40 disabled:cursor-not-allowed"
+                                  className="px-3 py-1 text-xs rounded-lg border border-gray-300 dark:border-white/12 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-white/6 disabled:opacity-40 disabled:cursor-not-allowed"
                                 >
                                   {branchSaving ? 'Saving…' : 'Save'}
                                 </button>
@@ -408,7 +408,7 @@ export function ServiceSettings({ projectId, projectName }: ServiceSettingsProps
                                     checked={autoSync}
                                     disabled={autoSyncSaving}
                                     onChange={(e) => saveAutoSync(e.target.checked, autoSyncMinutes)}
-                                    className="h-4 w-4 rounded border-gray-300 dark:border-white/[0.2] text-[#DE7356] focus:ring-[#DE7356] accent-[#DE7356]"
+                                    className="h-4 w-4 rounded-sm border-gray-300 dark:border-white/20 text-[#DE7356] focus:ring-[#DE7356] accent-[#DE7356]"
                                   />
                                   <span className="shrink-0">Auto-sync from remote</span>
                                 </label>
@@ -422,13 +422,13 @@ export function ServiceSettings({ projectId, projectName }: ServiceSettingsProps
                                       value={autoSyncMinutes}
                                       disabled={autoSyncSaving}
                                       onChange={(e) => { autoSyncMinutesDirty.current = true; setAutoSyncMinutes(Number(e.target.value)); }}
-                                      className="w-16 px-2 py-1 text-sm font-mono rounded-lg border border-gray-300 dark:border-white/[0.12] bg-white dark:bg-white/[0.06] text-gray-800 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-[#DE7356]"
+                                      className="w-16 px-2 py-1 text-sm font-mono rounded-lg border border-gray-300 dark:border-white/12 bg-white dark:bg-white/6 text-gray-800 dark:text-gray-100 focus:outline-hidden focus:ring-1 focus:ring-[#DE7356]"
                                     />
                                     <span className="text-gray-500 dark:text-gray-400">min</span>
                                     <button
                                       onClick={() => saveAutoSync(true, Math.min(1440, Math.max(1, Math.round(autoSyncMinutes) || 5)))}
                                       disabled={autoSyncSaving || !autoSyncMinutesDirty.current}
-                                      className="px-3 py-1 text-xs rounded-lg border border-gray-300 dark:border-white/[0.12] text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-white/[0.06] disabled:opacity-40 disabled:cursor-not-allowed"
+                                      className="px-3 py-1 text-xs rounded-lg border border-gray-300 dark:border-white/12 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-white/6 disabled:opacity-40 disabled:cursor-not-allowed"
                                     >
                                       {autoSyncSaving ? 'Saving…' : 'Save'}
                                     </button>
@@ -471,7 +471,7 @@ export function ServiceSettings({ projectId, projectName }: ServiceSettingsProps
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-2 sm:flex-shrink-0 w-full sm:w-auto sm:justify-end">
+                  <div className="flex items-center gap-2 sm:shrink-0 w-full sm:w-auto sm:justify-end">
                     {service.connected ? (
                       <button
                         onClick={() => handleDisconnect(service.id)}
@@ -483,7 +483,7 @@ export function ServiceSettings({ projectId, projectName }: ServiceSettingsProps
                     ) : tokenStatus[service.id as keyof typeof tokenStatus] === false ? (
                       <button
                         onClick={() => setTokenSetupProvider(service.id as 'github' | 'supabase' | 'vercel')}
-                        className="px-4 py-2.5 text-sm rounded-xl bg-amber-500 hover:bg-amber-600 text-white shadow-sm transition flex items-center justify-center gap-2 whitespace-nowrap w-full sm:w-auto"
+                        className="px-4 py-2.5 text-sm rounded-xl bg-amber-500 hover:bg-amber-600 text-white shadow-xs transition flex items-center justify-center gap-2 whitespace-nowrap w-full sm:w-auto"
                         disabled={isLoading}
                       >
                         <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd"/></svg>
@@ -492,7 +492,7 @@ export function ServiceSettings({ projectId, projectName }: ServiceSettingsProps
                     ) : (
                       <button
                         onClick={() => handleConnect(service.id)}
-                        className="px-4 py-2.5 text-sm rounded-xl bg-[#DE7356] hover:bg-[#c9634a] text-white shadow-sm transition disabled:opacity-50 whitespace-nowrap w-full sm:w-auto"
+                        className="px-4 py-2.5 text-sm rounded-xl bg-[#DE7356] hover:bg-[#c9634a] text-white shadow-xs transition disabled:opacity-50 whitespace-nowrap w-full sm:w-auto"
                         disabled={isLoading || tokenStatus[service.id as keyof typeof tokenStatus] === null}
                       >
                         {tokenStatus[service.id as keyof typeof tokenStatus] === null ? 'Checking...' : 'Connect'}

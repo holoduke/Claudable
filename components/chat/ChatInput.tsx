@@ -537,7 +537,7 @@ export default function ChatInput({
       onDragLeave={handleDragLeave}
       onDragOver={handleDragOver}
       onDrop={handleDrop}
-      className={`bg-white dark:bg-gray-900 border rounded-2xl shadow-sm overflow-hidden transition-all duration-200 relative ${
+      className={`bg-white dark:bg-gray-900 border rounded-2xl shadow-xs overflow-hidden transition-all duration-200 relative ${
       isDragOver
         ? 'border-blue-400 bg-blue-50'
         : 'border-gray-200 dark:border-gray-700'
@@ -626,7 +626,7 @@ export default function ChatInput({
                   requestAnimationFrame(() => textareaRef.current?.focus());
                 }}
                 disabled={cliChangeDisabled || !onCliChange}
-                className="mt-1 w-32 rounded-md border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-200 text-xs py-1 px-2 focus:outline-none focus:ring-2 focus:ring-gray-300 disabled:opacity-60"
+                className="mt-1 w-32 rounded-md border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-200 text-xs py-1 px-2 focus:outline-hidden focus:ring-2 focus:ring-gray-300 disabled:opacity-60"
               >
                 {cliOptions.length === 0 && <option value={preferredCli}>{preferredCli}</option>}
                 {cliOptions.map(option => (
@@ -648,7 +648,7 @@ export default function ChatInput({
                   }
                 }}
                 disabled={modelChangeDisabled || !onModelChange || modelOptionsForCli.length === 0}
-                className="mt-1 w-40 rounded-md border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-200 text-xs py-1 px-2 focus:outline-none focus:ring-2 focus:ring-gray-300 disabled:opacity-60"
+                className="mt-1 w-40 rounded-md border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-200 text-xs py-1 px-2 focus:outline-hidden focus:ring-2 focus:ring-gray-300 disabled:opacity-60"
               >
                 {modelOptionsForCli.length === 0 && <option value="">No models available</option>}
                 {modelOptionsForCli.length > 0 && selectedModelValue === '' && (
@@ -672,7 +672,7 @@ export default function ChatInput({
                   }}
                   disabled={!onThinkingModeChange}
                   title="Extended thinking: Auto lets Claude decide, Deep forces maximum reasoning, Off is fastest."
-                  className="mt-1 w-28 rounded-md border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-200 text-xs py-1 px-2 focus:outline-none focus:ring-2 focus:ring-gray-300 disabled:opacity-60"
+                  className="mt-1 w-28 rounded-md border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-200 text-xs py-1 px-2 focus:outline-hidden focus:ring-2 focus:ring-gray-300 disabled:opacity-60"
                 >
                   <option value="auto">Auto</option>
                   <option value="forced">Deep</option>
@@ -685,7 +685,7 @@ export default function ChatInput({
 
         <div className="relative">
           {skillMenuOpen && (
-            <div style={menuStyle} className="z-[200] overflow-y-auto rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-2xl py-1">
+            <div style={menuStyle} className="z-200 overflow-y-auto rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-2xl py-1">
               <div className="px-3 py-1.5 text-[11px] font-medium text-gray-400 dark:text-gray-500 border-b border-gray-100 dark:border-gray-800">Commands & skills · ↑↓ to navigate · ↵ to insert</div>
               {skillMatches.map((s, i) => (
                 <button
@@ -698,7 +698,7 @@ export default function ChatInput({
                 >
                   <span className="flex items-center gap-2">
                     <span className="text-sm font-medium text-[#DE7356]">/{s.name}</span>
-                    <span className="text-[9px] uppercase tracking-wide text-gray-400 dark:text-gray-500 bg-gray-100 dark:bg-gray-800 px-1.5 py-0.5 rounded">{s.scope}</span>
+                    <span className="text-[9px] uppercase tracking-wide text-gray-400 dark:text-gray-500 bg-gray-100 dark:bg-gray-800 px-1.5 py-0.5 rounded-sm">{s.scope}</span>
                   </span>
                   {s.description && <span className="text-xs text-gray-500 dark:text-gray-400 line-clamp-2">{s.description}</span>}
                 </button>
@@ -738,7 +738,7 @@ export default function ChatInput({
               onClick={() => onModeChange?.('act')}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all duration-200 ${
                 mode === 'act'
-                  ? 'bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-50 shadow-sm'
+                  ? 'bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-50 shadow-xs'
                   : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 '
               }`}
               title="Act Mode: AI can modify code and create/delete files"
@@ -751,7 +751,7 @@ export default function ChatInput({
               onClick={() => onModeChange?.('chat')}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all duration-200 ${
                 mode === 'chat'
-                  ? 'bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-50 shadow-sm'
+                  ? 'bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-50 shadow-xs'
                   : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 '
               }`}
               title="Chat Mode: AI provides answers without modifying code"
