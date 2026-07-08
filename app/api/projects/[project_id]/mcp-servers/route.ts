@@ -15,6 +15,7 @@ import { getSessionUser } from '@/lib/auth/session';
 import { getMcpCatalog } from '@/lib/config/mcp-catalog';
 import { listSharedMcpForProject } from '@/lib/services/shared-mcp';
 import { accountMcpConnectorsEnabled } from '@/lib/services/cli/claude-container';
+import { runUsesRequestersOwnAccount } from '@/lib/services/claude-credentials';
 import { createSuccessResponse, createErrorResponse, handleApiError } from '@/lib/utils/api-response';
 
 interface RouteContext {
@@ -44,7 +45,12 @@ export async function GET(_request: NextRequest, { params }: RouteContext) {
     const containerized = process.env.AGENT_CONTAINERIZED?.trim()
       ? process.env.AGENT_CONTAINERIZED.trim() === 'true'
       : Boolean(process.env.PREVIEW_ISOLATION?.trim());
-    const accountConnectors = containerized && accountMcpConnectorsEnabled();
+    // Only claim connectors for THIS viewer if their own runs would actually get
+    // them (own account) — a teammate on a shared/global-token project won't.
+    const accountConnectors =
+      containerized &&
+      accountMcpConnectorsEnabled() &&
+      (await runUsesRequestersOwnAccount(project_id, user?.id).catch(() => false));
     // Only the enabled shared servers actually attach to this project's agent.
     const sharedActive = shared.filter((s) => s.enabled);
     return createSuccessResponse({ project, builtin, catalog: available, accountConnectors, shared: sharedActive });

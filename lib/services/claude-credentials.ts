@@ -175,6 +175,65 @@ export async function resolveProjectClaudeToken(
   return null;
 }
 
+/**
+ * Whether THIS run's resolved Claude token belongs to the acting user's OWN
+ * account — mirrors resolveProjectClaudeToken's resolution order. Used to gate
+ * account-connector passthrough: the agent may inherit the account's managed
+ * connectors (Gmail/Drive/…) only when the token is the acting user's own, so a
+ * teammate running a project on a SHARED or the GLOBAL token never wields
+ * someone else's connected accounts.
+ *
+ * Returns true when: auth is off (single operator); the requester's own
+ * credential is used; the assigned credential is owned by the requester; or the
+ * run falls back to the global env token AND `CLAUDE_GLOBAL_TOKEN_OWNER`
+ * (a userId or email) identifies the requester as that token's owner.
+ */
+export async function runUsesRequestersOwnAccount(
+  projectId: string,
+  requesterUserId?: string,
+): Promise<boolean> {
+  // Auth off → no multi-user; the one operator's account is their own.
+  if (!requesterUserId) return true;
+
+  const project = await prisma.project.findUnique({
+    where: { id: projectId },
+    select: { claudeCredentialId: true },
+  });
+
+  if (project?.claudeCredentialId) {
+    const cred = await prisma.claudeCredential.findUnique({
+      where: { id: project.claudeCredentialId },
+      select: { ownerId: true, shareable: true },
+    });
+    if (cred) {
+      // The assigned credential is USED for this run when it's shareable or the
+      // requester owns it (matches resolveProjectClaudeToken step 1). If used, it
+      // is the requester's OWN account only when they own it.
+      if (cred.shareable || cred.ownerId === requesterUserId) {
+        return cred.ownerId === requesterUserId;
+      }
+      // Private + not owner → not used; falls through to the requester's own.
+    }
+  }
+
+  // Step 2: the requester's own credential is used → their own account.
+  const own = await prisma.claudeCredential.findFirst({
+    where: { ownerId: requesterUserId },
+    select: { id: true },
+  });
+  if (own) return true;
+
+  // Step 3: the global env token. Owned by no user unless declared. Only "own"
+  // when CLAUDE_GLOBAL_TOKEN_OWNER names this requester (by id or email).
+  const globalOwner = (process.env.CLAUDE_GLOBAL_TOKEN_OWNER || '').trim().toLowerCase();
+  if (globalOwner) {
+    if (globalOwner === requesterUserId.toLowerCase()) return true;
+    const u = await prisma.user.findUnique({ where: { id: requesterUserId }, select: { email: true } });
+    if (u && globalOwner === u.email.toLowerCase()) return true;
+  }
+  return false;
+}
+
 function decryptAndStamp(cred: ClaudeCredential): string | null {
   try {
     const token = decrypt(cred.token);
