@@ -163,7 +163,7 @@ export function EnvironmentSettings({ projectId }: EnvironmentSettingsProps) {
 
         {error && (
           <div className="mb-4 flex items-start justify-between gap-3 text-xs text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg px-3 py-2">
-            <span className="break-words min-w-0">{error}</span>
+            <span className="wrap-break-word min-w-0">{error}</span>
             <button onClick={() => setError('')} className="shrink-0 hover:text-red-800 dark:hover:text-red-300">✕</button>
           </div>
         )}
@@ -183,7 +183,7 @@ export function EnvironmentSettings({ projectId }: EnvironmentSettingsProps) {
             variables.map((variable, index) => (
               <div
                 key={variable.key}
-                className="flex items-center gap-2 p-3 bg-gray-50 dark:bg-white/[0.03] rounded-lg"
+                className="flex items-center gap-2 p-3 bg-gray-50 dark:bg-white/3 rounded-lg"
               >
                 {editingIndex === index ? (
                   <>
@@ -195,19 +195,19 @@ export function EnvironmentSettings({ projectId }: EnvironmentSettingsProps) {
                       type={variable.isSecret ? 'password' : 'text'}
                       value={editValue}
                       onChange={(e) => setEditValue(e.target.value)}
-                      className="flex-1 px-2 py-1 border border-gray-300 dark:border-white/[0.08] rounded "
+                      className="flex-1 px-2 py-1 border border-gray-300 dark:border-white/8 rounded-sm "
                     />
                     <button
                       onClick={() => handleUpdate(index)}
                       disabled={isBusy}
-                      className="px-3 py-1 text-sm bg-green-500 text-white rounded hover:bg-green-600 disabled:opacity-50"
+                      className="px-3 py-1 text-sm bg-green-500 text-white rounded-sm hover:bg-green-600 disabled:opacity-50"
                     >
                       Save
                     </button>
                     <button
                       onClick={() => setEditingIndex(null)}
                       disabled={isBusy}
-                      className="px-3 py-1 text-sm bg-gray-400 text-white rounded hover:bg-gray-500 disabled:opacity-50"
+                      className="px-3 py-1 text-sm bg-gray-400 text-white rounded-sm hover:bg-gray-500 disabled:opacity-50"
                     >
                       Cancel
                     </button>
@@ -222,7 +222,7 @@ export function EnvironmentSettings({ projectId }: EnvironmentSettingsProps) {
                       {variable.isSecret ? '••••••••' : variable.value}
                     </span>
                     {variable.isSecret && (
-                      <span className="text-xs px-2 py-1 bg-yellow-100 text-yellow-700 rounded">
+                      <span className="text-xs px-2 py-1 bg-yellow-100 text-yellow-700 rounded-sm">
                         Secret
                       </span>
                     )}
@@ -253,7 +253,7 @@ export function EnvironmentSettings({ projectId }: EnvironmentSettingsProps) {
         </div>
 
         {/* Add New Variable */}
-        <div className="border-t border-gray-200 dark:border-white/[0.08] pt-6">
+        <div className="border-t border-gray-200 dark:border-white/8 pt-6">
           <h4 className="text-sm font-medium text-gray-700 dark:text-gray-200 mb-3">
             Add New Variable
           </h4>
@@ -271,14 +271,14 @@ export function EnvironmentSettings({ projectId }: EnvironmentSettingsProps) {
                     .toUpperCase();
                   setNewKey(cleaned);
                 }}
-                className="flex-1 px-3 py-2 border border-gray-300 dark:border-white/[0.08] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#DE7356] "
+                className="flex-1 px-3 py-2 border border-gray-300 dark:border-white/8 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-[#DE7356] "
               />
               <input
                 type={isSecret ? 'password' : 'text'}
                 placeholder="Value"
                 value={newValue}
                 onChange={(e) => setNewValue(e.target.value)}
-                className="flex-1 px-3 py-2 border border-gray-300 dark:border-white/[0.08] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#DE7356] "
+                className="flex-1 px-3 py-2 border border-gray-300 dark:border-white/8 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-[#DE7356] "
               />
             </div>
 
@@ -288,7 +288,7 @@ export function EnvironmentSettings({ projectId }: EnvironmentSettingsProps) {
                   type="checkbox"
                   checked={isSecret}
                   onChange={(e) => setIsSecret(e.target.checked)}
-                  className="w-4 h-4 text-[#DE7356] border-gray-300 dark:border-white/[0.08] rounded focus:ring-[#DE7356]"
+                  className="w-4 h-4 text-[#DE7356] border-gray-300 dark:border-white/8 rounded-sm focus:ring-[#DE7356]"
                 />
                 <span className="text-sm text-gray-700 dark:text-gray-200 ">
                   Mark as secret

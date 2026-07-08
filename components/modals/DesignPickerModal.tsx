@@ -53,7 +53,7 @@ export default function DesignPickerModal({ isOpen, selectedId, onClose, onSelec
   };
 
   return (
-    <div className="fixed inset-0 z-[300] flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-300 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-md" onClick={onClose} />
       <div className="relative bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-4xl h-[80vh] border border-gray-200 dark:border-gray-700 flex flex-col">
         <div className="p-5 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
@@ -72,7 +72,7 @@ export default function DesignPickerModal({ isOpen, selectedId, onClose, onSelec
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search designs…"
-            className="flex-1 px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-sm text-gray-800 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-200"
+            className="flex-1 px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-sm text-gray-800 dark:text-gray-100 focus:outline-hidden focus:ring-2 focus:ring-blue-200"
           />
           <button
             onClick={() => pick(null)}
@@ -100,7 +100,7 @@ export default function DesignPickerModal({ isOpen, selectedId, onClose, onSelec
                       selected ? 'border-blue-500 ring-2 ring-blue-200' : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
                     }`}
                   >
-                    <div className="aspect-[4/3] bg-gray-100 dark:bg-gray-800 overflow-hidden relative">
+                    <div className="aspect-4/3 bg-gray-100 dark:bg-gray-800 overflow-hidden relative">
                       {d.preview ? (
                         // eslint-disable-next-line @next/next/no-img-element
                         <img src={d.preview} alt={d.name} loading="lazy" className="w-full h-full object-cover" />

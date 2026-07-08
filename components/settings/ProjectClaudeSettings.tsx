@@ -92,7 +92,7 @@ export default function ProjectClaudeSettings({ projectId }: Props) {
         value={credentialId ?? '__default__'}
         onChange={(e) => choose(e.target.value)}
         disabled={busy}
-        className="w-full max-w-md px-3 py-2 rounded-lg border border-gray-200 dark:border-white/[0.08] bg-white dark:bg-white/[0.06] text-sm text-gray-800 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-gray-200 disabled:opacity-50"
+        className="w-full max-w-md px-3 py-2 rounded-lg border border-gray-200 dark:border-white/8 bg-white dark:bg-white/6 text-sm text-gray-800 dark:text-gray-100 focus:outline-hidden focus:ring-2 focus:ring-gray-200 disabled:opacity-50"
       >
         <option value="__default__">Default — each user&apos;s own Claude account (platform token as fallback)</option>
         {current && (

@@ -36,7 +36,7 @@ function SkillCard({
   const [open, setOpen] = useState(false);
   const isGlobal = skill.scope === 'global';
   return (
-    <div className="group rounded-xl border border-gray-200 dark:border-white/[0.08] bg-white dark:bg-white/[0.03] hover:border-gray-300 dark:hover:border-white/[0.18] hover:shadow-sm transition-all">
+    <div className="group rounded-xl border border-gray-200 dark:border-white/8 bg-white dark:bg-white/3 hover:border-gray-300 dark:hover:border-white/18 hover:shadow-xs transition-all">
       <div className="flex items-start gap-3 p-3.5">
         <div
           className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-sm ${
@@ -47,7 +47,7 @@ function SkillCard({
         </div>
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
-            <span className="font-mono text-sm font-medium text-gray-900 dark:text-gray-50 break-words">{skill.name}</span>
+            <span className="font-mono text-sm font-medium text-gray-900 dark:text-gray-50 wrap-break-word">{skill.name}</span>
             <span
               className={`rounded-full px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
                 isGlobal ? 'bg-violet-100 text-violet-700' : 'bg-[#DE7356]/10 text-[#DE7356]'
@@ -78,7 +78,7 @@ function SkillCard({
             )}
           </div>
           {open && (
-            <pre className="mt-2 max-h-56 overflow-auto whitespace-pre-wrap rounded-lg bg-gray-50 dark:bg-white/[0.06] p-3 text-[11px] leading-relaxed text-gray-700 dark:text-gray-200">
+            <pre className="mt-2 max-h-56 overflow-auto whitespace-pre-wrap rounded-lg bg-gray-50 dark:bg-white/6 p-3 text-[11px] leading-relaxed text-gray-700 dark:text-gray-200">
               {skill.content || '(no body)'}
             </pre>
           )}
@@ -201,7 +201,7 @@ export function SkillsSettings({ projectId }: SkillsSettingsProps) {
         <div className="flex items-center justify-between">
           <h4 className="flex items-center gap-2 text-sm font-semibold text-gray-800 dark:text-gray-100">
             Project skills
-            <span className="rounded-full bg-gray-100 dark:bg-white/[0.06] px-2 py-0.5 text-xs font-medium text-gray-600 dark:text-gray-300">
+            <span className="rounded-full bg-gray-100 dark:bg-white/6 px-2 py-0.5 text-xs font-medium text-gray-600 dark:text-gray-300">
               {project.length}
             </span>
           </h4>
@@ -219,7 +219,7 @@ export function SkillsSettings({ projectId }: SkillsSettingsProps) {
             be visible too — only suppress this copy while the form shows its own. */}
         {error && editing === null && (
           <div className="flex items-start justify-between gap-3 text-xs text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg px-3 py-2">
-            <span className="break-words min-w-0">{error}</span>
+            <span className="wrap-break-word min-w-0">{error}</span>
             <button onClick={() => setError(null)} className="shrink-0 hover:text-red-800 dark:hover:text-red-300">✕</button>
           </div>
         )}
@@ -234,20 +234,20 @@ export function SkillsSettings({ projectId }: SkillsSettingsProps) {
               onChange={(e) => setName(e.target.value)}
               disabled={editing !== '__new__'}
               placeholder="skill-name (e.g. brand-voice)"
-              className="w-full rounded-lg border border-gray-300 dark:border-white/[0.08] px-3 py-2 text-sm disabled:bg-gray-100"
+              className="w-full rounded-lg border border-gray-300 dark:border-white/8 px-3 py-2 text-sm disabled:bg-gray-100"
             />
             <input
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               placeholder="Description — when should the agent use this?"
-              className="w-full rounded-lg border border-gray-300 dark:border-white/[0.08] px-3 py-2 text-sm"
+              className="w-full rounded-lg border border-gray-300 dark:border-white/8 px-3 py-2 text-sm"
             />
             <textarea
               value={content}
               onChange={(e) => setContent(e.target.value)}
               rows={9}
               placeholder={EXAMPLE}
-              className="w-full rounded-lg border border-gray-300 dark:border-white/[0.08] px-3 py-2 font-mono text-xs"
+              className="w-full rounded-lg border border-gray-300 dark:border-white/8 px-3 py-2 font-mono text-xs"
             />
             {error && <p className="text-xs text-red-600">{error}</p>}
             <div className="flex gap-2">
@@ -260,7 +260,7 @@ export function SkillsSettings({ projectId }: SkillsSettingsProps) {
               </button>
               <button
                 onClick={resetForm}
-                className="rounded-lg border border-gray-300 dark:border-white/[0.08] px-3 py-1.5 text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-white/[0.06]"
+                className="rounded-lg border border-gray-300 dark:border-white/8 px-3 py-1.5 text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-white/6"
               >
                 Cancel
               </button>
@@ -269,7 +269,7 @@ export function SkillsSettings({ projectId }: SkillsSettingsProps) {
         )}
 
         {project.length === 0 && editing === null ? (
-          <div className="rounded-xl border border-dashed border-gray-300 dark:border-white/[0.08] p-6 text-center text-sm text-gray-400 dark:text-gray-500">
+          <div className="rounded-xl border border-dashed border-gray-300 dark:border-white/8 p-6 text-center text-sm text-gray-400 dark:text-gray-500">
             No project skills yet. Add one to teach the agent project-specific conventions.
           </div>
         ) : (
@@ -295,14 +295,14 @@ export function SkillsSettings({ projectId }: SkillsSettingsProps) {
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Search skills…"
-              className="w-44 rounded-lg border border-gray-300 dark:border-white/[0.08] px-3 py-1.5 text-sm focus:w-56 transition-all"
+              className="w-44 rounded-lg border border-gray-300 dark:border-white/8 px-3 py-1.5 text-sm focus:w-56 transition-all"
             />
           )}
         </div>
         {isLoading ? (
           <p className="text-sm text-gray-400 dark:text-gray-500">Loading…</p>
         ) : filteredGlobal.length === 0 ? (
-          <div className="rounded-xl border border-dashed border-gray-300 dark:border-white/[0.08] p-6 text-center text-sm text-gray-400 dark:text-gray-500">
+          <div className="rounded-xl border border-dashed border-gray-300 dark:border-white/8 p-6 text-center text-sm text-gray-400 dark:text-gray-500">
             {global.length === 0 ? 'No global skills installed.' : 'No skills match your search.'}
           </div>
         ) : (

@@ -124,7 +124,7 @@ export default function CommentsLayer({
             placeholder="Add a comment…"
             rows={3}
             disabled={submitting}
-            className="w-full text-sm border border-gray-200 dark:border-white/[0.08] rounded-md p-2 focus:outline-none focus:ring-2 focus:ring-[#DE7356]/30 resize-none disabled:opacity-60"
+            className="w-full text-sm border border-gray-200 dark:border-white/8 rounded-md p-2 focus:outline-hidden focus:ring-2 focus:ring-[#DE7356]/30 resize-none disabled:opacity-60"
           />
           {submitError && <p className="text-[11px] text-red-600 mt-1 px-0.5">{submitError}</p>}
           <div className="flex items-center justify-end gap-2 mt-1">
@@ -132,7 +132,7 @@ export default function CommentsLayer({
             <button
               onClick={() => void doSubmit()}
               disabled={!draft.trim() || submitting}
-              className="text-xs font-medium text-white bg-[#DE7356] hover:bg-[#c65f43] rounded-md px-3 py-1 disabled:opacity-40 flex items-center gap-1.5"
+              className="text-xs font-medium text-white bg-[#DE7356] hover:bg-brand-600 rounded-md px-3 py-1 disabled:opacity-40 flex items-center gap-1.5"
             >
               {submitting && (
                 <svg className="animate-spin" width="11" height="11" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" className="opacity-25" /><path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" strokeWidth="4" strokeLinecap="round" /></svg>
@@ -156,16 +156,16 @@ export default function CommentsLayer({
                 <span className="text-sm font-medium text-gray-900 dark:text-gray-50 truncate">{active.authorName}</span>
                 <span className="text-[11px] text-gray-400 dark:text-gray-500">{timeAgo(active.createdAt)}</span>
               </div>
-              <p className={`text-sm text-gray-700 dark:text-gray-200 mt-1 whitespace-pre-wrap break-words ${active.resolved ? 'line-through text-gray-400 dark:text-gray-500' : ''}`}>{active.body}</p>
+              <p className={`text-sm text-gray-700 dark:text-gray-200 mt-1 whitespace-pre-wrap wrap-break-word ${active.resolved ? 'line-through text-gray-400 dark:text-gray-500' : ''}`}>{active.body}</p>
             </div>
             <button onClick={onCloseThread} className="text-gray-300 hover:text-gray-600 dark:hover:text-gray-300 text-sm shrink-0" aria-label="Close">✕</button>
           </div>
           {!readOnly && (
-            <div className="flex items-center justify-end gap-2 px-3 pb-2 border-t border-gray-100 dark:border-white/[0.08] pt-2">
-              <button onClick={() => onResolve(active.id, !active.resolved)} className="text-xs text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 px-2 py-1 rounded hover:bg-gray-100 dark:hover:bg-white/[0.06]">
+            <div className="flex items-center justify-end gap-2 px-3 pb-2 border-t border-gray-100 dark:border-white/8 pt-2">
+              <button onClick={() => onResolve(active.id, !active.resolved)} className="text-xs text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 px-2 py-1 rounded-sm hover:bg-gray-100 dark:hover:bg-white/6">
                 {active.resolved ? 'Reopen' : 'Resolve'}
               </button>
-              <button onClick={() => onDelete(active.id)} className="text-xs text-red-500 hover:text-red-700 px-2 py-1 rounded hover:bg-red-50">Delete</button>
+              <button onClick={() => onDelete(active.id)} className="text-xs text-red-500 hover:text-red-700 px-2 py-1 rounded-sm hover:bg-red-50">Delete</button>
             </div>
           )}
         </div>

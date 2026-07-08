@@ -36,13 +36,13 @@ export default function SpotlightCard({
     <div
       onMouseMove={handleMove}
       onMouseLeave={handleLeave}
-      className={`relative overflow-hidden rounded-2xl border border-white/[0.08] bg-gradient-to-b from-white/[0.05] to-white/[0.015] backdrop-blur-xl shadow-[0_24px_70px_-24px_rgba(0,0,0,0.85)] ${className}`}
+      className={`relative overflow-hidden rounded-2xl border border-white/8 bg-linear-to-b from-white/5 to-white/1.5 backdrop-blur-xl shadow-[0_24px_70px_-24px_rgba(0,0,0,0.85)] ${className}`}
       style={style}
     >
       {/* Hairline top highlight — catches the light like a real glass edge. */}
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-x-8 top-0 h-px bg-gradient-to-r from-transparent via-white/25 to-transparent"
+        className="pointer-events-none absolute inset-x-8 top-0 h-px bg-linear-to-r from-transparent via-white/25 to-transparent"
       />
       <div
         ref={glowRef}

@@ -143,7 +143,7 @@ export function ProjectSettings({
     >
         <div className="flex h-full">
           {/* Sidebar Tabs */}
-          <div className="w-56 bg-white dark:bg-transparent border-r border-gray-200 dark:border-white/[0.08]">
+          <div className="w-56 bg-white dark:bg-transparent border-r border-gray-200 dark:border-white/8">
           <nav className="p-4 space-y-1">
             {availableTabs.map(tab => (
               <button
@@ -151,8 +151,8 @@ export function ProjectSettings({
                 onClick={() => setActiveTab(tab.id)}
                 className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-left transition-all duration-200 ${
                   activeTab === tab.id
-                    ? 'bg-[#DE7356]/10 text-[#DE7356] border border-[#DE7356]/25 shadow-sm '
-                    : 'hover:bg-gray-50 dark:hover:bg-white/[0.06] text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 '
+                    ? 'bg-[#DE7356]/10 text-[#DE7356] border border-[#DE7356]/25 shadow-xs '
+                    : 'hover:bg-gray-50 dark:hover:bg-white/6 text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 '
                 }`}
               >
                 <span className={activeTab === tab.id ? 'text-[#DE7356] ' : 'text-gray-500 dark:text-gray-400 '}>

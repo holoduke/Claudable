@@ -15,12 +15,12 @@ export default function GoogleSignInButton() {
       type="submit"
       disabled={pending}
       aria-busy={pending}
-      className="group relative flex w-full items-center justify-center gap-3 overflow-hidden rounded-xl bg-white px-5 py-3 text-[15px] font-medium text-[#1f1f1f] shadow-[0_1px_2px_rgba(0,0,0,0.4)] transition-all duration-200 hover:shadow-[0_8px_30px_-8px_rgba(222,115,86,0.55)] hover:-translate-y-px focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#DE7356] focus-visible:ring-offset-2 focus-visible:ring-offset-transparent active:translate-y-0 disabled:cursor-not-allowed disabled:opacity-80"
+      className="group relative flex w-full items-center justify-center gap-3 overflow-hidden rounded-xl bg-white px-5 py-3 text-[15px] font-medium text-[#1f1f1f] shadow-[0_1px_2px_rgba(0,0,0,0.4)] transition-all duration-200 hover:shadow-[0_8px_30px_-8px_rgba(222,115,86,0.55)] hover:-translate-y-px focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-[#DE7356] focus-visible:ring-offset-2 focus-visible:ring-offset-transparent active:translate-y-0 disabled:cursor-not-allowed disabled:opacity-80"
     >
       {/* Sheen sweep on hover */}
       <span
         aria-hidden
-        className="pointer-events-none absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-black/[0.04] to-transparent transition-transform duration-700 group-hover:translate-x-full"
+        className="pointer-events-none absolute inset-0 -translate-x-full bg-linear-to-r from-transparent via-black/4 to-transparent transition-transform duration-700 group-hover:translate-x-full"
       />
       {pending ? (
         <>

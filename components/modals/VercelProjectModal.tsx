@@ -182,7 +182,7 @@ export default function VercelProjectModal({
               value={vercelProjectName}
               onChange={(e) => setVercelProjectName(e.target.value)}
               placeholder="my-awesome-project"
-              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-50 "
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-md focus:outline-hidden focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-50 "
               required
               disabled={isLoading}
             />
@@ -198,7 +198,7 @@ export default function VercelProjectModal({
             <select
               value={framework}
               onChange={(e) => setFramework(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-50 "
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-md focus:outline-hidden focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-50 "
               disabled={isLoading}
             >
               <option value="nextjs">Next.js</option>
@@ -221,7 +221,7 @@ export default function VercelProjectModal({
               value={teamId}
               onChange={(e) => setTeamId(e.target.value)}
               placeholder="team_xxxxxxxxx"
-              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-50 "
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-md focus:outline-hidden focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-50 "
               disabled={isLoading}
             />
             <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
