@@ -64,8 +64,8 @@ export default function ConnectClaudePrompt() {
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-[300] flex items-center justify-center bg-black/40 p-4">
-      <div className="w-full max-w-md rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-white/[0.08] shadow-2xl p-6 space-y-4">
+    <div className="fixed inset-0 z-300 flex items-center justify-center bg-black/40 p-4">
+      <div className="w-full max-w-md rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-white/8 shadow-2xl p-6 space-y-4">
         {done ? (
           <div className="text-center py-4">
             <div className="text-3xl mb-2">✅</div>
@@ -83,22 +83,22 @@ export default function ConnectClaudePrompt() {
               </p>
             </div>
             <ol className="text-sm text-gray-600 dark:text-gray-300 space-y-1 list-decimal list-inside">
-              <li>On your own machine, run <code className="px-1.5 py-0.5 rounded bg-gray-100 dark:bg-white/[0.06] text-[13px]">claude setup-token</code></li>
-              <li>Paste the token (starts with <code className="px-1 rounded bg-gray-100 dark:bg-white/[0.06] text-[13px]">sk-ant-oat…</code>) below</li>
+              <li>On your own machine, run <code className="px-1.5 py-0.5 rounded-sm bg-gray-100 dark:bg-white/6 text-[13px]">claude setup-token</code></li>
+              <li>Paste the token (starts with <code className="px-1 rounded-sm bg-gray-100 dark:bg-white/6 text-[13px]">sk-ant-oat…</code>) below</li>
             </ol>
             <div className="space-y-2">
               <input
                 value={label}
                 onChange={(e) => setLabel(e.target.value)}
                 placeholder="Label (e.g. your name)"
-                className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-white/[0.08] bg-white dark:bg-white/[0.06] text-sm text-gray-800 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-[#DE7356]/40"
+                className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-white/8 bg-white dark:bg-white/6 text-sm text-gray-800 dark:text-gray-100 focus:outline-hidden focus:ring-2 focus:ring-[#DE7356]/40"
               />
               <input
                 value={token}
                 onChange={(e) => setToken(e.target.value)}
                 placeholder="sk-ant-oat…"
                 type="password"
-                className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-white/[0.08] bg-white dark:bg-white/[0.06] text-sm font-mono text-gray-800 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-[#DE7356]/40"
+                className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-white/8 bg-white dark:bg-white/6 text-sm font-mono text-gray-800 dark:text-gray-100 focus:outline-hidden focus:ring-2 focus:ring-[#DE7356]/40"
               />
               {error && <p className="text-xs text-red-500">{error}</p>}
             </div>

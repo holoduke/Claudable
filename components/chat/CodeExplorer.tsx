@@ -60,7 +60,7 @@ function TreeView({ entries, selectedFile, expandedFolders, folderContents, onTo
               className={`group flex items-center h-[22px] px-2 cursor-pointer ${
                 selectedFile === fullPath
                   ? 'bg-blue-100 dark:bg-blue-950/40 '
-                  : 'hover:bg-gray-100 dark:hover:bg-white/[0.06] '
+                  : 'hover:bg-gray-100 dark:hover:bg-white/6 '
               }`}
               style={{ paddingLeft: `${8 + indent}px` }}
               onClick={async () => {
@@ -266,9 +266,9 @@ export default function CodeExplorer({
       className="h-full flex bg-white dark:bg-[#0c0a09] "
     >
       {/* Left Sidebar - File Explorer (VS Code style) */}
-      <div className="w-64 flex-shrink-0 bg-gray-50 dark:bg-white/[0.03] border-r border-gray-200 dark:border-white/[0.08] flex flex-col">
+      <div className="w-64 shrink-0 bg-gray-50 dark:bg-white/3 border-r border-gray-200 dark:border-white/8 flex flex-col">
         {/* File Tree */}
-        <div className="flex-1 overflow-y-auto bg-gray-50 dark:bg-white/[0.03] custom-scrollbar">
+        <div className="flex-1 overflow-y-auto bg-gray-50 dark:bg-white/3 custom-scrollbar">
           {!tree || tree.length === 0 ? (
             <div className="px-3 py-8 text-center text-[11px] text-gray-600 dark:text-gray-300 select-none">
               No files found
@@ -295,7 +295,7 @@ export default function CodeExplorer({
         {selectedFile ? (
           <>
             {/* File Tab */}
-            <div className="flex-shrink-0 bg-gray-100 dark:bg-white/[0.03] ">
+            <div className="shrink-0 bg-gray-100 dark:bg-white/3 ">
               <div className="flex items-center gap-3 bg-white dark:bg-[#0c0a09] px-3 py-1.5 border-t-2 border-t-[#DE7356] ">
                 <div className="flex items-center gap-2 min-w-0">
                   <span className="w-4 h-4 flex items-center justify-center">
@@ -330,7 +330,7 @@ export default function CodeExplorer({
                 )}
                 <div className="ml-auto flex items-center gap-2">
                   <button
-                    className="px-3 py-1 text-xs font-medium rounded bg-[#DE7356] text-white hover:bg-[#c9634a] disabled:bg-gray-300 disabled:text-gray-600 disabled:cursor-not-allowed "
+                    className="px-3 py-1 text-xs font-medium rounded-sm bg-[#DE7356] text-white hover:bg-[#c9634a] disabled:bg-gray-300 disabled:text-gray-600 disabled:cursor-not-allowed "
                     onClick={onSaveFile}
                     disabled={!hasUnsavedChanges || isSavingFile}
                     title="Save (Ctrl+S)"
@@ -338,7 +338,7 @@ export default function CodeExplorer({
                     {isSavingFile ? 'Saving…' : 'Save'}
                   </button>
                   <button
-                    className="text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-white/[0.06] px-1 rounded"
+                    className="text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-white/6 px-1 rounded-sm"
                     onClick={onCloseFile}
                   >
                     ×
@@ -353,7 +353,7 @@ export default function CodeExplorer({
                 {/* Line Numbers */}
                 <div
                   ref={lineNumberRef}
-                  className="bg-gray-50 dark:bg-[#0c0a09] px-3 py-4 select-none flex-shrink-0 overflow-y-auto overflow-x-hidden custom-scrollbar pointer-events-none"
+                  className="bg-gray-50 dark:bg-[#0c0a09] px-3 py-4 select-none shrink-0 overflow-y-auto overflow-x-hidden custom-scrollbar pointer-events-none"
                   aria-hidden="true"
                 >
                   <div className="text-[13px] font-mono text-gray-500 dark:text-gray-400 leading-[19px]">
@@ -376,7 +376,7 @@ export default function CodeExplorer({
                       className={`language-${getFileLanguage(selectedFile)}`}
                       dangerouslySetInnerHTML={{ __html: highlightedCode }}
                     />
-                    <span className="block h-full min-h-[1px]" />
+                    <span className="block h-full min-h-px" />
                   </pre>
                   <textarea
                     ref={editorRef}
@@ -390,7 +390,7 @@ export default function CodeExplorer({
                     autoComplete="off"
                     wrap="off"
                     aria-label="Code editor"
-                    className="absolute inset-0 w-full h-full resize-none bg-transparent text-transparent caret-gray-800 outline-none font-mono text-[13px] leading-[19px] p-4 whitespace-pre overflow-auto custom-scrollbar"
+                    className="absolute inset-0 w-full h-full resize-none bg-transparent text-transparent caret-gray-800 outline-hidden font-mono text-[13px] leading-[19px] p-4 whitespace-pre overflow-auto custom-scrollbar"
                     style={{ fontFamily: "'Fira Code', 'Consolas', 'Monaco', monospace" }}
                   />
                 </div>

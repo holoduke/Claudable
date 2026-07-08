@@ -39,7 +39,7 @@ export function AIAssistantSettings({ projectId }: AIAssistantSettingsProps) {
         
         <div className="space-y-4">
           {/* Current CLI */}
-          <div className="p-4 bg-gray-50 dark:bg-white/[0.03] rounded-lg">
+          <div className="p-4 bg-gray-50 dark:bg-white/3 rounded-lg">
             <div className="flex items-center justify-between">
               <div>
                 <h4 className="text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">
@@ -50,11 +50,11 @@ export function AIAssistantSettings({ projectId }: AIAssistantSettingsProps) {
                     {selectedCLIOption?.name || preference?.preferredCli || 'Not configured'}
                   </span>
                   {selectedCLIOption?.configured ? (
-                    <span className="text-xs px-2 py-1 bg-green-100 text-green-700 rounded">
+                    <span className="text-xs px-2 py-1 bg-green-100 text-green-700 rounded-sm">
                       Configured
                     </span>
                   ) : (
-                    <span className="text-xs px-2 py-1 bg-yellow-100 text-yellow-700 rounded">
+                    <span className="text-xs px-2 py-1 bg-yellow-100 text-yellow-700 rounded-sm">
                       Not Configured
                     </span>
                   )}
@@ -64,7 +64,7 @@ export function AIAssistantSettings({ projectId }: AIAssistantSettingsProps) {
           </div>
 
           {/* Current Model */}
-          <div className="p-4 bg-gray-50 dark:bg-white/[0.03] rounded-lg">
+          <div className="p-4 bg-gray-50 dark:bg-white/3 rounded-lg">
             <h4 className="text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">
               Model
             </h4>

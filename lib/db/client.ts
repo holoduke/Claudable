@@ -1,4 +1,6 @@
+import path from 'path';
 import { PrismaClient } from '@prisma/client';
+import { PrismaBetterSqlite3 } from '@prisma/adapter-better-sqlite3';
 
 // Prisma Client singleton pattern for Next.js
 // Prevents multiple instances in development (hot reload)
@@ -8,9 +10,27 @@ const globalForPrisma = global as unknown as {
   staleRequestsReconciled?: boolean;
 };
 
+/**
+ * Prisma <=6 resolved a relative `file:` DATABASE_URL against the prisma/
+ * directory; the better-sqlite3 adapter resolves against the process cwd.
+ * Re-anchor relative paths to prisma/ so existing .env values (e.g.
+ * "file:../data/cc.db") keep pointing at the same database file.
+ */
+function resolveSqliteUrl(rawUrl: string | undefined): string {
+  if (!rawUrl) {
+    throw new Error('DATABASE_URL is not configured');
+  }
+  const filePath = rawUrl.replace(/^file:/, '');
+  if (path.isAbsolute(filePath)) {
+    return `file:${filePath}`;
+  }
+  return `file:${path.resolve(process.cwd(), 'prisma', filePath)}`;
+}
+
 export const prisma =
   globalForPrisma.prisma ||
   new PrismaClient({
+    adapter: new PrismaBetterSqlite3({ url: resolveSqliteUrl(process.env.DATABASE_URL) }),
     log: process.env.NODE_ENV === 'development' ? ['query', 'error', 'warn'] : ['error'],
   });
 

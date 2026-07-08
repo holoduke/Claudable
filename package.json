@@ -3,22 +3,15 @@
   "version": "2.0.0",
   "description": "AI-Powered Web App Builder - Build apps with natural language using Claude Code, Cursor, and more",
   "private": true,
-  "main": "index.js",
   "scripts": {
     "dev": "node scripts/run-web.js",
     "dev:web": "node scripts/run-web.js",
-    "dev:desktop": "node scripts/run-desktop.js",
-    "dev:electron": "npm run dev:desktop",
     "ensure:env": "node scripts/setup-env.js",
     "test": "vitest run",
     "test:watch": "vitest",
     "build": "next build",
-    "build:desktop": "npm run build && electron-builder",
-    "package:mac": "npm run build && electron-builder --mac",
-    "package:win": "npm run build && electron-builder --win",
-    "package:linux": "npm run build && electron-builder --linux",
     "start": "next start",
-    "lint": "next lint",
+    "lint": "eslint .",
     "type-check": "tsc --noEmit",
     "prisma:generate": "prisma generate",
     "prisma:push": "prisma db push",
@@ -30,38 +23,37 @@
     "postinstall": "npm run ensure:env"
   },
   "dependencies": {
-    "@anthropic-ai/claude-agent-sdk": "^0.2.68",
-    "@prisma/client": "^6.1.0",
-    "dotenv": "^16.4.5",
+    "@anthropic-ai/claude-agent-sdk": "^0.3.204",
+    "@prisma/adapter-better-sqlite3": "^7.8.0",
+    "@prisma/client": "^7.8.0",
     "fflate": "^0.8.3",
-    "framer-motion": "^11.11.17",
+    "framer-motion": "^12.42.2",
     "highlight.js": "^11.10.0",
-    "lucide-react": "^0.460.0",
-    "next": "^15.5.6",
+    "lucide-react": "^1.23.0",
+    "next": "^16.2.10",
     "next-auth": "^5.0.0-beta.31",
-    "react": "19.0.0",
-    "react-dom": "19.0.0",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
     "react-icons": "^5.5.0",
     "react-markdown": "^10.0.0",
     "ws": "^8.18.0",
     "zod": "^4.3.6"
   },
   "devDependencies": {
+    "@tailwindcss/postcss": "^4.3.2",
     "@types/node": "^22.10.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "@types/ws": "^8.18.1",
-    "autoprefixer": "^10.4.20",
-    "electron": "^39.0.0",
-    "electron-builder": "^25.1.6",
-    "eslint": "^9.17.0",
-    "eslint-config-next": "15.1.0",
+    "dotenv": "^17.4.2",
+    "eslint": "^9.39.4",
+    "eslint-config-next": "^16.2.10",
     "postcss": "^8.4.49",
     "prettier": "^3.4.2",
-    "prisma": "^6.1.0",
-    "tailwindcss": "^3.4.17",
-    "typescript": "^5.7.2",
-    "vitest": "^2.1.9"
+    "prisma": "^7.8.0",
+    "tailwindcss": "^4.3.2",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.10"
   },
   "engines": {
     "node": ">=20.0.0",
@@ -81,56 +73,6 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/yourusername/claudable.git"
-  },
-  "build": {
-    "appId": "com.claudable.desktop",
-    "productName": "Claudable",
-    "files": [
-      "index.js",
-      "electron/**/*",
-      ".next/standalone/**/*",
-      ".next/static/**/*",
-      "public/**/*",
-      "package.json"
-    ],
-    "extraResources": [
-      {
-        "from": ".next/static",
-        "to": ".next/static"
-      },
-      {
-        "from": "public",
-        "to": "public"
-      }
-    ],
-    "asar": true,
-    "directories": {
-      "buildResources": "resources",
-      "output": "dist"
-    },
-    "mac": {
-      "target": [
-        "dmg",
-        "zip"
-      ],
-      "category": "public.app-category.developer-tools"
-    },
-    "win": {
-      "target": [
-        {
-          "target": "nsis",
-          "arch": [
-            "x64"
-          ]
-        }
-      ]
-    },
-    "linux": {
-      "target": [
-        "AppImage"
-      ],
-      "category": "Development"
-    }
+    "url": "https://github.com/holoduke/Claudable.git"
   }
 }

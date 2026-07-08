@@ -307,7 +307,7 @@ export default function ServiceConnectionModal({
         className="fixed inset-0 z-50 flex items-center justify-center p-4"
       >
         <div 
-          className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+          className="absolute inset-0 bg-black/50 backdrop-blur-xs"
           onClick={onClose}
         />
         
@@ -488,7 +488,7 @@ export default function ServiceConnectionModal({
                   <ol className="text-xs text-gray-600 dark:text-gray-300 space-y-2">
                     {providerInfo.instructions.map((step, index) => (
                       <li key={index} className="flex gap-2">
-                        <span className="flex-shrink-0 w-5 h-5 bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-gray-50 rounded-full flex items-center justify-center text-xs font-medium">
+                        <span className="shrink-0 w-5 h-5 bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-gray-50 rounded-full flex items-center justify-center text-xs font-medium">
                           {index + 1}
                         </span>
                         <span>{step}</span>
@@ -519,7 +519,7 @@ export default function ServiceConnectionModal({
                   <button
                     onClick={handleSaveToken}
                     disabled={isLoading || !token.trim()}
-                    className="w-full px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-all duration-200 shadow-sm hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="w-full px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-all duration-200 shadow-xs hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {isLoading ? 'Saving Token...' : 'Save Token'}
                   </button>
