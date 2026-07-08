@@ -336,6 +336,51 @@ model SharedMcpServer {
   @@map("shared_mcp_servers")
 }
 
+// A registered Claude Code plugin MARKETPLACE (a git repo with
+// .claude-plugin/marketplace.json). Org-wide like SharedMcpServer: orgId null =
+// instance-wide (all projects). Claudable clones the repo in the CONTROL PLANE
+// (auth token never enters the sandbox), sanitizes it, and mounts the plugin
+// dirs read-only into each agent turn, loading enabled plugins via the CLI's
+// own `--plugin-dir` flag. Per-project opt-out lives in a project state file
+// (mirrors the skills subsystem), not here.
+model PluginMarketplace {
+  id        String   @id @default(cuid())
+  orgId     String?  @map("org_id")
+
+  name      String   // marketplace id (from marketplace.json "name"); slug used as the on-disk dir
+  gitUrl    String   @map("git_url")            // https git URL of the marketplace repo
+  ref       String?                             // optional branch/tag/sha to pin
+  subpath   String?                             // optional path within the repo to the marketplace root
+  // Git host whose ServiceToken authenticates the clone (private repos). The
+  // token is read in the control plane and embedded in the remote URL, exactly
+  // like git push — it never reaches the agent container.
+  tokenProvider String @default("github") @map("token_provider")
+  enabled   Boolean  @default(true)
+
+  // The plugins' bundled MCP servers ship platform-specific binaries (e.g.
+  // darwin-arm64) that can't run in the linux agent sandbox and may hang on
+  // autoInstall, so their .mcp.json is stripped from the synced copy by default.
+  // Opt in only if a marketplace's MCP servers are known to work in-container.
+  includeMcpServers Boolean @default(false) @map("include_mcp_servers")
+
+  // Parsed at sync time from marketplace.json: JSON array of
+  // {name, source, description, version}. The catalog of installable plugins.
+  catalogJson String? @map("catalog_json")
+  // JSON string[] of plugin names enabled org-wide (default: all in the catalog).
+  enabledPluginsJson String? @map("enabled_plugins_json")
+
+  lastSyncedAt  DateTime? @map("last_synced_at")
+  lastSyncError String?   @map("last_sync_error")
+  syncedRef     String?   @map("synced_ref") // commit sha actually checked out
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([orgId, name])
+  @@index([orgId])
+  @@map("plugin_marketplaces")
+}
+
 model ProjectMcpServer {
   id        String   @id @default(cuid())
   projectId String   @map("project_id")

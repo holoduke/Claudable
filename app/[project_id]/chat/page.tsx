@@ -244,7 +244,7 @@ export default function ChatPage() {
   const [showGlobalSettings, setShowGlobalSettings] = useState(false);
   // Which tab the settings modal opens on: the gear opens General; the publish
   // panel's "Open Settings → Services" jumps straight to the Deploy tab.
-  const [settingsInitialTab, setSettingsInitialTab] = useState<'general' | 'services' | 'mcp'>('general');
+  const [settingsInitialTab, setSettingsInitialTab] = useState<'general' | 'services' | 'mcp' | 'plugins'>('general');
   // The MCP OAuth callback redirects back here with ?mcp_auth=success|error.
   // Surface the result and open the MCP tab so the user sees "authenticated".
   useEffect(() => {
@@ -3017,6 +3017,13 @@ const persistProjectPreferences = useCallback(
                     // Like `/mcp` in the Claude CLI: open the project's MCP servers
                     // + their auth status, where you can authenticate.
                     setSettingsInitialTab('mcp');
+                    setShowGlobalSettings(true);
+                    return;
+                  }
+                  if (isBareCommand && command === '/plugin') {
+                    // Like `/plugin` in the Claude CLI: open the plugins panel
+                    // (marketplaces + which plugins are enabled).
+                    setSettingsInitialTab('plugins');
                     setShowGlobalSettings(true);
                     return;
                   }

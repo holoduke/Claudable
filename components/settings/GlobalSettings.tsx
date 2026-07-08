@@ -6,6 +6,7 @@ import { MotionDiv } from '@/lib/motion';
 import UsersSettings from '@/components/settings/UsersSettings';
 import SystemOverviewSettings from '@/components/settings/SystemOverviewSettings';
 import SharedMcpSettings from '@/components/settings/SharedMcpSettings';
+import PluginSettings from '@/components/settings/PluginSettings';
 import ClaudeAccountSettings from '@/components/settings/ClaudeAccountSettings';
 import MyAccountSettings from '@/components/settings/MyAccountSettings';
 import BrandWordmark from '@/components/ui/BrandWordmark';
@@ -17,7 +18,7 @@ import type { CLIStatus } from '@/types/cli';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? '';
 
-type SettingsTab = 'general' | 'ai-agents' | 'claude' | 'account' | 'users' | 'shared-mcp' | 'system' | 'about';
+type SettingsTab = 'general' | 'ai-agents' | 'claude' | 'account' | 'users' | 'shared-mcp' | 'plugins' | 'system' | 'about';
 
 interface GlobalSettingsProps {
   isOpen: boolean;
@@ -223,7 +224,7 @@ export default function GlobalSettings({ isOpen, onClose, initialTab = 'general'
     // to General if /api/users/me resolves before /api/auth/config.
     if (
       (userLoaded && !isAdmin && (activeTab === 'users' || activeTab === 'system')) ||
-      (userLoaded && authConfigLoaded && !canManageOrg && activeTab === 'shared-mcp')
+      (userLoaded && authConfigLoaded && !canManageOrg && (activeTab === 'shared-mcp' || activeTab === 'plugins'))
     ) {
       setActiveTab('general');
     }
@@ -383,6 +384,7 @@ export default function GlobalSettings({ isOpen, onClose, initialTab = 'general'
                 ...(currentUser ? [{ id: 'account' as const, label: 'My Account' }] : []),
                 ...(isAdmin ? [{ id: 'users' as const, label: 'Users' }] : []),
                 ...(canManageOrg ? [{ id: 'shared-mcp' as const, label: 'Shared MCP' }] : []),
+                ...(canManageOrg ? [{ id: 'plugins' as const, label: 'Plugins' }] : []),
                 ...(isAdmin ? [{ id: 'system' as const, label: 'Network' }] : []),
                 { id: 'about' as const, label: 'About' }
               ] as { id: SettingsTab; label: string }[]).map(tab => (
@@ -636,6 +638,7 @@ export default function GlobalSettings({ isOpen, onClose, initialTab = 'general'
             )}
 
             {activeTab === 'shared-mcp' && canManageOrg && <SharedMcpSettings />}
+            {activeTab === 'plugins' && canManageOrg && <PluginSettings />}
             {activeTab === 'system' && isAdmin && <SystemOverviewSettings />}
             {activeTab === 'users' && isAdmin && currentUser && (
               <UsersSettings currentUserId={currentUser.id} onToast={showToast} />
