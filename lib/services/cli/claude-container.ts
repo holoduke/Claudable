@@ -53,7 +53,11 @@ export interface ContainerTurnOptions {
   envFilePath?: string;
 }
 
-const CLI_IN_IMAGE = '/app/node_modules/@anthropic-ai/claude-agent-sdk/cli.js';
+// The globally installed Claude Code CLI (Dockerfile: npm install -g
+// @anthropic-ai/claude-code). Agent SDK <=0.2 shipped a vendored cli.js inside
+// its package that was spawned here; 0.3 removed it, so the global binary is
+// the only CLI in the image.
+const CLI_IN_IMAGE = '/usr/local/bin/claude';
 
 /** Build the `docker run` argv for one isolated agent turn. Hardened + no docker access. */
 export function buildAgentContainerArgs(o: ContainerTurnOptions): string[] {
@@ -112,7 +116,7 @@ export function buildAgentContainerArgs(o: ContainerTurnOptions): string[] {
   }
   // The prompt is NOT passed as an argument (it would be visible in `ps` on the
   // host) — runAgentTurnContainerized pipes it via stdin, which `-p` reads to EOF.
-  args.push(image, 'node', CLI_IN_IMAGE,
+  args.push(image, CLI_IN_IMAGE,
     '-p',
     '--output-format', 'stream-json', '--verbose',
     '--permission-mode', 'bypassPermissions');
