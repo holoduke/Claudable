@@ -10,6 +10,7 @@ import { streamManager } from '../stream';
 import { serializeMessage, createRealtimeMessage } from '@/lib/serializers/chat';
 import { getProjectById } from '../project';
 import { syncProjectSkills, hasDisabledSkills } from '../skills';
+import { isTechnicalNoise, toUserFacingAgentError } from './agent-error';
 import { CLAUDE_SYSTEM_PROMPT } from './prompts/claude-system-prompt';
 import { NEXT_SYSTEM_PROMPT } from './prompts/next-system-prompt';
 import { ANGULAR_SYSTEM_PROMPT } from './prompts/angular-system-prompt';
@@ -601,8 +602,12 @@ async function runContainerizedTurn(args: {
       throw new Error(errorMessage);
     }
 
-    await args.safeMarkFailed(errorMessage);
-    args.publishStatus('error', errorMessage);
+    // The raw error can be a stderr tail full of stack frames (e.g. a failed
+    // CLI spawn); the user-facing surfaces get a friendly message with a
+    // reference code, while the full detail stays in the server log above.
+    const userErrorMessage = toUserFacingAgentError(errorMessage);
+    await args.safeMarkFailed(userErrorMessage);
+    args.publishStatus('error', userErrorMessage);
 
     // Persist + stream a visible error message so it shows up in the chat log.
     try {
@@ -610,7 +615,7 @@ async function runContainerizedTurn(args: {
         projectId,
         role: 'assistant',
         messageType: 'error',
-        content: errorMessage,
+        content: userErrorMessage,
         cliSource: 'claude',
       });
       streamManager.publish(projectId, {
@@ -623,7 +628,7 @@ async function runContainerizedTurn(args: {
 
     streamManager.publish(projectId, {
       type: 'error',
-      error: errorMessage,
+      error: userErrorMessage,
       data: requestId ? { requestId } : undefined,
     });
     throw new Error(errorMessage);
@@ -1217,9 +1222,17 @@ export async function executeClaude(
           errorMessage = `Execution interrupted due to file access permission error. Please check project directory permissions.\n\nDetailed log:\n${tail}`;
         } else if (/model|unsupported|invalid\s+model/i.test(tail)) {
           errorMessage = `There is a problem with the model settings. Please try changing the model.\n\nDetailed log:\n${tail}`;
+        } else if (isTechnicalNoise(tail)) {
+          // A stderr tail of raw stack frames helps nobody in the chat; show
+          // the friendly message (the full trace was logged above).
+          errorMessage = toUserFacingAgentError(tail);
         } else {
           errorMessage = `${errorMessage}\n\nDetailed log:\n${tail}`;
         }
+      }
+      // Final guard: never surface a bare stack trace in the chat.
+      else {
+        errorMessage = toUserFacingAgentError(errorMessage);
       }
     }
 
