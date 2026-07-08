@@ -97,6 +97,7 @@ model Comment {
   resolved       Boolean  @default(false)
   authorId       String?  @map("author_id")
   authorName     String?  @map("author_name") // snapshot at create time (survives author deletion)
+  mentionsJson   String?  @map("mentions_json") // JSON [{id,name}] — users @-tagged in the body (names snapshotted)
   createdAt      DateTime @default(now()) @map("created_at")
   updatedAt      DateTime @updatedAt @map("updated_at")
 
