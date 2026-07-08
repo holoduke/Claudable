@@ -171,7 +171,7 @@ export default function ProjectAccessSettings({ projectId }: Props) {
       // eslint-disable-next-line @next/next/no-img-element
       <img src={m.image} alt="" className="w-7 h-7 rounded-full" />
     ) : (
-      <div className="w-7 h-7 rounded-full bg-gray-200 dark:bg-white/[0.06] flex items-center justify-center text-xs font-medium text-gray-600 dark:text-gray-300">
+      <div className="w-7 h-7 rounded-full bg-gray-200 dark:bg-white/6 flex items-center justify-center text-xs font-medium text-gray-600 dark:text-gray-300">
         {(m.name || m.email).charAt(0).toUpperCase()}
       </div>
     );
@@ -181,7 +181,7 @@ export default function ProjectAccessSettings({ projectId }: Props) {
       <h3 className="text-lg font-medium text-gray-900 dark:text-gray-50">Access</h3>
 
       {/* Toggle */}
-      <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-white/[0.03] rounded-xl border border-gray-200 dark:border-white/[0.08]">
+      <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-white/3 rounded-xl border border-gray-200 dark:border-white/8">
         <p className="pr-4 font-medium text-gray-900 dark:text-gray-50">Restrict to specific users</p>
         <label className="relative inline-flex items-center cursor-pointer">
           <input
@@ -191,7 +191,7 @@ export default function ProjectAccessSettings({ projectId }: Props) {
             disabled={busy}
             onChange={(e) => setVisibility(e.target.checked ? 'restricted' : 'org')}
           />
-          <div className="w-11 h-6 bg-gray-200 dark:bg-white/[0.06] rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#DE7356]" />
+          <div className="w-11 h-6 bg-gray-200 dark:bg-white/6 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:inset-s-[2px] after:bg-white after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#DE7356]" />
         </label>
       </div>
 
@@ -210,7 +210,7 @@ export default function ProjectAccessSettings({ projectId }: Props) {
               onChange={(e) => setQuery(e.target.value)}
               onFocus={() => { if (results.length) setOpen(true); }}
               placeholder="Search by name or email…"
-              className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-white/[0.08] bg-white dark:bg-white/[0.06] text-sm text-gray-800 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-[#DE7356]"
+              className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-white/8 bg-white dark:bg-white/6 text-sm text-gray-800 dark:text-gray-100 focus:outline-hidden focus:ring-2 focus:ring-[#DE7356]"
             />
             {open && (
               <div className="absolute z-10 mt-1 w-full rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-[#181310] shadow-lg max-h-60 overflow-y-auto">
@@ -224,7 +224,7 @@ export default function ProjectAccessSettings({ projectId }: Props) {
                       key={u.id}
                       onClick={() => addMember(u.id)}
                       disabled={busy}
-                      className="flex w-full items-center gap-3 px-3 py-2 text-left hover:bg-gray-50 dark:hover:bg-white/[0.06] disabled:opacity-50"
+                      className="flex w-full items-center gap-3 px-3 py-2 text-left hover:bg-gray-50 dark:hover:bg-white/6 disabled:opacity-50"
                     >
                       {avatar(u)}
                       <span className="min-w-0">
@@ -246,7 +246,7 @@ export default function ProjectAccessSettings({ projectId }: Props) {
             {(access?.members.length ?? 0) === 0 ? (
               <p className="text-sm text-gray-400 dark:text-gray-500">No one assigned yet — search above to add people.</p>
             ) : (
-              <ul className="divide-y divide-gray-100 dark:divide-white/[0.06] rounded-xl border border-gray-200 dark:border-white/[0.08]">
+              <ul className="divide-y divide-gray-100 dark:divide-white/6 rounded-xl border border-gray-200 dark:border-white/8">
                 {access!.members.map((m) => (
                   <li key={m.id} className="flex items-center gap-3 px-3 py-2">
                     {avatar(m)}
@@ -259,7 +259,7 @@ export default function ProjectAccessSettings({ projectId }: Props) {
                       value={m.role ?? 'viewer'}
                       onChange={(e) => setMemberRole(m.id, e.target.value as 'viewer' | 'editor')}
                       disabled={busy}
-                      className="text-xs border border-gray-200 dark:border-white/[0.08] rounded-full bg-white dark:bg-white/[0.06] text-gray-600 dark:text-gray-300 px-2 py-1 disabled:opacity-40"
+                      className="text-xs border border-gray-200 dark:border-white/8 rounded-full bg-white dark:bg-white/6 text-gray-600 dark:text-gray-300 px-2 py-1 disabled:opacity-40"
                     >
                       <option value="viewer">Viewer</option>
                       <option value="editor">Editor</option>
@@ -267,7 +267,7 @@ export default function ProjectAccessSettings({ projectId }: Props) {
                     <button
                       onClick={() => removeMember(m.id)}
                       disabled={busy}
-                      className="px-2.5 py-1 text-xs font-medium border border-gray-200 dark:border-white/[0.08] rounded-full bg-white dark:bg-white/[0.03] text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-white/[0.06] disabled:opacity-40"
+                      className="px-2.5 py-1 text-xs font-medium border border-gray-200 dark:border-white/8 rounded-full bg-white dark:bg-white/3 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-white/6 disabled:opacity-40"
                     >
                       Remove
                     </button>

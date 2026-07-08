@@ -119,7 +119,7 @@ export default function UsersSettings({ currentUserId, onToast }: UsersSettingsP
       <h3 className="text-lg font-medium text-gray-900 dark:text-gray-50">Users</h3>
 
       {/* Invite external user */}
-      <div className="flex flex-col gap-3 p-4 bg-gray-50 dark:bg-white/[0.03] rounded-xl border border-gray-200 dark:border-white/[0.08] sm:flex-row sm:items-end">
+      <div className="flex flex-col gap-3 p-4 bg-gray-50 dark:bg-white/3 rounded-xl border border-gray-200 dark:border-white/8 sm:flex-row sm:items-end">
         <div className="flex-1">
           <label className="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">Email</label>
           <input
@@ -128,7 +128,7 @@ export default function UsersSettings({ currentUserId, onToast }: UsersSettingsP
             onChange={(e) => setNewEmail(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter') addUser(); }}
             placeholder="person@partner.com"
-            className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-white/[0.08] bg-white dark:bg-white/[0.06] text-sm text-gray-800 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-gray-200"
+            className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-white/8 bg-white dark:bg-white/6 text-sm text-gray-800 dark:text-gray-100 focus:outline-hidden focus:ring-2 focus:ring-gray-200"
           />
         </div>
         <div className="flex-1">
@@ -139,7 +139,7 @@ export default function UsersSettings({ currentUserId, onToast }: UsersSettingsP
             onChange={(e) => setNewName(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter') addUser(); }}
             placeholder="Jane Doe"
-            className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-white/[0.08] bg-white dark:bg-white/[0.06] text-sm text-gray-800 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-gray-200"
+            className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-white/8 bg-white dark:bg-white/6 text-sm text-gray-800 dark:text-gray-100 focus:outline-hidden focus:ring-2 focus:ring-gray-200"
           />
         </div>
         <button
@@ -152,24 +152,24 @@ export default function UsersSettings({ currentUserId, onToast }: UsersSettingsP
       </div>
 
       {/* User list */}
-      <div className="rounded-xl border border-gray-200 dark:border-white/[0.08] overflow-hidden">
+      <div className="rounded-xl border border-gray-200 dark:border-white/8 overflow-hidden">
         {loading ? (
           <div className="p-6 text-center text-sm text-gray-500 dark:text-gray-400">Loading users…</div>
         ) : users.length === 0 ? (
           <div className="p-6 text-center text-sm text-gray-500 dark:text-gray-400">No users yet.</div>
         ) : (
-          <ul className="divide-y divide-gray-200 dark:divide-white/[0.08]">
+          <ul className="divide-y divide-gray-200 dark:divide-white/8">
             {users.map((u) => {
               const isSelf = u.id === currentUserId;
               const busy = busyId === u.id;
               return (
                 <li key={u.id} className="flex items-center gap-3 p-4">
-                  <div className="flex-shrink-0">
+                  <div className="shrink-0">
                     {u.image ? (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img src={u.image} alt="" className="w-9 h-9 rounded-full" />
                     ) : (
-                      <div className="w-9 h-9 rounded-full bg-gray-200 dark:bg-white/[0.06] flex items-center justify-center text-sm font-medium text-gray-600 dark:text-gray-300">
+                      <div className="w-9 h-9 rounded-full bg-gray-200 dark:bg-white/6 flex items-center justify-center text-sm font-medium text-gray-600 dark:text-gray-300">
                         {(u.name || u.email).charAt(0).toUpperCase()}
                       </div>
                     )}
@@ -182,12 +182,12 @@ export default function UsersSettings({ currentUserId, onToast }: UsersSettingsP
                       </p>
                       {isSelf && <span className="text-[11px] text-gray-400 dark:text-gray-500">(you)</span>}
                       {!u.isActive && (
-                        <span className="text-[11px] font-medium text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded">
+                        <span className="text-[11px] font-medium text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded-sm">
                           deactivated
                         </span>
                       )}
                       {u.lastLoginAt === null && u.isActive && (
-                        <span className="text-[11px] font-medium text-[#DE7356] bg-[#DE7356]/10 px-1.5 py-0.5 rounded">
+                        <span className="text-[11px] font-medium text-[#DE7356] bg-[#DE7356]/10 px-1.5 py-0.5 rounded-sm">
                           invited
                         </span>
                       )}
@@ -205,7 +205,7 @@ export default function UsersSettings({ currentUserId, onToast }: UsersSettingsP
                     value={u.role}
                     disabled={busy || isSelf}
                     onChange={(e) => patchUser(u.id, { role: e.target.value })}
-                    className="px-2.5 py-1.5 text-xs font-medium border border-gray-200 dark:border-white/[0.08] rounded-full bg-white dark:bg-white/[0.06] text-gray-700 dark:text-gray-200 focus:outline-none focus:ring-0 disabled:opacity-50 cursor-pointer"
+                    className="px-2.5 py-1.5 text-xs font-medium border border-gray-200 dark:border-white/8 rounded-full bg-white dark:bg-white/6 text-gray-700 dark:text-gray-200 focus:outline-hidden focus:ring-0 disabled:opacity-50 cursor-pointer"
                     title={isSelf ? 'You cannot change your own role' : 'Change role'}
                   >
                     <option value="user">User</option>
@@ -216,7 +216,7 @@ export default function UsersSettings({ currentUserId, onToast }: UsersSettingsP
                   <button
                     onClick={() => patchUser(u.id, { isActive: !u.isActive })}
                     disabled={busy || isSelf}
-                    className="px-2.5 py-1.5 text-xs font-medium border border-gray-200 dark:border-white/[0.08] rounded-full bg-white dark:bg-white/[0.03] text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-white/[0.06] transition-colors disabled:opacity-50"
+                    className="px-2.5 py-1.5 text-xs font-medium border border-gray-200 dark:border-white/8 rounded-full bg-white dark:bg-white/3 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-white/6 transition-colors disabled:opacity-50"
                     title={isSelf ? 'You cannot deactivate yourself' : u.isActive ? 'Deactivate' : 'Activate'}
                   >
                     {u.isActive ? 'Deactivate' : 'Activate'}
@@ -229,7 +229,7 @@ export default function UsersSettings({ currentUserId, onToast }: UsersSettingsP
                     className={`px-2.5 py-1.5 text-xs font-medium border rounded-full transition-colors disabled:opacity-50 ${
                       u.itopsEnabled
                         ? 'border-amber-300 bg-amber-50 text-amber-700 hover:bg-amber-100'
-                        : 'border-gray-200 dark:border-white/[0.08] bg-white dark:bg-white/[0.03] text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-white/[0.06]'
+                        : 'border-gray-200 dark:border-white/8 bg-white dark:bg-white/3 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-white/6'
                     }`}
                     title={u.itopsEnabled ? 'Disable it-ops tools for this user' : 'Enable it-ops tools for this user'}
                   >
@@ -240,7 +240,7 @@ export default function UsersSettings({ currentUserId, onToast }: UsersSettingsP
                   <button
                     onClick={() => removeUser(u.id, u.email)}
                     disabled={busy || isSelf}
-                    className="px-2.5 py-1.5 text-xs font-medium border border-red-200 rounded-full bg-white dark:bg-white/[0.03] text-red-600 hover:bg-red-50 transition-colors disabled:opacity-40"
+                    className="px-2.5 py-1.5 text-xs font-medium border border-red-200 rounded-full bg-white dark:bg-white/3 text-red-600 hover:bg-red-50 transition-colors disabled:opacity-40"
                     title={isSelf ? 'You cannot remove yourself' : 'Remove user'}
                   >
                     Remove

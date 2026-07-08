@@ -206,11 +206,11 @@ export default function McpServersSettings({ projectId }: Props) {
             <h4 className="text-xs font-medium uppercase tracking-wide text-gray-400 dark:text-gray-500 mb-2">Provided by Claudable</h4>
             <div className="space-y-2">
               {builtin.map((b) => (
-                <div key={b.name} className="flex items-center gap-3 rounded-lg border border-gray-200 dark:border-white/[0.06] bg-gray-50/60 dark:bg-white/[0.02] px-3 py-2.5">
+                <div key={b.name} className="flex items-center gap-3 rounded-lg border border-gray-200 dark:border-white/6 bg-gray-50/60 dark:bg-white/2 px-3 py-2.5">
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
                       <span className="text-sm font-medium text-gray-700 dark:text-gray-200">{b.label}</span>
-                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 dark:bg-white/[0.06] text-gray-500 dark:text-gray-400 font-mono">{b.name}</span>
+                      <span className="text-[10px] px-1.5 py-0.5 rounded-sm bg-gray-100 dark:bg-white/6 text-gray-500 dark:text-gray-400 font-mono">{b.name}</span>
                     </div>
                     <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{b.description}</p>
                   </div>
@@ -227,11 +227,11 @@ export default function McpServersSettings({ projectId }: Props) {
             <h4 className="text-xs font-medium uppercase tracking-wide text-gray-400 dark:text-gray-500 mb-2">Shared by your team</h4>
             <div className="space-y-2">
               {shared.map((s) => (
-                <div key={s.id} className="flex items-center gap-3 rounded-lg border border-gray-200 dark:border-white/[0.06] bg-gray-50/60 dark:bg-white/[0.02] px-3 py-2.5">
+                <div key={s.id} className="flex items-center gap-3 rounded-lg border border-gray-200 dark:border-white/6 bg-gray-50/60 dark:bg-white/2 px-3 py-2.5">
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
                       <span className="text-sm font-medium text-gray-700 dark:text-gray-200 truncate">{s.label}</span>
-                      <span className="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-gray-100 dark:bg-white/[0.06] text-gray-500 dark:text-gray-400">{s.transport}</span>
+                      <span className="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded-sm bg-gray-100 dark:bg-white/6 text-gray-500 dark:text-gray-400">{s.transport}</span>
                     </div>
                     <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{s.url || 'stdio command'}</p>
                   </div>
@@ -248,7 +248,7 @@ export default function McpServersSettings({ projectId }: Props) {
             <p className="text-xs text-sky-700/80 dark:text-sky-400/80 mt-0.5">
               The agent also inherits the managed connectors from your Claude subscription
               (Gmail, Drive, Calendar, Atlassian, and any others you&apos;ve connected) — the same
-              set <code className="px-1 py-0.5 rounded bg-sky-100 dark:bg-sky-900/40 text-[11px]">claude mcp list</code> shows.
+              set <code className="px-1 py-0.5 rounded-sm bg-sky-100 dark:bg-sky-900/40 text-[11px]">claude mcp list</code> shows.
               Manage or disconnect those in your Claude account settings.
             </p>
           </div>
@@ -260,22 +260,22 @@ export default function McpServersSettings({ projectId }: Props) {
             <p className="text-sm text-gray-400 dark:text-gray-500">No project MCP servers yet.</p>
           )}
           {servers.map((s) => (
-            <div key={s.id} className="flex items-center gap-3 rounded-lg border border-gray-200 dark:border-white/[0.08] px-3 py-2.5">
+            <div key={s.id} className="flex items-center gap-3 rounded-lg border border-gray-200 dark:border-white/8 px-3 py-2.5">
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
                   <span className="text-sm font-medium text-gray-900 dark:text-gray-50 truncate">{s.label}</span>
-                  <span className="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-gray-100 dark:bg-white/[0.06] text-gray-500 dark:text-gray-400">{s.transport}</span>
-                  <span className={`text-[10px] px-1.5 py-0.5 rounded ${s.visibility === 'private' ? 'bg-purple-100 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300' : 'bg-blue-100 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300'}`}>
+                  <span className="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded-sm bg-gray-100 dark:bg-white/6 text-gray-500 dark:text-gray-400">{s.transport}</span>
+                  <span className={`text-[10px] px-1.5 py-0.5 rounded-sm ${s.visibility === 'private' ? 'bg-purple-100 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300' : 'bg-blue-100 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300'}`}>
                     {s.visibility === 'private' ? 'private' : 'shared'}
                   </span>
                   {(s.hasHeaders || s.hasEnv) && (
-                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300">secret</span>
+                    <span className="text-[10px] px-1.5 py-0.5 rounded-sm bg-amber-100 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300">secret</span>
                   )}
                   {s.authType === 'oauth' && (
                     s.authStatus === 'connected' ? (
-                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-100 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300">authenticated</span>
+                      <span className="text-[10px] px-1.5 py-0.5 rounded-sm bg-emerald-100 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300">authenticated</span>
                     ) : (
-                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-orange-100 dark:bg-orange-950/40 text-orange-700 dark:text-orange-300">{s.authStatus === 'expired' ? 'auth expired' : 'needs auth'}</span>
+                      <span className="text-[10px] px-1.5 py-0.5 rounded-sm bg-orange-100 dark:bg-orange-950/40 text-orange-700 dark:text-orange-300">{s.authStatus === 'expired' ? 'auth expired' : 'needs auth'}</span>
                     )
                   )}
                 </div>
@@ -283,7 +283,7 @@ export default function McpServersSettings({ projectId }: Props) {
               </div>
               {s.authType === 'oauth' && (
                 s.authStatus === 'connected' ? (
-                  <button onClick={() => disconnect(s)} className="text-xs px-2 py-1 rounded-md border border-gray-200 dark:border-white/[0.08] text-gray-500 hover:text-gray-700 dark:hover:text-gray-200">
+                  <button onClick={() => disconnect(s)} className="text-xs px-2 py-1 rounded-md border border-gray-200 dark:border-white/8 text-gray-500 hover:text-gray-700 dark:hover:text-gray-200">
                     Disconnect
                   </button>
                 ) : (
@@ -294,7 +294,7 @@ export default function McpServersSettings({ projectId }: Props) {
               )}
               <button
                 onClick={() => toggle(s)}
-                className={`text-xs px-2 py-1 rounded-md border transition-colors ${s.enabled ? 'border-emerald-300 text-emerald-700 dark:text-emerald-300 dark:border-emerald-800' : 'border-gray-200 dark:border-white/[0.08] text-gray-400'}`}
+                className={`text-xs px-2 py-1 rounded-md border transition-colors ${s.enabled ? 'border-emerald-300 text-emerald-700 dark:text-emerald-300 dark:border-emerald-800' : 'border-gray-200 dark:border-white/8 text-gray-400'}`}
               >
                 {s.enabled ? 'Enabled' : 'Disabled'}
               </button>
@@ -312,15 +312,15 @@ export default function McpServersSettings({ projectId }: Props) {
             <h4 className="text-xs font-medium uppercase tracking-wide text-gray-400 dark:text-gray-500 mb-2">Available to add</h4>
             <div className="space-y-2">
               {catalog.map((c) => (
-                <div key={c.name} className="flex items-center gap-3 rounded-lg border border-dashed border-gray-200 dark:border-white/[0.08] px-3 py-2.5">
+                <div key={c.name} className="flex items-center gap-3 rounded-lg border border-dashed border-gray-200 dark:border-white/8 px-3 py-2.5">
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
                       <span className="text-sm font-medium text-gray-900 dark:text-gray-50 truncate">{c.label}</span>
                       {c.source === 'company' && (
-                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-sky-100 dark:bg-sky-950/40 text-sky-700 dark:text-sky-300">company</span>
+                        <span className="text-[10px] px-1.5 py-0.5 rounded-sm bg-sky-100 dark:bg-sky-950/40 text-sky-700 dark:text-sky-300">company</span>
                       )}
                       {c.authType === 'oauth' && (
-                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 dark:bg-white/[0.06] text-gray-500 dark:text-gray-400">sign-in required</span>
+                        <span className="text-[10px] px-1.5 py-0.5 rounded-sm bg-gray-100 dark:bg-white/6 text-gray-500 dark:text-gray-400">sign-in required</span>
                       )}
                     </div>
                     <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{c.description || c.url}</p>
@@ -328,7 +328,7 @@ export default function McpServersSettings({ projectId }: Props) {
                   <button
                     onClick={() => addFromCatalog(c)}
                     disabled={addingCatalogName !== null}
-                    className="text-xs px-2.5 py-1.5 rounded-md border border-gray-200 dark:border-white/[0.08] text-gray-700 dark:text-gray-200 hover:border-[#DE7356]/50 hover:text-[#DE7356] disabled:opacity-50 transition-colors"
+                    className="text-xs px-2.5 py-1.5 rounded-md border border-gray-200 dark:border-white/8 text-gray-700 dark:text-gray-200 hover:border-[#DE7356]/50 hover:text-[#DE7356] disabled:opacity-50 transition-colors"
                   >
                     {addingCatalogName === c.name ? 'Adding…' : 'Add'}
                   </button>
@@ -347,21 +347,21 @@ export default function McpServersSettings({ projectId }: Props) {
           </button>
         </div>
       ) : (
-        <div className="rounded-xl border border-gray-200 dark:border-white/[0.08] p-4 space-y-3">
+        <div className="rounded-xl border border-gray-200 dark:border-white/8 p-4 space-y-3">
           <div className="grid grid-cols-2 gap-3">
             <label className="text-xs text-gray-500 dark:text-gray-400">
               Name (key)
-              <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="relume" className="mt-1 w-full px-2.5 py-2 rounded-md border border-gray-200 dark:border-white/[0.08] bg-transparent text-sm text-gray-900 dark:text-gray-50" />
+              <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="relume" className="mt-1 w-full px-2.5 py-2 rounded-md border border-gray-200 dark:border-white/8 bg-transparent text-sm text-gray-900 dark:text-gray-50" />
             </label>
             <label className="text-xs text-gray-500 dark:text-gray-400">
               Label
-              <input value={form.label} onChange={(e) => setForm({ ...form, label: e.target.value })} placeholder="Relume Library" className="mt-1 w-full px-2.5 py-2 rounded-md border border-gray-200 dark:border-white/[0.08] bg-transparent text-sm text-gray-900 dark:text-gray-50" />
+              <input value={form.label} onChange={(e) => setForm({ ...form, label: e.target.value })} placeholder="Relume Library" className="mt-1 w-full px-2.5 py-2 rounded-md border border-gray-200 dark:border-white/8 bg-transparent text-sm text-gray-900 dark:text-gray-50" />
             </label>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <label className="block text-xs text-gray-500 dark:text-gray-400">
               Transport
-              <select value={form.transport} onChange={(e) => setForm({ ...form, transport: e.target.value as Transport })} className="mt-1 w-full px-2.5 py-2 rounded-md border border-gray-200 dark:border-white/[0.08] bg-transparent text-sm text-gray-900 dark:text-gray-50">
+              <select value={form.transport} onChange={(e) => setForm({ ...form, transport: e.target.value as Transport })} className="mt-1 w-full px-2.5 py-2 rounded-md border border-gray-200 dark:border-white/8 bg-transparent text-sm text-gray-900 dark:text-gray-50">
                 <option value="http">Remote (HTTP)</option>
                 <option value="sse">Remote (SSE)</option>
                 <option value="stdio">Command (stdio)</option>
@@ -369,7 +369,7 @@ export default function McpServersSettings({ projectId }: Props) {
             </label>
             <label className="block text-xs text-gray-500 dark:text-gray-400">
               Visibility
-              <select value={form.visibility} onChange={(e) => setForm({ ...form, visibility: e.target.value as 'shared' | 'private' })} className="mt-1 w-full px-2.5 py-2 rounded-md border border-gray-200 dark:border-white/[0.08] bg-transparent text-sm text-gray-900 dark:text-gray-50">
+              <select value={form.visibility} onChange={(e) => setForm({ ...form, visibility: e.target.value as 'shared' | 'private' })} className="mt-1 w-full px-2.5 py-2 rounded-md border border-gray-200 dark:border-white/8 bg-transparent text-sm text-gray-900 dark:text-gray-50">
                 <option value="shared">Shared (whole project)</option>
                 <option value="private">Private (only me)</option>
               </select>
@@ -379,22 +379,22 @@ export default function McpServersSettings({ projectId }: Props) {
             <div className="grid grid-cols-2 gap-3">
               <label className="text-xs text-gray-500 dark:text-gray-400">
                 Command
-                <input value={form.command} onChange={(e) => setForm({ ...form, command: e.target.value })} placeholder="npx" className="mt-1 w-full px-2.5 py-2 rounded-md border border-gray-200 dark:border-white/[0.08] bg-transparent text-sm text-gray-900 dark:text-gray-50" />
+                <input value={form.command} onChange={(e) => setForm({ ...form, command: e.target.value })} placeholder="npx" className="mt-1 w-full px-2.5 py-2 rounded-md border border-gray-200 dark:border-white/8 bg-transparent text-sm text-gray-900 dark:text-gray-50" />
               </label>
               <label className="text-xs text-gray-500 dark:text-gray-400">
                 Args (space-separated)
-                <input value={form.argsText} onChange={(e) => setForm({ ...form, argsText: e.target.value })} placeholder="-y some-mcp-package" className="mt-1 w-full px-2.5 py-2 rounded-md border border-gray-200 dark:border-white/[0.08] bg-transparent text-sm text-gray-900 dark:text-gray-50" />
+                <input value={form.argsText} onChange={(e) => setForm({ ...form, argsText: e.target.value })} placeholder="-y some-mcp-package" className="mt-1 w-full px-2.5 py-2 rounded-md border border-gray-200 dark:border-white/8 bg-transparent text-sm text-gray-900 dark:text-gray-50" />
               </label>
             </div>
           ) : (
             <>
               <label className="block text-xs text-gray-500 dark:text-gray-400">
                 URL (https)
-                <input value={form.url} onChange={(e) => setForm({ ...form, url: e.target.value })} placeholder="https://mcp.relume.io/mcp" className="mt-1 w-full px-2.5 py-2 rounded-md border border-gray-200 dark:border-white/[0.08] bg-transparent text-sm text-gray-900 dark:text-gray-50" />
+                <input value={form.url} onChange={(e) => setForm({ ...form, url: e.target.value })} placeholder="https://mcp.relume.io/mcp" className="mt-1 w-full px-2.5 py-2 rounded-md border border-gray-200 dark:border-white/8 bg-transparent text-sm text-gray-900 dark:text-gray-50" />
               </label>
               <label className="block text-xs text-gray-500 dark:text-gray-400">
                 Authentication
-                <select value={form.authType} onChange={(e) => setForm({ ...form, authType: e.target.value as 'none' | 'oauth' })} className="mt-1 w-full px-2.5 py-2 rounded-md border border-gray-200 dark:border-white/[0.08] bg-transparent text-sm text-gray-900 dark:text-gray-50">
+                <select value={form.authType} onChange={(e) => setForm({ ...form, authType: e.target.value as 'none' | 'oauth' })} className="mt-1 w-full px-2.5 py-2 rounded-md border border-gray-200 dark:border-white/8 bg-transparent text-sm text-gray-900 dark:text-gray-50">
                   <option value="none">None / static header</option>
                   <option value="oauth">OAuth (sign in after adding)</option>
                 </select>
@@ -407,11 +407,11 @@ export default function McpServersSettings({ projectId }: Props) {
               <div className="grid grid-cols-2 gap-3">
                 <label className="text-xs text-gray-500 dark:text-gray-400">
                   Auth header (optional)
-                  <input value={form.headerKey} onChange={(e) => setForm({ ...form, headerKey: e.target.value })} className="mt-1 w-full px-2.5 py-2 rounded-md border border-gray-200 dark:border-white/[0.08] bg-transparent text-sm text-gray-900 dark:text-gray-50" />
+                  <input value={form.headerKey} onChange={(e) => setForm({ ...form, headerKey: e.target.value })} className="mt-1 w-full px-2.5 py-2 rounded-md border border-gray-200 dark:border-white/8 bg-transparent text-sm text-gray-900 dark:text-gray-50" />
                 </label>
                 <label className="text-xs text-gray-500 dark:text-gray-400">
                   Value (stored encrypted)
-                  <input value={form.headerValue} onChange={(e) => setForm({ ...form, headerValue: e.target.value })} placeholder="Bearer …" className="mt-1 w-full px-2.5 py-2 rounded-md border border-gray-200 dark:border-white/[0.08] bg-transparent text-sm text-gray-900 dark:text-gray-50" />
+                  <input value={form.headerValue} onChange={(e) => setForm({ ...form, headerValue: e.target.value })} placeholder="Bearer …" className="mt-1 w-full px-2.5 py-2 rounded-md border border-gray-200 dark:border-white/8 bg-transparent text-sm text-gray-900 dark:text-gray-50" />
                 </label>
               </div>
               )}
@@ -421,7 +421,7 @@ export default function McpServersSettings({ projectId }: Props) {
             <button disabled={saving} onClick={submit} className="text-sm px-3 py-2 rounded-lg bg-[#DE7356] text-white hover:bg-[#c9634a] disabled:opacity-50 transition-colors">
               {saving ? 'Adding…' : 'Add server'}
             </button>
-            <button onClick={() => { setAdding(false); setForm({ ...EMPTY_FORM }); }} className="text-sm px-3 py-2 rounded-lg border border-gray-200 dark:border-white/[0.08] text-gray-600 dark:text-gray-300">
+            <button onClick={() => { setAdding(false); setForm({ ...EMPTY_FORM }); }} className="text-sm px-3 py-2 rounded-lg border border-gray-200 dark:border-white/8 text-gray-600 dark:text-gray-300">
               Cancel
             </button>
           </div>

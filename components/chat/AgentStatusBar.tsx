@@ -73,7 +73,7 @@ function Meter({ label, pct, sub }: { label: string; pct?: number; sub?: string 
         <span className="text-gray-600 dark:text-gray-300">{label}</span>
         <span className={textColor(pct)}>{pct === undefined ? 'not reported yet' : `${pct}%`}</span>
       </div>
-      <div className="mt-1 h-1.5 rounded-full bg-gray-100 dark:bg-white/[0.08] overflow-hidden">
+      <div className="mt-1 h-1.5 rounded-full bg-gray-100 dark:bg-white/8 overflow-hidden">
         <div
           className={`h-full rounded-full transition-all ${meterColor(pct)}`}
           style={{ width: `${pct ?? 0}%` }}
@@ -140,7 +140,7 @@ export default function AgentStatusBar({ projectId, liveStatus, open, onOpenChan
     if (!open) return null;
     return (
       <div className="relative flex justify-end mb-1.5" ref={panelRef}>
-        <div className="absolute bottom-full right-0 mb-2 w-80 z-[120] rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-2xl p-4 text-left">
+        <div className="absolute bottom-full right-0 mb-2 w-80 z-120 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-2xl p-4 text-left">
           <div className="text-sm font-semibold text-gray-900 dark:text-gray-50 mb-1">Agent status</div>
           <p className="text-sm text-gray-500 dark:text-gray-400">
             No usage recorded yet — run the agent once and context, token spend and rate limits appear here.
@@ -156,7 +156,7 @@ export default function AgentStatusBar({ projectId, liveStatus, open, onOpenChan
         type="button"
         onClick={() => onOpenChange(!open)}
         title="Agent status — context & usage limits (/usage)"
-        className="flex items-center gap-2 px-2 py-1 rounded-md text-[11px] text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-white/[0.06] transition-colors"
+        className="flex items-center gap-2 px-2 py-1 rounded-md text-[11px] text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-white/6 transition-colors"
       >
         {chips.map((c) => (
           <span key={c.key} className="flex items-center gap-1">
@@ -168,11 +168,11 @@ export default function AgentStatusBar({ projectId, liveStatus, open, onOpenChan
       </button>
 
       {open && (
-        <div className="absolute bottom-full right-0 mb-2 w-80 z-[120] rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-2xl p-4 space-y-4 text-left">
+        <div className="absolute bottom-full right-0 mb-2 w-80 z-120 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-2xl p-4 space-y-4 text-left">
           <div className="flex items-center justify-between">
             <span className="text-sm font-semibold text-gray-900 dark:text-gray-50">Agent status</span>
             {status.model && (
-              <span className="text-[10px] uppercase tracking-wide text-gray-400 dark:text-gray-500 bg-gray-100 dark:bg-gray-800 px-1.5 py-0.5 rounded">
+              <span className="text-[10px] uppercase tracking-wide text-gray-400 dark:text-gray-500 bg-gray-100 dark:bg-gray-800 px-1.5 py-0.5 rounded-sm">
                 {status.model.replace(/^claude-/, '')}
               </span>
             )}

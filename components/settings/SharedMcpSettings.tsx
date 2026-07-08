@@ -130,20 +130,20 @@ export default function SharedMcpSettings() {
             <p className="text-sm text-gray-400 dark:text-gray-500">No shared MCP servers yet.</p>
           )}
           {servers.map((s) => (
-            <div key={s.id} className="flex items-center gap-3 rounded-lg border border-gray-200 dark:border-white/[0.08] px-3 py-2.5">
+            <div key={s.id} className="flex items-center gap-3 rounded-lg border border-gray-200 dark:border-white/8 px-3 py-2.5">
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
                   <span className="text-sm font-medium text-gray-900 dark:text-gray-50 truncate">{s.label}</span>
-                  <span className="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-gray-100 dark:bg-white/[0.06] text-gray-500 dark:text-gray-400">{s.transport}</span>
+                  <span className="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded-sm bg-gray-100 dark:bg-white/6 text-gray-500 dark:text-gray-400">{s.transport}</span>
                   {(s.hasHeaders || s.hasEnv) && (
-                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300">secret</span>
+                    <span className="text-[10px] px-1.5 py-0.5 rounded-sm bg-amber-100 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300">secret</span>
                   )}
                 </div>
                 <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{s.url || `${s.command ?? ''} ${s.args.join(' ')}`.trim()}</p>
               </div>
               <button
                 onClick={() => toggle(s)}
-                className={`text-xs px-2 py-1 rounded-md border transition-colors ${s.enabled ? 'border-emerald-300 text-emerald-700 dark:text-emerald-300 dark:border-emerald-800' : 'border-gray-200 dark:border-white/[0.08] text-gray-400'}`}
+                className={`text-xs px-2 py-1 rounded-md border transition-colors ${s.enabled ? 'border-emerald-300 text-emerald-700 dark:text-emerald-300 dark:border-emerald-800' : 'border-gray-200 dark:border-white/8 text-gray-400'}`}
               >
                 {s.enabled ? 'Enabled' : 'Disabled'}
               </button>
@@ -160,20 +160,20 @@ export default function SharedMcpSettings() {
           Add shared MCP server
         </button>
       ) : (
-        <div className="rounded-xl border border-gray-200 dark:border-white/[0.08] p-4 space-y-3">
+        <div className="rounded-xl border border-gray-200 dark:border-white/8 p-4 space-y-3">
           <div className="grid grid-cols-2 gap-3">
             <label className="text-xs text-gray-500 dark:text-gray-400">
               Name (key)
-              <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="company-docs" className="mt-1 w-full px-2.5 py-2 rounded-md border border-gray-200 dark:border-white/[0.08] bg-transparent text-sm text-gray-900 dark:text-gray-50" />
+              <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="company-docs" className="mt-1 w-full px-2.5 py-2 rounded-md border border-gray-200 dark:border-white/8 bg-transparent text-sm text-gray-900 dark:text-gray-50" />
             </label>
             <label className="text-xs text-gray-500 dark:text-gray-400">
               Label
-              <input value={form.label} onChange={(e) => setForm({ ...form, label: e.target.value })} placeholder="Company Docs" className="mt-1 w-full px-2.5 py-2 rounded-md border border-gray-200 dark:border-white/[0.08] bg-transparent text-sm text-gray-900 dark:text-gray-50" />
+              <input value={form.label} onChange={(e) => setForm({ ...form, label: e.target.value })} placeholder="Company Docs" className="mt-1 w-full px-2.5 py-2 rounded-md border border-gray-200 dark:border-white/8 bg-transparent text-sm text-gray-900 dark:text-gray-50" />
             </label>
           </div>
           <label className="block text-xs text-gray-500 dark:text-gray-400">
             Transport
-            <select value={form.transport} onChange={(e) => setForm({ ...form, transport: e.target.value as Transport })} className="mt-1 w-full px-2.5 py-2 rounded-md border border-gray-200 dark:border-white/[0.08] bg-transparent text-sm text-gray-900 dark:text-gray-50">
+            <select value={form.transport} onChange={(e) => setForm({ ...form, transport: e.target.value as Transport })} className="mt-1 w-full px-2.5 py-2 rounded-md border border-gray-200 dark:border-white/8 bg-transparent text-sm text-gray-900 dark:text-gray-50">
               <option value="http">Remote (HTTP)</option>
               <option value="sse">Remote (SSE)</option>
               <option value="stdio">Command (stdio)</option>
@@ -183,27 +183,27 @@ export default function SharedMcpSettings() {
             <div className="grid grid-cols-2 gap-3">
               <label className="text-xs text-gray-500 dark:text-gray-400">
                 Command
-                <input value={form.command} onChange={(e) => setForm({ ...form, command: e.target.value })} placeholder="npx" className="mt-1 w-full px-2.5 py-2 rounded-md border border-gray-200 dark:border-white/[0.08] bg-transparent text-sm text-gray-900 dark:text-gray-50" />
+                <input value={form.command} onChange={(e) => setForm({ ...form, command: e.target.value })} placeholder="npx" className="mt-1 w-full px-2.5 py-2 rounded-md border border-gray-200 dark:border-white/8 bg-transparent text-sm text-gray-900 dark:text-gray-50" />
               </label>
               <label className="text-xs text-gray-500 dark:text-gray-400">
                 Args (space-separated)
-                <input value={form.argsText} onChange={(e) => setForm({ ...form, argsText: e.target.value })} placeholder="-y some-mcp-package" className="mt-1 w-full px-2.5 py-2 rounded-md border border-gray-200 dark:border-white/[0.08] bg-transparent text-sm text-gray-900 dark:text-gray-50" />
+                <input value={form.argsText} onChange={(e) => setForm({ ...form, argsText: e.target.value })} placeholder="-y some-mcp-package" className="mt-1 w-full px-2.5 py-2 rounded-md border border-gray-200 dark:border-white/8 bg-transparent text-sm text-gray-900 dark:text-gray-50" />
               </label>
             </div>
           ) : (
             <>
               <label className="block text-xs text-gray-500 dark:text-gray-400">
                 URL (https)
-                <input value={form.url} onChange={(e) => setForm({ ...form, url: e.target.value })} placeholder="https://mcp.example.com/mcp" className="mt-1 w-full px-2.5 py-2 rounded-md border border-gray-200 dark:border-white/[0.08] bg-transparent text-sm text-gray-900 dark:text-gray-50" />
+                <input value={form.url} onChange={(e) => setForm({ ...form, url: e.target.value })} placeholder="https://mcp.example.com/mcp" className="mt-1 w-full px-2.5 py-2 rounded-md border border-gray-200 dark:border-white/8 bg-transparent text-sm text-gray-900 dark:text-gray-50" />
               </label>
               <div className="grid grid-cols-2 gap-3">
                 <label className="text-xs text-gray-500 dark:text-gray-400">
                   Auth header (optional)
-                  <input value={form.headerKey} onChange={(e) => setForm({ ...form, headerKey: e.target.value })} className="mt-1 w-full px-2.5 py-2 rounded-md border border-gray-200 dark:border-white/[0.08] bg-transparent text-sm text-gray-900 dark:text-gray-50" />
+                  <input value={form.headerKey} onChange={(e) => setForm({ ...form, headerKey: e.target.value })} className="mt-1 w-full px-2.5 py-2 rounded-md border border-gray-200 dark:border-white/8 bg-transparent text-sm text-gray-900 dark:text-gray-50" />
                 </label>
                 <label className="text-xs text-gray-500 dark:text-gray-400">
                   Value (stored encrypted)
-                  <input value={form.headerValue} onChange={(e) => setForm({ ...form, headerValue: e.target.value })} placeholder="Bearer …" className="mt-1 w-full px-2.5 py-2 rounded-md border border-gray-200 dark:border-white/[0.08] bg-transparent text-sm text-gray-900 dark:text-gray-50" />
+                  <input value={form.headerValue} onChange={(e) => setForm({ ...form, headerValue: e.target.value })} placeholder="Bearer …" className="mt-1 w-full px-2.5 py-2 rounded-md border border-gray-200 dark:border-white/8 bg-transparent text-sm text-gray-900 dark:text-gray-50" />
                 </label>
               </div>
             </>
@@ -212,7 +212,7 @@ export default function SharedMcpSettings() {
             <button disabled={saving} onClick={submit} className="text-sm px-3 py-2 rounded-lg bg-[#DE7356] text-white hover:bg-[#c9634a] disabled:opacity-50 transition-colors">
               {saving ? 'Adding…' : 'Add server'}
             </button>
-            <button onClick={() => { setAdding(false); setForm({ ...EMPTY_FORM }); }} className="text-sm px-3 py-2 rounded-lg border border-gray-200 dark:border-white/[0.08] text-gray-600 dark:text-gray-300">
+            <button onClick={() => { setAdding(false); setForm({ ...EMPTY_FORM }); }} className="text-sm px-3 py-2 rounded-lg border border-gray-200 dark:border-white/8 text-gray-600 dark:text-gray-300">
               Cancel
             </button>
           </div>

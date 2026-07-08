@@ -2206,14 +2206,14 @@ export default function ChatLog({ projectId, onSessionStatusChange, onProjectSta
             <ReactMarkdown 
               key={createKey('text-before')}
               components={{
-                p: ({children}) => <p className="mb-2 last:mb-0 break-words">{children}</p>,
+                p: ({children}) => <p className="mb-2 last:mb-0 wrap-break-word">{children}</p>,
                 strong: ({children}) => <strong className="font-medium">{children}</strong>,
                 em: ({children}) => <em className="italic">{children}</em>,
-                code: ({children}) => <code className="bg-gray-100 dark:bg-white/[0.06] px-2 py-1 rounded text-xs font-mono">{children}</code>,
-                pre: ({children}) => <pre className="bg-gray-100 dark:bg-white/[0.06] p-3 rounded-lg my-2 overflow-x-auto text-xs break-words">{children}</pre>,
+                code: ({children}) => <code className="bg-gray-100 dark:bg-white/6 px-2 py-1 rounded-sm text-xs font-mono">{children}</code>,
+                pre: ({children}) => <pre className="bg-gray-100 dark:bg-white/6 p-3 rounded-lg my-2 overflow-x-auto text-xs wrap-break-word">{children}</pre>,
                 ul: ({children}) => <ul className="list-disc list-inside mb-2 space-y-1">{children}</ul>,
                 ol: ({children}) => <ol className="list-decimal list-inside mb-2 space-y-1">{children}</ol>,
-                li: ({children}) => <li className="mb-1 break-words">{children}</li>
+                li: ({children}) => <li className="mb-1 wrap-break-word">{children}</li>
               }}
             >
               {beforeText}
@@ -2254,21 +2254,21 @@ export default function ChatLog({ projectId, onSessionStatusChange, onProjectSta
                   return false;
                 });
                 if (hasPlanning) {
-                  return <p className="mb-2 last:mb-0 break-words">
-                    <code className="bg-gray-100 dark:bg-white/[0.06] px-2 py-1 rounded text-xs font-mono">
+                  return <p className="mb-2 last:mb-0 wrap-break-word">
+                    <code className="bg-gray-100 dark:bg-white/6 px-2 py-1 rounded-sm text-xs font-mono">
                       Planning for next moves...
                     </code>
                   </p>;
                 }
-                return <p className="mb-2 last:mb-0 break-words">{children}</p>;
+                return <p className="mb-2 last:mb-0 wrap-break-word">{children}</p>;
               },
               strong: ({children}) => <strong className="font-medium">{children}</strong>,
               em: ({children}) => <em className="italic">{children}</em>,
-              code: ({children}) => <code className="bg-gray-100 dark:bg-white/[0.06] px-2 py-1 rounded text-xs font-mono">{children}</code>,
-              pre: ({children}) => <pre className="bg-gray-100 dark:bg-white/[0.06] p-3 rounded-lg my-2 overflow-x-auto text-xs break-words">{children}</pre>,
+              code: ({children}) => <code className="bg-gray-100 dark:bg-white/6 px-2 py-1 rounded-sm text-xs font-mono">{children}</code>,
+              pre: ({children}) => <pre className="bg-gray-100 dark:bg-white/6 p-3 rounded-lg my-2 overflow-x-auto text-xs wrap-break-word">{children}</pre>,
               ul: ({children}) => <ul className="list-disc list-inside mb-2 space-y-1">{children}</ul>,
               ol: ({children}) => <ol className="list-decimal list-inside mb-2 space-y-1">{children}</ol>,
-              li: ({children}) => <li className="mb-1 break-words">{children}</li>
+              li: ({children}) => <li className="mb-1 wrap-break-word">{children}</li>
             }}
           >
             {remainingText}
@@ -2294,21 +2294,21 @@ export default function ChatLog({ projectId, onSessionStatusChange, onProjectSta
                 return false;
               });
               if (hasPlanning) {
-                return <p className="mb-2 last:mb-0 break-words">
-                  <code className="bg-gray-100 dark:bg-white/[0.06] px-2 py-1 rounded text-xs font-mono">
+                return <p className="mb-2 last:mb-0 wrap-break-word">
+                  <code className="bg-gray-100 dark:bg-white/6 px-2 py-1 rounded-sm text-xs font-mono">
                     Planning for next moves...
                   </code>
                 </p>;
               }
-              return <p className="mb-2 last:mb-0 break-words">{children}</p>;
+              return <p className="mb-2 last:mb-0 wrap-break-word">{children}</p>;
             },
             strong: ({children}) => <strong className="font-medium">{children}</strong>,
             em: ({children}) => <em className="italic">{children}</em>,
-            code: ({children}) => <code className="bg-gray-100 dark:bg-white/[0.06] px-2 py-1 rounded text-xs font-mono">{children}</code>,
-            pre: ({children}) => <pre className="bg-gray-100 dark:bg-white/[0.06] p-3 rounded-lg my-2 overflow-x-auto text-xs break-words">{children}</pre>,
+            code: ({children}) => <code className="bg-gray-100 dark:bg-white/6 px-2 py-1 rounded-sm text-xs font-mono">{children}</code>,
+            pre: ({children}) => <pre className="bg-gray-100 dark:bg-white/6 p-3 rounded-lg my-2 overflow-x-auto text-xs wrap-break-word">{children}</pre>,
             ul: ({children}) => <ul className="list-disc list-inside mb-2 space-y-1">{children}</ul>,
             ol: ({children}) => <ol className="list-decimal list-inside mb-2 space-y-1">{children}</ol>,
-            li: ({children}) => <li className="mb-1 break-words">{children}</li>
+            li: ({children}) => <li className="mb-1 wrap-break-word">{children}</li>
           }}
         >
           {content}
@@ -2432,14 +2432,14 @@ export default function ChatLog({ projectId, onSessionStatusChange, onProjectSta
           <div>
             <ReactMarkdown 
               components={{
-                p: ({children}) => <p className="mb-2 last:mb-0 break-words">{children}</p>,
+                p: ({children}) => <p className="mb-2 last:mb-0 wrap-break-word">{children}</p>,
                 strong: ({children}) => <strong className="font-medium">{children}</strong>,
                 em: ({children}) => <em className="italic">{children}</em>,
-                code: ({children}) => <code className="bg-gray-100 dark:bg-white/[0.06] px-2 py-1 rounded text-xs font-mono break-all">{children}</code>,
-                pre: ({children}) => <pre className="bg-gray-100 dark:bg-white/[0.06] p-3 rounded-lg my-2 overflow-x-auto text-xs break-words">{children}</pre>,
+                code: ({children}) => <code className="bg-gray-100 dark:bg-white/6 px-2 py-1 rounded-sm text-xs font-mono break-all">{children}</code>,
+                pre: ({children}) => <pre className="bg-gray-100 dark:bg-white/6 p-3 rounded-lg my-2 overflow-x-auto text-xs wrap-break-word">{children}</pre>,
                 ul: ({children}) => <ul className="list-disc list-inside mb-2 space-y-1">{children}</ul>,
                 ol: ({children}) => <ol className="list-decimal list-inside mb-2 space-y-1">{children}</ol>,
-                li: ({children}) => <li className="mb-1 break-words">{children}</li>
+                li: ({children}) => <li className="mb-1 wrap-break-word">{children}</li>
               }}
             >
               {shortenPath(log.data.content)}
@@ -2542,7 +2542,7 @@ export default function ChatLog({ projectId, onSessionStatusChange, onProjectSta
             {type === 'tool_result' && data.diff_info && (
               <div>
                 <strong className="text-gray-700 dark:text-gray-200 ">Changes:</strong>
-                <pre className="bg-gray-100 dark:bg-white/[0.06] p-3 rounded-lg overflow-x-auto text-xs font-mono">
+                <pre className="bg-gray-100 dark:bg-white/6 p-3 rounded-lg overflow-x-auto text-xs font-mono">
                   {data.diff_info}
                 </pre>
               </div>
@@ -2550,7 +2550,7 @@ export default function ChatLog({ projectId, onSessionStatusChange, onProjectSta
 
             <div>
               <strong className="text-gray-700 dark:text-gray-200 ">Detailed Data:</strong>
-              <pre className="bg-gray-100 dark:bg-white/[0.06] p-3 rounded-lg overflow-x-auto text-xs font-mono">
+              <pre className="bg-gray-100 dark:bg-white/6 p-3 rounded-lg overflow-x-auto text-xs font-mono">
                 {JSON.stringify(data, null, 2)}
               </pre>
             </div>
@@ -2613,7 +2613,7 @@ export default function ChatLog({ projectId, onSessionStatusChange, onProjectSta
         <div className="mx-8 mt-3 p-4 bg-red-50 dark:bg-red-900/10 border border-red-200 dark:border-red-800 rounded-lg">
           <div className="flex items-start justify-between">
             <div className="flex items-start">
-              <div className="flex-shrink-0">
+              <div className="shrink-0">
                 <svg className="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
                   <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
                 </svg>
@@ -2633,7 +2633,7 @@ export default function ChatLog({ projectId, onSessionStatusChange, onProjectSta
             <div className="ml-auto pl-3">
               <button
                 onClick={clearError}
-                className="inline-flex text-red-400 hover:text-red-600 focus:outline-none focus:text-red-600 transition-colors"
+                className="inline-flex text-red-400 hover:text-red-600 focus:outline-hidden focus:text-red-600 transition-colors"
               >
                 <svg className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
                   <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
@@ -2669,7 +2669,7 @@ export default function ChatLog({ projectId, onSessionStatusChange, onProjectSta
           <div className="mb-4 flex justify-center">
             <button
               onClick={loadOlderMessages}
-              className="px-4 py-2 text-sm text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-white/[0.06] hover:bg-gray-200 dark:hover:bg-white/[0.06] rounded-md transition-colors"
+              className="px-4 py-2 text-sm text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-white/6 hover:bg-gray-200 dark:hover:bg-white/6 rounded-md transition-colors"
               disabled={isLoading}
             >
               {isLoading ? 'Loading...' : `Load older messages (${Math.max(0, totalMessageCount - loadedRowCount)} remaining)`}
@@ -2725,8 +2725,8 @@ export default function ChatLog({ projectId, onSessionStatusChange, onProjectSta
                 {message.role === 'user' ? (
                   // User message - boxed on the right
                   <div className="flex justify-end">
-                    <div className="max-w-[80%] bg-gray-100 dark:bg-white/[0.06] rounded-lg px-4 py-3">
-                      <div className="text-sm text-gray-900 dark:text-gray-50 break-words">
+                    <div className="max-w-[80%] bg-gray-100 dark:bg-white/6 rounded-lg px-4 py-3">
+                      <div className="text-sm text-gray-900 dark:text-gray-50 wrap-break-word">
                         {(() => {
                           const cleanedMessage = cleanUserMessage(messageText);
                           
@@ -2805,7 +2805,7 @@ export default function ChatLog({ projectId, onSessionStatusChange, onProjectSta
 
                                         return (
                                           <div key={idx} className="relative group">
-                                            <div className="w-40 h-40 bg-gray-200 dark:bg-white/[0.06] rounded-lg overflow-hidden border border-gray-300 dark:border-white/[0.08] ">
+                                            <div className="w-40 h-40 bg-gray-200 dark:bg-white/6 rounded-lg overflow-hidden border border-gray-300 dark:border-white/8 ">
                                               {allCandidatesFailed ? (
                                                 // Show an icon when loading fails
                                                 <div className="w-full h-full flex items-center justify-center">
@@ -2825,12 +2825,12 @@ export default function ChatLog({ projectId, onSessionStatusChange, onProjectSta
                                               )}
                                             </div>
                                             <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-30 rounded-lg transition-opacity flex items-center justify-center">
-                                              <span className="text-white text-sm font-medium opacity-0 group-hover:opacity-100 transition-opacity bg-black bg-opacity-60 px-2 py-1 rounded">
+                                              <span className="text-white text-sm font-medium opacity-0 group-hover:opacity-100 transition-opacity bg-black bg-opacity-60 px-2 py-1 rounded-sm">
                                                 #{idx + 1}
                                               </span>
                                             </div>
                                             {/* Tooltip with filename */}
-                                            <div className="absolute bottom-full mb-1 left-1/2 transform -translate-x-1/2 bg-gray-900 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-10">
+                                            <div className="absolute bottom-full mb-1 left-1/2 transform -translate-x-1/2 bg-gray-900 text-white text-xs px-2 py-1 rounded-sm opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-10">
                                               {toRelativePath(attachment.name)}
                                             </div>
                                           </div>
@@ -2846,18 +2846,18 @@ export default function ChatLog({ projectId, onSessionStatusChange, onProjectSta
                                         const filename = path.split('/').pop() || 'image';
                                         return (
                                           <div key={idx} className="relative group">
-                                            <div className="w-40 h-40 bg-gray-200 dark:bg-white/[0.06] rounded-lg overflow-hidden border border-gray-300 dark:border-white/[0.08] flex items-center justify-center">
+                                            <div className="w-40 h-40 bg-gray-200 dark:bg-white/6 rounded-lg overflow-hidden border border-gray-300 dark:border-white/8 flex items-center justify-center">
                                               <svg className="w-16 h-16 text-gray-400 dark:text-gray-500 " fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
                                               </svg>
                                             </div>
                                             <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-30 rounded-lg transition-opacity flex items-center justify-center">
-                                              <span className="text-white text-sm font-medium opacity-0 group-hover:opacity-100 transition-opacity bg-black bg-opacity-60 px-2 py-1 rounded">
+                                              <span className="text-white text-sm font-medium opacity-0 group-hover:opacity-100 transition-opacity bg-black bg-opacity-60 px-2 py-1 rounded-sm">
                                                 #{idx + 1}
                                               </span>
                                             </div>
                                             {/* Tooltip with filename */}
-                                            <div className="absolute bottom-full mb-1 left-1/2 transform -translate-x-1/2 bg-gray-900 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-10">
+                                            <div className="absolute bottom-full mb-1 left-1/2 transform -translate-x-1/2 bg-gray-900 text-white text-xs px-2 py-1 rounded-sm opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-10">
                                               {filename}
                                             </div>
                                           </div>

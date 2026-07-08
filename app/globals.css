@@ -1,10 +1,67 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;800;900&display=swap');
-@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;800&display=swap');
-@import '../styles/scrollbar.css';
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;800;900&display=swap')
+layer(base);
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;800&display=swap')
+layer(base);
+@import '../styles/scrollbar.css' layer(base);
 
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import 'tailwindcss';
+
+@custom-variant dark (&:is(.dark *));
+
+@theme {
+  --color-brand-50: #fdf3f0;
+  --color-brand-100: #fbe6df;
+  --color-brand-200: #f5c9bb;
+  --color-brand-300: #eda88f;
+  --color-brand-400: #e28a6b;
+  --color-brand-500: #de7356;
+  --color-brand-600: #c65f43;
+  --color-brand-700: #a54a32;
+  --color-brand-800: #833c2a;
+  --color-brand-900: #6b3324;
+
+  --color-bolt-bg-primary: #0c0a14;
+  --color-bolt-bg-secondary: #15111e;
+  --color-bolt-bg-tertiary: #1e1a2a;
+  --color-bolt-border-color: rgba(139, 92, 246, 0.2);
+  --color-bolt-text-primary: #e5e2ff;
+  --color-bolt-text-secondary: #a8a4ce;
+  --color-bolt-text-tertiary: #6b6685;
+}
+
+/*
+  The default border color has changed to `currentcolor` in Tailwind CSS v4,
+  so we've added these compatibility styles to make sure everything still
+  looks the same as it did with Tailwind CSS v3.
+
+  If we ever want to remove these styles, we need to add an explicit border
+  color utility to any element that depends on these defaults.
+*/
+@layer base {
+  *,
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
+    border-color: var(--color-gray-200, currentcolor);
+  }
+}
+
+@utility modal-content {
+  @apply bg-white rounded-2xl shadow-2xl border border-gray-100;
+  background:
+    radial-gradient(
+      circle at 100% 0%,
+      rgba(120, 119, 198, 0.05) 0%,
+      transparent 50%
+    ),
+    radial-gradient(
+      circle at 0% 100%,
+      rgba(255, 119, 198, 0.05) 0%,
+      transparent 50%
+    ),
+    white;
+}
 
 @layer base {
   html, body {
@@ -25,16 +82,6 @@
   html.theme-preload * {
     transition: none !important;
     animation: none !important;
-  }
-}
-
-@layer components {
-  .modal-content {
-    @apply bg-white rounded-2xl shadow-2xl border border-gray-100;
-    background: 
-      radial-gradient(circle at 100% 0%, rgba(120, 119, 198, 0.05) 0%, transparent 50%),
-      radial-gradient(circle at 0% 100%, rgba(255, 119, 198, 0.05) 0%, transparent 50%),
-      white;
   }
 }
 

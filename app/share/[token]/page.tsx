@@ -168,12 +168,12 @@ export default function SharePage({ params }: { params: Promise<{ token: string 
           <input
             autoFocus value={guestName} onChange={(e) => setGuestName(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter' && guestName.trim()) { try { localStorage.setItem('claudable-guest-name', guestName.trim()); } catch {} setNameConfirmed(true); } }}
-            placeholder="Your name" className="w-full border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 text-sm mb-3 focus:outline-none focus:ring-2 focus:ring-[#DE7356]/30"
+            placeholder="Your name" className="w-full border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 text-sm mb-3 focus:outline-hidden focus:ring-2 focus:ring-[#DE7356]/30"
           />
           <button
             onClick={() => { if (guestName.trim()) { try { localStorage.setItem('claudable-guest-name', guestName.trim()); } catch {} setNameConfirmed(true); } }}
             disabled={!guestName.trim()}
-            className="w-full h-9 rounded-lg bg-[#DE7356] text-white text-sm font-medium hover:bg-[#c65f43] disabled:opacity-40"
+            className="w-full h-9 rounded-lg bg-[#DE7356] text-white text-sm font-medium hover:bg-brand-600 disabled:opacity-40"
           >Start reviewing</button>
         </div>
       </div>

@@ -354,7 +354,7 @@ export default function GlobalSettings({ isOpen, onClose, initialTab = 'general'
           transition={{ duration: 0.2 }}
         >
           {/* Header */}
-          <div className="p-5 border-b border-gray-200 dark:border-white/[0.08]">
+          <div className="p-5 border-b border-gray-200 dark:border-white/8">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <span className="text-gray-600 dark:text-gray-300 ">
@@ -364,7 +364,7 @@ export default function GlobalSettings({ isOpen, onClose, initialTab = 'general'
               </div>
               <button
                 onClick={onClose}
-                className="text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 transition-colors p-1 hover:bg-gray-100 dark:hover:bg-white/[0.06] rounded-lg"
+                className="text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 transition-colors p-1 hover:bg-gray-100 dark:hover:bg-white/6 rounded-lg"
               >
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                   <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
@@ -374,7 +374,7 @@ export default function GlobalSettings({ isOpen, onClose, initialTab = 'general'
           </div>
 
           {/* Tab Navigation */}
-          <div className="border-b border-gray-200 dark:border-white/[0.08]">
+          <div className="border-b border-gray-200 dark:border-white/8">
             <nav className="flex px-5">
               {([
                 { id: 'general' as const, label: 'General' },
@@ -392,7 +392,7 @@ export default function GlobalSettings({ isOpen, onClose, initialTab = 'general'
                   className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-all ${
                     activeTab === tab.id
                       ? 'border-[#DE7356] text-gray-900 dark:text-gray-50 '
-                      : 'border-transparent text-gray-600 dark:text-gray-300 hover:text-gray-700 dark:hover:text-gray-200 hover:border-gray-300 dark:hover:border-white/[0.18] '
+                      : 'border-transparent text-gray-600 dark:text-gray-300 hover:text-gray-700 dark:hover:text-gray-200 hover:border-gray-300 dark:hover:border-white/18 '
                   }`}
                 >
                   {tab.label}
@@ -407,10 +407,10 @@ export default function GlobalSettings({ isOpen, onClose, initialTab = 'general'
               <div className="space-y-6">
                 <div>
                   <h3 className="text-lg font-medium text-gray-900 dark:text-gray-50 mb-4">Defaults</h3>
-                  <div className="p-4 bg-gray-50 dark:bg-white/[0.03] rounded-xl border border-gray-200 dark:border-white/[0.08]">
+                  <div className="p-4 bg-gray-50 dark:bg-white/3 rounded-xl border border-gray-200 dark:border-white/8">
                     <div className="flex items-center justify-between">
                       <p className="font-medium text-gray-900 dark:text-gray-50">Default assistant</p>
-                      <span className="text-sm font-mono px-2 py-1 rounded bg-white dark:bg-white/[0.06] border border-gray-200 dark:border-white/[0.08] text-gray-700 dark:text-gray-200">
+                      <span className="text-sm font-mono px-2 py-1 rounded-sm bg-white dark:bg-white/6 border border-gray-200 dark:border-white/8 text-gray-700 dark:text-gray-200">
                         {globalSettings?.default_cli || '—'}
                       </span>
                     </div>
@@ -425,12 +425,12 @@ export default function GlobalSettings({ isOpen, onClose, initialTab = 'general'
                   <div className="flex items-center gap-4">
                     <h3 className="text-lg font-medium text-gray-900 dark:text-gray-50">CLI Agents</h3>
                     {/* Inline Default CLI Selector */}
-                    <div className="flex items-center gap-2 ml-6 pl-6 border-l border-gray-200 dark:border-white/[0.08] ">
+                    <div className="flex items-center gap-2 ml-6 pl-6 border-l border-gray-200 dark:border-white/8 ">
                       <span className="text-sm text-gray-600 dark:text-gray-300 ">Default:</span>
                       <select
                         value={globalSettings.default_cli}
                         onChange={(e) => setDefaultCLI(e.target.value)}
-                        className="pl-3 pr-8 py-1.5 text-xs font-medium border border-gray-200 dark:border-white/[0.08] rounded-full bg-transparent hover:bg-gray-50 dark:hover:bg-white/[0.06] hover:border-gray-300 dark:hover:border-white/[0.18] text-gray-700 dark:text-gray-200 focus:outline-none focus:ring-0 transition-colors cursor-pointer"
+                        className="pl-3 pr-8 py-1.5 text-xs font-medium border border-gray-200 dark:border-white/8 rounded-full bg-transparent hover:bg-gray-50 dark:hover:bg-white/6 hover:border-gray-300 dark:hover:border-white/18 text-gray-700 dark:text-gray-200 focus:outline-hidden focus:ring-0 transition-colors cursor-pointer"
                       >
                         {CLI_OPTIONS.filter(cli => cliStatus[cli.id]?.installed && cli.enabled !== false).map(cli => (
                           <option key={cli.id} value={cli.id}>
@@ -462,7 +462,7 @@ export default function GlobalSettings({ isOpen, onClose, initialTab = 'general'
                     <div className="flex items-center gap-2">
                       <button
                         onClick={checkCLIStatus}
-                        className="px-3 py-1.5 text-xs font-medium border border-gray-200 dark:border-white/[0.08] rounded-full bg-transparent hover:bg-gray-50 dark:hover:bg-white/[0.06] hover:border-gray-300 dark:hover:border-white/[0.18] text-gray-700 dark:text-gray-200 transition-colors"
+                        className="px-3 py-1.5 text-xs font-medium border border-gray-200 dark:border-white/8 rounded-full bg-transparent hover:bg-gray-50 dark:hover:bg-white/6 hover:border-gray-300 dark:hover:border-white/18 text-gray-700 dark:text-gray-200 transition-colors"
                       >
                         Refresh Status
                       </button>
@@ -492,10 +492,10 @@ export default function GlobalSettings({ isOpen, onClose, initialTab = 'general'
                         onClick={() => isInstalled && setDefaultCLI(cli.id)}
                         className={`border rounded-xl pl-4 pr-8 py-4 transition-all ${
                           !isInstalled
-                            ? 'border-gray-200 dark:border-white/[0.06] cursor-not-allowed bg-gray-50 dark:bg-white/[0.02] '
+                            ? 'border-gray-200 dark:border-white/6 cursor-not-allowed bg-gray-50 dark:bg-white/2 '
                             : isDefault
                               ? 'cursor-pointer'
-                              : 'border-gray-200 dark:border-white/[0.08] hover:border-gray-300 dark:hover:border-white/[0.18] hover:bg-gray-50 dark:hover:bg-white/[0.04] cursor-pointer'
+                              : 'border-gray-200 dark:border-white/8 hover:border-gray-300 dark:hover:border-white/18 hover:bg-gray-50 dark:hover:bg-white/4 cursor-pointer'
                         }`}
                         style={isDefault && isInstalled ? {
                           borderColor: cli.brandColor,
@@ -503,7 +503,7 @@ export default function GlobalSettings({ isOpen, onClose, initialTab = 'general'
                         } : {}}
                       >
                         <div className="flex items-start gap-3 mb-3">
-                          <div className={`flex-shrink-0 ${!isInstalled ? 'opacity-40' : ''}`}>
+                          <div className={`shrink-0 ${!isInstalled ? 'opacity-40' : ''}`}>
                             {cli.id === 'claude' && (
                               <Image src="/claude.png" alt="Claude" width={32} height={32} className="w-8 h-8" />
                             )}
@@ -541,7 +541,7 @@ export default function GlobalSettings({ isOpen, onClose, initialTab = 'general'
                             <select
                               value={settings.model || ''}
                               onChange={(e) => setDefaultModel(cli.id, e.target.value)}
-                              className="w-full px-3 py-1.5 border border-gray-200 dark:border-white/[0.08] rounded-full bg-transparent hover:bg-gray-50 dark:hover:bg-white/[0.06] text-gray-700 dark:text-gray-200 text-xs font-medium transition-colors focus:outline-none focus:ring-0"
+                              className="w-full px-3 py-1.5 border border-gray-200 dark:border-white/8 rounded-full bg-transparent hover:bg-gray-50 dark:hover:bg-white/6 text-gray-700 dark:text-gray-200 text-xs font-medium transition-colors focus:outline-hidden focus:ring-0"
                             >
                               <option value="">Select model</option>
                               {cli.models.map(model => (
@@ -562,7 +562,7 @@ export default function GlobalSettings({ isOpen, onClose, initialTab = 'general'
                                     value={settings.apiKey ?? ''}
                                     onChange={(e) => setCliApiKey(cli.id, e.target.value)}
                                     placeholder="Enter GLM API key"
-                                    className="flex-1 px-3 py-1.5 rounded-lg border border-gray-200 dark:border-white/[0.08] bg-white dark:bg-white/[0.06] text-sm text-gray-700 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-[#DE7356]/50"
+                                    className="flex-1 px-3 py-1.5 rounded-lg border border-gray-200 dark:border-white/8 bg-white dark:bg-white/6 text-sm text-gray-700 dark:text-gray-200 focus:outline-hidden focus:ring-2 focus:ring-[#DE7356]/50"
                                   />
                                   <button
                                     type="button"
@@ -571,7 +571,7 @@ export default function GlobalSettings({ isOpen, onClose, initialTab = 'general'
                                       event.stopPropagation();
                                       toggleApiKeyVisibility(cli.id);
                                     }}
-                                    className="px-3 py-1.5 text-xs font-medium text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 border border-gray-200 dark:border-white/[0.08] rounded-lg bg-white dark:bg-white/[0.06] transition-colors"
+                                    className="px-3 py-1.5 text-xs font-medium text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 border border-gray-200 dark:border-white/8 rounded-lg bg-white dark:bg-white/6 transition-colors"
                                   >
                                     {apiKeyVisibility[cli.id] ? 'Hide' : 'Show'}
                                   </button>
@@ -589,7 +589,7 @@ export default function GlobalSettings({ isOpen, onClose, initialTab = 'general'
                                     value={settings.apiKey ?? ''}
                                     onChange={(e) => setCliApiKey(cli.id, e.target.value)}
                                     placeholder="Enter Cursor API key"
-                                    className="flex-1 px-3 py-1.5 rounded-lg border border-gray-200 dark:border-white/[0.08] bg-white dark:bg-white/[0.06] text-sm text-gray-700 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-[#DE7356]/50"
+                                    className="flex-1 px-3 py-1.5 rounded-lg border border-gray-200 dark:border-white/8 bg-white dark:bg-white/6 text-sm text-gray-700 dark:text-gray-200 focus:outline-hidden focus:ring-2 focus:ring-[#DE7356]/50"
                                   />
                                   <button
                                     type="button"
@@ -598,7 +598,7 @@ export default function GlobalSettings({ isOpen, onClose, initialTab = 'general'
                                       event.stopPropagation();
                                       toggleApiKeyVisibility(cli.id);
                                     }}
-                                    className="px-3 py-1.5 text-xs font-medium text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 border border-gray-200 dark:border-white/[0.08] rounded-lg bg-white dark:bg-white/[0.06] transition-colors"
+                                    className="px-3 py-1.5 text-xs font-medium text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 border border-gray-200 dark:border-white/8 rounded-lg bg-white dark:bg-white/6 transition-colors"
                                   >
                                     {apiKeyVisibility[cli.id] ? 'Hide' : 'Show'}
                                   </button>
@@ -645,7 +645,7 @@ export default function GlobalSettings({ isOpen, onClose, initialTab = 'general'
               <div className="space-y-6">
                 <div className="text-center">
                   <div className="w-20 h-20 mx-auto mb-4 relative">
-                    <div className="absolute inset-0 bg-gradient-to-br from-[#DE7356]/20 to-[#DE7356]/5 blur-xl rounded-2xl" />
+                    <div className="absolute inset-0 bg-linear-to-br from-[#DE7356]/20 to-[#DE7356]/5 blur-xl rounded-2xl" />
                     <Image
                       src="/Claudable_Icon.png"
                       alt="Claudable Icon"
@@ -686,7 +686,7 @@ export default function GlobalSettings({ isOpen, onClose, initialTab = 'general'
       
       {/* Toast notification */}
       {toast && (
-        <div className={`fixed bottom-4 right-4 z-[80] px-4 py-3 rounded-lg shadow-2xl transition-all transform animate-slide-in-up ${
+        <div className={`fixed bottom-4 right-4 z-80 px-4 py-3 rounded-lg shadow-2xl transition-all transform animate-slide-in-up ${
           toast.type === 'success' ? 'bg-green-500 text-white' : 'bg-red-500 text-white'
         }`}>
           <div className="flex items-center gap-2">
@@ -702,7 +702,7 @@ export default function GlobalSettings({ isOpen, onClose, initialTab = 'general'
 
       {/* Install Guide Modal */}
       {installModalOpen && selectedCLI && (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4" key={`modal-${selectedCLI.id}`}>
+        <div className="fixed inset-0 z-70 flex items-center justify-center p-4" key={`modal-${selectedCLI.id}`}>
           <div 
             className="absolute inset-0 bg-black/60 backdrop-blur-md"
             onClick={() => {
@@ -716,7 +716,7 @@ export default function GlobalSettings({ isOpen, onClose, initialTab = 'general'
             onClick={(e) => e.stopPropagation()}
           >
             {/* Header */}
-            <div className="p-5 border-b border-gray-200 dark:border-white/[0.08]">
+            <div className="p-5 border-b border-gray-200 dark:border-white/8">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   {selectedCLI.id === 'claude' && (
@@ -737,7 +737,7 @@ export default function GlobalSettings({ isOpen, onClose, initialTab = 'general'
                     setInstallModalOpen(false);
                     setSelectedCLI(null);
                   }}
-                  className="text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 transition-colors p-1 hover:bg-gray-100 dark:hover:bg-white/[0.06] rounded-lg"
+                  className="text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 transition-colors p-1 hover:bg-gray-100 dark:hover:bg-white/6 rounded-lg"
                 >
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                     <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
@@ -756,7 +756,7 @@ export default function GlobalSettings({ isOpen, onClose, initialTab = 'general'
                   </span>
                   Install CLI
                 </div>
-                <div className="ml-8 flex items-center gap-2 bg-gray-100 dark:bg-white/[0.06] rounded-lg px-3 py-2">
+                <div className="ml-8 flex items-center gap-2 bg-gray-100 dark:bg-white/6 rounded-lg px-3 py-2">
                   <code className="text-sm text-gray-800 dark:text-gray-100 flex-1">
                     {selectedCLI.installCommand}
                   </code>
@@ -791,7 +791,7 @@ export default function GlobalSettings({ isOpen, onClose, initialTab = 'general'
                   {selectedCLI.id === 'claude' && 'Start Claude and sign in'}
                   {selectedCLI.id === 'cursor' && 'Start Cursor CLI and sign in'}
                 </div>
-                <div className="ml-8 flex items-center gap-2 bg-gray-100 dark:bg-white/[0.06] rounded-lg px-3 py-2">
+                <div className="ml-8 flex items-center gap-2 bg-gray-100 dark:bg-white/6 rounded-lg px-3 py-2">
                   <code className="text-sm text-gray-800 dark:text-gray-100 flex-1">
                     {selectedCLI.id === 'claude' ? 'claude' :
                      selectedCLI.id === 'cursor' ? 'cursor-agent' :
@@ -832,7 +832,7 @@ export default function GlobalSettings({ isOpen, onClose, initialTab = 'general'
                   </span>
                   Test your installation
                 </div>
-                <div className="ml-8 flex items-center gap-2 bg-gray-100 dark:bg-white/[0.06] rounded-lg px-3 py-2">
+                <div className="ml-8 flex items-center gap-2 bg-gray-100 dark:bg-white/6 rounded-lg px-3 py-2">
                   <code className="text-sm text-gray-800 dark:text-gray-100 flex-1">
                     {selectedCLI.id === 'claude' ? 'claude --version' :
                      selectedCLI.id === 'cursor' ? 'cursor-agent --version' :
@@ -869,7 +869,7 @@ export default function GlobalSettings({ isOpen, onClose, initialTab = 'general'
             </div>
 
             {/* Footer */}
-            <div className="p-5 border-t border-gray-200 dark:border-white/[0.08] flex justify-between">
+            <div className="p-5 border-t border-gray-200 dark:border-white/8 flex justify-between">
               <button
                 onClick={() => checkCLIStatus()}
                 className="px-4 py-2 text-sm text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 transition-colors"
