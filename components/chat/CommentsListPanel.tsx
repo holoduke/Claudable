@@ -1,6 +1,7 @@
 "use client";
 import { useMemo, useState } from 'react';
 import type { CommentPin } from './CommentsLayer';
+import { MentionedBody } from './CommentsLayer';
 
 interface Props {
   comments: (CommentPin & { route: string })[];
@@ -106,7 +107,7 @@ export default function CommentsListPanel({ comments, currentRoute, activeId, on
                       <span className="text-[11px] text-gray-400 dark:text-gray-500 shrink-0">{timeAgo(c.createdAt)}</span>
                       {c.resolved && <span className="text-[9px] uppercase tracking-wide text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded-sm shrink-0">resolved</span>}
                     </div>
-                    <p className={`text-sm mt-0.5 line-clamp-2 wrap-break-word ${c.resolved ? 'text-gray-400 dark:text-gray-500 line-through' : 'text-gray-700 dark:text-gray-200'}`}>{c.body}</p>
+                    <p className={`text-sm mt-0.5 line-clamp-2 wrap-break-word ${c.resolved ? 'text-gray-400 dark:text-gray-500 line-through' : 'text-gray-700 dark:text-gray-200'}`}><MentionedBody body={c.body} mentions={c.mentions} /></p>
                   </div>
                 </button>
               ))}

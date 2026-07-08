@@ -5,6 +5,7 @@
  */
 import { prisma } from '@/lib/db/client';
 import type { Comment, User } from '@prisma/client';
+import { parseMentionsJson, sanitizeMentions, type CommentMention } from '@/lib/utils/mentions';
 
 type CommentWithAuthor = Comment & { author: Pick<User, 'id' | 'name' | 'email' | 'image'> | null };
 
@@ -20,9 +21,26 @@ function serializeComment(c: CommentWithAuthor) {
     resolved: c.resolved,
     authorName: name,
     authorImage: c.author?.image ?? null,
+    mentions: parseMentionsJson(c.mentionsJson),
     createdAt: c.createdAt,
     updatedAt: c.updatedAt,
   };
+}
+
+/**
+ * Keep only mentions that point at real, active users in the author's org —
+ * the client payload is untrusted, and cross-org user ids must never be
+ * echoed back to other viewers. Names are re-snapshotted from the DB so a
+ * spoofed payload can't attach an arbitrary label to a real user id.
+ */
+async function resolveMentions(raw: unknown, authorOrgId: string | undefined): Promise<CommentMention[]> {
+  const candidates = sanitizeMentions(raw);
+  if (!candidates.length || !authorOrgId) return [];
+  const users = await prisma.user.findMany({
+    where: { id: { in: candidates.map((m) => m.id) }, orgId: authorOrgId, isActive: true },
+    select: { id: true, name: true, email: true },
+  });
+  return users.map((u) => ({ id: u.id, name: u.name || u.email.split('@')[0] }));
 }
 
 export async function listComments(projectId: string, route?: string) {
@@ -43,7 +61,11 @@ export async function createComment(input: {
   body: string;
   authorId?: string | null;
   authorName?: string | null;
+  /** Untrusted @-mention payload; validated against the author's org. */
+  mentions?: unknown;
+  authorOrgId?: string;
 }) {
+  const mentions = await resolveMentions(input.mentions, input.authorOrgId);
   const created = await prisma.comment.create({
     data: {
       projectId: input.projectId,
@@ -54,6 +76,7 @@ export async function createComment(input: {
       body: input.body,
       authorId: input.authorId ?? null,
       authorName: input.authorName ?? null,
+      mentionsJson: mentions.length ? JSON.stringify(mentions) : null,
     },
     include: { author: { select: { id: true, name: true, email: true, image: true } } },
   });
