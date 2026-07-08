@@ -122,5 +122,6 @@ services:
       # Custom config: the stock 10m idle timeouts severed every quiet preview's
       # docker-run attach stream, which Claudable's exit handler read as a dead
       # dev server and tore the healthy container down ("Preview is restarting"
-      # every 10-20 min). See the file header for details.
-      - ./docker/socket-proxy/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+      # every 10-20 min). Mounted as the TEMPLATE — the entrypoint regenerates
+      # haproxy.cfg from it at start; mounting the final file breaks boot.
+      - ./docker/socket-proxy/haproxy.cfg.template:/usr/local/etc/haproxy/haproxy.cfg.template:ro

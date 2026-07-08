@@ -12,7 +12,11 @@
 # hours; the PreviewManager has its own 1h idle evictor), so client/server/
 # tunnel timeouts are disabled. Request-parsing timeouts stay strict.
 #
-# Mounted over /usr/local/etc/haproxy/haproxy.cfg by docker-compose.yml.
+# Mounted as /usr/local/etc/haproxy/haproxy.cfg.template (NOT haproxy.cfg —
+# the image's entrypoint regenerates haproxy.cfg from this template at every
+# start, substituting ${BIND_CONFIG}; mounting the final file broke boot on a
+# read-only filesystem error). Reload note: haproxy runs in master-worker
+# mode (-W) — config reloads take SIGUSR2, not SIGHUP.
 
 global
     log stdout format raw daemon "${LOG_LEVEL}"
@@ -63,7 +67,7 @@ backend docker-events
     timeout server 0
 
 frontend dockerfrontend
-    bind [::]:2375 v4v6
+    bind ${BIND_CONFIG}
     http-request deny unless METH_GET || { env(POST) -m bool }
     http-request allow if { path,url_dec -m reg -i ^(/v[\d\.]+)?/containers/[a-zA-Z0-9_.-]+/((stop)|(restart)|(kill)) } { env(ALLOW_RESTARTS) -m bool }
     http-request allow if { path,url_dec -m reg -i ^(/v[\d\.]+)?/containers/[a-zA-Z0-9_.-]+/start } { env(ALLOW_START) -m bool }
