@@ -53,19 +53,27 @@ USER node
 # Docker create the parent as root (which blocks the agent writing session-env).
 RUN mkdir -p /home/node/.claude
 
-# Install deps (cached on lockfile). --ignore-scripts skips electron/postinstall.
+# Install deps (cached on lockfile). --ignore-scripts skips the postinstall
+# env setup, so better-sqlite3 (Prisma driver adapter, native module) must be
+# rebuilt explicitly — prebuild-install fetches the prebuilt binding.
 COPY --chown=node:node package*.json ./
-RUN npm ci --ignore-scripts
+RUN npm ci --ignore-scripts && npm rebuild better-sqlite3
+
+# Prisma 7 reads the datasource from prisma.config.ts (not schema.prisma) and
+# resolves it eagerly, so build-time steps need a DATABASE_URL even though
+# generate/build never open the database. The value mirrors the runtime env.
 COPY --chown=node:node prisma ./prisma
-RUN npx prisma generate
+COPY --chown=node:node prisma.config.ts tsconfig.json ./
+RUN DATABASE_URL="file:../data/cc.db" npx prisma generate
 
 # Build the Next.js app.
 COPY --chown=node:node . .
-RUN npm run build
+RUN DATABASE_URL="file:../data/cc.db" npm run build
 
 ENV NODE_ENV=production
 ENV PORT=3700
 ENV WEB_PORT=3700
 
 # Ensure the SQLite schema exists on the mounted volume, then start.
-CMD ["sh", "-c", "npx prisma db push --skip-generate && npx next start -p ${WEB_PORT}"]
+# (--skip-generate was removed in Prisma 7; the client is generated at build.)
+CMD ["sh", "-c", "npx prisma db push && npx next start -p ${WEB_PORT}"]
