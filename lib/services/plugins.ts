@@ -433,11 +433,28 @@ function frontmatterDescription(md: string): string | undefined {
   return line ? line.replace(/^description\s*:\s*/, '').replace(/^["']|["']$/g, '').trim() || undefined : undefined;
 }
 
+/** Enumerate one plugin's commands/ dir into PluginCommand[]. Best-effort: no
+ *  commands/ dir → none. Shared by the project and org listers. */
+async function commandsForPlugin(m: PluginMarketplace, pluginName: string): Promise<PluginCommand[]> {
+  const source = parseCatalog(m.catalogJson).find((c) => c.name === pluginName)?.source;
+  if (!source) return [];
+  const cmdDir = path.join(pluginHostDir(m.name, m.subpath, source), 'commands');
+  let entries: string[] = [];
+  try { entries = (await fs.readdir(cmdDir)).filter((f) => f.endsWith('.md')); } catch { return []; }
+  const out: PluginCommand[] = [];
+  for (const file of entries) {
+    const command = file.replace(/\.md$/, '');
+    let description: string | undefined;
+    try { description = frontmatterDescription(await fs.readFile(path.join(cmdDir, file), 'utf8')); } catch { /* ignore */ }
+    out.push({ plugin: pluginName, command, invocation: `${pluginName}:${command}`, description });
+  }
+  return out;
+}
+
 /**
  * The slash-commands contributed by the plugins effective+enabled in a project,
  * enumerated from each plugin's commands/ dir. Powers the chat autocomplete so
- * a user can type /<plugin>:<command>, exactly like the CLI. Best-effort: a
- * plugin with no commands/ dir simply contributes none.
+ * a user can type /<plugin>:<command>, exactly like the CLI.
  */
 export async function listProjectPluginCommands(projectId: string): Promise<PluginCommand[]> {
   const effective = await listEffectivePlugins(projectId);
@@ -449,17 +466,27 @@ export async function listProjectPluginCommands(projectId: string): Promise<Plug
   for (const p of effective) {
     if (!p.enabled || !p.synced) continue;
     const m = byName.get(p.marketplace);
-    if (!m) continue;
-    const source = parseCatalog(m.catalogJson).find((c) => c.name === p.name)?.source;
-    if (!source) continue;
-    const cmdDir = path.join(pluginHostDir(m.name, m.subpath, source), 'commands');
-    let entries: string[] = [];
-    try { entries = (await fs.readdir(cmdDir)).filter((f) => f.endsWith('.md')); } catch { continue; }
-    for (const file of entries) {
-      const command = file.replace(/\.md$/, '');
-      let description: string | undefined;
-      try { description = frontmatterDescription(await fs.readFile(path.join(cmdDir, file), 'utf8')); } catch { /* ignore */ }
-      out.push({ plugin: p.name, command, invocation: `${p.name}:${command}`, description });
+    if (m) out.push(...(await commandsForPlugin(m, p.name)));
+  }
+  return out;
+}
+
+/**
+ * The slash-commands available ORG-WIDE (no project) — used by the start screen
+ * so a new project can be kicked off with a plugin command. Lists commands from
+ * every enabled, org-enabled, synced plugin in the instance-wide + org
+ * marketplaces. A new project inherits all org-enabled plugins, so these are
+ * exactly the commands its first turn will have.
+ */
+export async function listOrgPluginCommands(orgId: string | null): Promise<PluginCommand[]> {
+  const orgFilter = orgId ? [{ orgId: null }, { orgId }] : [{ orgId: null }];
+  const rows = await prisma.pluginMarketplace.findMany({ where: { enabled: true, OR: orgFilter }, orderBy: { createdAt: 'asc' } });
+  const out: PluginCommand[] = [];
+  for (const m of rows) {
+    const enabled = new Set(enabledNames(m));
+    for (const p of parseCatalog(m.catalogJson)) {
+      if (!enabled.has(p.name)) continue;
+      out.push(...(await commandsForPlugin(m, p.name)));
     }
   }
   return out;
