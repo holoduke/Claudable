@@ -32,6 +32,23 @@ ENV PATH="/usr/local/go/bin:${PATH}" \
     GOTOOLCHAIN=local \
     GOFLAGS=-buildvcs=false
 
+# PHP 8.3 toolchain + Composer — lets the AGENT run Laravel/Filament generators
+# (composer require, php artisan make:*, migrate) for the Filament (Laravel)
+# stack, the same way the Go toolchain above lets it build Go backends. Pinned
+# to 8.3 to match the preview image (webdevops/php:8.3) so composer platform
+# checks agree. Extensions are the Laravel + Filament set. Via the sury repo
+# (bookworm ships 8.2). The agent shares the project dir with the preview, so
+# artisan/migrations it runs are what the running app serves.
+RUN curl -fsSL https://packages.sury.org/php/apt.gpg -o /etc/apt/trusted.gpg.d/sury-php.gpg \
+  && echo "deb https://packages.sury.org/php/ bookworm main" > /etc/apt/sources.list.d/sury-php.list \
+  && apt-get update \
+  && apt-get install -y --no-install-recommends \
+     php8.3-cli php8.3-intl php8.3-sqlite3 php8.3-mbstring php8.3-xml \
+     php8.3-curl php8.3-zip php8.3-gd php8.3-bcmath \
+  && rm -rf /var/lib/apt/lists/* \
+  && curl -fsSL https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer \
+  && php -v | head -1 && composer --version
+
 # Docker CLI ONLY (not the daemon) — for project-environment isolation, Claudable
 # builds/runs hardened sibling containers via the socket-proxy (DOCKER_HOST). Just
 # the static client binary; talks to a remote daemon, runs nothing locally.
