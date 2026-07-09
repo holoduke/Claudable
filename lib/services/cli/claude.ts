@@ -15,6 +15,7 @@ import { isTechnicalNoise, toUserFacingAgentError } from './agent-error';
 import { CLAUDE_SYSTEM_PROMPT } from './prompts/claude-system-prompt';
 import { NEXT_SYSTEM_PROMPT } from './prompts/next-system-prompt';
 import { ANGULAR_SYSTEM_PROMPT } from './prompts/angular-system-prompt';
+import { LARAVEL_SYSTEM_PROMPT } from './prompts/laravel-system-prompt';
 import { STATIC_SYSTEM_PROMPT } from './prompts/static-system-prompt';
 import { DOCUMENT_SYSTEM_PROMPT } from './prompts/document-system-prompt';
 import { stackKind } from '@/lib/config/stacks';
@@ -95,6 +96,8 @@ function selectSystemPrompt(templateType: string | null | undefined): string {
       return NEXT_SYSTEM_PROMPT;
     case 'angular':
       return ANGULAR_SYSTEM_PROMPT;
+    case 'laravel':
+      return LARAVEL_SYSTEM_PROMPT;
     default:
       return CLAUDE_SYSTEM_PROMPT;
   }
