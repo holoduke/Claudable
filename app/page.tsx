@@ -114,6 +114,12 @@ export default function HomePage() {
   const [showDatabaseMenu, setShowDatabaseMenu] = useState(false);
   const [showStackMenu, setShowStackMenu] = useState(false);
   const [showImageGenMenu, setShowImageGenMenu] = useState(false);
+  const [showPluginMenu, setShowPluginMenu] = useState(false);
+  // Plugin commands available org-wide — let a user start a new project by
+  // running one (e.g. filament:new-project). A new project inherits all
+  // org-enabled plugins, so its first turn expands the command.
+  const [pluginCommands, setPluginCommands] = useState<{ plugin: string; command: string; invocation: string; description?: string }[]>([]);
+  const promptRef = useRef<HTMLTextAreaElement>(null);
   const [projectSearch, setProjectSearch] = useState('');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [cliStatus, setCLIStatus] = useState<CLIStatus>({});
@@ -126,6 +132,16 @@ export default function HomePage() {
   // Sync with Global Settings (until user overrides locally)
   const { settings: globalSettings } = useGlobalSettings();
   
+  // Load org-wide plugin commands for the "Plugins" starter menu (best-effort).
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`${API_BASE}/api/plugins/commands`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => { if (!cancelled && j?.success && Array.isArray(j.data)) setPluginCommands(j.data); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
+
   // Check if this is a fresh page load (not navigation)
   useEffect(() => {
     const isPageRefresh = !sessionStorage.getItem('navigationFlag');
@@ -1102,6 +1118,7 @@ export default function HomePage() {
             >
               <div className="relative flex flex-1 items-center">
                 <textarea
+                  ref={promptRef}
                   value={prompt}
                   onChange={(e) => setPrompt(e.target.value)}
                   placeholder="Ask Claudable to create a blog about..."
@@ -1202,6 +1219,47 @@ export default function HomePage() {
                     </>
                   )}
                 </div>
+                {/* Plugin starter — kick off a new project by running a plugin
+                    command (e.g. filament:new-project). Only shown when plugins
+                    are registered. Selecting one prefills the prompt so the user
+                    can add arguments before creating the project. */}
+                {pluginCommands.length > 0 && (
+                  <div className="relative">
+                    <button
+                      type="button"
+                      onClick={() => setShowPluginMenu(v => !v)}
+                      title="Start from a plugin command"
+                      className="justify-center whitespace-nowrap text-sm font-medium transition-colors duration-100 ease-in-out border border-gray-200 dark:border-white/9 bg-transparent shadow-xs hover:bg-gray-50 dark:hover:bg-white/5 hover:border-gray-300 dark:hover:border-white/18 px-3 py-2 flex h-8 items-center gap-1.5 rounded-full text-gray-700 dark:text-gray-200 hover:text-gray-900 dark:hover:text-gray-100"
+                    >
+                      <Sparkles aria-hidden className="h-3.5 w-3.5 text-[#DE7356]/80" />
+                      <span className="hidden md:flex text-sm font-medium">Plugin</span>
+                    </button>
+                    {showPluginMenu && (
+                      <>
+                        <div className="fixed inset-0 z-290" onClick={() => setShowPluginMenu(false)} />
+                        <div className="absolute bottom-full mb-2 left-0 z-300 w-80 max-h-80 overflow-y-auto rounded-xl border border-gray-200 dark:border-white/10 bg-white dark:bg-[#181310] shadow-xl p-1">
+                          {pluginCommands.map((c) => (
+                            <button
+                              key={c.invocation}
+                              type="button"
+                              onClick={() => {
+                                setPrompt(`/${c.invocation} `);
+                                setShowPluginMenu(false);
+                                setTimeout(() => promptRef.current?.focus(), 0);
+                              }}
+                              className="w-full text-left px-3 py-2 rounded-lg transition-colors hover:bg-gray-50 dark:hover:bg-white/5"
+                            >
+                              <div className="flex items-center gap-2">
+                                <span className="text-sm font-medium text-gray-900 dark:text-gray-50">/{c.invocation}</span>
+                              </div>
+                              {c.description && <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 line-clamp-2">{c.description}</p>}
+                            </button>
+                          ))}
+                        </div>
+                      </>
+                    )}
+                  </div>
+                )}
                 {/* Backend Selector (optional) */}
                 <div className="relative">
                   <button
