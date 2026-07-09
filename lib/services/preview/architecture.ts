@@ -34,6 +34,9 @@ export async function writeArchitectureSummary(opts: {
       if (backendContainer) L.push(`- **Backend:** isolated container \`${backendContainer}\`, built from the project's own Dockerfile — non-root, \`cap-drop ALL\`, no-new-privileges, memory/CPU/PID limits${net}.`);
       else if (backendInProcess) L.push('- **Backend:** runs in Claudable\'s process (not isolated).');
       if (proxy?.length) L.push(`- **Proxy:** \`${proxy.join('`, `')}\` are forwarded to the backend.`);
+    } else if (frontendContainer && kind === 'laravel') {
+      L.push(`- **Runtime:** Laravel + Filament (PHP 8.3) in isolated container \`${frontendContainer}\` — served by \`php artisan serve\`, no build step (PHP interpreted per request). First start bootstraps Laravel + the Filament admin panel via Composer; deps and a file **SQLite** DB (\`database/database.sqlite\`) live in the project mount. Non-root, \`cap-drop ALL\`, no-new-privileges, resource limits${net}.`);
+      L.push('- **Admin panel:** available at `/admin` (Filament).');
     } else if (frontendContainer) {
       L.push(`- **Dev server:** isolated container \`${frontendContainer}\` — bind-mounts **only this project's source**, non-root, \`cap-drop ALL\`, no-new-privileges, memory/CPU/PID limits${net}.`);
     } else {

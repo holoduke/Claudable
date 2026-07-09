@@ -20,6 +20,8 @@ export async function scaffoldForStack(
   switch (stackKind(templateType)) {
     case 'static':
       return; // imported existing site — never scaffolded
+    case 'laravel':
+      return; // PHP: the preview container bootstraps Laravel + Filament (needs composer)
     case 'next':
       return scaffoldNextApp(projectPath, projectId);
     case 'angular':
