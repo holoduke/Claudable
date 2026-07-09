@@ -555,9 +555,25 @@ function laravelDevScript(port: number): string {
     'composer show filament/filament >/dev/null 2>&1 || composer require filament/filament --no-interaction',
     '[ -f app/Providers/Filament/AdminPanelProvider.php ] || php artisan filament:install --panels --no-interaction',
     '[ -f .env ] || cp .env.example .env',
-    // File SQLite — no separate DB container needed for the preview.
-    'grep -q "^DB_CONNECTION=sqlite" .env || sed -i "s/^DB_CONNECTION=.*/DB_CONNECTION=sqlite/" .env',
-    'mkdir -p database && touch database/database.sqlite',
+    // Laravel needs these dirs to exist (a fresh clone/checkout may miss them).
+    'mkdir -p storage/framework/cache/data storage/framework/sessions storage/framework/views bootstrap/cache database',
+    // DB: a managed Postgres container (injected DATABASE_URL, reachable at
+    // db:5432 on the project net) when the project has one; else file SQLite.
+    // Parse the URL into DB_* envs (robust — no reliance on a DB_URL config key).
+    'if [ -n "${DATABASE_URL:-}" ]; then',
+    '  export DB_CONNECTION=pgsql',
+    '  export DB_HOST=$(echo "$DATABASE_URL" | sed -E "s#.*@([^:/]+).*#\\1#")',
+    '  export DB_PORT=$(echo "$DATABASE_URL" | sed -E "s#.*@[^:]+:([0-9]+).*#\\1#")',
+    '  export DB_DATABASE=$(echo "$DATABASE_URL" | sed -E "s#.*/([^/?]+).*#\\1#")',
+    '  export DB_USERNAME=$(echo "$DATABASE_URL" | sed -E "s#.*://([^:]+):.*#\\1#")',
+    '  export DB_PASSWORD=$(echo "$DATABASE_URL" | sed -E "s#.*://[^:]+:([^@]+)@.*#\\1#")',
+    '  echo "[laravel] using managed Postgres at ${DB_HOST}:${DB_PORT}/${DB_DATABASE}"',
+    '  for i in $(seq 1 30); do php -r "new PDO(\\"pgsql:host=${DB_HOST};port=${DB_PORT};dbname=${DB_DATABASE}\\", \\"${DB_USERNAME}\\", \\"${DB_PASSWORD}\\");" 2>/dev/null && break || sleep 2; done',
+    'else',
+    '  export DB_CONNECTION=sqlite',
+    '  touch database/database.sqlite',
+    '  echo "[laravel] using file SQLite (no managed database attached)"',
+    'fi',
     'grep -q "^APP_KEY=base64:" .env || php artisan key:generate --force',
     'php artisan migrate --force || true',
     `echo "[laravel] starting php artisan serve on ${port}"`,
@@ -633,8 +649,9 @@ export async function buildFrontendContainerArgs(
         HOME: '/tmp',
         COMPOSER_NO_INTERACTION: '1',
         ...(cacheArgs.length ? { COMPOSER_CACHE_DIR: '/composer-cache' } : {}),
-        // File SQLite is the preview DB (bootstrap creates database/database.sqlite).
-        DB_CONNECTION: 'sqlite',
+        // DB is decided at runtime by laravelDevScript: a managed Postgres
+        // container (injected DATABASE_URL, on db:5432) when the project has one,
+        // else a file SQLite fallback. NOT hardcoded here.
         APP_ENV: 'local',
         APP_DEBUG: 'true',
       }
