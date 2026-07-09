@@ -1298,6 +1298,50 @@ export async function executeClaude(
  * @param model - Claude model to use (default: claude-sonnet-4-6)
  * @param requestId - (Optional) User request tracking ID
  */
+/**
+ * Build the first-turn instruction, tailored to the project's stack. Each stack
+ * has a DIFFERENT starting point (a bare node scaffold vs. the NewStory Filament
+ * golden template), so a single hardcoded "build a Nuxt app" instruction is
+ * wrong for the others — a Filament project would be told to build Nuxt on a
+ * Laravel repo and (correctly) refuse.
+ */
+function buildInitialBuildPrompt(
+  templateType: string | null | undefined,
+  initialPrompt: string,
+): string {
+  switch (stackKind(templateType)) {
+    case 'laravel':
+      return `
+Extend the NewStory Filament CMS (Laravel + Filament) that is ALREADY scaffolded in this project under src/. Implement the following:
+${initialPrompt}
+
+Work against the existing app in src/ (run artisan/composer/npm from there). Do NOT run composer create-project / laravel new or re-scaffold — the golden template is already in place. Build admin UI with Filament resources/pages/widgets and the NewStory FilamentBase conventions; consult the filament plugin skills before building a CMS feature. Add migrations and run \`php artisan migrate --force\` after schema changes. Public pages are ordinary Laravel routes/Blade reading the same models.
+`.trim();
+    case 'next':
+      return `
+Build a Next.js (App Router) application with the following requirements:
+${initialPrompt}
+
+Use React + Next.js (App Router, file-based routing in app/), TypeScript and Tailwind utility classes. Build on the existing scaffold in the project root and implement the requested features.
+`.trim();
+    case 'angular':
+      return `
+Build an Angular application with the following requirements:
+${initialPrompt}
+
+Use Angular standalone components, TypeScript and Tailwind utility classes. Build on the existing scaffold in the project root and implement the requested features.
+`.trim();
+    default: // nuxt (and any other node scaffold)
+      return `
+Build a Nuxt 4 application with the following requirements:
+${initialPrompt}
+
+Use Nuxt 4 (Vue 3 <script setup lang="ts">, file-based routing in pages/) and Nuxt UI (@nuxt/ui) components — consult the "nuxt-ui" skill. The app is wrapped in <UApp>. Use TypeScript and Tailwind utility classes.
+Build on the existing scaffold in the project root and implement the requested features.
+`.trim();
+  }
+}
+
 export async function initializeNextJsProject(
   projectId: string,
   projectPath: string,
@@ -1307,16 +1351,11 @@ export async function initializeNextJsProject(
   requesterItopsEnabled?: boolean,
   requesterUserId?: string
 ): Promise<void> {
-  console.log(`[ClaudeService] Initializing Nuxt project: ${projectId}`);
+  const proj = await getProjectById(projectId).catch(() => null);
+  const kind = stackKind(proj?.templateType);
+  console.log(`[ClaudeService] Initializing ${kind} project: ${projectId}`);
 
-  // Nuxt project creation command
-  const fullPrompt = `
-Build a Nuxt 4 application with the following requirements:
-${initialPrompt}
-
-Use Nuxt 4 (Vue 3 <script setup lang="ts">, file-based routing in pages/) and Nuxt UI (@nuxt/ui) components — consult the "nuxt-ui" skill. The app is wrapped in <UApp>. Use TypeScript and Tailwind utility classes.
-Build on the existing scaffold in the project root and implement the requested features.
-`.trim();
+  const fullPrompt = buildInitialBuildPrompt(proj?.templateType, initialPrompt);
 
   await executeClaude(projectId, projectPath, fullPrompt, model, undefined, requestId, { requesterItopsEnabled, requesterUserId });
 }
