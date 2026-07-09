@@ -117,6 +117,21 @@ async function mergeNoClobber(srcDir: string, destDir: string, top = true): Prom
   }
 }
 
+/** Remove a standalone `build/` (or `/build/`, `build`) exclusion from the
+ * project's root .gitignore so the template's build/ Docker context commits. */
+async function unignoreBuildDir(projectPath: string): Promise<void> {
+  const gitignorePath = path.join(projectPath, '.gitignore');
+  const contents = await fs.readFile(gitignorePath, 'utf8').catch(() => null);
+  if (contents === null) return;
+  const filtered = contents
+    .split('\n')
+    .filter((line) => !/^\/?build\/?$/u.test(line.trim()))
+    .join('\n');
+  if (filtered !== contents) {
+    await fs.writeFile(gitignorePath, filtered, 'utf8');
+  }
+}
+
 /**
  * Clone + re-slug the golden Filament template into an existing project dir.
  * Idempotent: returns early once `src/composer.json` is present, so the
@@ -151,6 +166,12 @@ export async function scaffoldFilamentApp(
     await fs.rm(path.join(tmpDir, '.git'), { recursive: true, force: true });
     await reslugTree(tmpDir, slug);
     await mergeNoClobber(tmpDir, projectPath);
+    // Claudable pre-seeds a node-oriented default .gitignore in the project dir,
+    // and mergeNoClobber keeps it (doesn't overwrite) — but it ignores `build/`,
+    // which for this template is the Docker BUILD CONTEXT (build/service/*), not
+    // build output. If left ignored, `git add -A` at publish skips it and the
+    // deploy build fails. Strip any standalone build/ exclusion so it commits.
+    await unignoreBuildDir(projectPath);
     console.log(`[scaffold-filament] template ready for project ${projectId}`);
   } catch (err) {
     // Surface a clear, actionable error; the caller logs it into the preview.
