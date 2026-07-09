@@ -521,10 +521,13 @@ export interface FrontendContainerContext {
   log: (chunk: Buffer | string) => void;
 }
 
-// PHP image for the Laravel/Filament preview — bundles composer + intl + sqlite
-// + gd/zip and runs cleanly as an arbitrary uid against a bind mount (verified).
+// PHP image for the Filament (Laravel) preview — bundles composer + imagick +
+// intl + pdo_pgsql/sqlite + gd/zip and runs cleanly as an arbitrary uid against
+// a bind mount (verified). Pinned to 8.4: the golden template's composer.lock
+// pins symfony/* v8.1 which requires php >=8.4.1 (composer.json's ^8.3 is a
+// floor, not what the lock resolves to), so 8.3 fails `composer install`.
 // Overridable per-project via preview.json frontend.image.
-const LARAVEL_PHP_IMAGE = 'webdevops/php:8.3';
+const LARAVEL_PHP_IMAGE = 'webdevops/php:8.4';
 
 /**
  * Install + run for a Filament (Laravel) project scaffolded from the NewStory
@@ -581,10 +584,11 @@ function laravelDevScript(port: number): string {
     // Laravel needs these dirs to exist (a fresh clone may miss them).
     'mkdir -p storage/framework/cache/data storage/framework/sessions storage/framework/views bootstrap/cache',
     'grep -q "^APP_KEY=base64:" .env || php artisan key:generate --force',
-    // Front + Filament assets: vite build then publish Filament's vendor assets.
-    // Non-fatal — a missing build should not block the admin panel from booting.
-    '[ -d node_modules ] || npm ci --no-audit --no-fund || npm install --no-audit --no-fund',
-    '[ -d public/build ] || npm run build || true',
+    // Assets: the template ships a prebuilt public/build (vite manifest + theme),
+    // so no npm/Node is needed here — the preview image is PHP-only. Just publish
+    // Filament's own vendor assets (pure PHP copy). If the agent edits the vite
+    // theme it rebuilds public/build itself (its image has Node); the preview
+    // then serves the updated manifest.
     'php artisan filament:assets || true',
     'php artisan storage:link 2>/dev/null || true',
     'php artisan migrate --force || true',

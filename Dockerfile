@@ -32,19 +32,21 @@ ENV PATH="/usr/local/go/bin:${PATH}" \
     GOTOOLCHAIN=local \
     GOFLAGS=-buildvcs=false
 
-# PHP 8.3 toolchain + Composer — lets the AGENT run Laravel/Filament generators
+# PHP 8.4 toolchain + Composer — lets the AGENT run Laravel/Filament generators
 # (composer require, php artisan make:*, migrate) for the Filament (Laravel)
 # stack, the same way the Go toolchain above lets it build Go backends. Pinned
-# to 8.3 to match the preview image (webdevops/php:8.3) so composer platform
-# checks agree. Extensions are the Laravel + Filament set. Via the sury repo
-# (bookworm ships 8.2). The agent shares the project dir with the preview, so
-# artisan/migrations it runs are what the running app serves.
+# to 8.4 to match the preview image (webdevops/php:8.4): the NewStory golden
+# template's composer.lock pins symfony/* v8.1, which requires php >=8.4.1, so
+# 8.3 fails composer install. Extensions are the Laravel + NewStory Filament set
+# (incl. pgsql for managed-Postgres migrations and imagick for the media
+# library). Via the sury repo (bookworm ships 8.2). The agent shares the project
+# dir with the preview, so artisan/migrations it runs are what the app serves.
 RUN curl -fsSL https://packages.sury.org/php/apt.gpg -o /etc/apt/trusted.gpg.d/sury-php.gpg \
   && echo "deb https://packages.sury.org/php/ bookworm main" > /etc/apt/sources.list.d/sury-php.list \
   && apt-get update \
   && apt-get install -y --no-install-recommends \
-     php8.3-cli php8.3-intl php8.3-sqlite3 php8.3-mbstring php8.3-xml \
-     php8.3-curl php8.3-zip php8.3-gd php8.3-bcmath \
+     php8.4-cli php8.4-intl php8.4-sqlite3 php8.4-pgsql php8.4-mbstring php8.4-xml \
+     php8.4-curl php8.4-zip php8.4-gd php8.4-bcmath php8.4-imagick \
   && rm -rf /var/lib/apt/lists/* \
   && curl -fsSL https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer \
   && php -v | head -1 && composer --version
