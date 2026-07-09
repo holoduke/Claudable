@@ -515,7 +515,47 @@ export interface FrontendContainerContext {
   composedBackendUrl: string | null;
   composedInternalUrl: string | null;
   injectedEnv: Record<string, string>;
+  /** Framework family — 'laravel' runs a PHP dev server (bootstraps Laravel +
+   *  Filament); everything else runs the node dev server. */
+  kind: import('@/lib/config/stacks').StackKind;
   log: (chunk: Buffer | string) => void;
+}
+
+// PHP image for the Laravel/Filament preview — bundles composer + intl + sqlite
+// + gd/zip and runs cleanly as an arbitrary uid against a bind mount (verified).
+// Overridable per-project via preview.json frontend.image.
+const LARAVEL_PHP_IMAGE = 'webdevops/php:8.3';
+
+/**
+ * First-boot bootstrap + run for a Laravel/Filament project. Idempotent: only
+ * scaffolds when composer.json is absent, then installs deps, wires a file
+ * SQLite DB, and serves via artisan. Slow only on the very first start
+ * (composer create-project + filament install); later starts reuse vendor/ and
+ * the shared composer cache. The heredoc-free single line keeps it a valid
+ * `sh -c` argument.
+ */
+function laravelDevScript(port: number): string {
+  return [
+    'set -e',
+    'export HOME=${HOME:-/tmp}',
+    // Scaffold Laravel + Filament once. Laravel pinned to ^12 (newest with
+    // stable Filament support); Filament unpinned so composer resolves the
+    // compatible release.
+    'if [ ! -f composer.json ]; then',
+    '  echo "[laravel] bootstrapping Laravel + Filament (first start, this takes a few minutes)…"',
+    '  composer create-project laravel/laravel:^12 . --no-interaction',
+    '  composer require filament/filament --no-interaction',
+    '  php artisan filament:install --panels --no-interaction',
+    'fi',
+    '[ -d vendor ] || composer install --no-interaction',
+    '[ -f .env ] || cp .env.example .env',
+    // File SQLite — no separate DB container needed for the preview.
+    'grep -q "^DB_CONNECTION=sqlite" .env || sed -i "s/^DB_CONNECTION=.*/DB_CONNECTION=sqlite/" .env',
+    'mkdir -p database && touch database/database.sqlite',
+    'grep -q "^APP_KEY=base64:" .env || php artisan key:generate --force',
+    'php artisan migrate --force || true',
+    `exec php artisan serve --host 0.0.0.0 --port ${port}`,
+  ].join('\n');
 }
 
 /**
@@ -526,12 +566,13 @@ export interface FrontendContainerContext {
 export async function buildFrontendContainerArgs(
   ctx: FrontendContainerContext
 ): Promise<{ command: string; args: string[]; envFileCleanup: () => void }> {
-  const { projectId, projectPath, cfg, feName, effectivePort, devArgs, previewPublishHost, sandboxNet, composedBackendUrl, composedInternalUrl, injectedEnv, log } = ctx;
+  const { projectId, projectPath, cfg, feName, effectivePort, devArgs, previewPublishHost, sandboxNet, composedBackendUrl, composedInternalUrl, injectedEnv, kind, log } = ctx;
+  const isLaravel = kind === 'laravel';
 
   const fe = cfg?.frontend ?? {}; // config optional — isolation is agnostic
   await dockerRmSync(feName); // clear any stale container before re-creating
   const hostProject = toHostPath(projectPath);
-  const image = fe.image || 'node:22-bookworm-slim';
+  const image = fe.image || (isLaravel ? LARAVEL_PHP_IMAGE : 'node:22-bookworm-slim');
   // Reuse the SAME per-stack dev command the in-process path builds (devArgs
   // already carries --port + the stack's host/allowed-hosts flags), so this
   // works for nuxt/next/angular without per-project config.
@@ -541,26 +582,31 @@ export async function buildFrontendContainerArgs(
   // the default command we compose ourselves gets exec'd.
   const inner = fe.dev
     ? substVars(fe.dev, { PORT: String(effectivePort) })
+    : isLaravel
+    ? laravelDevScript(effectivePort)
     : `exec npm ${devArgs.join(' ')}`;
   // Clear Next's dev lock first: an OOM-kill / hard stop leaves .next/dev/lock
   // behind in the bind-mounted project, and the next `next dev` refuses to start
   // ("Unable to acquire lock") — every restart would fail until someone deletes
   // it by hand. Harmless for non-Next stacks (path simply doesn't exist).
   // --prefer-offline: reuse the shared npm cache (mounted below) instead of
-  // re-downloading packages on every project's first install.
-  const devScript = `rm -rf .next/dev/lock 2>/dev/null; [ -d node_modules ] || npm install --prefer-offline --no-audit --no-fund; ${inner}`;
+  // re-downloading packages on every project's first install. Laravel supplies
+  // its own bootstrap+serve script (composer, not npm), so use it verbatim.
+  const devScript = isLaravel
+    ? inner
+    : `rm -rf .next/dev/lock 2>/dev/null; [ -d node_modules ] || npm install --prefer-offline --no-audit --no-fund; ${inner}`;
 
-  // Shared npm cache across ALL preview containers: a project's FIRST `npm install`
-  // (the slowest part of a cold start) reuses packages any other project already
-  // pulled. Subsequent starts already skip install (node_modules persists in the
-  // bind-mounted project). Dir lives under the data root so it's node-owned (the
-  // container runs --user node); npm cacache is content-addressed → concurrent
-  // installs are safe. Best-effort: never block a preview start on it.
-  let npmCacheArgs: string[] = [];
+  // Shared package cache across ALL preview containers so a project's first
+  // install reuses what others pulled. npm cacache (node) or composer cache
+  // (laravel); both content-addressed → concurrent installs are safe. Dir lives
+  // under the data root so it's node-owned (containers run as uid 1000).
+  // Best-effort: never block a preview start on it.
+  let cacheArgs: string[] = [];
   try {
-    const cacheDir = path.resolve(path.dirname(process.env.PROJECTS_DIR || './data/projects'), '.npm-cache');
+    const dir = isLaravel ? '.composer-cache' : '.npm-cache';
+    const cacheDir = path.resolve(path.dirname(process.env.PROJECTS_DIR || './data/projects'), dir);
     await fs.mkdir(cacheDir, { recursive: true });
-    npmCacheArgs = ['-v', `${toHostPath(cacheDir)}:/npm-cache`];
+    cacheArgs = ['-v', `${toHostPath(cacheDir)}:${isLaravel ? '/composer-cache' : '/npm-cache'}`];
   } catch { /* cache is an optimization only */ }
   // Build the container's env as an ordered record, then pass it via a single
   // 0600 env-file (writeContainerEnvFile) instead of `-e` on the argv. These
@@ -573,13 +619,25 @@ export async function buildFrontendContainerArgs(
   // URLs, then managed-service connection env (DATABASE_URL, REDIS_URL, … reached
   // over the project net the container joins below), then the project's own
   // Env-tab vars — so a project var of the same name wins.
-  const feEnv: Record<string, string> = {
-    NODE_ENV: 'development',
-    PORT: String(effectivePort),
-    HOST: '0.0.0.0',
-    // Point npm at the shared cache volume mounted below (node-owned bind mount).
-    ...(npmCacheArgs.length ? { npm_config_cache: '/npm-cache' } : {}),
-  };
+  const feEnv: Record<string, string> = isLaravel
+    ? {
+        PORT: String(effectivePort),
+        // artisan/composer need a writable HOME; composer cache is the mount.
+        HOME: '/tmp',
+        COMPOSER_NO_INTERACTION: '1',
+        ...(cacheArgs.length ? { COMPOSER_CACHE_DIR: '/composer-cache' } : {}),
+        // File SQLite is the preview DB (bootstrap creates database/database.sqlite).
+        DB_CONNECTION: 'sqlite',
+        APP_ENV: 'local',
+        APP_DEBUG: 'true',
+      }
+    : {
+        NODE_ENV: 'development',
+        PORT: String(effectivePort),
+        HOST: '0.0.0.0',
+        // Point npm at the shared cache volume mounted below (node-owned bind mount).
+        ...(cacheArgs.length ? { npm_config_cache: '/npm-cache' } : {}),
+      };
   if (composedBackendUrl) {
     // Composed backend URL (model B): PUBLIC url for the BROWSER (client-side).
     feEnv.NUXT_PUBLIC_API_BASE = composedBackendUrl;
@@ -613,11 +671,16 @@ export async function buildFrontendContainerArgs(
     '--memory', fe.memory || '2g',
     '--cpus', String(fe.cpus || '2.0'),
     '--pids-limit', '512',
-    '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges', '--user', 'node',
-    ...npmCacheArgs,
+    '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges',
+    // Node image ships a `node` user (uid 1000); the PHP image has no such
+    // user, so pin the numeric uid/gid (matches the bind-mounted project owner)
+    // and override its entrypoint to a plain shell.
+    ...(isLaravel ? ['--user', '1000:1000', '--entrypoint', 'sh'] : ['--user', 'node']),
+    ...cacheArgs,
     ...(sandboxNet ? ['--network', sandboxNet] : []),
     ...cenvFile.args,
-    image, 'sh', '-c', devScript,
+    // PHP image: entrypoint is already `sh`, so pass just `-c <script>`.
+    ...(isLaravel ? [image, '-c', devScript] : [image, 'sh', '-c', devScript]),
   ];
   // The docker CLI needs DOCKER_HOST (already in spawnEnv via process.env).
   log(Buffer.from(`[PreviewManager] [frontend] running dev server in isolated container ${feName} (mem ${fe.memory || '2g'}, cap-drop ALL, egress-locked)`));
