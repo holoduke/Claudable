@@ -35,7 +35,7 @@ export async function writeArchitectureSummary(opts: {
       else if (backendInProcess) L.push('- **Backend:** runs in Claudable\'s process (not isolated).');
       if (proxy?.length) L.push(`- **Proxy:** \`${proxy.join('`, `')}\` are forwarded to the backend.`);
     } else if (frontendContainer && kind === 'laravel') {
-      L.push(`- **Runtime:** Laravel + Filament (PHP 8.3) in isolated container \`${frontendContainer}\` — served by \`php artisan serve\`, no build step (PHP interpreted per request). First start bootstraps Laravel + the Filament admin panel via Composer; deps and a file **SQLite** DB (\`database/database.sqlite\`) live in the project mount. Non-root, \`cap-drop ALL\`, no-new-privileges, resource limits${net}.`);
+      L.push(`- **Runtime:** NewStory Filament CMS (Laravel + Filament v4, PHP 8.3) in isolated container \`${frontendContainer}\` — the app lives under \`src/\`, served by \`php artisan serve\` (PHP interpreted per request; PHP edits are immediate, asset changes need a vite rebuild). First start composer-installs the template and builds assets; the DB is a managed **Postgres** if attached, else file **SQLite** (\`src/database/database.sqlite\`). Non-root, \`cap-drop ALL\`, no-new-privileges, resource limits${net}.`);
       L.push('- **Admin panel:** available at `/admin` (Filament).');
     } else if (frontendContainer) {
       L.push(`- **Dev server:** isolated container \`${frontendContainer}\` — bind-mounts **only this project's source**, non-root, \`cap-drop ALL\`, no-new-privileges, memory/CPU/PID limits${net}.`);

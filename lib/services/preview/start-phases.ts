@@ -86,7 +86,7 @@ export async function resolveProjectWorkspace(projectId: string): Promise<Projec
       console.log(
         `[PreviewManager] Bootstrapping ${stackKind(proj?.templateType)} app for project ${projectId}`
       );
-      await scaffoldForStack(projectPath, projectId, proj?.templateType);
+      await scaffoldForStack(projectPath, projectId, proj?.templateType, proj?.name);
     }
 
     // Make the preview report its route to the URL bar (cross-origin iframe).
@@ -527,39 +527,42 @@ export interface FrontendContainerContext {
 const LARAVEL_PHP_IMAGE = 'webdevops/php:8.3';
 
 /**
- * First-boot bootstrap + run for a Laravel/Filament project. Idempotent: only
- * scaffolds when composer.json is absent, then installs deps, wires a file
- * SQLite DB, and serves via artisan. Slow only on the very first start
- * (composer create-project + filament install); later starts reuse vendor/ and
- * the shared composer cache. The heredoc-free single line keeps it a valid
- * `sh -c` argument.
+ * Install + run for a Filament (Laravel) project scaffolded from the NewStory
+ * golden template (see scaffold-filament.ts). The template's Laravel app lives
+ * under `src/`, so everything runs from there. Idempotent: reuses vendor/,
+ * node_modules/ and the shared composer cache on later starts. First boot is
+ * slow (full composer install of the NewStory stack + a vite build); the
+ * readiness poll tolerates that as long as the container does not exit.
+ *
+ * Preview-only env overrides are EXPORTED (not written to .env): the preview
+ * never runs `config:cache`, so Laravel resolves config from live env() and
+ * Dotenv (immutable) will not clobber an already-exported var. This keeps the
+ * template's committed .env values intact while forcing preview-safe behaviour
+ * (no external object store / SMTP / dbsync, local env so Filament serves
+ * without the production TLS + panel gates). The heredoc-free lines keep the
+ * whole thing a valid single `sh -c` argument.
  */
 function laravelDevScript(port: number): string {
   return [
     'set -e',
     'export HOME=${HOME:-/tmp}',
-    // Scaffold Laravel once. The project dir is NOT empty (Claudable already put
-    // .claude/ etc. there), and `composer create-project .` refuses a non-empty
-    // target — so build the skeleton in a temp dir and merge it in without
-    // clobbering existing files. Laravel pinned to ^12 (newest with stable
-    // Filament support).
-    'if [ ! -f composer.json ]; then',
-    '  echo "[laravel] bootstrapping Laravel + Filament (first start — a few minutes)…"',
-    '  rm -rf /tmp/lv && composer create-project laravel/laravel:^12 /tmp/lv --no-interaction',
-    '  cp -an /tmp/lv/. . 2>/dev/null || cp -rn /tmp/lv/. .',
-    '  rm -rf /tmp/lv',
-    'fi',
-    '[ -d vendor ] || composer install --no-interaction',
-    // Each step guarded independently so a retry after a mid-bootstrap teardown
-    // converges instead of skipping Filament.
-    'composer show filament/filament >/dev/null 2>&1 || composer require filament/filament --no-interaction',
-    '[ -f app/Providers/Filament/AdminPanelProvider.php ] || php artisan filament:install --panels --no-interaction',
+    // The golden template is cloned at scaffold time (Claudable process, which
+    // holds GIT_TOKEN). If its app is missing, fail loudly rather than silently
+    // bootstrapping a bare Laravel — this stack IS the NewStory template.
+    'if [ ! -f src/composer.json ]; then echo "[filament] ERROR: src/composer.json missing — the Filament template scaffold did not run (check GIT_TOKEN / filament-template repo access)"; exit 1; fi',
+    'cd src',
+    'echo "[filament] installing PHP dependencies (composer) — first start is slow…"',
+    '[ -d vendor ] || composer install --no-interaction --no-progress',
     '[ -f .env ] || cp .env.example .env',
-    // Laravel needs these dirs to exist (a fresh clone/checkout may miss them).
-    'mkdir -p storage/framework/cache/data storage/framework/sessions storage/framework/views bootstrap/cache database',
-    // DB: a managed Postgres container (injected DATABASE_URL, reachable at
-    // db:5432 on the project net) when the project has one; else file SQLite.
-    // Parse the URL into DB_* envs (robust — no reliance on a DB_URL config key).
+    // Preview-safe overrides (exported; see the doc comment above).
+    'export APP_ENV=local',
+    'export FILESYSTEM_DISK=public',
+    'export MEDIA_DISK=public',
+    'export MAIL_MAILER=log',
+    'export DBSYNC_ENABLED=false',
+    // DB: a managed Postgres container (injected DATABASE_URL, reachable on the
+    // project net) when the project has one; else file SQLite. Parse the URL
+    // into DB_* envs (robust — no reliance on a DB_URL config key).
     'if [ -n "${DATABASE_URL:-}" ]; then',
     '  export DB_CONNECTION=pgsql',
     '  export DB_HOST=$(echo "$DATABASE_URL" | sed -E "s#.*@([^:/]+).*#\\1#")',
@@ -567,16 +570,25 @@ function laravelDevScript(port: number): string {
     '  export DB_DATABASE=$(echo "$DATABASE_URL" | sed -E "s#.*/([^/?]+).*#\\1#")',
     '  export DB_USERNAME=$(echo "$DATABASE_URL" | sed -E "s#.*://([^:]+):.*#\\1#")',
     '  export DB_PASSWORD=$(echo "$DATABASE_URL" | sed -E "s#.*://[^:]+:([^@]+)@.*#\\1#")',
-    '  echo "[laravel] using managed Postgres at ${DB_HOST}:${DB_PORT}/${DB_DATABASE}"',
+    '  echo "[filament] using managed Postgres at ${DB_HOST}:${DB_PORT}/${DB_DATABASE}"',
     '  for i in $(seq 1 30); do php -r "new PDO(\\"pgsql:host=${DB_HOST};port=${DB_PORT};dbname=${DB_DATABASE}\\", \\"${DB_USERNAME}\\", \\"${DB_PASSWORD}\\");" 2>/dev/null && break || sleep 2; done',
     'else',
     '  export DB_CONNECTION=sqlite',
-    '  touch database/database.sqlite',
-    '  echo "[laravel] using file SQLite (no managed database attached)"',
+    '  mkdir -p database && touch database/database.sqlite',
+    '  export DB_DATABASE="$(pwd)/database/database.sqlite"',
+    '  echo "[filament] using file SQLite (no managed database attached)"',
     'fi',
+    // Laravel needs these dirs to exist (a fresh clone may miss them).
+    'mkdir -p storage/framework/cache/data storage/framework/sessions storage/framework/views bootstrap/cache',
     'grep -q "^APP_KEY=base64:" .env || php artisan key:generate --force',
+    // Front + Filament assets: vite build then publish Filament's vendor assets.
+    // Non-fatal — a missing build should not block the admin panel from booting.
+    '[ -d node_modules ] || npm ci --no-audit --no-fund || npm install --no-audit --no-fund',
+    '[ -d public/build ] || npm run build || true',
+    'php artisan filament:assets || true',
+    'php artisan storage:link 2>/dev/null || true',
     'php artisan migrate --force || true',
-    `echo "[laravel] starting php artisan serve on ${port}"`,
+    `echo "[filament] starting php artisan serve on ${port}"`,
     `exec php artisan serve --host 0.0.0.0 --port ${port}`,
   ].join('\n');
 }

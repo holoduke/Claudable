@@ -7,9 +7,11 @@
  *   nuxt    -> Nuxt 4 (Vue)         — scaffold.ts
  *   next    -> Next.js (React)      — scaffold-next.ts
  *   angular -> Angular (standalone) — scaffold-angular.ts
- *   laravel -> Laravel + Filament (PHP) — no file scaffold; the preview
- *              container bootstraps it (composer + filament:install), so this
- *              kind runs a PHP dev server, not npm. Containerized preview only.
+ *   laravel -> Laravel + Filament (PHP), NewStory golden template — scaffold
+ *              clones the private filament-template repo + re-slugs it
+ *              (scaffold-filament.ts); the preview container composer-installs
+ *              and runs it from src/ (PHP dev server, not npm). Containerized
+ *              preview only.
  */
 export type StackKind = 'nuxt' | 'next' | 'angular' | 'static' | 'laravel';
 
@@ -25,9 +27,10 @@ export const STACKS: StackOption[] = [
   { id: 'nuxt-clean', name: 'Clean Nuxt', kind: 'nuxt', description: 'Minimal Nuxt — a blank canvas the agent fills from your prompt.' },
   { id: 'next', name: 'Next.js', kind: 'next', description: 'React + Next.js (App Router) with Tailwind — a blank canvas.' },
   { id: 'angular', name: 'Angular', kind: 'angular', description: 'Angular (standalone components) with Tailwind — a blank canvas.' },
-  // kind 'laravel': PHP. The preview container bootstraps Laravel + the Filament
-  // admin panel on first start (composer + artisan), backed by file SQLite.
-  { id: 'filament', name: 'Filament (Laravel)', kind: 'laravel', description: 'Laravel + Filament admin panel (PHP). A full-stack starter the agent builds on.' },
+  // kind 'laravel': PHP. Scaffolded from the NewStory golden Filament template
+  // (private repo, cloned + re-slugged); the preview composer-installs and runs
+  // it from src/, backed by a managed Postgres if attached, else file SQLite.
+  { id: 'filament', name: 'Filament (Laravel)', kind: 'laravel', description: 'NewStory Filament CMS (Laravel + Filament admin) — the full golden template, ready to extend.' },
   // kind 'static': served by the plain static file server, no npm/build step.
   { id: 'document', name: 'Document (PDF / HTML)', kind: 'static', description: 'A polished HTML document — proposition, one-pager, report. Preview it live, export as PDF.' },
 ];
