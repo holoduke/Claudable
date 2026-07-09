@@ -203,7 +203,7 @@ class PreviewManager {
     } catch {
       const proj = await getProjectById(projectId).catch(() => null);
       record(`Bootstrapping ${stackKind(proj?.templateType)} app for project ${projectId}`);
-      await scaffoldForStack(projectPath, projectId, proj?.templateType);
+      await scaffoldForStack(projectPath, projectId, proj?.templateType, proj?.name);
     }
 
     const hadNodeModules = await directoryExists(path.join(projectPath, 'node_modules'));
