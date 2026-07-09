@@ -505,9 +505,13 @@ async function pushProjectToGitHubImpl(projectId: string): Promise<boolean> {
     await injectDeployScaffolding(repoPath, { repoName, templateType: project.templateType });
 
     const committed = commitAll(repoPath, 'Update from Claudable');
+    // NOTE: do NOT early-return when there's nothing new to commit. A freshly
+    // connected repo has an initial commit (from connectProjectToGitHub) that
+    // isn't on the remote yet — returning here would leave it unpushed and the
+    // deploy would never fire. `git push` is a no-op when the branch is already
+    // up to date, so always attempt it.
     if (!committed) {
-      console.log('[GitService] No changes to commit before push');
-      return false;
+      console.log('[GitService] No new changes to commit; pushing any unpushed commits');
     }
 
     // If a Postgres was provisioned, sync its DATABASE_URL as a repo Action secret
