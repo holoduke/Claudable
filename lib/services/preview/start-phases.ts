@@ -76,7 +76,7 @@ export async function resolveProjectWorkspace(projectId: string): Promise<Projec
     pendingLogs.push(formatted);
   };
 
-  await ensureProjectRootStructure(projectPath, queueLog);
+  await ensureProjectRootStructure(projectPath, queueLog, stackKind(project.templateType));
 
   if (!isStatic) {
     try {

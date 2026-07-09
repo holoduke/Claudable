@@ -196,7 +196,7 @@ class PreviewManager {
       logs.push(formatted);
     };
 
-    await ensureProjectRootStructure(projectPath, record);
+    await ensureProjectRootStructure(projectPath, record, kind);
 
     try {
       await fs.access(path.join(projectPath, 'package.json'));

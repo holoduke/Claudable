@@ -271,8 +271,17 @@ function isOverwritableRootFile(name: string): boolean {
 
 export async function ensureProjectRootStructure(
   projectPath: string,
-  log: (message: string) => void
+  log: (message: string) => void,
+  kind?: string
 ): Promise<void> {
+  // The Filament (Laravel) golden template keeps its app under src/ on purpose
+  // (build/service/Dockerfile + deployment/ reference ./src). The node-oriented
+  // "flatten a nested project to root" logic below would mis-detect src/ as a
+  // stray nested app and refuse to start (".dockerignore exists alongside src").
+  // Its layout is intentional — never restructure it.
+  if (kind === 'laravel') {
+    return;
+  }
   const entries = await fs.readdir(projectPath, { withFileTypes: true });
   // If the project explicitly defines how to run itself via .claudable/preview.json,
   // its layout is intentional (e.g. a monorepo with frontend + backend subdirs) —
