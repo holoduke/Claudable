@@ -8,6 +8,7 @@ import { ensureGitRepository, ensureGitConfig, initializeMainBranch, addOrUpdate
 import { getGitProviderConfig, getEnvGitToken } from '@/lib/services/git-provider';
 import { injectDeployScaffolding } from '@/lib/services/scaffold-deploy';
 import { getDatabaseUrl } from '@/lib/services/database';
+import { stackKind } from '@/lib/config/stacks';
 import type { GitHubUserInfo, CreateRepoOptions, GitHubRepositoryInfo } from '@/types/shared';
 
 class GitHubError extends Error {
@@ -224,8 +225,18 @@ export async function connectProjectToGitHub(projectId: string, options: CreateR
 
   await resolveGitToken();
 
+  // SECURITY: Filament (laravel) projects carry a live gemfury private-registry
+  // token inside src/composer.json (it authenticates `composer install` for the
+  // NewStory packages). Publishing such a project to a PUBLIC repo would leak
+  // that credential, so force the repo private regardless of the requested
+  // visibility. Non-laravel stacks keep the caller's choice.
+  const effectiveOptions: CreateRepoOptions =
+    stackKind(project.templateType) === 'laravel'
+      ? { ...options, private: true }
+      : options;
+
   const user = await getGithubUser();
-  const repo = await createRepository(options);
+  const repo = await createRepository(effectiveOptions);
 
   const repoPath = await ensureProjectRepository(projectId, project.repoPath);
   ensureGitRepository(repoPath);

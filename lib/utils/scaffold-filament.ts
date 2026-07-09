@@ -26,9 +26,13 @@ import { getGitProviderConfig, getEnvGitToken } from '@/lib/services/git-provide
 const execFileAsync = promisify(execFile);
 
 const PLACEHOLDER = 'storyabletpl';
-// Sentinel that proves the template is already laid down — the template's
-// Laravel app lives under src/, so this is the reliable "scaffolded" marker.
-const SENTINEL = path.join('src', 'composer.json');
+// Idempotency marker, written as the FINAL step of a successful scaffold (see
+// scaffoldFilamentApp). We deliberately do NOT key on src/composer.json: that
+// file lands mid-merge, so a process kill (OOM/redeploy) between it and the rest
+// of src/ would leave the project half-scaffolded yet "done" forever. Gating on
+// a last-written marker makes a killed scaffold self-heal on the next start
+// (mergeNoClobber just fills in the missing files).
+const SCAFFOLD_MARKER = path.join('.claudable', '.filament-scaffolded');
 // Files/dirs we must never overwrite when merging the template into a project
 // dir that Claudable already populated (agent config, preview plumbing, git).
 const PRESERVE = new Set(['.git', '.claude', '.claudable', 'node_modules']);
@@ -143,12 +147,13 @@ export async function scaffoldFilamentApp(
   projectName?: string | null,
 ): Promise<void> {
   await fs.mkdir(projectPath, { recursive: true });
-  // Already scaffolded → nothing to do.
+  // Already fully scaffolded → nothing to do (marker is written last, so its
+  // presence means every template file is in place).
   try {
-    await fs.access(path.join(projectPath, SENTINEL));
+    await fs.access(path.join(projectPath, SCAFFOLD_MARKER));
     return;
   } catch {
-    /* proceed to scaffold */
+    /* proceed to scaffold (fresh, or resume a killed half-scaffold) */
   }
 
   const slug = filamentSlug(projectName, projectId);
@@ -172,6 +177,10 @@ export async function scaffoldFilamentApp(
     // build output. If left ignored, `git add -A` at publish skips it and the
     // deploy build fails. Strip any standalone build/ exclusion so it commits.
     await unignoreBuildDir(projectPath);
+    // Write the idempotency marker LAST — only now is the scaffold complete.
+    const markerPath = path.join(projectPath, SCAFFOLD_MARKER);
+    await fs.mkdir(path.dirname(markerPath), { recursive: true });
+    await fs.writeFile(markerPath, `${slug}\n`, 'utf8');
     console.log(`[scaffold-filament] template ready for project ${projectId}`);
   } catch (err) {
     // Surface a clear, actionable error; the caller logs it into the preview.
