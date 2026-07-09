@@ -176,9 +176,11 @@ class PreviewManager {
       throw new Error('Project not found');
     }
 
-    // Static imports have no npm deps and are never scaffolded.
-    if (stackKind(project.templateType) === 'static') {
-      return { logs: ['[PreviewManager] static project — no dependencies to install'] };
+    // Static imports have no npm deps and are never scaffolded. Laravel is PHP —
+    // composer install happens in the preview container's bootstrap, not here.
+    const kind = stackKind(project.templateType);
+    if (kind === 'static' || kind === 'laravel') {
+      return { logs: [`[PreviewManager] ${kind} project — no npm dependencies to install here`] };
     }
 
     const projectPath = project.repoPath
@@ -438,6 +440,14 @@ class PreviewManager {
     const { project, projectPath, isStatic, pendingLogs, queueLog } =
       await resolveProjectWorkspace(projectId);
 
+    // Laravel/Filament is PHP: it has no npm deps and runs its own bootstrap
+    // (composer + artisan) inside the preview container — treat it like `static`
+    // for the node install/scaffold gates below, and require the containerized
+    // path (there's no PHP toolchain in the app process for an in-process run).
+    const feKind = stackKind(project.templateType);
+    const isLaravel = feKind === 'laravel';
+    const skipNodeInstall = isStatic || isLaravel;
+
     const { previewBounds, preferredPort } = await this.reservePreviewPort(projectId);
 
     // When Claudable runs remotely (e.g. on a server), localhost:<port> is not
@@ -481,9 +491,9 @@ class PreviewManager {
       catch (e) { log(Buffer.from(`[svc] start failed: ${(e as Error).message}`)); }
     }
 
-    if (!isStatic) await this.ensureDependenciesWithLock(projectId, projectPath, env, log);
+    if (!skipNodeInstall) await this.ensureDependenciesWithLock(projectId, projectPath, env, log);
 
-    const packageJson = isStatic ? null : await readPackageJson(projectPath);
+    const packageJson = skipNodeInstall ? null : await readPackageJson(projectPath);
     const hasPredev = Boolean(packageJson?.scripts?.predev);
 
     if (hasPredev) {
@@ -533,11 +543,19 @@ class PreviewManager {
     // A CONTAINER DB lives on the project's internal net, so the frontend CAN be
     // containerized and reach it at db:5432 — only a legacy HOST DB (blocked by
     // the egress lock) forces the frontend to stay in-process.
-    const feKind = stackKind(project.templateType);
+    // Laravel ALWAYS runs containerized (PHP bootstrap needs composer/artisan in
+    // the image); the node stacks containerize only when isolation is on and no
+    // legacy host DB is in play.
     const useFrontendContainer =
       !isStatic && isolationEnabled() && (!projectDbUrl || dbIsContainer) &&
-      (feKind === 'nuxt' || feKind === 'next' || feKind === 'angular') &&
+      (feKind === 'nuxt' || feKind === 'next' || feKind === 'angular' || isLaravel) &&
       cfg?.frontend?.isolate !== false;
+    // A Laravel project can only run via the container path. If isolation is off
+    // (local dev) or opted out, there is no in-process PHP fallback — fail with a
+    // clear message rather than silently trying `npm run dev`.
+    if (isLaravel && !useFrontendContainer) {
+      throw new Error('The Filament (Laravel) stack requires the containerized preview (PREVIEW_ISOLATION). It cannot run in the in-process dev server.');
+    }
 
     const composed = await startComposedBackend({
       projectId,
@@ -584,6 +602,7 @@ class PreviewManager {
         composedBackendUrl,
         composedInternalUrl,
         injectedEnv,
+        kind: feKind,
         log,
       });
       command = fe.command;
