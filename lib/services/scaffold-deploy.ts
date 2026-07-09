@@ -282,7 +282,10 @@ services:
     environment:
       POSTGRES_DB: app
       POSTGRES_USER: sa
-      POSTGRES_PASSWORD: "123456"
+      # Interpolated from the deploy workflow's shell env (same generated value
+      # that goes into secrets.json's DB_PASSWORD), so the credential is never
+      # committed. The DB has no published port (private compose net only).
+      POSTGRES_PASSWORD: "\${DB_PASSWORD:?DB_PASSWORD must be exported by the deploy workflow}"
     volumes:
       - ./data/pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -358,6 +361,7 @@ jobs:
           if [ ! -f "$DIR/secrets.json" ]; then
             echo "Generating $DIR/secrets.json (first deploy)"
             APP_KEY="base64:$(openssl rand -base64 32)"
+            DB_PASS="$(openssl rand -hex 24)"
             cat > "$DIR/secrets.json" <<JSON
           {
             "APP_NAME": "${site}",
@@ -372,7 +376,7 @@ jobs:
             "DB_PORT": "5432",
             "DB_DATABASE": "app",
             "DB_USERNAME": "sa",
-            "DB_PASSWORD": "123456",
+            "DB_PASSWORD": "$DB_PASS",
             "CACHE_DRIVER": "file",
             "SESSION_DRIVER": "database",
             "SESSION_LIFETIME": "120",
@@ -387,6 +391,9 @@ jobs:
           JSON
           fi
           export secrets="$(cat "$DIR/secrets.json")"
+          # Feed the same DB password to the Postgres sidecar (compose interpolates
+          # POSTGRES_PASSWORD from this) so app + db agree without committing it.
+          export DB_PASSWORD="$(grep -oP '"DB_PASSWORD":\\s*"\\K[^"]+' "$DIR/secrets.json")"
 
           # --- Build & (re)start ----------------------------------------------
           docker compose build
