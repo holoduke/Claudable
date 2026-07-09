@@ -538,22 +538,29 @@ function laravelDevScript(port: number): string {
   return [
     'set -e',
     'export HOME=${HOME:-/tmp}',
-    // Scaffold Laravel + Filament once. Laravel pinned to ^12 (newest with
-    // stable Filament support); Filament unpinned so composer resolves the
-    // compatible release.
+    // Scaffold Laravel once. The project dir is NOT empty (Claudable already put
+    // .claude/ etc. there), and `composer create-project .` refuses a non-empty
+    // target — so build the skeleton in a temp dir and merge it in without
+    // clobbering existing files. Laravel pinned to ^12 (newest with stable
+    // Filament support).
     'if [ ! -f composer.json ]; then',
-    '  echo "[laravel] bootstrapping Laravel + Filament (first start, this takes a few minutes)…"',
-    '  composer create-project laravel/laravel:^12 . --no-interaction',
-    '  composer require filament/filament --no-interaction',
-    '  php artisan filament:install --panels --no-interaction',
+    '  echo "[laravel] bootstrapping Laravel + Filament (first start — a few minutes)…"',
+    '  rm -rf /tmp/lv && composer create-project laravel/laravel:^12 /tmp/lv --no-interaction',
+    '  cp -an /tmp/lv/. . 2>/dev/null || cp -rn /tmp/lv/. .',
+    '  rm -rf /tmp/lv',
     'fi',
     '[ -d vendor ] || composer install --no-interaction',
+    // Each step guarded independently so a retry after a mid-bootstrap teardown
+    // converges instead of skipping Filament.
+    'composer show filament/filament >/dev/null 2>&1 || composer require filament/filament --no-interaction',
+    '[ -f app/Providers/Filament/AdminPanelProvider.php ] || php artisan filament:install --panels --no-interaction',
     '[ -f .env ] || cp .env.example .env',
     // File SQLite — no separate DB container needed for the preview.
     'grep -q "^DB_CONNECTION=sqlite" .env || sed -i "s/^DB_CONNECTION=.*/DB_CONNECTION=sqlite/" .env',
     'mkdir -p database && touch database/database.sqlite',
     'grep -q "^APP_KEY=base64:" .env || php artisan key:generate --force',
     'php artisan migrate --force || true',
+    `echo "[laravel] starting php artisan serve on ${port}"`,
     `exec php artisan serve --host 0.0.0.0 --port ${port}`,
   ].join('\n');
 }
