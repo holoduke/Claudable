@@ -2189,7 +2189,31 @@ export default function ChatLog({ projectId, onSessionStatusChange, onProjectSta
   };
 
   // Function to render content with thinking tags
-  const renderContentWithThinking = (content: string): ReactElement => {
+  // Assistant messages sometimes arrive as a bare JSON array/object — e.g. a
+  // review/analysis command that emits its findings as JSON. That isn't
+  // markdown, so ReactMarkdown collapses it into a raw run-on paragraph. Detect
+  // a whole-message JSON payload and fence it as a pretty-printed ```json block
+  // so it renders as a formatted, scrollable code block instead of raw text.
+  const fenceBareJson = (raw: string): string => {
+    const t = raw.trim();
+    if (t.length < 2) return raw;
+    const first = t[0];
+    const last = t[t.length - 1];
+    const looksJson = (first === '[' && last === ']') || (first === '{' && last === '}');
+    if (!looksJson) return raw;
+    try {
+      const parsed = JSON.parse(t);
+      if (parsed && typeof parsed === 'object') {
+        return '```json\n' + JSON.stringify(parsed, null, 2) + '\n```';
+      }
+    } catch {
+      /* not valid JSON — leave it as prose */
+    }
+    return raw;
+  };
+
+  const renderContentWithThinking = (rawContent: string): ReactElement => {
+    const content = fenceBareJson(rawContent);
     const parts: ReactElement[] = [];
     let lastIndex = 0;
     let segmentCounter = 0;
@@ -2304,8 +2328,17 @@ export default function ChatLog({ projectId, onSessionStatusChange, onProjectSta
             },
             strong: ({children}) => <strong className="font-medium">{children}</strong>,
             em: ({children}) => <em className="italic">{children}</em>,
-            code: ({children}) => <code className="bg-gray-100 dark:bg-white/6 px-2 py-1 rounded-sm text-xs font-mono">{children}</code>,
-            pre: ({children}) => <pre className="bg-gray-100 dark:bg-white/6 p-3 rounded-lg my-2 overflow-x-auto text-xs wrap-break-word">{children}</pre>,
+            // Distinguish inline `code` (styled pill) from a fenced block
+            // (className "language-…"): a block sits inside <pre>, which already
+            // provides the background/padding, so drop the pill and preserve the
+            // JSON indentation with whitespace-pre.
+            code: ({className, children}) =>
+              typeof className === 'string' && className.startsWith('language-') ? (
+                <code className="font-mono text-xs whitespace-pre">{children}</code>
+              ) : (
+                <code className="bg-gray-100 dark:bg-white/6 px-2 py-1 rounded-sm text-xs font-mono">{children}</code>
+              ),
+            pre: ({children}) => <pre className="bg-gray-100 dark:bg-white/6 p-3 rounded-lg my-2 overflow-x-auto text-xs">{children}</pre>,
             ul: ({children}) => <ul className="list-disc list-inside mb-2 space-y-1">{children}</ul>,
             ol: ({children}) => <ol className="list-decimal list-inside mb-2 space-y-1">{children}</ol>,
             li: ({children}) => <li className="mb-1 wrap-break-word">{children}</li>
