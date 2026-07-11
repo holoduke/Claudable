@@ -1,5 +1,5 @@
 "use client";
-import React, { useEffect, useState, useRef, ReactElement, useCallback } from 'react';
+import React, { useEffect, useLayoutEffect, useState, useRef, ReactElement, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import ReactMarkdown from 'react-markdown';
 import { useWebSocket } from '@/hooks/useWebSocket';
@@ -1626,10 +1626,35 @@ export default function ChatLog({ projectId, onSessionStatusChange, onProjectSta
   // scrolling up → stick=false. No time window needed (and a window would
   // swallow the user's scroll-up during a fast stream — the bug this replaces).
   const stickToBottomRef = useRef(true);
+  // The scrollable message list, plus the machinery for auto-loading older
+  // history on scroll-up WITHOUT the viewport jumping. When we prepend older
+  // messages, scrollHeight grows above the current view, so we capture the
+  // pre-prepend geometry and, in a layout effect (before paint), bump scrollTop
+  // by the added height — the user keeps seeing the exact same text, just with
+  // more above it.
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const prependAnchorRef = useRef<{ height: number; top: number } | null>(null);
+  const loadingOlderRef = useRef(false);
+  // Indirection so the scroll handler (defined above loadOlderMessages) can call
+  // it without a use-before-declaration ordering problem.
+  const loadOlderRef = useRef<() => void>(() => {});
   const handleLogScroll = (e: React.UIEvent<HTMLDivElement>) => {
     const el = e.currentTarget;
     stickToBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
+    // Auto-load older history as the user nears the top (no button needed).
+    if (el.scrollTop < 300 && !loadingOlderRef.current) {
+      loadOlderRef.current();
+    }
   };
+  // Restore the scroll anchor right after older messages are prepended.
+  useLayoutEffect(() => {
+    const anchor = prependAnchorRef.current;
+    const el = scrollContainerRef.current;
+    if (anchor && el) {
+      el.scrollTop = anchor.top + (el.scrollHeight - anchor.height);
+      prependAnchorRef.current = null;
+    }
+  }, [messages]);
   // Keyed by the send's requestId (falls back to message id) so the optimistic
   // user message → server echo swap (different id, SAME requestId) doesn't snap
   // twice and override a scroll-up the user made right after sending.
@@ -1907,7 +1932,8 @@ export default function ChatLog({ projectId, onSessionStatusChange, onProjectSta
 
   // Load older messages (pagination)
   const loadOlderMessages = useCallback(async () => {
-    if (!projectId || !hasMoreMessages) return;
+    if (!projectId || !hasMoreMessages || loadingOlderRef.current) return;
+    loadingOlderRef.current = true;
 
     try {
       // Offset by DB rows already fetched, not the UI message count.
@@ -1934,15 +1960,24 @@ export default function ChatLog({ projectId, onSessionStatusChange, onProjectSta
           setTotalMessageCount(payload.totalCount || 0);
         }
 
-        // Prepend older messages to the existing list
+        // Prepend older messages to the existing list. Capture the scroll
+        // geometry BEFORE the state update so the layout effect can keep the
+        // viewport anchored on the same content after the DOM grows above it.
         if (normalized.length > 0) {
+          const el = scrollContainerRef.current;
+          if (el) prependAnchorRef.current = { height: el.scrollHeight, top: el.scrollTop };
           setMessages((prev) => integrateMessages(prev, normalized));
         }
       }
     } catch (error) {
       console.error('[ChatLog] Failed to load older messages:', error);
+    } finally {
+      loadingOlderRef.current = false;
     }
   }, [projectId, hasMoreMessages, ensureStableMessageId]);
+
+  // Point the scroll-handler indirection at the current callback each render.
+  loadOlderRef.current = loadOlderMessages;
 
   // Poll session status periodically. NOTE: its OWN interval ref — it used to
   // share pollIntervalRef with the history poller and each silently killed the
@@ -2210,6 +2245,19 @@ export default function ChatLog({ projectId, onSessionStatusChange, onProjectSta
       /* not valid JSON — leave it as prose */
     }
     return raw;
+  };
+
+  // Compact per-message timestamp: HH:MM for today, "D Mon HH:MM" otherwise.
+  const formatMsgTime = (value: string | number | Date): string => {
+    const d = new Date(value);
+    if (isNaN(d.getTime())) return '';
+    const now = new Date();
+    const sameDay =
+      d.getDate() === now.getDate() &&
+      d.getMonth() === now.getMonth() &&
+      d.getFullYear() === now.getFullYear();
+    const time = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    return sameDay ? time : `${d.toLocaleDateString([], { day: 'numeric', month: 'short' })} ${time}`;
   };
 
   const renderContentWithThinking = (rawContent: string): ReactElement => {
@@ -2678,7 +2726,7 @@ export default function ChatLog({ projectId, onSessionStatusChange, onProjectSta
       )}
 
       {/* Display messages and logs together */}
-      <div className="flex-1 overflow-y-auto px-8 py-3 space-y-2 custom-scrollbar " onScroll={handleLogScroll}>
+      <div ref={scrollContainerRef} className="flex-1 overflow-y-auto px-8 py-3 space-y-2 custom-scrollbar " onScroll={handleLogScroll}>
         {isLoading && !hasLoadedOnce && !hasError && (
           <div className="flex items-center justify-center h-32 text-gray-400 dark:text-gray-500 text-sm">
             <div className="flex flex-col items-center">
@@ -2962,10 +3010,16 @@ export default function ChatLog({ projectId, onSessionStatusChange, onProjectSta
                     )}
                   </div>
                 )}
+
+                {!isToolMessage && (message as any).createdAt && (
+                  <div className={`mt-1 text-[10px] leading-none text-gray-400/90 dark:text-gray-500 ${message.role === 'user' ? 'text-right' : 'text-left'}`}>
+                    {formatMsgTime((message as any).createdAt)}
+                  </div>
+                )}
             </div>
           );
         })}
-        
+
         {/* Render filtered agent logs as plain text */}
         {logs.filter(log => {
           // Hide internal tool results and system logs
