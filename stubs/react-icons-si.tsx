@@ -10,6 +10,5 @@ export const SiTypescript = wrap(Type);
 export const SiGo = wrap(Bird);
 export const SiRuby = wrap(Gem);
 export const SiSvelte = wrap(Flame);
-export const SiJson = wrap(Braces);
 export const SiYaml = wrap(List);
 export const SiCplusplus = wrap(Plus);

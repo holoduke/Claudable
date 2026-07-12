@@ -21,7 +21,7 @@ export interface CommentPin {
   createdAt: string;
 }
 
-export interface MentionCandidate {
+interface MentionCandidate {
   id: string;
   name: string;
   email?: string;
