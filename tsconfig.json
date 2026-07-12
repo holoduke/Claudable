@@ -32,18 +32,6 @@
       "@/types/shared/*": [
         "./types/shared/*"
       ],
-      "@/types/client": [
-        "./types/client/index.ts"
-      ],
-      "@/types/client/*": [
-        "./types/client/*"
-      ],
-      "@/types/server": [
-        "./types/server/index.ts"
-      ],
-      "@/types/server/*": [
-        "./types/server/*"
-      ],
       "@/types/backend": [
         "./types/backend/index.ts"
       ],
