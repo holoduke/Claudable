@@ -38,21 +38,42 @@ works; this fork adds:
   GitHub), one-click publish + auto-deploy via **Gitea Actions**, and a shared **Traefik**
   proxy. Each running preview gets a **stable per-project subdomain** with automatic HTTPS
   (Let's Encrypt DNS-01), isolated so one project's preview can never show another's.
+- **Multiple stacks + project composition** — start from **Nuxt**, **Next.js**, **Angular**,
+  a **print-ready Document** (HTML→PDF), or the **Filament (Laravel) CMS** stack, and
+  optionally compose a backend + database at creation time.
+- **Filament (Laravel) CMS stack** — new Filament projects are scaffolded from the NewStory
+  golden template (cloned from a private repo + re-slugged), run in a PHP preview, and
+  publish with one click as **php-fpm + nginx + Postgres** (schema auto-migrated on deploy).
+- **Managed service containers** — attach a per-project **Postgres / MySQL / Redis / Mongo**
+  container in one click (its `DATABASE_URL`/connection env is injected into preview *and*
+  deploy), or provision a Coolify-managed Postgres.
+- **Plugins** — Claude Code **plugin marketplaces** available to every project, invoked with
+  `/plugin`; you can even start a new project straight from a plugin command.
+- **MCP servers** — a per-project and shared **MCP catalog** with OAuth-authenticated servers,
+  managed from settings and invoked with `/mcp`.
+- **Checkpoints & revert** — every agent turn is checkpointed; restore the project to any
+  step in one click. The agent also detects build/runtime errors and offers a fix.
 - **Multi-user** — Google login with an auth gate, per-project access control, and
   per-user Claude credentials (paste your own `claude setup-token`).
 - **Visual editor** — an *Edit* mode to click elements in the live preview and tweak text
   & CSS, then apply the change to code through the agent.
 - **Preview comments** — Figma-style pinned, per-route review comments overlaid on the
-  preview (Claudable-only; never touches the app source), with author, resolve & clear-all.
+  preview (Claudable-only; never touches the app source), with author, @-mentions,
+  resolve & clear-all.
 - **Device preview** — a device selector (iPhone/iPad/Pixel/Surface…) with portrait ⇄
   landscape and always-fit scaling.
 - **it-ops broker** *(admin-opt-in, per user)* — scoped, audited infrastructure tools the
   agent can use (Gitea repo/admin, Coolify apps & projects, Traefik routes); AWS/IAM stays
   propose-only, and credentials never enter the agent's context.
-- **Agent sandboxing** — the agent's environment is scrubbed of Claudable's secrets and
-  guarded from escaping its own project.
+- **Agent & preview sandboxing** — previews and each per-turn agent run in **hardened
+  containers** (non-root, `cap-drop ALL`, no-new-privileges, resource limits) on an
+  **egress-locked network** (public internet allowed; the box's private network, other
+  projects, and Claudable's own data blocked). The agent's environment is scrubbed of
+  Claudable's secrets.
 - **Quality-of-life** — a large **design-style catalog** (skills), chunked large-file
-  uploads with progress, and a project dashboard.
+  uploads with progress, a project **dashboard** with live thumbnails, and a richer chat:
+  markdown/JSON-aware rendering, message timestamps, and auto-loading history that keeps
+  your scroll position anchored.
 
 Deployment specifics live in `.env.example` and `docker-compose.yml`; no infrastructure
 values or secrets are committed. It tracks upstream and is not intended for merge back.
