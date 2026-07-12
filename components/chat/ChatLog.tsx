@@ -1635,12 +1635,23 @@ export default function ChatLog({ projectId, onSessionStatusChange, onProjectSta
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const prependAnchorRef = useRef<{ height: number; top: number } | null>(null);
   const loadingOlderRef = useRef(false);
+  // The anchor-restore below sets scrollTop programmatically, which the browser
+  // reports as a scroll event AFTER loadingOlderRef was already released. If the
+  // prepended batch dedup'd down to little height, scrollTop can still be < 300
+  // and that synthetic event would immediately fire another load — a burst of
+  // back-to-back page loads on a single scroll gesture. Consume exactly that one
+  // synthetic event.
+  const skipNextScrollLoadRef = useRef(false);
   // Indirection so the scroll handler (defined above loadOlderMessages) can call
   // it without a use-before-declaration ordering problem.
   const loadOlderRef = useRef<() => void>(() => {});
   const handleLogScroll = (e: React.UIEvent<HTMLDivElement>) => {
     const el = e.currentTarget;
     stickToBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
+    if (skipNextScrollLoadRef.current) {
+      skipNextScrollLoadRef.current = false;
+      return; // this event is the programmatic anchor restore, not a user scroll
+    }
     // Auto-load older history as the user nears the top (no button needed).
     if (el.scrollTop < 300 && !loadingOlderRef.current) {
       loadOlderRef.current();
@@ -1653,6 +1664,7 @@ export default function ChatLog({ projectId, onSessionStatusChange, onProjectSta
     if (anchor && el) {
       el.scrollTop = anchor.top + (el.scrollHeight - anchor.height);
       prependAnchorRef.current = null;
+      skipNextScrollLoadRef.current = true;
     }
   }, [messages]);
   // Keyed by the send's requestId (falls back to message id) so the optimistic
@@ -3011,11 +3023,14 @@ export default function ChatLog({ projectId, onSessionStatusChange, onProjectSta
                   </div>
                 )}
 
-                {!isToolMessage && (message as any).createdAt && (
-                  <div className={`mt-1 text-[10px] leading-none text-gray-400/90 dark:text-gray-500 ${message.role === 'user' ? 'text-right' : 'text-left'}`}>
-                    {formatMsgTime((message as any).createdAt)}
-                  </div>
-                )}
+                {!isToolMessage && (message as any).createdAt && (() => {
+                  const ts = formatMsgTime((message as any).createdAt);
+                  return ts ? (
+                    <div className={`mt-1 text-[10px] leading-none text-gray-400/90 dark:text-gray-500 ${message.role === 'user' ? 'text-right' : 'text-left'}`}>
+                      {ts}
+                    </div>
+                  ) : null;
+                })()}
             </div>
           );
         })}
