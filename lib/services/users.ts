@@ -65,6 +65,11 @@ export async function setUserItops(id: string, itopsEnabled: boolean): Promise<U
   return prisma.user.update({ where: { id }, data: { itopsEnabled: Boolean(itopsEnabled) } });
 }
 
+/** Persist a user's preferred UI language (null clears it → follow the default). */
+export async function setUserLocale(id: string, locale: string | null): Promise<User> {
+  return prisma.user.update({ where: { id }, data: { locale } });
+}
+
 export async function deleteUser(id: string): Promise<void> {
   await prisma.user.delete({ where: { id } });
 }
@@ -79,6 +84,7 @@ export function serializeUser(u: User) {
     role: u.role,
     isActive: u.isActive,
     itopsEnabled: u.itopsEnabled,
+    locale: (u as { locale?: string | null }).locale ?? null,
     createdAt: u.createdAt,
     lastLoginAt: u.lastLoginAt,
   };

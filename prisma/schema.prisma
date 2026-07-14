@@ -146,6 +146,9 @@ model User {
   // When true, the it-ops MCP broker attaches for every project this user owns
   // (admins self-enable; admins can also enable it for others). See claude.ts.
   itopsEnabled Boolean  @default(false) @map("itops_enabled")
+  // Preferred UI language (i18n locale code, e.g. 'en','nl'); null = follow the
+  // browser/localStorage default. Set from Settings → General, per user.
+  locale      String?
   orgId       String    @map("org_id")
   createdAt   DateTime  @default(now()) @map("created_at")
   lastLoginAt DateTime? @map("last_login_at")
