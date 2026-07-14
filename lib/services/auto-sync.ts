@@ -40,7 +40,10 @@ export async function syncAndRestartPreview(projectId: string): Promise<SyncAndR
 
   let previewRestarted = false;
   let previewError: string | null = null;
-  if (result.updated && previewManager.getStatus(projectId).status === 'running') {
+  // Re-check immediately before stopping: a turn may have started (and
+  // auto-started/adopted the preview) between the caller's shouldSkip() and here.
+  // Killing the preview mid-turn is disruptive — bail if an agent run is active.
+  if (result.updated && previewManager.getStatus(projectId).status === 'running' && !isAgentRunActive(projectId)) {
     try {
       await previewManager.stop(projectId);
       // A dependency-manifest change needs a reinstall BEFORE restart, else the

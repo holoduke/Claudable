@@ -8,7 +8,7 @@
 import { NextRequest } from 'next/server';
 import { getSessionUser, authEnabled } from '@/lib/auth/session';
 import { prisma } from '@/lib/db/client';
-import { canManageProject } from '@/lib/services/project-access';
+import { canManageProject, canAccessProject } from '@/lib/services/project-access';
 import { getProjectById } from '@/lib/services/project';
 import { getDatabaseInfo, provisionPostgres, removeDatabase } from '@/lib/services/database';
 import { createSuccessResponse, createErrorResponse, handleApiError } from '@/lib/utils/api-response';
@@ -33,7 +33,16 @@ async function denyIfCannotManage(projectId: string): Promise<Response | null> {
 export async function GET(_request: NextRequest, { params }: RouteContext) {
   try {
     const { project_id } = await params;
-    if (!(await getProjectById(project_id))) return createErrorResponse('not_found', 'Project not found', 404);
+    const project = await prisma.project.findUnique({ where: { id: project_id } });
+    if (!project) return createErrorResponse('not_found', 'Project not found', 404);
+    // Read-tier gate: DB host/name/coolifyUuid is cross-project infra disclosure
+    // (and confirms a restricted project exists) if returned to a non-member.
+    if (authEnabled()) {
+      const user = await getSessionUser();
+      if (!user || !(await canAccessProject(user, project))) {
+        return createErrorResponse('not_found', 'Project not found', 404);
+      }
+    }
     return createSuccessResponse(await getDatabaseInfo(project_id));
   } catch (error) {
     return handleApiError(error, 'API', 'Failed to read database status');

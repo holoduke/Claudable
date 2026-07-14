@@ -464,6 +464,24 @@ async function writeManaged(filePath: string, contents: string): Promise<void> {
 }
 
 /**
+ * Remove every CI workflow file except the Claudable-managed deploy.yml. The
+ * privileged host-runner executes anything under .gitea/workflows and
+ * .github/workflows, and the agent can write those paths — so a foreign workflow
+ * is root RCE on the deploy box. Only call for Claudable-scaffolded projects.
+ */
+async function stripForeignWorkflows(repoPath: string): Promise<void> {
+  await fs.rm(path.join(repoPath, '.github', 'workflows'), { recursive: true, force: true }).catch(() => {});
+  const giteaWf = path.join(repoPath, '.gitea', 'workflows');
+  try {
+    for (const f of await fs.readdir(giteaWf)) {
+      if (f !== 'deploy.yml') {
+        await fs.rm(path.join(giteaWf, f), { recursive: true, force: true }).catch(() => {});
+      }
+    }
+  } catch { /* no workflows dir */ }
+}
+
+/**
  * Write Dockerfile, .dockerignore, docker-compose.yml and the Gitea Actions
  * deploy workflow into the project repo (idempotent).
  */
@@ -485,15 +503,14 @@ export async function injectDeployScaffolding(repoPath: string, options: Scaffol
     await fs.access(path.join(repoPath, '.claudable', 'preview.json'));
     return; // imported / self-managed — leave its deploy files untouched
   } catch { /* no preview.json → a Claudable-scaffolded project; proceed */ }
-  // Belt-and-suspenders: if the repo already ships its own workflows (anything
-  // other than a Claudable-managed deploy.yml), don't touch them.
-  try {
-    const wf = (await fs.readdir(path.join(repoPath, '.gitea', 'workflows')))
-      .filter((f) => f.endsWith('.yml') || f.endsWith('.yaml'));
-    if (wf.length > 0 && !wf.every((f) => f === 'deploy.yml')) {
-      return;
-    }
-  } catch { /* no existing workflows dir */ }
+  // SECURITY: the deploy host-runner executes EVERY workflow file in the repo
+  // with docker + sudo (root on the box). The agent controls the whole project
+  // tree, so an agent-authored workflow would be arbitrary ROOT code on the next
+  // push. Claudable manages exactly one workflow (.gitea/workflows/deploy.yml);
+  // strip every other workflow file (and all of .github/workflows) at publish.
+  // Imported/self-managed projects (preview.json) returned above, so their own
+  // CI is left untouched — this only affects Claudable-scaffolded projects.
+  await stripForeignWorkflows(repoPath);
 
   const site = options.repoName.toLowerCase().replace(/[^a-z0-9-]/gu, '-').replace(/-+/gu, '-').replace(/^-|-$/gu, '');
   const port = deployPortFor(site);
@@ -503,9 +520,8 @@ export async function injectDeployScaffolding(repoPath: string, options: Scaffol
     // The Filament golden template ships its OWN production build/service/Dockerfile
     // (php-fpm + nginx) and a correct .dockerignore — do NOT overwrite them with the
     // node image. Provide only the compose (app builds from the template Dockerfile +
-    // a Postgres sidecar) and the Laravel deploy workflow. Also drop the template's
-    // AWS App Runner workflows under .github/ so they don't run (and fail) on Gitea.
-    await fs.rm(path.join(repoPath, '.github', 'workflows'), { recursive: true, force: true }).catch(() => {});
+    // a Postgres sidecar) and the Laravel deploy workflow. (The template's AWS App
+    // Runner workflows under .github/ were already removed by stripForeignWorkflows.)
     await writeIfAbsent(path.join(repoPath, 'docker-compose.yml'), dockerComposeLaravel(site, port));
     await writeManaged(
       path.join(repoPath, '.gitea', 'workflows', 'deploy.yml'),

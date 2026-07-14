@@ -7,7 +7,7 @@
 import { NextRequest } from 'next/server';
 import { getSessionUser, authEnabled } from '@/lib/auth/session';
 import { prisma } from '@/lib/db/client';
-import { canAccessProject } from '@/lib/services/project-access';
+import { canAccessProject, canManageProject } from '@/lib/services/project-access';
 import { updateComment, deleteComment } from '@/lib/services/comments';
 import { createSuccessResponse, createErrorResponse, handleApiError } from '@/lib/utils/api-response';
 
@@ -17,13 +17,23 @@ interface RouteContext {
   params: Promise<{ project_id: string; comment_id: string }>;
 }
 
-async function denyIfNoAccess(projectId: string): Promise<Response | null> {
+/**
+ * Gate for editing/deleting a specific comment: project access AND ownership —
+ * only the comment's author (or a project manager/admin) may modify it, so a
+ * viewer/member can't edit or delete other people's review comments.
+ */
+async function denyIfCannotModify(projectId: string, commentId: string): Promise<Response | null> {
   const project = await prisma.project.findUnique({ where: { id: projectId } });
   if (!project) return createErrorResponse('not_found', 'Project not found', 404);
   if (authEnabled()) {
     const user = await getSessionUser();
     if (!user) return createErrorResponse('unauthorized', 'Authentication required', 401);
     if (!(await canAccessProject(user, project))) return createErrorResponse('forbidden', 'Access denied', 403);
+    const comment = await prisma.comment.findFirst({ where: { id: commentId, projectId }, select: { authorId: true } });
+    if (!comment) return createErrorResponse('not_found', 'Comment not found', 404);
+    if (comment.authorId !== user.id && !canManageProject(user, project)) {
+      return createErrorResponse('forbidden', 'You can only modify your own comments', 403);
+    }
   }
   return null;
 }
@@ -31,7 +41,7 @@ async function denyIfNoAccess(projectId: string): Promise<Response | null> {
 export async function PATCH(request: NextRequest, { params }: RouteContext) {
   try {
     const { project_id, comment_id } = await params;
-    const denied = await denyIfNoAccess(project_id);
+    const denied = await denyIfCannotModify(project_id, comment_id);
     if (denied) return denied;
     const body = (await request.json().catch(() => null)) ?? {};
     if (body.body !== undefined && typeof body.body !== 'string') return createErrorResponse('invalid', 'body must be a string', 400);
@@ -50,7 +60,7 @@ export async function PATCH(request: NextRequest, { params }: RouteContext) {
 export async function DELETE(_request: NextRequest, { params }: RouteContext) {
   try {
     const { project_id, comment_id } = await params;
-    const denied = await denyIfNoAccess(project_id);
+    const denied = await denyIfCannotModify(project_id, comment_id);
     if (denied) return denied;
     const ok = await deleteComment(project_id, comment_id);
     if (!ok) return createErrorResponse('not_found', 'Comment not found', 404);

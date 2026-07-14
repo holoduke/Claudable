@@ -39,6 +39,12 @@ function gitDir(projectId: string): string {
   return dir;
 }
 
+// Hard ceiling on any single git op. Ops are serialized through withLock, so a
+// hung git (index-lock contention, a pathological `git add -A` on an accidentally
+// tracked huge tree) would otherwise block ALL future checkpoints/reverts for the
+// project — invisibly, since checkpointTurn is void-fired. Kill + fail instead.
+const GIT_TIMEOUT_MS = Number(process.env.CHECKPOINT_GIT_TIMEOUT_MS || 120_000);
+
 function git(projectId: string, projectPath: string, args: string[]): Promise<{ ok: boolean; out: string }> {
   return new Promise((resolve) => {
     const child = spawn('git', args, {
@@ -46,11 +52,17 @@ function git(projectId: string, projectPath: string, args: string[]): Promise<{ 
       env: { ...process.env, GIT_DIR: gitDir(projectId), GIT_WORK_TREE: projectPath },
     });
     let out = '';
+    let settled = false;
+    const done = (r: { ok: boolean; out: string }) => { if (!settled) { settled = true; clearTimeout(timer); resolve(r); } };
     const collect = (d: Buffer) => { if (out.length < MAX_GIT_OUTPUT) out += d.toString('utf8'); };
+    const timer = setTimeout(() => {
+      try { child.kill('SIGKILL'); } catch { /* already gone */ }
+      done({ ok: false, out: `git ${args[0]} timed out after ${GIT_TIMEOUT_MS}ms` });
+    }, GIT_TIMEOUT_MS);
     child.stdout?.on('data', collect);
     child.stderr?.on('data', collect);
-    child.on('error', (e) => resolve({ ok: false, out: String(e?.message || e) }));
-    child.on('close', (code) => resolve({ ok: code === 0, out: out.trim() }));
+    child.on('error', (e) => done({ ok: false, out: String(e?.message || e) }));
+    child.on('close', (code) => done({ ok: code === 0, out: out.trim() }));
   });
 }
 

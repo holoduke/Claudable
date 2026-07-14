@@ -49,10 +49,22 @@ export function callbackUri(): string {
 }
 
 async function guardedFetch(url: string, init?: RequestInit): Promise<Response> {
-  const u = new URL(url);
-  if (u.protocol !== 'https:') throw new Error(`OAuth endpoint must be https: ${url}`);
-  await assertHostAllowed(u.hostname); // SSRF guard (auth server may differ from MCP host)
-  return fetch(url, init);
+  // SSRF guard. Validating only the initial host is not enough: with the default
+  // redirect:follow, a hostile endpoint can 302 → http://169.254.169.254 (IMDS)
+  // or an RFC-1918 host and the guard is bypassed. So follow redirects MANUALLY,
+  // re-validating https + the host on every hop (bounded).
+  let current = url;
+  for (let hop = 0; hop < 6; hop++) {
+    const u = new URL(current);
+    if (u.protocol !== 'https:') throw new Error(`OAuth endpoint must be https: ${current}`);
+    await assertHostAllowed(u.hostname);
+    const res = await fetch(current, { ...init, redirect: 'manual' });
+    if (res.status < 300 || res.status >= 400) return res;
+    const location = res.headers.get('location');
+    if (!location) return res; // redirect without a target — hand back as-is
+    current = new URL(location, current).toString(); // resolve relative redirects
+  }
+  throw new Error(`Too many redirects fetching OAuth endpoint: ${url}`);
 }
 
 /** POST a JSON-RPC initialize and read whether the server demands OAuth. */

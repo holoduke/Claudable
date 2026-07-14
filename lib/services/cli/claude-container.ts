@@ -9,9 +9,10 @@
  * Proven feasible on box1 (2026-07-03): `claude` CLI runs headless here and edits
  * the mounted project. This module packages that as a streaming runner.
  *
- * NOT YET WIRED into executeClaude — that swap (streaming → SSE, network-MCP for
- * the 3 tools, session resume) is the guarded next step. This module is dormant
- * (nothing imports it) so it carries zero risk to the live in-process agent path.
+ * WIRED into executeClaude as the DEFAULT path whenever PREVIEW_ISOLATION is set
+ * (or AGENT_CONTAINERIZED=true): the per-turn agent runs here, in a hardened
+ * container with network-MCP for the in-process tools and session resume. The
+ * in-process path (claude.ts) is the fallback for local dev without the infra.
  */
 import { spawn, type ChildProcess } from 'child_process';
 import path from 'path';
