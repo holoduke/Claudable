@@ -27,6 +27,10 @@ function mapPrismaMessage(message: PrismaMessage): Message {
     createdAt: message.createdAt,
     updatedAt,
     requestId,
+    // Turn-checkpoint SHA backing the "Revert to here" button. Omitting it here
+    // dropped it at the DB→Message boundary, before the serializer — so the
+    // revert action never reached the UI despite checkpoints existing.
+    commitSha: (message as any).commitSha ?? null,
   };
 }
 
