@@ -24,7 +24,8 @@ function detectUsageLimitReply(content: string): string | null | undefined {
   // a short line STARTING with the phrase. An agent quoting/explaining the
   // error mid-conversation must not peg the account-wide limit meter.
   const trimmed = content.trim();
-  if (trimmed.length > 200 || !/^you'?ve hit your (usage )?limit\b/i.test(trimmed)) return undefined;
+  // The CLI phrases this as "usage limit", "session limit", or plain "limit".
+  if (trimmed.length > 200 || !/^you'?ve hit your (usage |session )?limit\b/i.test(trimmed)) return undefined;
   const m = content.match(/resets\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\s*\(?UTC\)?/i);
   if (!m) return null;
   let hour = Number(m[1]);
