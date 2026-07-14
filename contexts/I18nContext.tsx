@@ -11,6 +11,7 @@ import { MESSAGES, LOCALES, DEFAULT_LOCALE, isLocale, type Locale } from '@/lib/
 import type { MessageKey } from '@/lib/i18n/messages/en';
 
 const STORAGE_KEY = 'claudable.locale';
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? '';
 
 type TFunc = (key: MessageKey, vars?: Record<string, string | number>) => string;
 
@@ -28,13 +29,34 @@ export default function I18nProvider({ children }: { children: React.ReactNode }
 
   // Resolve the initial locale on mount (client-only — avoids SSR hydration
   // mismatch by starting from the default and correcting after mount).
+  // Priority: the signed-in user's saved locale > localStorage > browser lang.
+  // The user's account setting wins so a language chosen on one device follows
+  // them everywhere; localStorage gives an instant answer before the fetch.
   useEffect(() => {
     try {
       const stored = localStorage.getItem(STORAGE_KEY);
-      if (isLocale(stored)) { setLocaleState(stored); return; }
-      const nav = (navigator.language || '').slice(0, 2).toLowerCase();
-      if (isLocale(nav)) setLocaleState(nav);
+      if (isLocale(stored)) setLocaleState(stored);
+      else {
+        const nav = (navigator.language || '').slice(0, 2).toLowerCase();
+        if (isLocale(nav)) setLocaleState(nav);
+      }
     } catch { /* no storage (SSR / privacy mode) */ }
+
+    // Then reconcile with the account preference (authoritative when present).
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`${API_BASE}/api/users/me`, { credentials: 'include' });
+        if (!res.ok) return;
+        const json = await res.json();
+        const accountLocale = json?.data?.locale;
+        if (!cancelled && isLocale(accountLocale)) {
+          setLocaleState(accountLocale);
+          try { localStorage.setItem(STORAGE_KEY, accountLocale); } catch { /* noop */ }
+        }
+      } catch { /* not signed in / offline → keep the local guess */ }
+    })();
+    return () => { cancelled = true; };
   }, []);
 
   useEffect(() => {
@@ -44,6 +66,14 @@ export default function I18nProvider({ children }: { children: React.ReactNode }
   const setLocale = useCallback((l: Locale) => {
     setLocaleState(l);
     try { localStorage.setItem(STORAGE_KEY, l); } catch { /* noop */ }
+    // Persist to the signed-in user's account (best-effort; a guest just keeps
+    // the localStorage value). 401/anon responses are fine to ignore.
+    fetch(`${API_BASE}/api/users/me`, {
+      method: 'PATCH',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ locale: l }),
+    }).catch(() => { /* offline / not signed in */ });
   }, []);
 
   const t = useCallback<TFunc>((key, vars) => {
