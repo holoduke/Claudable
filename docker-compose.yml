@@ -76,13 +76,17 @@ services:
   # control plane can reach it (host-network loopback; the containerized agent has
   # NO docker access). It filters by ENDPOINT, not request body.
   #
-  # tecnativa filters by endpoint but CANNOT inspect the /containers/create body,
-  # so on its own POST=1 would let a caller `docker run -v /:/h` for host root. It
-  # is therefore fronted by `socket-filter` (below), a body-inspecting proxy that
-  # rejects host bind mounts outside the data root + privileged/host-namespace
-  # escapes. This service now has NO published port — only socket-filter reaches
-  # it (over the compose network); Claudable talks to socket-filter at :2375.
-  # Only used when PREVIEW_ISOLATION is set; otherwise it just sits idle.
+  # RESIDUAL RISK (defense-in-depth gap, DOCUMENTED): /containers/create (POST=1)
+  # allows a host bind mount, so a party reaching this proxy could `docker run
+  # -v /:/h` for host root. tecnativa can't inspect the create body. Contained
+  # because only Claudable's trusted control plane reaches 127.0.0.1:2375 (the
+  # agent/preview sandboxes cannot), and the control-plane RCE vectors (in-process
+  # agent, OAuth SSRF) are closed in code. A body-inspecting filter exists
+  # (docker/socket-filter/filter.js) but is NOT wired in: proxying docker's
+  # foreground-run attach HIJACK through it broke preview stdout streaming, so it
+  # needs a correct raw-hijack implementation + an offline test harness before it
+  # can front this. FULL FIX still recommended (that filter, fixed, or rootless
+  # dockerd). Only used when PREVIEW_ISOLATION is set; otherwise it sits idle.
   dockerproxy:
     image: tecnativa/docker-socket-proxy:0.3.0
     container_name: claudable-dockerproxy
@@ -122,8 +126,9 @@ services:
       - TASKS=0
       - NODES=0
       - PLUGINS=0
-    # No published port: only socket-filter (same compose network) reaches this,
-    # by service name `dockerproxy:2375`. Claudable talks to socket-filter :2375.
+    ports:
+      # Loopback only — Claudable (host network) reaches it at 127.0.0.1:2375.
+      - "127.0.0.1:2375:2375"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       # Custom config: the stock 10m idle timeouts severed every quiet preview's
@@ -133,33 +138,8 @@ services:
       # haproxy.cfg from it at start; mounting the final file breaks boot.
       - ./docker/socket-proxy/haproxy.cfg.template:/usr/local/etc/haproxy/haproxy.cfg.template:ro
 
-  # Body-inspecting bind-mount filter in FRONT of dockerproxy. Transparently
-  # streams every Docker API call through to dockerproxy, but rejects a
-  # /containers/create that requests a host bind mount outside the data root /
-  # skills / plugins dirs (or privileged / host-namespace / device escapes) —
-  # closing the "docker run -v /:/h → host root" gap. Claudable points
-  # DOCKER_HOST at THIS (127.0.0.1:2375). Fails open on internal errors.
-  # Staged: leave SOCKET_FILTER_ENFORCE unset for log-only ("WOULD BLOCK"); set
-  # it to 1 to actually reject (after confirming the logs show no legit binds).
-  socket-filter:
-    image: node:22-alpine
-    container_name: claudable-socket-filter
-    restart: unless-stopped
-    command: ["node", "/app/filter.js"]
-    environment:
-      - LISTEN_PORT=2375
-      - UPSTREAM_HOST=dockerproxy
-      - UPSTREAM_PORT=2375
-      - SOCKET_FILTER_ENFORCE=${SOCKET_FILTER_ENFORCE:-}
-      # Allowed bind-mount roots (Claudable only mounts under these).
-      - DATA_HOST_DIR=${DATA_HOST_DIR:-}
-      - GLOBAL_SKILLS_HOST_DIR=${GLOBAL_SKILLS_HOST_DIR:-}
-      - AGENT_PLUGINS_HOST_DIR=${AGENT_PLUGINS_HOST_DIR:-}
-      - ALLOWED_BIND_PREFIXES=${ALLOWED_BIND_PREFIXES:-}
-    ports:
-      # Loopback only — Claudable (host network) reaches it at 127.0.0.1:2375.
-      - "127.0.0.1:2375:2375"
-    volumes:
-      - ./docker/socket-filter/filter.js:/app/filter.js:ro
-    depends_on:
-      - dockerproxy
+  # NOTE: docker/socket-filter/filter.js (the bind-mount body filter for #7) is
+  # intentionally NOT wired in here yet — its transparent proxying broke docker's
+  # foreground-run attach hijack (preview stdout never streamed). It needs a
+  # correct raw-hijack implementation + an offline test before fronting
+  # dockerproxy. Kept in the repo for that follow-up.
