@@ -3015,7 +3015,12 @@ export default function ChatLog({ projectId, onSessionStatusChange, onProjectSta
                   </div>
                 )}
 
-                {message.role === 'assistant' && message.isFinal && (messageText || (message as any).commitSha) && (
+                {/* Show the copy/revert actions on any SETTLED assistant message.
+                    isFinal is a streaming-time flag that isn't persisted, so on
+                    reload it's always false — gate on "not streaming" too (the
+                    same "settled" test used elsewhere) or these actions (incl.
+                    "Revert to here") would never appear on loaded history. */}
+                {message.role === 'assistant' && (message.isFinal || !message.isStreaming) && (messageText || (message as any).commitSha) && (
                   <div className="mt-1.5 flex items-center gap-3">
                     {messageText && (
                       <button
