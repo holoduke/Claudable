@@ -2259,6 +2259,27 @@ export default function ChatLog({ projectId, onSessionStatusChange, onProjectSta
     return raw;
   };
 
+  // The CLI's limit refusals quote the reset time in UTC ("resets 1:40pm (UTC)").
+  // Rewrite any such mention to the viewer's LOCAL time so nobody has to do the
+  // timezone math. The UTC time is anchored to today (or tomorrow if already
+  // past), matching how the reset actually rolls.
+  const localizeUtcResetTimes = (text: string): string =>
+    text.replace(
+      /(resets\s+)(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\s*\(?UTC\)?/gi,
+      (_full, prefix: string, h: string, mm: string | undefined, mer: string | undefined) => {
+        let hour = Number(h);
+        const minute = Number(mm ?? 0);
+        const meridiem = (mer ?? '').toLowerCase();
+        if (meridiem === 'pm' && hour < 12) hour += 12;
+        if (meridiem === 'am' && hour === 12) hour = 0;
+        if (hour > 23 || minute > 59) return _full; // not a real time — leave as-is
+        const now = new Date();
+        const reset = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), hour, minute));
+        if (reset.getTime() <= now.getTime()) reset.setUTCDate(reset.getUTCDate() + 1);
+        return `${prefix}${reset.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`;
+      },
+    );
+
   // Compact per-message timestamp: HH:MM for today, "D Mon HH:MM" otherwise.
   const formatMsgTime = (value: string | number | Date): string => {
     const d = new Date(value);
@@ -2273,7 +2294,7 @@ export default function ChatLog({ projectId, onSessionStatusChange, onProjectSta
   };
 
   const renderContentWithThinking = (rawContent: string): ReactElement => {
-    const content = fenceBareJson(rawContent);
+    const content = fenceBareJson(localizeUtcResetTimes(rawContent));
     const parts: ReactElement[] = [];
     let lastIndex = 0;
     let segmentCounter = 0;
@@ -2795,7 +2816,7 @@ export default function ChatLog({ projectId, onSessionStatusChange, onProjectSta
                       {resetLabel ? <> — it resets around <span className="font-medium">{resetLabel}</span> (your local time)</> : null}.
                       Wait for the reset, or switch this project to another account in Project Settings → Claude.
                     </p>
-                    <p className="mt-1 text-xs text-amber-600/80 dark:text-amber-400/70">{messageText}</p>
+                    <p className="mt-1 text-xs text-amber-600/80 dark:text-amber-400/70">{localizeUtcResetTimes(messageText)}</p>
                   </div>
                 </div>
               </div>
