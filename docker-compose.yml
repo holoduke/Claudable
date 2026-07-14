@@ -76,16 +76,12 @@ services:
   # control plane can reach it (host-network loopback; the containerized agent has
   # NO docker access). It filters by ENDPOINT, not request body.
   #
-  # RESIDUAL RISK (defense-in-depth gap): /containers/create (POST=1) allows a
-  # host bind mount, so a party that reaches this proxy could `docker run -v /:/h`
-  # and gain host root. tecnativa/docker-socket-proxy cannot inspect the create
-  # body to block that. This is contained because the only caller is Claudable's
-  # own (trusted) code — the agent/preview sandboxes cannot reach 127.0.0.1:2375,
-  # and the control-plane RCE vectors (in-process agent, OAuth SSRF) are closed in
-  # code. FULL FIX (recommended, deferred — needs staged rollout so it can't break
-  # legitimate preview binds, which all resolve under the data root): front this
-  # with a body-inspecting proxy that rejects bind sources outside DATA_HOST_DIR /
-  # Privileged / host PID/NET, or run previews on a rootless dockerd.
+  # tecnativa filters by endpoint but CANNOT inspect the /containers/create body,
+  # so on its own POST=1 would let a caller `docker run -v /:/h` for host root. It
+  # is therefore fronted by `socket-filter` (below), a body-inspecting proxy that
+  # rejects host bind mounts outside the data root + privileged/host-namespace
+  # escapes. This service now has NO published port — only socket-filter reaches
+  # it (over the compose network); Claudable talks to socket-filter at :2375.
   # Only used when PREVIEW_ISOLATION is set; otherwise it just sits idle.
   dockerproxy:
     image: tecnativa/docker-socket-proxy:0.3.0
@@ -126,9 +122,8 @@ services:
       - TASKS=0
       - NODES=0
       - PLUGINS=0
-    ports:
-      # Loopback only — Claudable (host network) reaches it at 127.0.0.1:2375.
-      - "127.0.0.1:2375:2375"
+    # No published port: only socket-filter (same compose network) reaches this,
+    # by service name `dockerproxy:2375`. Claudable talks to socket-filter :2375.
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       # Custom config: the stock 10m idle timeouts severed every quiet preview's
@@ -137,3 +132,34 @@ services:
       # every 10-20 min). Mounted as the TEMPLATE — the entrypoint regenerates
       # haproxy.cfg from it at start; mounting the final file breaks boot.
       - ./docker/socket-proxy/haproxy.cfg.template:/usr/local/etc/haproxy/haproxy.cfg.template:ro
+
+  # Body-inspecting bind-mount filter in FRONT of dockerproxy. Transparently
+  # streams every Docker API call through to dockerproxy, but rejects a
+  # /containers/create that requests a host bind mount outside the data root /
+  # skills / plugins dirs (or privileged / host-namespace / device escapes) —
+  # closing the "docker run -v /:/h → host root" gap. Claudable points
+  # DOCKER_HOST at THIS (127.0.0.1:2375). Fails open on internal errors.
+  # Staged: leave SOCKET_FILTER_ENFORCE unset for log-only ("WOULD BLOCK"); set
+  # it to 1 to actually reject (after confirming the logs show no legit binds).
+  socket-filter:
+    image: node:22-alpine
+    container_name: claudable-socket-filter
+    restart: unless-stopped
+    command: ["node", "/app/filter.js"]
+    environment:
+      - LISTEN_PORT=2375
+      - UPSTREAM_HOST=dockerproxy
+      - UPSTREAM_PORT=2375
+      - SOCKET_FILTER_ENFORCE=${SOCKET_FILTER_ENFORCE:-}
+      # Allowed bind-mount roots (Claudable only mounts under these).
+      - DATA_HOST_DIR=${DATA_HOST_DIR:-}
+      - GLOBAL_SKILLS_HOST_DIR=${GLOBAL_SKILLS_HOST_DIR:-}
+      - AGENT_PLUGINS_HOST_DIR=${AGENT_PLUGINS_HOST_DIR:-}
+      - ALLOWED_BIND_PREFIXES=${ALLOWED_BIND_PREFIXES:-}
+    ports:
+      # Loopback only — Claudable (host network) reaches it at 127.0.0.1:2375.
+      - "127.0.0.1:2375:2375"
+    volumes:
+      - ./docker/socket-filter/filter.js:/app/filter.js:ro
+    depends_on:
+      - dockerproxy

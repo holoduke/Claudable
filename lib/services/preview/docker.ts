@@ -97,7 +97,15 @@ export async function connectToProjectNet(net: string, container: string, alias?
   }
 }
 export async function removeProjectNetwork(projectId: string): Promise<void> {
-  await dockerCli(['network', 'rm', projectNetworkName(projectId)]);
+  // `network rm` fails with "has active endpoints" while the just-stopped
+  // frontend/backend containers are still detaching, leaking the per-project
+  // network until the next boot sweep. Retry a few times so it usually cleans up
+  // now. Best-effort throughout — the boot sweep is the backstop.
+  const name = projectNetworkName(projectId);
+  for (let attempt = 0; attempt < 4; attempt++) {
+    if (await dockerCli(['network', 'rm', name])) return; // removed
+    if (attempt < 3) await new Promise((r) => setTimeout(r, 1500));
+  }
 }
 
 // Skip generated/dependency dirs when scanning a backend's source for changes —

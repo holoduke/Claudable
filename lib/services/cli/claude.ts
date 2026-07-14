@@ -978,13 +978,14 @@ export async function executeClaude(
     });
 
     // Handle streaming response
+    const STREAM_DEBUG = process.env.DEBUG_AGENT_STREAM === '1';
     for await (const message of response) {
-      console.log('[ClaudeService] Message type:', message.type);
+      if (STREAM_DEBUG) console.log('[ClaudeService] Message type:', message.type);
 
       if (message.type === 'stream_event') {
         const event: any = (message as any).event ?? {};
         const sessionKey = (message.session_id ?? message.uuid ?? 'default').toString();
-        console.log('[ClaudeService] Stream event type:', event.type);
+        if (STREAM_DEBUG) console.log('[ClaudeService] Stream event type:', event.type);
 
         let streamState = assistantStreamStates.get(sessionKey);
 
