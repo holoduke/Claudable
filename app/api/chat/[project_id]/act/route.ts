@@ -42,6 +42,19 @@ async function checkpointTurn(projectId: string, projectPath: string, instructio
     /* checkpoints are best-effort — never fail the turn */
   }
 }
+
+// A turn's checkpoint (git add -A) runs AFTER the run slot is released (in the
+// executor's .then), so a fast back-to-back turn could start editing files while
+// the previous turn's checkpoint is still snapshotting — capturing a mix of both
+// turns and making "Revert to here" restore an inconsistent tree. We track the
+// in-flight checkpoint per project and make the NEXT turn wait for it before its
+// agent starts (see `await pendingCheckpoints...` below). No executor changes.
+const pendingCheckpoints = new Map<string, Promise<void>>();
+function runCheckpoint(projectId: string, projectPath: string, instruction: string, requestId?: string): void {
+  const p = checkpointTurn(projectId, projectPath, instruction, requestId);
+  pendingCheckpoints.set(projectId, p);
+  p.finally(() => { if (pendingCheckpoints.get(projectId) === p) pendingCheckpoints.delete(projectId); });
+}
 import { initializeNextJsProject as initializeClaudeProject, applyChanges as applyClaudeChanges } from '@/lib/services/cli/claude';
 import { getDefaultModelForCli, normalizeModelId } from '@/lib/constants/cliModels';
 import { sanitizeActiveCli } from '@/lib/utils/cliOptions';
@@ -491,6 +504,11 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
       console.warn('[API] Preview auto-start check failed (will continue):', error);
     }
 
+    // Wait for the PREVIOUS turn's checkpoint to finish snapshotting before this
+    // turn's agent starts writing files, so the checkpoint can't capture a mix of
+    // two turns (see pendingCheckpoints above). Fast (a git add -A) and bounded.
+    await pendingCheckpoints.get(project_id)?.catch(() => {});
+
     // Claude-only deployment: cliPreference is sanitized to 'claude' above, so
     // only the Claude executor runs (the codex/cursor/qwen/glm adapters are
     // removed — glm redirected ANTHROPIC_BASE_URL to z.ai process-wide).
@@ -504,7 +522,7 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
         requesterItopsEnabled,
         requester?.id,
       ).then(() => {
-        void checkpointTurn(project_id, projectPath, finalInstruction, requestId);
+        runCheckpoint(project_id, projectPath, finalInstruction, requestId);
         // A compiled/production backend doesn't hot-reload — rebuild it if the agent
         // changed its source (no-op for frontend edits / dev-reload backends).
         void previewManager.rebuildBackendIfChanged(project_id);
@@ -543,7 +561,7 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
         requesterItopsEnabled,
         requester?.id,
       ).then(() => {
-        void checkpointTurn(project_id, projectPath, finalInstruction, requestId);
+        runCheckpoint(project_id, projectPath, finalInstruction, requestId);
         // A compiled/production backend doesn't hot-reload — rebuild it if the agent
         // changed its source (no-op for frontend edits / dev-reload backends).
         void previewManager.rebuildBackendIfChanged(project_id);

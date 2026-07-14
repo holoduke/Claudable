@@ -28,11 +28,20 @@ export async function revokeShare(projectId: string): Promise<void> {
   await prisma.projectShare.deleteMany({ where: { projectId } });
 }
 
-/** Resolve a share token to its project id, or null if invalid/revoked. */
+// Optional expiry for share links. Default 0 = never expire (unchanged behavior);
+// set SHARE_TTL_DAYS to auto-invalidate stakeholder links after N days.
+const SHARE_TTL_DAYS = Number(process.env.SHARE_TTL_DAYS || 0);
+
+/** Resolve a share token to its project id, or null if invalid/revoked/expired. */
 export async function resolveShareToken(token: string): Promise<string | null> {
   if (!token || token.length < 10) return null;
-  const s = await prisma.projectShare.findUnique({ where: { token }, select: { projectId: true } });
-  return s?.projectId ?? null;
+  const s = await prisma.projectShare.findUnique({ where: { token }, select: { projectId: true, createdAt: true } });
+  if (!s) return null;
+  if (SHARE_TTL_DAYS > 0) {
+    const ageMs = Date.now() - new Date(s.createdAt).getTime();
+    if (ageMs > SHARE_TTL_DAYS * 24 * 60 * 60 * 1000) return null; // expired
+  }
+  return s.projectId;
 }
 
 /** True if the given token is a valid share for this project (guest access gate). */

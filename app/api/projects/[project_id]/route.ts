@@ -41,10 +41,15 @@ export async function GET(
     }
 
     // When the gate is on, a restricted project the user can't access is hidden
-    // (404, not 403 — don't reveal that it exists).
+    // (404, not 403 — don't reveal that it exists). A NULL session must deny too:
+    // the Edge middleware only checks JWT signature/expiry, so a deactivated
+    // user's still-valid cookie reaches here; getSessionUser() then returns null
+    // (isActive=false). Falling through on null would leak ANY project and defeat
+    // the isActive revocation + membership checks — so deny unless there's an
+    // active user WITH access.
     if (authEnabled()) {
       const me = await getSessionUser();
-      if (me && !(await canAccessProject(me, project as never))) {
+      if (!me || !(await canAccessProject(me, project as never))) {
         return NextResponse.json(
           { success: false, error: 'Project not found' },
           { status: 404 }

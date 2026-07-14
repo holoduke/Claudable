@@ -1509,7 +1509,12 @@ export default function ChatLog({ projectId, onSessionStatusChange, onProjectSta
 
     const resolveStreamUrl = () => {
       const rawBase = process.env.NEXT_PUBLIC_API_BASE?.trim() ?? '';
-      const endpoint = `/api/chat/${projectId}/stream`;
+      let endpoint = `/api/chat/${projectId}/stream`;
+      // Pass the newest message time so the server replays anything persisted
+      // after it (gap recovery on reconnect / after a backpressure drop). Dedup
+      // is by message id on integrate, so an overlap is harmless.
+      const since = newestMessageTimeRef.current;
+      if (since) endpoint += `?since=${encodeURIComponent(since)}`;
       if (rawBase.length > 0) {
         const normalizedBase = rawBase.replace(/\/+$/, '');
         return `${normalizedBase}${endpoint}`;
@@ -1642,6 +1647,17 @@ export default function ChatLog({ projectId, onSessionStatusChange, onProjectSta
   // back-to-back page loads on a single scroll gesture. Consume exactly that one
   // synthetic event.
   const skipNextScrollLoadRef = useRef(false);
+  // Newest message time we hold — sent as ?since= on SSE (re)connect for gap
+  // recovery. Kept in a ref so the EventSource effect doesn't remount on it.
+  const newestMessageTimeRef = useRef<string | null>(null);
+  useEffect(() => {
+    let max = newestMessageTimeRef.current;
+    for (const m of messages) {
+      const t = m.createdAt;
+      if (t && (!max || new Date(t).getTime() > new Date(max).getTime())) max = t as string;
+    }
+    newestMessageTimeRef.current = max;
+  }, [messages]);
   // Indirection so the scroll handler (defined above loadOlderMessages) can call
   // it without a use-before-declaration ordering problem.
   const loadOlderRef = useRef<() => void>(() => {});

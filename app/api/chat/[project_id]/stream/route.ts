@@ -6,6 +6,8 @@
 import { NextRequest } from 'next/server';
 import { denyUnlessProjectAccess } from '@/lib/auth/gate';
 import { streamManager } from '@/lib/services/stream';
+import { prisma } from '@/lib/db/client';
+import { serializeMessage } from '@/lib/serializers/chat';
 
 interface RouteContext {
   params: Promise<{ project_id: string }>;
@@ -64,6 +66,34 @@ export async function GET(
         controller.enqueue(new TextEncoder().encode(welcomeMessage));
       } catch (error) {
         console.error('[SSE] Failed to send welcome message:', error);
+      }
+
+      // Gap recovery: a reconnecting client passes ?since=<newest message ISO it
+      // has>. Replay anything persisted after that so messages streamed during a
+      // network blip or a backpressure drop aren't lost until a full reload. The
+      // client dedupes by message id, so an overlap is harmless. Bounded.
+      const since = request.nextUrl.searchParams.get('since');
+      if (since) {
+        const sinceDate = new Date(since);
+        if (!Number.isNaN(sinceDate.getTime())) {
+          (async () => {
+            try {
+              const missed = await prisma.message.findMany({
+                where: { projectId: project_id, createdAt: { gt: sinceDate } },
+                orderBy: { createdAt: 'asc' },
+                take: 200,
+              });
+              for (const m of missed) {
+                if (!streamController) break; // client already gone
+                const forStream = { ...m, updatedAt: (m as { updatedAt?: Date }).updatedAt ?? m.createdAt } as unknown as Parameters<typeof serializeMessage>[0];
+                const frame = `data: ${JSON.stringify({ type: 'message', data: serializeMessage(forStream, { isFinal: true }) })}\n\n`;
+                controller.enqueue(new TextEncoder().encode(frame));
+              }
+            } catch (e) {
+              console.error('[SSE] replay-since failed:', e);
+            }
+          })();
+        }
       }
 
       // Heartbeat (every 30 seconds)

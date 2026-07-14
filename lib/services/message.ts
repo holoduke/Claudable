@@ -69,15 +69,20 @@ export async function createMessage(input: CreateMessageInput): Promise<Message>
       : '';
   let lastError: Error | null = null;
 
-  console.log('[MessageService] Creating message with metadata:', {
-    messageId: input.id,
-    projectId: input.projectId,
-    role: input.role,
-    hasMetadata: !!input.metadata,
-    metadataKeys: input.metadata ? Object.keys(input.metadata) : [],
-    metadataJsonLength: metadataLength,
-    metadataJson: metadataPreview,
-  });
+  // Per-message metadata dumps are noisy on a busy multi-project stream (several
+  // writes per turn) and violate the no-console-in-prod rule — gate behind a flag.
+  const MSG_DEBUG = process.env.DEBUG_MESSAGES === '1';
+  if (MSG_DEBUG) {
+    console.log('[MessageService] Creating message with metadata:', {
+      messageId: input.id,
+      projectId: input.projectId,
+      role: input.role,
+      hasMetadata: !!input.metadata,
+      metadataKeys: input.metadata ? Object.keys(input.metadata) : [],
+      metadataJsonLength: metadataLength,
+      metadataJson: metadataPreview,
+    });
+  }
 
   // Retry logic with exponential backoff for database operations
   for (let attempt = 1; attempt <= 3; attempt++) {
@@ -97,20 +102,22 @@ export async function createMessage(input: CreateMessageInput): Promise<Message>
         },
       });
 
-      console.log(`[MessageService] Created message: ${message.id} (${input.role})${input.requestId ? ` [requestId: ${input.requestId}]` : ''} on attempt ${attempt}`);
-      console.log('[MessageService] Stored metadataJson length:', metadataLength);
+      if (MSG_DEBUG) {
+        console.log(`[MessageService] Created message: ${message.id} (${input.role})${input.requestId ? ` [requestId: ${input.requestId}]` : ''} on attempt ${attempt}`);
+        console.log('[MessageService] Stored metadataJson length:', metadataLength);
+      }
 
       const mappedMessage = mapPrismaMessage(message);
-      const mappedMetadataLength = mappedMessage.metadataJson ? mappedMessage.metadataJson.length : 0;
-      const mappedMetadataPreview =
-        mappedMessage.metadataJson && mappedMetadataLength > 0
-          ? `${mappedMessage.metadataJson.substring(0, 200)}${mappedMetadataLength > 200 ? '...' : ''}`
-          : '';
-      console.log('[MessageService] Mapped message metadata:', {
-        hasMetadataJson: mappedMetadataLength > 0,
-        metadataJsonLength: mappedMetadataLength,
-        metadataJsonPreview: mappedMetadataPreview,
-      });
+      if (MSG_DEBUG) {
+        const mappedMetadataLength = mappedMessage.metadataJson ? mappedMessage.metadataJson.length : 0;
+        console.log('[MessageService] Mapped message metadata:', {
+          hasMetadataJson: mappedMetadataLength > 0,
+          metadataJsonLength: mappedMetadataLength,
+          metadataJsonPreview: mappedMessage.metadataJson && mappedMetadataLength > 0
+            ? `${mappedMessage.metadataJson.substring(0, 200)}${mappedMetadataLength > 200 ? '...' : ''}`
+            : '',
+        });
+      }
 
       return mappedMessage;
     } catch (error) {

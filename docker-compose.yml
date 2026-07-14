@@ -71,9 +71,21 @@ services:
       # throwaway so deployments that don't use it mount nothing meaningful.
       - ${TRAEFIK_DYNAMIC_HOST_DIR:-./data/.no-traefik}:/traefik-dynamic
 
-  # Locked-down Docker API gateway for project-environment isolation. Claudable
-  # talks to THIS (DOCKER_HOST=tcp://127.0.0.1:2375), never the raw socket, so a
-  # Claudable/agent compromise is limited to container ops — not full host root.
+  # Docker API gateway for project-environment isolation. Claudable talks to THIS
+  # (DOCKER_HOST=tcp://127.0.0.1:2375), never the raw socket, and only the trusted
+  # control plane can reach it (host-network loopback; the containerized agent has
+  # NO docker access). It filters by ENDPOINT, not request body.
+  #
+  # RESIDUAL RISK (defense-in-depth gap): /containers/create (POST=1) allows a
+  # host bind mount, so a party that reaches this proxy could `docker run -v /:/h`
+  # and gain host root. tecnativa/docker-socket-proxy cannot inspect the create
+  # body to block that. This is contained because the only caller is Claudable's
+  # own (trusted) code — the agent/preview sandboxes cannot reach 127.0.0.1:2375,
+  # and the control-plane RCE vectors (in-process agent, OAuth SSRF) are closed in
+  # code. FULL FIX (recommended, deferred — needs staged rollout so it can't break
+  # legitimate preview binds, which all resolve under the data root): front this
+  # with a body-inspecting proxy that rejects bind sources outside DATA_HOST_DIR /
+  # Privileged / host PID/NET, or run previews on a rootless dockerd.
   # Only used when PREVIEW_ISOLATION is set; otherwise it just sits idle.
   dockerproxy:
     image: tecnativa/docker-socket-proxy:0.3.0

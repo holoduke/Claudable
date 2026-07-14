@@ -93,12 +93,21 @@ export async function waitForPreviewReady(
   return false;
 }
 
+// Upper bound on a setup subprocess (install / docker build / predev). Without
+// it, a stalled npm registry, a hung base-image pull, or a wedged predev makes
+// startInternal never resolve — so the `.finally` that frees the reserved
+// preview port never runs, the project is stuck "starting" forever, and the port
+// leaks. On timeout we kill the whole process tree and reject so the caller's
+// teardown (committed=false) releases the port.
+const DEFAULT_COMMAND_TIMEOUT_MS = Number(process.env.PREVIEW_COMMAND_TIMEOUT_MS || 600_000);
+
 export async function appendCommandLogs(
   command: string,
   args: string[],
   cwd: string,
   env: NodeJS.ProcessEnv,
-  logger: (chunk: Buffer | string) => void
+  logger: (chunk: Buffer | string) => void,
+  timeoutMs: number = DEFAULT_COMMAND_TIMEOUT_MS
 ) {
   await new Promise<void>((resolve, reject) => {
     const child = spawn(command, args, {
@@ -108,18 +117,23 @@ export async function appendCommandLogs(
       stdio: ['ignore', 'pipe', 'pipe'],
     });
 
+    let settled = false;
+    const finish = (fn: () => void) => { if (!settled) { settled = true; clearTimeout(timer); fn(); } };
+    const timer = setTimeout(() => {
+      killProcessTree(child);
+      logger(Buffer.from(`\n[PreviewManager] ${command} ${args.join(' ')} timed out after ${timeoutMs}ms — killed.\n`));
+      finish(() => reject(new Error(`${command} ${args.join(' ')} timed out after ${timeoutMs}ms`)));
+    }, timeoutMs);
+
     child.stdout?.on('data', logger);
     child.stderr?.on('data', logger);
 
-    child.on('error', (error) => reject(error));
+    child.on('error', (error) => finish(() => reject(error)));
     child.on('close', (code) => {
-      if (code === 0) {
-        resolve();
-      } else {
-        reject(
-          new Error(`${command} ${args.join(' ')} exited with code ${code}`)
-        );
-      }
+      finish(() => {
+        if (code === 0) resolve();
+        else reject(new Error(`${command} ${args.join(' ')} exited with code ${code}`));
+      });
     });
   });
 }

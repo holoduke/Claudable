@@ -734,6 +734,26 @@ export async function executeClaude(
   const containerize = containerizeFlag
     ? containerizeFlag === 'true'
     : Boolean(process.env.PREVIEW_ISOLATION?.trim());
+
+  // SECURITY: the in-process path runs the agent at THIS process's uid with the
+  // whole filesystem reachable, guarded only by a best-effort bash-string regex.
+  // On any deployment that holds real Claudable secrets, a prompt-injected agent
+  // could read them off disk (/app/.env, the encryption key, cc.db). Refuse to
+  // run in-process when such secrets are present — require the containerized
+  // path (PREVIEW_ISOLATION / AGENT_CONTAINERIZED=true). DATABASE_URL is excluded
+  // (it's a local sqlite file path here, not a shared secret).
+  if (!containerize) {
+    const sensitive = ['AUTH_SECRET', 'ENCRYPTION_KEY', 'GIT_TOKEN', 'COOLIFY_API_TOKEN', 'GOOGLE_CLIENT_SECRET'];
+    const present = sensitive.filter((k) => (process.env[k] ?? '').trim().length > 0);
+    if (present.length > 0) {
+      throw new Error(
+        `Refusing to run the agent in-process: Claudable secrets (${present.join(', ')}) are in the ` +
+        `environment and the in-process path has no OS sandbox. Enable the containerized agent ` +
+        `(set PREVIEW_ISOLATION, or AGENT_CONTAINERIZED=true).`,
+      );
+    }
+  }
+
   if (containerize) {
     await runContainerizedTurn({
       projectId,
