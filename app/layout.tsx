@@ -6,6 +6,7 @@ import 'highlight.js/styles/github-dark.css'
 import '@/lib/services/auto-sync-boot'
 import GlobalSettingsProvider from '@/contexts/GlobalSettingsContext'
 import { AuthProvider } from '@/contexts/AuthContext'
+import I18nProvider from '@/contexts/I18nContext'
 import AppShell from '@/components/layout/AppShell'
 import { ToastProvider } from '@/components/ui/Toast'
 import { Metadata } from 'next'
@@ -30,13 +31,15 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         />
       </head>
       <body className="bg-gray-50 dark:bg-gray-950 text-gray-900 dark:text-gray-50 min-h-screen">
-        <AuthProvider>
-          <GlobalSettingsProvider>
-            <ToastProvider>
-              <AppShell>{children}</AppShell>
-            </ToastProvider>
-          </GlobalSettingsProvider>
-        </AuthProvider>
+        <I18nProvider>
+          <AuthProvider>
+            <GlobalSettingsProvider>
+              <ToastProvider>
+                <AppShell>{children}</AppShell>
+              </ToastProvider>
+            </GlobalSettingsProvider>
+          </AuthProvider>
+        </I18nProvider>
       </body>
     </html>
   );
