@@ -164,6 +164,9 @@ export const toChatMessage = (raw: any): ChatMessage => {
     requestId: raw?.requestId ?? raw?.request_id ?? undefined,
     createdAt,
     updatedAt,
+    // The turn checkpoint SHA that backs the "Revert to here" button. Explicitly
+    // carried (both camel/snake) — omitting it silently dropped the revert action.
+    commitSha: raw?.commitSha ?? raw?.commit_sha ?? null,
     isStreaming: raw?.isStreaming ?? raw?.is_streaming ?? false,
     isFinal: raw?.isFinal ?? raw?.is_final ?? false,
     isOptimistic: raw?.isOptimistic ?? raw?.is_optimistic ?? false,
