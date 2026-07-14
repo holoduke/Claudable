@@ -3420,22 +3420,26 @@ const persistProjectPreferences = useCallback(
                   )}
 
                   {/* Publish/Update — primary CTA, labeled brand button */}
-                  {showPreview && previewUrl && (
+                  {showPreview && previewUrl && (() => {
+                    const publishing = deploymentStatus === 'deploying' || publishLoading;
+                    return (
                     <button
                       className="relative h-9 flex items-center gap-2 px-4 bg-[#DE7356] hover:bg-brand-600 text-white rounded-lg transition-colors shadow-xs font-medium text-sm"
                       onClick={() => setShowPublishPanel(true)}
-                      title="Publish this project"
+                      title={publishing ? 'Publishing… click to view progress' : 'Publish this project'}
                     >
-                      <FaRocket size={13} />
-                      <span>Publish</span>
-                      {deploymentStatus === 'deploying' && (
-                        <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-amber-400 ring-2 ring-white"></span>
+                      {publishing ? (
+                        <span className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" aria-hidden="true" />
+                      ) : (
+                        <FaRocket size={13} />
                       )}
-                      {deploymentStatus === 'ready' && (
+                      <span>{publishing ? 'Publishing…' : 'Publish'}</span>
+                      {deploymentStatus === 'ready' && !publishing && (
                         <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-emerald-400 ring-2 ring-white"></span>
                       )}
                     </button>
-                  )}
+                    );
+                  })()}
 
                   {/* My account — rightmost, so Publish stays to its left */}
                   <UserMenu />
