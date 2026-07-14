@@ -12,6 +12,7 @@ import MyAccountSettings from '@/components/settings/MyAccountSettings';
 import BrandWordmark from '@/components/ui/BrandWordmark';
 import { FaCog } from 'react-icons/fa';
 import { useGlobalSettings } from '@/contexts/GlobalSettingsContext';
+import { useI18n } from '@/contexts/I18nContext';
 import { getModelDefinitionsForCli, normalizeModelId } from '@/lib/constants/cliModels';
 import { fetchCliStatusSnapshot, createCliStatusFallback } from '@/hooks/useCLI';
 import type { CLIStatus } from '@/types/cli';
@@ -112,6 +113,7 @@ const CLI_OPTIONS: CLIOption[] = [
 // Global settings are provided by context
 
 export default function GlobalSettings({ isOpen, onClose, initialTab = 'general' }: GlobalSettingsProps) {
+  const { locale, setLocale, locales, t } = useI18n();
   const [activeTab, setActiveTab] = useState<SettingsTab>(initialTab);
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
   const [authOff, setAuthOff] = useState(false);
@@ -378,15 +380,15 @@ export default function GlobalSettings({ isOpen, onClose, initialTab = 'general'
           <div className="border-b border-gray-200 dark:border-white/8">
             <nav className="flex px-5">
               {([
-                { id: 'general' as const, label: 'General' },
-                { id: 'ai-agents' as const, label: 'AI Agents' },
-                ...(currentUser ? [{ id: 'claude' as const, label: 'Claude' }] : []),
-                ...(currentUser ? [{ id: 'account' as const, label: 'My Account' }] : []),
-                ...(isAdmin ? [{ id: 'users' as const, label: 'Users' }] : []),
-                ...(canManageOrg ? [{ id: 'shared-mcp' as const, label: 'Shared MCP' }] : []),
-                ...(canManageOrg ? [{ id: 'plugins' as const, label: 'Plugins' }] : []),
-                ...(isAdmin ? [{ id: 'system' as const, label: 'Network' }] : []),
-                { id: 'about' as const, label: 'About' }
+                { id: 'general' as const, label: t('settings.tab.general') },
+                { id: 'ai-agents' as const, label: t('settings.tab.aiAgents') },
+                ...(currentUser ? [{ id: 'claude' as const, label: t('settings.tab.claude') }] : []),
+                ...(currentUser ? [{ id: 'account' as const, label: t('settings.tab.account') }] : []),
+                ...(isAdmin ? [{ id: 'users' as const, label: t('settings.tab.users') }] : []),
+                ...(canManageOrg ? [{ id: 'shared-mcp' as const, label: t('settings.tab.sharedMcp') }] : []),
+                ...(canManageOrg ? [{ id: 'plugins' as const, label: t('settings.tab.plugins') }] : []),
+                ...(isAdmin ? [{ id: 'system' as const, label: t('settings.tab.system') }] : []),
+                { id: 'about' as const, label: t('settings.tab.about') }
               ] as { id: SettingsTab; label: string }[]).map(tab => (
                 <button
                   key={tab.id}
@@ -407,6 +409,26 @@ export default function GlobalSettings({ isOpen, onClose, initialTab = 'general'
           <div className="flex-1 p-6 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-transparent">
             {activeTab === 'general' && (
               <div className="space-y-6">
+                <div>
+                  <h3 className="text-lg font-medium text-gray-900 dark:text-gray-50 mb-4">{t('settings.general.language')}</h3>
+                  <div className="p-4 bg-gray-50 dark:bg-white/3 rounded-xl border border-gray-200 dark:border-white/8">
+                    <div className="flex items-center justify-between gap-4">
+                      <div className="min-w-0">
+                        <p className="font-medium text-gray-900 dark:text-gray-50">{t('settings.general.language')}</p>
+                        <p className="mt-0.5 text-sm text-gray-500 dark:text-gray-400">{t('settings.general.languageDesc')}</p>
+                      </div>
+                      <select
+                        value={locale}
+                        onChange={(e) => setLocale(e.target.value as typeof locale)}
+                        className="shrink-0 pl-3 pr-8 py-2 text-sm border border-gray-200 dark:border-white/8 rounded-lg bg-white dark:bg-white/6 hover:border-gray-300 dark:hover:border-white/18 text-gray-700 dark:text-gray-200 focus:outline-hidden focus:ring-0 transition-colors cursor-pointer"
+                      >
+                        {locales.map((l) => (
+                          <option key={l.code} value={l.code}>{l.flag} {l.label}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                </div>
                 <div>
                   <h3 className="text-lg font-medium text-gray-900 dark:text-gray-50 mb-4">Defaults</h3>
                   <div className="p-4 bg-gray-50 dark:bg-white/3 rounded-xl border border-gray-200 dark:border-white/8">

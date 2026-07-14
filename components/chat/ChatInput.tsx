@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { SendHorizontal, MessageSquare, Image as ImageIcon, Wrench, Square } from 'lucide-react';
 import { useToast } from '@/components/ui/Toast';
+import { useT } from '@/contexts/I18nContext';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? '';
 
@@ -77,6 +78,7 @@ export default function ChatInput({
   restoreDraft
 }: ChatInputProps) {
   const toast = useToast();
+  const t = useT();
   const [message, setMessage] = useState('');
   const [uploadedImages, setUploadedImages] = useState<UploadedImage[]>([]);
   const [isUploading, setIsUploading] = useState(false);
@@ -768,7 +770,7 @@ export default function ChatInput({
               title="Act Mode: AI can modify code and create/delete files"
             >
               <Wrench className="h-3.5 w-3.5" />
-              <span>Act</span>
+              <span>{t('chat.act')}</span>
             </button>
             <button
               type="button"
@@ -781,7 +783,7 @@ export default function ChatInput({
               title="Chat Mode: AI provides answers without modifying code"
             >
               <MessageSquare className="h-3.5 w-3.5" />
-              <span>Chat</span>
+              <span>{t('chat.chat')}</span>
             </button>
           </div>
 

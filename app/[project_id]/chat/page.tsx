@@ -11,6 +11,7 @@ import UserMenu from '@/components/layout/UserMenu';
 import type { SelectedElement } from '@/components/chat/VisualEditorPanel';
 import CommentsLayer, { type CommentPin, type ComposeAnchor } from '@/components/chat/CommentsLayer';
 import { useToast } from '@/components/ui/Toast';
+import { useT } from '@/contexts/I18nContext';
 import ConfirmDialog from '@/components/ui/ConfirmDialog';
 import ThemeToggle from '@/components/ui/ThemeToggle';
 import ChatInput from '@/components/chat/ChatInput';
@@ -176,6 +177,7 @@ export default function ChatPage() {
   const [isSseFallbackActive, setIsSseFallbackActive] = useState(false);
   const [showPreview, setShowPreview] = useState(true);
   const toast = useToast();
+  const t = useT();
   // --- Visual editor (inline edit mode) ---
   const [editMode, setEditMode] = useState(false);
   const [selectedEl, setSelectedEl] = useState<SelectedElement | null>(null);
@@ -3066,7 +3068,7 @@ const persistProjectPreferences = useCallback(
                 isRunning={isRunning || hasActiveRequests}
                 onStop={stopTurn}
                 restoreDraft={draftRestore}
-                placeholder={mode === 'act' ? "Ask Claudable..." : "Chat with Claudable..."}
+                placeholder={t('chat.placeholder')}
                 mode={mode}
                 onModeChange={setMode}
                 projectId={projectId}
@@ -3426,14 +3428,14 @@ const persistProjectPreferences = useCallback(
                     <button
                       className="relative h-9 flex items-center gap-2 px-4 bg-[#DE7356] hover:bg-brand-600 text-white rounded-lg transition-colors shadow-xs font-medium text-sm"
                       onClick={() => setShowPublishPanel(true)}
-                      title={publishing ? 'Publishing… click to view progress' : 'Publish this project'}
+                      title={publishing ? t('topbar.publishing') : t('topbar.publishTitle')}
                     >
                       {publishing ? (
                         <span className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" aria-hidden="true" />
                       ) : (
                         <FaRocket size={13} />
                       )}
-                      <span>{publishing ? 'Publishing…' : 'Publish'}</span>
+                      <span>{publishing ? t('topbar.publishing') : t('topbar.publish')}</span>
                       {deploymentStatus === 'ready' && !publishing && (
                         <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-emerald-400 ring-2 ring-white"></span>
                       )}
