@@ -21,9 +21,46 @@ import { streamManager } from '@/lib/services/stream';
 import { serializeDesignFrame } from '@/lib/serializers/design-explorer';
 import { readDesignSpec } from './styles';
 
-/** Max design containers in flight at once — keeps 3×(1g/1cpu) on the shared box. */
+/** Max design containers in flight at once — keeps 3×(1g/1cpu) on the shared box.
+ *  This is a GLOBAL cap across all canvases/requests (not per-call), so N
+ *  simultaneous "Generate" clicks can't multiply container load. */
 const MAX_CONCURRENT = Math.max(1, Number.parseInt(process.env.DESIGN_MAX_CONCURRENT || '', 10) || 3);
 const FRAME_TIMEOUT_MS = 4 * 60_000;
+
+// --- Global admission semaphore (shared by every generateFrames call) --------
+let activeSlots = 0;
+const slotWaiters: Array<() => void> = [];
+async function acquireSlot(): Promise<void> {
+  if (activeSlots < MAX_CONCURRENT) { activeSlots += 1; return; }
+  await new Promise<void>((resolve) => slotWaiters.push(resolve));
+  activeSlots += 1;
+}
+function releaseSlot(): void {
+  activeSlots -= 1;
+  const next = slotWaiters.shift();
+  if (next) next();
+}
+
+// Abort handles for in-flight frames so a canvas delete can hard-stop the
+// containers instead of orphaning them (they'd keep burning cost + resources).
+const inflight = new Map<string, () => void>();
+/** Hard-stop any still-running generation for these frame ids. */
+export function cancelFrames(frameIds: string[]): void {
+  for (const id of frameIds) {
+    const abort = inflight.get(id);
+    if (abort) { try { abort(); } catch { /* already gone */ } inflight.delete(id); }
+  }
+}
+
+/** Update a frame row, ignoring the "record deleted" race (canvas was removed
+ *  mid-generation) so a cancelled turn doesn't throw an untracked rejection. */
+async function safeUpdateFrame(frameId: string, data: Record<string, unknown>): Promise<void> {
+  try {
+    await prisma.designFrame.update({ where: { id: frameId }, data });
+  } catch (e) {
+    if ((e as { code?: string })?.code !== 'P2025') throw e; // P2025 = row gone (deleted)
+  }
+}
 
 /** Absolute scratch dir for a frame (under data/ so agentHostPath resolves it). */
 export function frameScratchDir(canvasId: string, frameId: string): string {
@@ -126,7 +163,10 @@ export async function generateFrame(
   const frame = await prisma.designFrame.findUnique({ where: { id: frameId } });
   if (!frame) return;
 
-  await prisma.designFrame.update({ where: { id: frameId }, data: { status: 'generating' } });
+  // Wait for a global slot (bounds total containers across all requests). Stay
+  // `pending` while queued so the UI doesn't claim "generating" prematurely.
+  await acquireSlot();
+  await safeUpdateFrame(frameId, { status: 'generating' });
   await publishFrame(projectId, frameId);
 
   const scratch = frameScratchDir(frame.canvasId, frameId);
@@ -150,7 +190,7 @@ export async function generateFrame(
     const model = normalizeModelId('claude', getDefaultModelForCli('claude'));
 
     const usage: CapturedUsage = {};
-    const { done } = runAgentTurnContainerized(
+    const { done, abort } = runAgentTurnContainerized(
       {
         projectHostPath: agentHostPath(scratch),
         prompt: framePrompt(frame.prompt, styleSpec, frame.styleName, hasReference),
@@ -165,6 +205,7 @@ export async function generateFrame(
       },
       (evt) => captureUsage(evt as Record<string, unknown>, usage),
     );
+    inflight.set(frameId, abort); // so a canvas delete can hard-stop this
     const result = await done;
 
     const html = await readGeneratedHtml(scratch);
@@ -173,41 +214,39 @@ export async function generateFrame(
     }
     const htmlPath = path.join(scratch, 'index.html');
     await fs.writeFile(htmlPath, html, 'utf8'); // normalize to index.html
-    await prisma.designFrame.update({
-      where: { id: frameId },
-      data: {
-        status: 'ready', htmlPath, errorText: null,
-        costUsd: usage.costUsd ?? null, inputTokens: usage.inputTokens ?? null,
-        outputTokens: usage.outputTokens ?? null, durationMs: usage.durationMs ?? null,
-      },
+    await safeUpdateFrame(frameId, {
+      status: 'ready', htmlPath, errorText: null,
+      costUsd: usage.costUsd ?? null, inputTokens: usage.inputTokens ?? null,
+      outputTokens: usage.outputTokens ?? null, durationMs: usage.durationMs ?? null,
     });
   } catch (error) {
-    await prisma.designFrame.update({
-      where: { id: frameId },
-      data: { status: 'error', errorText: error instanceof Error ? error.message.slice(0, 500) : 'Generation failed' },
+    await safeUpdateFrame(frameId, {
+      status: 'error', errorText: error instanceof Error ? error.message.slice(0, 500) : 'Generation failed',
     });
+  } finally {
+    inflight.delete(frameId);
+    releaseSlot();
   }
   await publishFrame(projectId, frameId);
 }
 
-/** Run `frameIds` through generateFrame with bounded concurrency. */
+/**
+ * Generate all `frameIds`. Each frame independently waits for a GLOBAL slot
+ * (acquireSlot in generateFrame), so this can safely fire them all at once —
+ * the semaphore, not this fan-out, bounds concurrency across every request.
+ */
 export async function generateFrames(
   projectId: string,
   frameIds: string[],
   requesterUserId?: string,
 ): Promise<void> {
-  let cursor = 0;
-  const worker = async (): Promise<void> => {
-    while (cursor < frameIds.length) {
-      const id = frameIds[cursor++];
-      await generateFrame(projectId, id, requesterUserId);
-    }
-  };
-  const workers = Array.from({ length: Math.min(MAX_CONCURRENT, frameIds.length) }, () => worker());
-  await Promise.all(workers);
-
-  // Mark the canvas ready once all its frames have settled.
+  if (frameIds.length === 0) return;
   const canvasId = (await prisma.designFrame.findUnique({ where: { id: frameIds[0] }, select: { canvasId: true } }))?.canvasId;
+
+  await Promise.all(frameIds.map((id) => generateFrame(projectId, id, requesterUserId)));
+
+  // Mark the canvas ready once all its frames have settled (independent of the
+  // above so one frame's failure can't strand the canvas in `generating`).
   if (canvasId) {
     await prisma.designCanvas.update({ where: { id: canvasId }, data: { status: 'ready' } }).catch(() => {});
   }

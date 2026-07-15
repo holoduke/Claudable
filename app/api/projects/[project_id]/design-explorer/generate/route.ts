@@ -24,6 +24,14 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
     const _gate = await denyUnlessProjectAccess(project_id, { write: true });
     if (_gate) return _gate;
 
+    // Reject oversized bodies BEFORE parsing into memory — the optional
+    // referenceImage is a base64 data URL, so cap the whole request generously
+    // (8MB image ≈ ~11MB base64 + prompt).
+    const declaredLen = Number(request.headers.get('content-length') || 0);
+    if (declaredLen && declaredLen > 12 * 1024 * 1024) {
+      return createErrorResponse('too_large', 'Request too large (reference image max 8MB)', 413);
+    }
+
     const body = (await request.json().catch(() => null)) ?? {};
     const prompt = typeof body.prompt === 'string' ? body.prompt.trim() : '';
     if (!prompt) return createErrorResponse('invalid', 'A design brief (prompt) is required', 400);
@@ -37,10 +45,19 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
       : [];
     const catalog = await listDesignCatalog();
     const byId = new Map(catalog.map((c) => [c.id, c]));
-    const seeds =
+    let seeds =
       requestedIds.length > 0
         ? requestedIds.slice(0, count).map((id) => byId.get(id)).filter((c): c is NonNullable<typeof c> => Boolean(c))
         : await pickDiverseStyles(count);
+    // If explicit styleIds didn't resolve to `count` valid styles, top up with
+    // diverse ones so the user still gets the number of variations they asked for.
+    if (seeds.length < count) {
+      const have = new Set(seeds.map((s) => s.id));
+      for (const s of await pickDiverseStyles(count)) {
+        if (seeds.length >= count) break;
+        if (!have.has(s.id)) { seeds.push(s); have.add(s.id); }
+      }
+    }
 
     const canvas = await prisma.designCanvas.create({
       data: {
