@@ -7,6 +7,7 @@ import { denyUnlessProjectAccess } from '@/lib/auth/gate';
 import { prisma } from '@/lib/db/client';
 import { serializeDesignCanvas } from '@/lib/serializers/design-explorer';
 import { sweepOrphanedCanvasScratch } from '@/lib/services/design-explorer/cleanup';
+import { recoverStuckFrames } from '@/lib/services/design-explorer/generate';
 import { createSuccessResponse, handleApiError } from '@/lib/utils/api-response';
 
 // Best-effort reclaim of scratch dirs whose canvas is gone (crash/redeploy
@@ -26,6 +27,7 @@ export async function GET(_request: Request, { params }: RouteContext) {
     if (now - lastSweep > 60 * 60 * 1000) {
       lastSweep = now;
       void sweepOrphanedCanvasScratch().catch(() => {});
+      void recoverStuckFrames().catch(() => {}); // un-stick frames orphaned by a restart
     }
 
     const canvases = await prisma.designCanvas.findMany({

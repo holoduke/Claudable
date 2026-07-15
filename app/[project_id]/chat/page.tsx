@@ -3195,7 +3195,7 @@ const persistProjectPreferences = useCallback(
                           ? 'bg-white dark:bg-white/12 text-gray-900 dark:text-gray-50 '
                           : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 '
                       }`}
-                      onClick={() => setDesignMode(true)}
+                      onClick={() => { setDesignMode(true); setEditMode(false); setCommentMode(false); }}
                       title="Design"
                       aria-label="Design"
                       aria-pressed={designMode}
@@ -3207,7 +3207,7 @@ const persistProjectPreferences = useCallback(
                   </div>
 
                   {/* Center Controls */}
-                  {showPreview && !editMode && !commentMode && previewUrl && (
+                  {showPreview && !designMode && !editMode && !commentMode && previewUrl && (
                     <div className="flex items-center gap-3">
                       {/* Route Navigation */}
                       <div className="h-9 flex items-center bg-gray-100 dark:bg-white/6 rounded-lg px-3 border border-gray-200 dark:border-white/8 ">
@@ -3391,7 +3391,7 @@ const persistProjectPreferences = useCallback(
                           {previewUrl && (
                             <button
                               role="menuitem"
-                              onClick={() => { setShowPreview(true); setEditMode((v) => !v); setOverflowMenuOpen(false); }}
+                              onClick={() => { setDesignMode(false); setShowPreview(true); setEditMode((v) => !v); setOverflowMenuOpen(false); }}
                               disabled={bridgeAbsent}
                               title={bridgeAbsent ? 'Visual editing needs the preview bridge (currently Nuxt only)' : undefined}
                               className={`w-full flex items-center gap-2.5 px-3 py-1.5 text-sm text-left transition-colors disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-50 dark:hover:bg-white/6 ${editMode ? 'text-[#DE7356] font-medium' : 'text-gray-700 dark:text-gray-200'}`}
@@ -3405,7 +3405,7 @@ const persistProjectPreferences = useCallback(
                           {previewUrl && (
                             <button
                               role="menuitem"
-                              onClick={() => { setShowPreview(true); setCommentMode((v) => !v); setOverflowMenuOpen(false); }}
+                              onClick={() => { setDesignMode(false); setShowPreview(true); setCommentMode((v) => !v); setOverflowMenuOpen(false); }}
                               disabled={bridgeAbsent}
                               title={bridgeAbsent ? 'Comments need the preview bridge (currently Nuxt only)' : undefined}
                               className={`w-full flex items-center gap-2.5 px-3 py-1.5 text-sm text-left transition-colors disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-50 dark:hover:bg-white/6 ${commentMode ? 'text-[#DE7356] font-medium' : 'text-gray-700 dark:text-gray-200'}`}
@@ -3555,6 +3555,7 @@ const persistProjectPreferences = useCallback(
                 <div className={`absolute inset-0 ${designMode ? '' : 'hidden'}`}>
                   <DesignExplorerBoard
                     projectId={projectId}
+                    active={designMode}
                     busy={isRunning || hasActiveRequests}
                     onApply={(prompt) => {
                       // Same busy rule as DesignImportModal: never launch a 2nd turn.

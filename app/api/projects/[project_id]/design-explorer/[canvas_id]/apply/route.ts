@@ -11,6 +11,7 @@ import { getProjectById } from '@/lib/services/project';
 import { prisma } from '@/lib/db/client';
 import { stageFrameForPort } from '@/lib/services/design-explorer/apply';
 import { createSuccessResponse, createErrorResponse, handleApiError } from '@/lib/utils/api-response';
+import { bodyTooLarge, SMALL_JSON_LIMIT } from '@/lib/utils/request-size';
 
 const PROJECTS_DIR = process.env.PROJECTS_DIR || './data/projects';
 
@@ -21,6 +22,7 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
     const { project_id, canvas_id } = await params;
     const _gate = await denyUnlessProjectAccess(project_id, { write: true });
     if (_gate) return _gate;
+    if (bodyTooLarge(request, SMALL_JSON_LIMIT)) return createErrorResponse('too_large', 'Request too large', 413);
 
     const body = (await request.json().catch(() => null)) ?? {};
     const frameId = typeof body.frameId === 'string' ? body.frameId : '';
