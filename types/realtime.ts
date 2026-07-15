@@ -52,6 +52,24 @@ export interface PreviewEventInfo {
   severity?: 'info' | 'warning' | 'error';
 }
 
+/** A Design Explorer frame whose status changed (generation progress). Kept
+ *  structural (not importing the serializer) to avoid a type cycle. */
+export interface DesignFrameEventInfo {
+  canvasId: string;
+  frame: {
+    id: string;
+    canvasId: string;
+    styleId: string | null;
+    styleName: string | null;
+    status: string;
+    version: number;
+    parentFrameId: string | null;
+    hasHtml: boolean;
+    errorText: string | null;
+    updatedAt: string;
+  };
+}
+
 export type RealtimeEvent =
   | { type: 'message'; data: RealtimeMessage }
   | { type: 'status'; data: RealtimeStatus }
@@ -60,4 +78,5 @@ export type RealtimeEvent =
   | { type: 'heartbeat'; data: HeartbeatInfo }
   | { type: 'preview_error'; data: PreviewEventInfo }
   | { type: 'preview_success'; data: PreviewEventInfo }
-  | { type: 'agent_status'; data: AgentUsageSnapshot };
+  | { type: 'agent_status'; data: AgentUsageSnapshot }
+  | { type: 'design_frame'; data: DesignFrameEventInfo };
