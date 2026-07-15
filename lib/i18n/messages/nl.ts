@@ -124,6 +124,8 @@ export const nl: Record<keyof typeof en, string> = {
   'designExplorer.combineSelect': 'Kies twee ontwerpen, dan Combineren',
   'designExplorer.totalCost': 'Geschat verbruik',
   'designExplorer.usageTip': 'Geschat API-equivalent verbruik — gedekt door je Claude-abonnement, geen kosten.',
+  'designExplorer.actionFailed': 'Er ging iets mis — probeer het opnieuw.',
+  'designExplorer.imageTooLarge': 'Die afbeelding is te groot (max 8MB).',
   'home.emptyTitle': 'Je eerste app is één prompt verwijderd',
   'home.emptyBody': 'Beschrijf hierboven wat je wilt bouwen — Claudable maakt het, draait het live, en jij verfijnt via de chat.',
   'home.deleteTitle': 'Project verwijderen',

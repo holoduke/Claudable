@@ -3196,8 +3196,8 @@ const persistProjectPreferences = useCallback(
                           : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 '
                       }`}
                       onClick={() => setDesignMode(true)}
-                      title={t('designExplorer.title')}
-                      aria-label={t('designExplorer.title')}
+                      title="Design"
+                      aria-label="Design"
                       aria-pressed={designMode}
                     >
                       <span className="w-4 h-4 flex items-center justify-center">
@@ -3550,7 +3550,9 @@ const persistProjectPreferences = useCallback(
               
               {/* Content Area */}
               <div className="flex-1 relative bg-black overflow-hidden">
-                {designMode ? (
+                {/* Design board stays MOUNTED (toggled via `hidden`) so switching to
+                    Preview/Code doesn't discard an in-progress brief/image/draft. */}
+                <div className={`absolute inset-0 ${designMode ? '' : 'hidden'}`}>
                   <DesignExplorerBoard
                     projectId={projectId}
                     busy={isRunning || hasActiveRequests}
@@ -3565,7 +3567,8 @@ const persistProjectPreferences = useCallback(
                       setShowPreview(true);
                     }}
                   />
-                ) : (
+                </div>
+                <div className={designMode ? 'hidden' : 'contents'}>
                 <AnimatePresence initial={false}>
                   {showPreview ? (
                   <MotionDiv
@@ -3986,7 +3989,7 @@ const persistProjectPreferences = useCallback(
               />
                 )}
                 </AnimatePresence>
-                )}
+                </div>
               </div>
             </div>
           </div>

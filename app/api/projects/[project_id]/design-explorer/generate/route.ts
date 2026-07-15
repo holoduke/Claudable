@@ -35,6 +35,8 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
     const body = (await request.json().catch(() => null)) ?? {};
     const prompt = typeof body.prompt === 'string' ? body.prompt.trim() : '';
     if (!prompt) return createErrorResponse('invalid', 'A design brief (prompt) is required', 400);
+    // Cap the brief so it can't bloat the (up to 6) per-frame generation prompts.
+    if (prompt.length > 4000) return createErrorResponse('invalid', 'Brief is too long (max 4000 characters)', 400);
 
     const count = Math.min(6, Math.max(1, Number.parseInt(String(body.count ?? 3), 10) || 3));
     const requester = await getSessionUser();
@@ -70,19 +72,25 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
     });
 
     // Optional reference image (data URL) — store it once per canvas; frames copy
-    // it into their scratch so the agent can match it. Cap the size defensively.
-    const ref = typeof body.referenceImage === 'string' ? body.referenceImage : '';
-    const m = ref.match(/^data:image\/(png|jpe?g|webp|gif);base64,(.+)$/u);
-    if (m) {
-      const buf = Buffer.from(m[2], 'base64');
-      if (buf.length > 0 && buf.length <= 8 * 1024 * 1024) {
-        const ext = m[1] === 'jpeg' ? 'jpg' : m[1];
-        const dir = path.resolve(process.cwd(), 'data', 'design-canvases', canvas.id);
-        await fs.mkdir(dir, { recursive: true });
-        const refPath = path.join(dir, `reference.${ext}`);
-        await fs.writeFile(refPath, buf);
-        await prisma.designCanvas.update({ where: { id: canvas.id }, data: { referenceImagePath: refPath } });
+    // it into their scratch so the agent can match it. Best-effort: a persistence
+    // failure must NOT abort after the canvas is committed (that would orphan it
+    // at status:'generating' with no frames) — degrade to "no reference".
+    try {
+      const ref = typeof body.referenceImage === 'string' ? body.referenceImage : '';
+      const m = ref.match(/^data:image\/(png|jpe?g|webp|gif);base64,(.+)$/u);
+      if (m) {
+        const buf = Buffer.from(m[2], 'base64');
+        if (buf.length > 0 && buf.length <= 8 * 1024 * 1024) {
+          const ext = m[1] === 'jpeg' ? 'jpg' : m[1];
+          const dir = path.resolve(process.cwd(), 'data', 'design-canvases', canvas.id);
+          await fs.mkdir(dir, { recursive: true });
+          const refPath = path.join(dir, `reference.${ext}`);
+          await fs.writeFile(refPath, buf);
+          await prisma.designCanvas.update({ where: { id: canvas.id }, data: { referenceImagePath: refPath } });
+        }
       }
+    } catch (e) {
+      console.error('[DesignExplorer] reference image persist failed (continuing without it):', e);
     }
 
     // One frame per seed (fall back to a single unseeded frame if the catalog is empty).
