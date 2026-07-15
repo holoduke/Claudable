@@ -50,7 +50,7 @@ export const es: Record<keyof typeof en, string> = {
   'settings.tab.account': 'Cuenta',
   'settings.tab.users': 'Usuarios',
   'settings.tab.sharedMcp': 'MCP compartido',
-  'settings.tab.plugins': 'Complementos',
+  'settings.tab.plugins': 'Plugins',
   'settings.tab.system': 'Sistema',
   'settings.tab.about': 'Acerca de',
 
@@ -126,6 +126,8 @@ export const es: Record<keyof typeof en, string> = {
   'designExplorer.usageTip': 'Uso estimado (equivalente en API) — cubierto por tu suscripción de Claude, sin cargo.',
   'designExplorer.actionFailed': 'Algo salió mal — inténtalo de nuevo.',
   'designExplorer.imageTooLarge': 'Esa imagen es demasiado grande (máx. 8MB).',
+  'designExplorer.previousVersion': 'Versión anterior',
+  'designExplorer.nextVersion': 'Versión siguiente',
   'home.emptyTitle': 'Tu primera app está a un prompt de distancia',
   'home.emptyBody': 'Describe arriba lo que quieres construir — Claudable lo genera, lo ejecuta en vivo y lo refinas conversando.',
   'home.deleteTitle': 'Eliminar proyecto',
