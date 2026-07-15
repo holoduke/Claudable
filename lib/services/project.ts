@@ -21,6 +21,14 @@ export async function getAllProjects(): Promise<Project[]> {
     orderBy: {
       lastActiveAt: 'desc',
     },
+    // Drop the (potentially huge) initial prompt from the LIST payload — it's the
+    // full text a user typed to create the project, can be hundreds of KB, and is
+    // never rendered on the homepage tiles. On box1 it was ~700KB of the ~723KB
+    // response for 16 projects (97%). Both callers (homepage list, admin
+    // system-overview) ignore it; single-project reads still return it.
+    omit: {
+      initialPrompt: true,
+    },
     // Creator + last-editor for the homepage tile (name/email only).
     include: {
       owner: { select: { name: true, email: true } },
