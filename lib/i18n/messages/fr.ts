@@ -124,6 +124,8 @@ export const fr: Record<keyof typeof en, string> = {
   'designExplorer.combineSelect': 'Sélectionnez deux designs, puis Combiner',
   'designExplorer.totalCost': 'Usage est.',
   'designExplorer.usageTip': 'Usage estimé (équivalent API) — couvert par votre abonnement Claude, sans frais.',
+  'designExplorer.actionFailed': 'Une erreur est survenue — réessayez.',
+  'designExplorer.imageTooLarge': 'Image trop volumineuse (max 8 Mo).',
   'home.emptyTitle': 'Votre première app n’est qu’à un prompt',
   'home.emptyBody': 'Décrivez ci-dessus ce que vous voulez créer — Claudable le génère, l’exécute en direct, et vous l’affinez par chat.',
   'home.deleteTitle': 'Supprimer le projet',

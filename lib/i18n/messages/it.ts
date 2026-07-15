@@ -124,6 +124,8 @@ export const it: Record<keyof typeof en, string> = {
   'designExplorer.combineSelect': 'Seleziona due design, poi Combina',
   'designExplorer.totalCost': 'Uso stim.',
   'designExplorer.usageTip': 'Uso stimato (equivalente API) — coperto dal tuo abbonamento Claude, nessun addebito.',
+  'designExplorer.actionFailed': 'Qualcosa è andato storto — riprova.',
+  'designExplorer.imageTooLarge': 'Immagine troppo grande (max 8MB).',
   'home.emptyTitle': 'La tua prima app è a un prompt di distanza',
   'home.emptyBody': 'Descrivi sopra cosa vuoi creare — Claudable lo genera, lo esegue dal vivo e tu lo perfezioni chattando.',
   'home.deleteTitle': 'Elimina progetto',

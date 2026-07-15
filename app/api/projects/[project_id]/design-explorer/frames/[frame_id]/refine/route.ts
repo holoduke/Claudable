@@ -22,6 +22,7 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
     const body = (await request.json().catch(() => null)) ?? {};
     const refinement = typeof body.prompt === 'string' ? body.prompt.trim() : '';
     if (!refinement) return createErrorResponse('invalid', 'A refinement instruction is required', 400);
+    if (refinement.length > 2000) return createErrorResponse('invalid', 'Refinement is too long (max 2000 characters)', 400);
 
     const parent = await prisma.designFrame.findUnique({
       where: { id: frame_id },
@@ -32,7 +33,8 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
     }
 
     // The refined brief keeps the original direction and layers the change on top.
-    const newPrompt = `${parent.prompt}\n\nRefine the previous design: ${refinement}`;
+    // Cap total length so a deep refine chain can't grow the prompt unboundedly.
+    const newPrompt = `${parent.prompt}\n\nRefine the previous design: ${refinement}`.slice(0, 12000);
     const child = await prisma.designFrame.create({
       data: {
         canvasId: parent.canvasId,
@@ -44,6 +46,9 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
         parentFrameId: parent.id,
       },
     });
+    // Reflect that the canvas is working again (generateFrames reconciles to
+    // 'ready' when this settles).
+    await prisma.designCanvas.update({ where: { id: parent.canvasId }, data: { status: 'generating' } }).catch(() => {});
 
     const requester = await getSessionUser();
     void generateFrames(project_id, [child.id], requester?.id).catch((e) => {

@@ -6,8 +6,9 @@
  * iframes. Refine/regenerate any one (refinements are kept as VERSIONS of the
  * same lineage, so a card shows the latest with a ‹ › version stepper), add
  * more variations, switch between past explorations, and "Use this" to port a
- * design into the project. Progress is polled while frames generate (the
- * backend also publishes design_frame SSE events).
+ * design into the project. Progress is tracked by polling the canvas while
+ * frames generate. (The backend also emits design_frame realtime events, not
+ * yet consumed here — a future optimization to replace polling with push.)
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useT } from '@/contexts/I18nContext';
@@ -56,6 +57,7 @@ export default function DesignExplorerBoard({ projectId, onApply, busy }: Props)
   const [html, setHtml] = useState<Record<string, string>>({});
   const [refiningId, setRefiningId] = useState<string | null>(null);
   const [refineText, setRefineText] = useState('');
+  const [refineBusy, setRefineBusy] = useState<string | null>(null);
   const [fullscreenId, setFullscreenId] = useState<string | null>(null);
   const [applyingId, setApplyingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -164,12 +166,12 @@ export default function DesignExplorerBoard({ projectId, onApply, busy }: Props)
         body: JSON.stringify({ prompt, count, referenceImage: refImage || undefined }),
       });
       const j = await r.json().catch(() => null);
-      if (!r.ok || !j?.data) { setError(j?.message || j?.error || 'Failed to start'); return; }
+      if (!r.ok || !j?.data) { setError(j?.message || t('designExplorer.actionFailed')); return; }
       setHtml({}); setVersionIdx({}); setRefImage(null);
       setCanvas(j.data as Canvas);
       setCanvases((cs) => [j.data as Canvas, ...cs]);
-    } catch { setError('Failed to start generation'); } finally { setStarting(false); }
-  }, [brief, count, starting, projectId, refImage]);
+    } catch { setError(t('designExplorer.actionFailed')); } finally { setStarting(false); }
+  }, [brief, count, starting, projectId, refImage, t]);
 
   const addMore = useCallback(async () => {
     if (!canvas || addingMore) return;
@@ -198,7 +200,8 @@ export default function DesignExplorerBoard({ projectId, onApply, busy }: Props)
   }, [canvas, projectId, t]);
 
   const refineFrame = useCallback(async (frameId: string, prompt: string) => {
-    if (!prompt.trim()) return;
+    if (!prompt.trim() || refineBusy === frameId) return; // guard double-submit
+    setRefineBusy(frameId);
     setRefiningId(null); setRefineText('');
     try {
       await fetch(`${API_BASE}/api/projects/${projectId}/design-explorer/frames/${frameId}/refine`, {
@@ -207,8 +210,8 @@ export default function DesignExplorerBoard({ projectId, onApply, busy }: Props)
         body: JSON.stringify({ prompt }),
       });
       if (canvas) refreshCanvas(canvas.id);
-    } catch { /* surfaced on next poll */ }
-  }, [projectId, canvas, refreshCanvas]);
+    } catch { /* surfaced on next poll */ } finally { setRefineBusy(null); }
+  }, [projectId, canvas, refreshCanvas, refineBusy]);
 
   const use = useCallback(async (frameId: string) => {
     if (!canvas || busy) return;
@@ -226,11 +229,11 @@ export default function DesignExplorerBoard({ projectId, onApply, busy }: Props)
 
   const onPickImage = useCallback((file: File | null) => {
     if (!file) { setRefImage(null); return; }
-    if (file.size > 8 * 1024 * 1024) { setError('Reference image is too large (max 8MB)'); return; }
+    if (file.size > 8 * 1024 * 1024) { setError(t('designExplorer.imageTooLarge')); return; }
     const reader = new FileReader();
     reader.onload = () => setRefImage(typeof reader.result === 'string' ? reader.result : null);
     reader.readAsDataURL(file);
-  }, []);
+  }, [t]);
 
   const toggleSelect = useCallback((frameId: string) => {
     setSelected((s) => (s.includes(frameId) ? s.filter((x) => x !== frameId) : [...s, frameId].slice(-2)));
@@ -264,9 +267,13 @@ export default function DesignExplorerBoard({ projectId, onApply, busy }: Props)
     URL.revokeObjectURL(url);
   }, [html]);
 
+  // Anchor top-left and scale down from there. (Flex-centering an absolutely-
+  // positioned pre-transform box pushed the scaled content off-screen, so cards
+  // rendered blank — see review.) top-left + overflow-hidden shows the top of the
+  // mockup, cropped, exactly like a thumbnail.
   const iframeStyle = device === 'mobile'
-    ? { width: '390px', height: '1400px', transform: 'scale(0.82)', transformOrigin: 'top center' as const }
-    : { width: '1280px', height: '1600px', transform: 'scale(0.28)', transformOrigin: 'top left' as const };
+    ? { width: '390px', height: '1400px', transform: 'scale(0.92)', transformOrigin: 'top left' as const }
+    : { width: '1280px', height: '1600px', transform: 'scale(0.32)', transformOrigin: 'top left' as const };
 
   const fullscreenFrame = lineages.flatMap((l) => l.versions).find((f) => f.id === fullscreenId);
 
@@ -277,6 +284,7 @@ export default function DesignExplorerBoard({ projectId, onApply, busy }: Props)
       {(canvases.length > 0 || canvas) && (
       <div className="sticky top-0 z-10 flex items-center gap-2 px-4 py-2 border-b border-gray-200 dark:border-white/8 bg-gray-50/90 dark:bg-[#0c0a09]/90 backdrop-blur">
         <select
+          aria-label={t('designExplorer.history')}
           value={canvas?.id ?? ''}
           onChange={(e) => { const c = canvases.find((x) => x.id === e.target.value); if (c) { setHtml({}); setVersionIdx({}); void refreshCanvas(c.id); } }}
           className="max-w-[40%] truncate bg-transparent border border-gray-200 dark:border-white/10 rounded-md px-2 py-1 text-xs text-gray-700 dark:text-gray-200"
@@ -380,9 +388,9 @@ export default function DesignExplorerBoard({ projectId, onApply, busy }: Props)
               const f = versions[idx];
               return (
                 <div key={root} className={`group rounded-xl border bg-white dark:bg-white/3 overflow-hidden transition-colors ${selected.includes(f.id) ? 'ring-2 ring-[#DE7356] border-[#DE7356]' : 'border-gray-200 dark:border-white/8'}`}>
-                  <div className="aspect-4/3 relative bg-gray-100 dark:bg-gray-900 overflow-hidden flex justify-center">
+                  <div className="aspect-4/3 relative bg-gray-100 dark:bg-gray-900 overflow-hidden">
                     {f.status === 'ready' && html[f.id] ? (
-                      <iframe title={f.styleName || 'design'} srcDoc={html[f.id]} sandbox="allow-scripts" className="border-0 bg-white" style={{ position: 'absolute', top: 0, ...iframeStyle }} />
+                      <iframe title={f.styleName || t('designExplorer.title')} srcDoc={html[f.id]} sandbox="allow-scripts" className="border-0 bg-white" style={{ position: 'absolute', top: 0, left: 0, ...iframeStyle }} />
                     ) : f.status === 'error' ? (
                       <div className="absolute inset-0 flex flex-col items-center justify-center text-center p-3 gap-2">
                         <span className="text-xs text-red-500">{t('designExplorer.failed')}</span>
@@ -412,9 +420,9 @@ export default function DesignExplorerBoard({ projectId, onApply, busy }: Props)
                       <span className="text-xs font-medium text-gray-700 dark:text-gray-200 truncate">{f.styleName || '—'}</span>
                       {versions.length > 1 && (
                         <span className="flex items-center gap-1 text-[11px] text-gray-400 dark:text-gray-500 shrink-0">
-                          <button onClick={() => setVersionIdx((v) => ({ ...v, [root]: Math.max(0, idx - 1) }))} disabled={idx === 0} className="disabled:opacity-30">‹</button>
+                          <button aria-label="Previous version" onClick={() => setVersionIdx((v) => ({ ...v, [root]: Math.max(0, idx - 1) }))} disabled={idx === 0} className="disabled:opacity-30">‹</button>
                           v{f.version}
-                          <button onClick={() => setVersionIdx((v) => ({ ...v, [root]: Math.min(versions.length - 1, idx + 1) }))} disabled={idx === versions.length - 1} className="disabled:opacity-30">›</button>
+                          <button aria-label="Next version" onClick={() => setVersionIdx((v) => ({ ...v, [root]: Math.min(versions.length - 1, idx + 1) }))} disabled={idx === versions.length - 1} className="disabled:opacity-30">›</button>
                         </span>
                       )}
                     </div>
@@ -424,7 +432,7 @@ export default function DesignExplorerBoard({ projectId, onApply, busy }: Props)
                           onKeyDown={(e) => { if (e.key === 'Enter') refineFrame(f.id, refineText); if (e.key === 'Escape') setRefiningId(null); }}
                           placeholder={t('designExplorer.refinePlaceholder')}
                           className="flex-1 min-w-0 text-xs bg-transparent border border-gray-200 dark:border-white/10 rounded-md px-2 py-1 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-[#DE7356] focus:outline-none" />
-                        <button onClick={() => refineFrame(f.id, refineText)} className="text-xs px-2 py-1 bg-[#DE7356] text-white rounded-md hover:bg-[#c9634a]">↵</button>
+                        <button aria-label={t('designExplorer.refine')} onClick={() => refineFrame(f.id, refineText)} disabled={refineBusy === f.id} className="text-xs px-2 py-1 bg-[#DE7356] text-white rounded-md hover:bg-[#c9634a] disabled:opacity-40">↵</button>
                       </div>
                     ) : (
                       <div className="flex items-center gap-1.5">
@@ -434,7 +442,7 @@ export default function DesignExplorerBoard({ projectId, onApply, busy }: Props)
                         <button onClick={() => { setRefiningId(f.id); setRefineText(''); }} disabled={f.status !== 'ready'} className="text-xs px-2 py-1 text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 border border-gray-200 dark:border-white/10 rounded-md disabled:opacity-40">
                           {t('designExplorer.refine')}
                         </button>
-                        <button onClick={() => refineFrame(f.id, REGEN_PROMPT)} disabled={f.status !== 'ready'} title={t('designExplorer.regenerate')} className="text-xs px-2 py-1 text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 border border-gray-200 dark:border-white/10 rounded-md disabled:opacity-40">
+                        <button onClick={() => refineFrame(f.id, REGEN_PROMPT)} disabled={f.status !== 'ready' || refineBusy === f.id} title={t('designExplorer.regenerate')} aria-label={t('designExplorer.regenerate')} className="text-xs px-2 py-1 text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 border border-gray-200 dark:border-white/10 rounded-md disabled:opacity-40">
                           ↻
                         </button>
                         <button onClick={() => exportHtml(f)} disabled={f.status !== 'ready' || !html[f.id]} title={t('designExplorer.export')} className="text-xs px-2 py-1 text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 border border-gray-200 dark:border-white/10 rounded-md disabled:opacity-40">
@@ -462,13 +470,13 @@ export default function DesignExplorerBoard({ projectId, onApply, busy }: Props)
       {fullscreenFrame && html[fullscreenFrame.id] && (
         <div className="fixed inset-0 z-[200] bg-black/70 flex items-center justify-center p-6" onClick={() => setFullscreenId(null)}>
           <div className={`relative bg-white rounded-lg shadow-2xl h-[85vh] overflow-hidden ${device === 'mobile' ? 'w-[390px]' : 'w-full max-w-5xl'}`} onClick={(e) => e.stopPropagation()}>
-            <iframe title="design-fullscreen" srcDoc={html[fullscreenFrame.id]} sandbox="allow-scripts" className="w-full h-full border-0" />
+            <iframe title={fullscreenFrame.styleName || t('designExplorer.title')} srcDoc={html[fullscreenFrame.id]} sandbox="allow-scripts" className="w-full h-full border-0" />
             <div className="absolute top-2 right-2 flex gap-2">
-              <button onClick={() => exportHtml(fullscreenFrame)} className="px-3 py-1.5 bg-white/90 text-gray-800 rounded-lg text-sm shadow" title={t('designExplorer.export')}>↓</button>
+              <button onClick={() => exportHtml(fullscreenFrame)} aria-label={t('designExplorer.export')} className="px-3 py-1.5 bg-white/90 text-gray-800 rounded-lg text-sm shadow" title={t('designExplorer.export')}>↓</button>
               <button onClick={() => { void use(fullscreenFrame.id); setFullscreenId(null); }} disabled={busy} className="px-3 py-1.5 bg-[#DE7356] text-white rounded-lg text-sm font-medium hover:bg-[#c9634a] disabled:opacity-40 shadow">
                 {t('designExplorer.use')}
               </button>
-              <button onClick={() => setFullscreenId(null)} className="px-3 py-1.5 bg-white/90 text-gray-800 rounded-lg text-sm shadow">✕</button>
+              <button onClick={() => setFullscreenId(null)} aria-label={t('common.close')} className="px-3 py-1.5 bg-white/90 text-gray-800 rounded-lg text-sm shadow">✕</button>
             </div>
           </div>
         </div>

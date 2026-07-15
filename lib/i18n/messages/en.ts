@@ -137,6 +137,8 @@ export const en = {
   'designExplorer.combineSelect': 'Select two designs, then Combine',
   'designExplorer.totalCost': 'Est. usage',
   'designExplorer.usageTip': 'Estimated API-equivalent usage — covered by your Claude subscription, not a charge.',
+  'designExplorer.actionFailed': 'Something went wrong — please try again.',
+  'designExplorer.imageTooLarge': 'That image is too large (max 8MB).',
   'home.emptyTitle': 'Your first app is one prompt away',
   'home.emptyBody': 'Describe what you want to build in the box above — Claudable scaffolds it, runs it live, and you refine by chatting.',
   'home.deleteTitle': 'Delete Project',

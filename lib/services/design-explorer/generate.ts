@@ -28,25 +28,32 @@ const MAX_CONCURRENT = Math.max(1, Number.parseInt(process.env.DESIGN_MAX_CONCUR
 const FRAME_TIMEOUT_MS = 4 * 60_000;
 
 // --- Global admission semaphore (shared by every generateFrames call) --------
+// A freed slot is handed DIRECTLY to a waiter (the count is never released and
+// re-taken), so two microtasks can't both claim the same slot and transiently
+// exceed MAX_CONCURRENT.
 let activeSlots = 0;
 const slotWaiters: Array<() => void> = [];
 async function acquireSlot(): Promise<void> {
-  if (activeSlots < MAX_CONCURRENT) { activeSlots += 1; return; }
+  if (activeSlots < MAX_CONCURRENT && slotWaiters.length === 0) { activeSlots += 1; return; }
   await new Promise<void>((resolve) => slotWaiters.push(resolve));
-  activeSlots += 1;
 }
 function releaseSlot(): void {
-  activeSlots -= 1;
   const next = slotWaiters.shift();
-  if (next) next();
+  if (next) { next(); return; } // hand the slot straight to the next waiter
+  activeSlots -= 1;
 }
 
 // Abort handles for in-flight frames so a canvas delete can hard-stop the
 // containers instead of orphaning them (they'd keep burning cost + resources).
+// A frame registers a no-op the moment it holds a slot (before the slow setup),
+// so a delete arriving during setup marks it cancelled; the real abort replaces
+// it once the container spawns.
 const inflight = new Map<string, () => void>();
+const cancelled = new Set<string>();
 /** Hard-stop any still-running generation for these frame ids. */
 export function cancelFrames(frameIds: string[]): void {
   for (const id of frameIds) {
+    cancelled.add(id);
     const abort = inflight.get(id);
     if (abort) { try { abort(); } catch { /* already gone */ } inflight.delete(id); }
   }
@@ -174,11 +181,19 @@ export async function generateFrame(
   // Wait for a global slot (bounds total containers across all requests). Stay
   // `pending` while queued so the UI doesn't claim "generating" prematurely.
   await acquireSlot();
+  // Register a placeholder abort IMMEDIATELY so a canvas-delete arriving during
+  // the (awaited) setup below still marks this frame cancelled — closing the gap
+  // where a container could spawn for an already-deleted canvas.
+  let aborted = false;
+  inflight.set(frameId, () => { aborted = true; });
+  if (cancelled.has(frameId)) aborted = true;
+
   await safeUpdateFrame(frameId, { status: 'generating' });
   await publishFrame(projectId, frameId);
 
   const scratch = frameScratchDir(frame.canvasId, frameId);
   try {
+    if (aborted) throw new Error('cancelled');
     await fs.mkdir(scratch, { recursive: true });
     const oauthToken =
       (await resolveProjectClaudeToken(projectId, requesterUserId)) ||
@@ -215,6 +230,9 @@ export async function generateFrame(
     // project default. Keeps design exploration inexpensive.
     const model = process.env.DESIGN_MODEL?.trim() || normalizeModelId('claude', getDefaultModelForCli('claude'));
 
+    // Final cancellation check before spending a container on this frame.
+    if (aborted || cancelled.has(frameId)) throw new Error('cancelled');
+
     const usage: CapturedUsage = {};
     const { done, abort } = runAgentTurnContainerized(
       {
@@ -228,10 +246,16 @@ export async function generateFrame(
         memory: '1g',
         cpus: '1.0',
         timeoutMs: FRAME_TIMEOUT_MS,
+        // Design generation needs ZERO MCP tools — it only writes one HTML file.
+        // Force strict mode so the agent can never inherit the credential owner's
+        // account connectors (Gmail/Drive/Calendar/…) when a shared/global token
+        // is in use. (No mcpConfigPath is passed, so strict = no MCP at all.)
+        strictMcpConfig: true,
       },
       (evt) => captureUsage(evt as Record<string, unknown>, usage),
     );
-    inflight.set(frameId, abort); // so a canvas delete can hard-stop this
+    inflight.set(frameId, abort); // replace the placeholder with the real hard-stop
+    if (cancelled.has(frameId)) { abort(); throw new Error('cancelled'); }
     const result = await done;
 
     const html = await readGeneratedHtml(scratch);
@@ -246,14 +270,22 @@ export async function generateFrame(
       outputTokens: usage.outputTokens ?? null, durationMs: usage.durationMs ?? null,
     });
   } catch (error) {
-    await safeUpdateFrame(frameId, {
-      status: 'error', errorText: error instanceof Error ? error.message.slice(0, 500) : 'Generation failed',
-    });
+    // Never let this reject (the caller's Promise.allSettled + docstring rely on
+    // it): record the failure best-effort. A cancelled frame's row may already be
+    // gone (P2025, handled) — don't mark it error in that case.
+    if (!(aborted || cancelled.has(frameId))) {
+      try {
+        await safeUpdateFrame(frameId, {
+          status: 'error', errorText: error instanceof Error ? error.message.slice(0, 500) : 'Generation failed',
+        });
+      } catch { /* swallow — nothing more we can do */ }
+    }
   } finally {
     inflight.delete(frameId);
+    cancelled.delete(frameId);
     releaseSlot();
   }
-  await publishFrame(projectId, frameId);
+  try { await publishFrame(projectId, frameId); } catch { /* row may be gone */ }
 }
 
 /**
@@ -269,11 +301,22 @@ export async function generateFrames(
   if (frameIds.length === 0) return;
   const canvasId = (await prisma.designFrame.findUnique({ where: { id: frameIds[0] }, select: { canvasId: true } }))?.canvasId;
 
-  await Promise.all(frameIds.map((id) => generateFrame(projectId, id, requesterUserId)));
+  // allSettled (not all): a single frame rejecting must NOT skip the canvas
+  // status reconciliation below (that was a path to a permanently-'generating'
+  // canvas). generateFrame is written never to throw, but belt-and-suspenders.
+  await Promise.allSettled(frameIds.map((id) => generateFrame(projectId, id, requesterUserId)));
 
-  // Mark the canvas ready once all its frames have settled (independent of the
-  // above so one frame's failure can't strand the canvas in `generating`).
+  // Reconcile the canvas status from its ACTUAL frames — only flip to 'ready'
+  // when no frame (including ones from a concurrent add-more/combine/refine) is
+  // still pending/generating. Avoids a racy premature 'ready' and never strands.
   if (canvasId) {
-    await prisma.designCanvas.update({ where: { id: canvasId }, data: { status: 'ready' } }).catch(() => {});
+    try {
+      const pending = await prisma.designFrame.count({
+        where: { canvasId, status: { in: ['pending', 'generating'] } },
+      });
+      if (pending === 0) {
+        await prisma.designCanvas.update({ where: { id: canvasId }, data: { status: 'ready' } });
+      }
+    } catch { /* canvas may have been deleted */ }
   }
 }

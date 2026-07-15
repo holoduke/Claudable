@@ -27,6 +27,7 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
     const body = (await request.json().catch(() => null)) ?? {};
     const ids: string[] = Array.isArray(body.frameIds) ? body.frameIds.filter((x: unknown): x is string => typeof x === 'string') : [];
     if (ids.length !== 2) return createErrorResponse('invalid', 'Pick exactly two designs to combine', 400);
+    if (ids[0] === ids[1]) return createErrorResponse('invalid', 'Pick two different designs to combine', 400);
     const instruction = typeof body.instruction === 'string' ? body.instruction.trim() : '';
 
     const canvas = await prisma.designCanvas.findFirst({ where: { id: canvas_id, projectId: project_id } });
