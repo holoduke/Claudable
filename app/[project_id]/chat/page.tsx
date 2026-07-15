@@ -79,6 +79,26 @@ const CLI_LABELS = ACTIVE_CLI_NAME_MAP;
 
 const CLI_ORDER = ACTIVE_CLI_IDS;
 
+/** Locale-aware absolute date+time for the project-info panel; '' for bad/empty input. */
+function fmtDateTime(iso: string | null): string {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  return d.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+}
+
+/** One label/value row in the project-info panel. */
+function InfoRow({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
+  return (
+    <div className="flex items-start justify-between gap-3">
+      <dt className="text-gray-400 dark:text-gray-500 shrink-0">{label}</dt>
+      <dd className={`text-gray-800 dark:text-gray-200 text-right truncate ${mono ? 'font-mono text-[11px]' : ''}`} title={value}>
+        {value}
+      </dd>
+    </div>
+  );
+}
+
 const sanitizeCli = (cli?: string | null) => sanitizeActiveCli(cli, DEFAULT_ACTIVE_CLI);
 
 const sanitizeModel = (cli: string, model?: string | null) => normalizeModelForCli(cli, model, DEFAULT_ACTIVE_CLI);
@@ -124,6 +144,14 @@ export default function ChatPage() {
   const [descDraft, setDescDraft] = useState('');
   const savingDescRef = useRef(false);
   const [projectDescription, setProjectDescription] = useState<string>('');
+  // Project metadata for the topbar ⓘ info panel (who/when created + last edited).
+  const [projectMeta, setProjectMeta] = useState<{
+    createdBy: string | null;
+    createdAt: string | null;
+    lastEditedBy: string | null;
+    lastActiveAt: string | null;
+  }>({ createdBy: null, createdAt: null, lastEditedBy: null, lastActiveAt: null });
+  const [showInfoPanel, setShowInfoPanel] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const previewUrlRef = useRef<string | null>(null);
   const [tree, setTree] = useState<Entry[]>([]);
@@ -235,6 +263,15 @@ export default function ChatPage() {
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
   }, [overflowMenuOpen]);
+  // Close the project-info (ⓘ) panel on Escape.
+  useEffect(() => {
+    if (!showInfoPanel) return;
+    const onKey = (e: globalThis.KeyboardEvent) => {
+      if (e.key === 'Escape') setShowInfoPanel(false);
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [showInfoPanel]);
   const deviceViewportRef = useRef<HTMLDivElement>(null);
   // Always points at the latest runAct closure (used by persistEdits).
   const runActRef = useRef<((m?: string, i?: any[]) => Promise<{ ok: boolean; busy: boolean } | void>) | null>(null);
@@ -2147,6 +2184,12 @@ const persistProjectPreferences = useCallback(
       const followGlobal = !rawPreferredCli && !rawSelectedModel;
       setUsingGlobalDefaults(followGlobal);
       setProjectDescription(project.description || '');
+      setProjectMeta({
+        createdBy: project.createdBy ?? project.created_by ?? null,
+        createdAt: project.createdAt ?? project.created_at ?? null,
+        lastEditedBy: project.lastEditedBy ?? project.last_edited_by ?? null,
+        lastActiveAt: project.lastActiveAt ?? project.last_active_at ?? project.updatedAt ?? project.updated_at ?? null,
+      });
 
       if (project.initial_prompt) {
         setHasInitialPrompt(true);
@@ -3257,6 +3300,45 @@ const persistProjectPreferences = useCallback(
                 
                 <div className="flex items-center gap-2">
                   <ThemeToggle />
+                  {/* Project info (ⓘ) — everything about this project at a glance. */}
+                  <div className="relative">
+                    <button
+                      onClick={() => setShowInfoPanel((v) => !v)}
+                      className={`h-9 w-9 flex items-center justify-center rounded-lg border transition-colors ${
+                        showInfoPanel
+                          ? 'bg-gray-200 dark:bg-white/10 text-gray-900 dark:text-gray-100 border-gray-300 dark:border-white/15'
+                          : 'bg-gray-100 dark:bg-white/6 text-gray-600 dark:text-gray-300 border-transparent hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-200 dark:hover:bg-white/6'
+                      }`}
+                      title={t('project.info.title')}
+                      aria-label={t('project.info.title')}
+                      aria-haspopup="dialog"
+                      aria-expanded={showInfoPanel}
+                    >
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <circle cx="12" cy="12" r="10" /><line x1="12" y1="16" x2="12" y2="12" /><line x1="12" y1="8" x2="12.01" y2="8" />
+                      </svg>
+                    </button>
+                    {showInfoPanel && (
+                      <>
+                        <div className="fixed inset-0 z-40" onClick={() => setShowInfoPanel(false)} />
+                        <div className="absolute right-0 top-full mt-1 z-50 w-72 bg-white dark:bg-[#181310] rounded-lg shadow-xl border border-gray-200 dark:border-white/8 p-4" role="dialog" aria-label={t('project.info.title')}>
+                          <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-50 mb-3">{t('project.info.title')}</h3>
+                          <dl className="space-y-2 text-xs">
+                            {projectDescription && (
+                              <InfoRow label={t('project.info.description')} value={projectDescription} />
+                            )}
+                            <InfoRow label={t('project.info.createdBy')} value={projectMeta.createdBy || t('project.info.unknown')} />
+                            <InfoRow label={t('project.info.createdAt')} value={fmtDateTime(projectMeta.createdAt) || t('project.info.unknown')} />
+                            <InfoRow label={t('project.info.lastEditedBy')} value={projectMeta.lastEditedBy || t('project.info.unknown')} />
+                            <InfoRow label={t('project.info.lastEditedAt')} value={fmtDateTime(projectMeta.lastActiveAt) || t('project.info.unknown')} />
+                            <InfoRow label={t('project.info.assistant')} value={`${CLI_LABELS[preferredCli] || preferredCli}${selectedModel ? ` · ${getModelDisplayName(preferredCli, selectedModel)}` : ''}`} />
+                            <InfoRow label={t('project.info.status')} value={projectStatus} />
+                            <InfoRow label={t('project.info.id')} value={projectId} mono />
+                          </dl>
+                        </div>
+                      </>
+                    )}
+                  </div>
                   {/* Settings — kept visible (common action) */}
                   <button
                     onClick={() => { setSettingsInitialTab('general'); setShowGlobalSettings(true); }}
