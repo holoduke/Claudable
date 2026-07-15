@@ -5,6 +5,8 @@
  * created canvas immediately.
  */
 import { NextRequest } from 'next/server';
+import fs from 'fs/promises';
+import path from 'path';
 import { denyUnlessProjectAccess } from '@/lib/auth/gate';
 import { getSessionUser } from '@/lib/auth/session';
 import { prisma } from '@/lib/db/client';
@@ -49,6 +51,22 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
         createdById: requester?.id ?? null,
       },
     });
+
+    // Optional reference image (data URL) — store it once per canvas; frames copy
+    // it into their scratch so the agent can match it. Cap the size defensively.
+    const ref = typeof body.referenceImage === 'string' ? body.referenceImage : '';
+    const m = ref.match(/^data:image\/(png|jpe?g|webp|gif);base64,(.+)$/u);
+    if (m) {
+      const buf = Buffer.from(m[2], 'base64');
+      if (buf.length > 0 && buf.length <= 8 * 1024 * 1024) {
+        const ext = m[1] === 'jpeg' ? 'jpg' : m[1];
+        const dir = path.resolve(process.cwd(), 'data', 'design-canvases', canvas.id);
+        await fs.mkdir(dir, { recursive: true });
+        const refPath = path.join(dir, `reference.${ext}`);
+        await fs.writeFile(refPath, buf);
+        await prisma.designCanvas.update({ where: { id: canvas.id }, data: { referenceImagePath: refPath } });
+      }
+    }
 
     // One frame per seed (fall back to a single unseeded frame if the catalog is empty).
     const specs = seeds.length > 0 ? seeds : [null];
