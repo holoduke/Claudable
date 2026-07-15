@@ -32,6 +32,7 @@ const ArchitectureModal = dynamic(() => import('@/components/chat/ArchitectureMo
 const DesignImportModal = dynamic(() => import('@/components/chat/DesignImportModal'), { ssr: false });
 const SkillsModal = dynamic(() => import('@/components/chat/SkillsModal'), { ssr: false });
 const PublishPanel = dynamic(() => import('@/components/chat/PublishPanel'), { ssr: false });
+const DesignExplorerBoard = dynamic(() => import('@/components/chat/DesignExplorerBoard'), { ssr: false });
 import { getFileLanguage, escapeHtml } from '@/lib/utils/format';
 import { ChatErrorBoundary } from '@/components/ErrorBoundary';
 import { useUserRequests } from '@/hooks/useUserRequests';
@@ -204,6 +205,8 @@ export default function ChatPage() {
   const interruptedRef = useRef(false);
   const [isSseFallbackActive, setIsSseFallbackActive] = useState(false);
   const [showPreview, setShowPreview] = useState(true);
+  // Design Explorer board (a third view alongside Preview/Code).
+  const [designMode, setDesignMode] = useState(false);
   const toast = useToast();
   const t = useT();
   // --- Visual editor (inline edit mode) ---
@@ -3162,29 +3165,44 @@ const persistProjectPreferences = useCallback(
                   <div className="flex items-center bg-gray-100 dark:bg-white/6 rounded-lg p-1">
                     <button
                       className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
-                        showPreview 
-                          ? 'bg-white dark:bg-white/12 text-gray-900 dark:text-gray-50 ' 
+                        showPreview && !designMode
+                          ? 'bg-white dark:bg-white/12 text-gray-900 dark:text-gray-50 '
                           : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 '
                       }`}
-                      onClick={() => setShowPreview(true)}
+                      onClick={() => { setDesignMode(false); setShowPreview(true); }}
                       title="Preview"
                       aria-label="Preview"
-                      aria-pressed={showPreview}
+                      aria-pressed={showPreview && !designMode}
                     >
                       <span className="w-4 h-4 flex items-center justify-center"><FaDesktop size={16} /></span>
                     </button>
                     <button
                       className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
-                        !showPreview 
-                          ? 'bg-white dark:bg-white/12 text-gray-900 dark:text-gray-50 ' 
+                        !showPreview && !designMode
+                          ? 'bg-white dark:bg-white/12 text-gray-900 dark:text-gray-50 '
                           : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 '
                       }`}
-                      onClick={() => setShowPreview(false)}
+                      onClick={() => { setDesignMode(false); setShowPreview(false); }}
                       title="Code"
                       aria-label="Code"
-                      aria-pressed={!showPreview}
+                      aria-pressed={!showPreview && !designMode}
                     >
                       <span className="w-4 h-4 flex items-center justify-center"><FaCode size={16} /></span>
+                    </button>
+                    <button
+                      className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
+                        designMode
+                          ? 'bg-white dark:bg-white/12 text-gray-900 dark:text-gray-50 '
+                          : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 '
+                      }`}
+                      onClick={() => setDesignMode(true)}
+                      title={t('designExplorer.title')}
+                      aria-label={t('designExplorer.title')}
+                      aria-pressed={designMode}
+                    >
+                      <span className="w-4 h-4 flex items-center justify-center">
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" /><rect x="3" y="14" width="7" height="7" rx="1" /><rect x="14" y="14" width="7" height="7" rx="1" /></svg>
+                      </span>
                     </button>
                   </div>
 
@@ -3532,6 +3550,22 @@ const persistProjectPreferences = useCallback(
               
               {/* Content Area */}
               <div className="flex-1 relative bg-black overflow-hidden">
+                {designMode ? (
+                  <DesignExplorerBoard
+                    projectId={projectId}
+                    busy={isRunning || hasActiveRequests}
+                    onApply={(prompt) => {
+                      // Same busy rule as DesignImportModal: never launch a 2nd turn.
+                      if (isRunning || hasActiveRequests) {
+                        setQueuedMessages(prev => [...prev, { message: prompt, images: [] }]);
+                      } else {
+                        runAct(prompt);
+                      }
+                      setDesignMode(false);
+                      setShowPreview(true);
+                    }}
+                  />
+                ) : (
                 <AnimatePresence initial={false}>
                   {showPreview ? (
                   <MotionDiv
@@ -3952,6 +3986,7 @@ const persistProjectPreferences = useCallback(
               />
                 )}
                 </AnimatePresence>
+                )}
               </div>
             </div>
           </div>
