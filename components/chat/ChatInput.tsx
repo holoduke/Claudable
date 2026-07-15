@@ -4,6 +4,7 @@ import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { SendHorizontal, MessageSquare, Image as ImageIcon, Wrench, Square } from 'lucide-react';
 import { useToast } from '@/components/ui/Toast';
 import { useT } from '@/contexts/I18nContext';
+import { uploadFileChunked, type UploadResult } from '@/lib/client/upload';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? '';
 
@@ -216,51 +217,16 @@ export default function ChatInput({
   // instantly with a clear message instead of after a long, doomed transfer.
   const maxUploadMb = Number(process.env.NEXT_PUBLIC_MAX_UPLOAD_MB) || 500;
 
-  // Upload a file in sub-limit CHUNKS via XHR. Chunking is required because the
-  // Next server (and proxies like Traefik) cap a single request body at ~10MB;
-  // it also gives smooth progress and never blocks the main thread. The chunks of
-  // one file share an uploadId; the server appends them and the last one finalizes.
+  // Upload a file in sub-limit CHUNKS (shared with the new-project screen so
+  // attachments behave identically before and after project creation). Chunking
+  // is required because the Next server + proxies cap a single request body at
+  // ~10MB; see lib/client/upload.ts.
   const uploadWithProgress = useCallback(
-    (file: File): Promise<any> => {
-      const CHUNK = 8 * 1024 * 1024; // 8MB — comfortably under the ~10MB body cap
-      const total = Math.max(1, Math.ceil(file.size / CHUNK));
-      const uploadId = crypto.randomUUID();
-
-      const sendChunk = (i: number): Promise<any> =>
-        new Promise((resolve, reject) => {
-          const start = i * CHUNK;
-          const blob = file.slice(start, Math.min(start + CHUNK, file.size));
-          const xhr = new XMLHttpRequest();
-          const qs =
-            `filename=${encodeURIComponent(file.name)}&type=${encodeURIComponent(file.type || '')}` +
-            `&uploadId=${uploadId}&chunkIndex=${i}&chunks=${total}`;
-          xhr.open('POST', `${API_BASE}/api/assets/${projectId}/upload?${qs}`);
-          xhr.setRequestHeader('Content-Type', 'application/octet-stream');
-          xhr.upload.onprogress = (ev) => {
-            if (ev.lengthComputable) {
-              const overall = Math.round(((start + ev.loaded) / Math.max(1, file.size)) * 100);
-              setUploadProgress({ name: file.name, pct: Math.min(100, overall) });
-            }
-          };
-          xhr.onload = () => {
-            if (xhr.status >= 200 && xhr.status < 300) {
-              try { resolve(JSON.parse(xhr.responseText)); }
-              catch { reject(new Error('Bad server response')); }
-            } else {
-              let msg = `${xhr.status}`;
-              try { msg = JSON.parse(xhr.responseText).error || msg; } catch { /* keep status */ }
-              reject(new Error(msg));
-            }
-          };
-          xhr.onerror = () => reject(new Error('Network error during upload'));
-          xhr.send(blob);
-        });
-
-      return (async () => {
-        let last: any;
-        for (let i = 0; i < total; i++) last = await sendChunk(i); // in order
-        return last;
-      })();
+    (file: File): Promise<UploadResult> => {
+      if (!projectId) return Promise.reject(new Error('No project to upload to'));
+      return uploadFileChunked(projectId, file, {
+        onProgress: (pct) => setUploadProgress({ name: file.name, pct }),
+      });
     },
     [projectId],
   );
@@ -438,8 +404,8 @@ export default function ChatInput({
 
         const newImage: UploadedImage = {
           id: crypto.randomUUID(),
-          filename: result.filename,
-          path: result.absolute_path,
+          filename: result.filename ?? file.name,
+          path: result.absolute_path ?? '',
           url: imageUrl,
           assetUrl: `/api/assets/${projectId}/${result.filename}`,
           publicUrl: typeof result.public_url === 'string' ? result.public_url : undefined
