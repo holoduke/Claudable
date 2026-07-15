@@ -74,6 +74,7 @@ model Project {
   comments              Comment[]
   shares                ProjectShare[]
   mcpServers            ProjectMcpServer[]
+  designCanvases        DesignCanvas[]
   organization          Organization?  @relation(fields: [orgId], references: [id])
   owner                 User?          @relation("OwnedProjects", fields: [ownerId], references: [id], onDelete: SetNull)
   lastEditedBy          User?          @relation("EditedProjects", fields: [lastEditedById], references: [id], onDelete: SetNull)
@@ -544,4 +545,45 @@ model ServiceToken {
 
   @@index([provider])
   @@map("service_tokens")
+}
+
+/// Design Explorer: a canvas of AI-generated design mockups for a project. A
+/// prompt fans out into several DesignFrames the user compares/refines/uses.
+model DesignCanvas {
+  id          String   @id @default(cuid())
+  projectId   String   @map("project_id")
+  title       String
+  prompt      String
+  status      String   @default("idle") // idle | generating | ready
+  createdById String?  @map("created_by_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  project Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  frames  DesignFrame[]
+
+  @@index([projectId])
+  @@map("design_canvases")
+}
+
+/// One generated design direction on a canvas. The mockup HTML lives on disk
+/// (htmlPath) — never in the DB — so the row stays light.
+model DesignFrame {
+  id            String   @id @default(cuid())
+  canvasId      String   @map("canvas_id")
+  styleId       String?  @map("style_id")
+  styleName     String?  @map("style_name")
+  prompt        String
+  htmlPath      String?  @map("html_path")
+  status        String   @default("pending") // pending | generating | ready | error
+  errorText     String?  @map("error_text")
+  version       Int      @default(1)
+  parentFrameId String?  @map("parent_frame_id")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  canvas DesignCanvas @relation(fields: [canvasId], references: [id], onDelete: Cascade)
+
+  @@index([canvasId])
+  @@map("design_frames")
 }

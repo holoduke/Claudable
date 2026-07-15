@@ -1,0 +1,60 @@
+/**
+ * POST /api/projects/[project_id]/design-explorer/frames/[frame_id]/refine
+ * Create a new child frame (a refined version of the given one) and regenerate
+ * it with an augmented brief. Returns the new pending frame; progress via SSE.
+ */
+import { NextRequest } from 'next/server';
+import { denyUnlessProjectAccess } from '@/lib/auth/gate';
+import { getSessionUser } from '@/lib/auth/session';
+import { prisma } from '@/lib/db/client';
+import { generateFrames } from '@/lib/services/design-explorer/generate';
+import { serializeDesignFrame } from '@/lib/serializers/design-explorer';
+import { createSuccessResponse, createErrorResponse, handleApiError } from '@/lib/utils/api-response';
+
+interface RouteContext { params: Promise<{ project_id: string; frame_id: string }>; }
+
+export async function POST(request: NextRequest, { params }: RouteContext) {
+  try {
+    const { project_id, frame_id } = await params;
+    const _gate = await denyUnlessProjectAccess(project_id, { write: true });
+    if (_gate) return _gate;
+
+    const body = (await request.json().catch(() => null)) ?? {};
+    const refinement = typeof body.prompt === 'string' ? body.prompt.trim() : '';
+    if (!refinement) return createErrorResponse('invalid', 'A refinement instruction is required', 400);
+
+    const parent = await prisma.designFrame.findUnique({
+      where: { id: frame_id },
+      include: { canvas: { select: { projectId: true } } },
+    });
+    if (!parent || parent.canvas.projectId !== project_id) {
+      return createErrorResponse('not_found', 'Frame not found', 404);
+    }
+
+    // The refined brief keeps the original direction and layers the change on top.
+    const newPrompt = `${parent.prompt}\n\nRefine the previous design: ${refinement}`;
+    const child = await prisma.designFrame.create({
+      data: {
+        canvasId: parent.canvasId,
+        styleId: parent.styleId,
+        styleName: parent.styleName,
+        prompt: newPrompt,
+        status: 'pending',
+        version: parent.version + 1,
+        parentFrameId: parent.id,
+      },
+    });
+
+    const requester = await getSessionUser();
+    void generateFrames(project_id, [child.id], requester?.id).catch((e) => {
+      console.error('[DesignExplorer] refine failed:', e);
+    });
+
+    return createSuccessResponse(serializeDesignFrame(child), 201);
+  } catch (error) {
+    return handleApiError(error, 'API', 'Failed to refine design');
+  }
+}
+
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
