@@ -14,6 +14,7 @@ import UserMenu from '@/components/layout/UserMenu';
 import ConnectClaudePrompt from '@/components/auth/ConnectClaudePrompt';
 import ThemeToggle from '@/components/ui/ThemeToggle';
 import { useGlobalSettings } from '@/contexts/GlobalSettingsContext';
+import { useT } from '@/contexts/I18nContext';
 import { getDefaultModelForCli, getModelDisplayName } from '@/lib/constants/cliModels';
 import Image from 'next/image';
 import { Image as ImageIcon, Palette, Layers, Server, Database, Sparkles, Search } from 'lucide-react';
@@ -55,6 +56,7 @@ const IMAGE_GEN_OPTIONS: { id: string; name: string; description: string }[] = [
 ];
 
 export default function HomePage() {
+  const t = useT();
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
   const [projectsLoaded, setProjectsLoaded] = useState(false);
   // Bumped after background thumbnail refreshes; cache-busts the tile images.
@@ -830,7 +832,7 @@ export default function HomePage() {
           <button
             onClick={() => setSidebarOpen(true)}
             className="w-full h-12 flex items-center justify-center text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-white/6 transition-colors"
-            title="Open sidebar"
+            title={t('home.openSidebar')}
           >
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
               <path d="M3 12h18M3 6h18M3 18h18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
@@ -842,7 +844,7 @@ export default function HomePage() {
             <button
               onClick={() => setShowGlobalSettings(true)}
               className="w-full h-12 flex items-center justify-center text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-white/6 transition-colors"
-              title="Settings"
+              title={t('topbar.settings')}
             >
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
@@ -859,12 +861,12 @@ export default function HomePage() {
           <div className="p-3 border-b border-gray-200 dark:border-white/8">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2 px-2 py-1">
-                <h2 className="text-gray-900 dark:text-gray-50 font-medium text-lg">History</h2>
+                <h2 className="text-gray-900 dark:text-gray-50 font-medium text-lg">{t('home.history')}</h2>
               </div>
               <button
                 onClick={() => setSidebarOpen(false)}
                 className="p-1 text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-white/6 rounded-sm transition-colors"
-                title="Close sidebar"
+                title={t('home.closeSidebar')}
               >
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                   <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
@@ -877,7 +879,7 @@ export default function HomePage() {
             <div className="space-y-1">
               {projects.length === 0 ? (
                 <div className="text-center py-8">
-                  <p className="text-gray-500 dark:text-gray-400 text-sm">No conversations yet</p>
+                  <p className="text-gray-500 dark:text-gray-400 text-sm">{t('home.noConversations')}</p>
                 </div>
               ) : (
                 projects.map((project) => {
@@ -991,7 +993,7 @@ export default function HomePage() {
                               setEditingProject(project);
                             }}
                             className="p-1 text-gray-400 dark:text-gray-500 hover:text-[#DE7356] transition-colors"
-                            title="Edit project name"
+                            title={t('home.editProjectName')}
                           >
                             <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
@@ -1003,7 +1005,7 @@ export default function HomePage() {
                               openDeleteModal(project);
                             }}
                             className="p-1 text-gray-400 dark:text-gray-500 hover:text-red-500 transition-colors"
-                            title="Delete project"
+                            title={t('home.deleteProject')}
                           >
                             <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -1121,7 +1123,7 @@ export default function HomePage() {
                   ref={promptRef}
                   value={prompt}
                   onChange={(e) => setPrompt(e.target.value)}
-                  placeholder="Ask Claudable to create a blog about..."
+                  placeholder={t('home.promptPlaceholder')}
                   disabled={isCreatingProject}
                   className="flex w-full rounded-md px-2 py-2 placeholder:text-gray-400 focus-visible:outline-hidden disabled:cursor-not-allowed disabled:opacity-50 resize-none text-[16px] leading-snug md:text-base focus-visible:ring-0 focus-visible:ring-offset-0 bg-transparent focus:bg-transparent flex-1 text-gray-900 dark:text-gray-50 overflow-y-auto"
                   style={{ height: '120px' }}
@@ -1145,10 +1147,10 @@ export default function HomePage() {
                   <div className="text-center">
                     <div className="text-3xl mb-3">📸</div>
                     <div className="text-lg font-semibold text-[#DE7356] mb-2">
-                      Drop images here
+                      {t('home.dropImages')}
                     </div>
                     <div className="text-sm text-[#DE7356] ">
-                      Supports: JPG, PNG, GIF, WEBP
+                      {t('home.dropSupports')}
                     </div>
                   </div>
                 </div>
@@ -1159,7 +1161,7 @@ export default function HomePage() {
                 <div className="flex items-center gap-2">
                   <label
                     className="flex items-center justify-center w-8 h-8 text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-white/6 rounded-full transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-                    title="Upload images or files"
+                    title={t('home.uploadFiles')}
                   >
                     <ImageIcon className="h-4 w-4" />
                     <input
@@ -1176,7 +1178,7 @@ export default function HomePage() {
                 <button
                   type="button"
                   onClick={() => setShowDesignPicker(true)}
-                  title="Pick a design style"
+                  title={t('home.pickDesign')}
                   className="justify-center whitespace-nowrap text-sm font-medium transition-colors duration-100 ease-in-out border border-gray-200 dark:border-white/9 bg-transparent shadow-xs hover:bg-gray-50 dark:hover:bg-white/5 hover:border-gray-300 dark:hover:border-white/18 px-3 py-2 flex h-8 items-center gap-1.5 rounded-full text-gray-700 dark:text-gray-200 hover:text-gray-900 dark:hover:text-gray-100"
                 >
                   <Palette aria-hidden className="h-3.5 w-3.5 text-[#DE7356]/80" />
@@ -1189,7 +1191,7 @@ export default function HomePage() {
                   <button
                     type="button"
                     onClick={() => setShowStackMenu(v => !v)}
-                    title="Pick a tech stack"
+                    title={t('home.pickStack')}
                     className="justify-center whitespace-nowrap text-sm font-medium transition-colors duration-100 ease-in-out border border-gray-200 dark:border-white/9 bg-transparent shadow-xs hover:bg-gray-50 dark:hover:bg-white/5 hover:border-gray-300 dark:hover:border-white/18 px-3 py-2 flex h-8 items-center gap-1.5 rounded-full text-gray-700 dark:text-gray-200 hover:text-gray-900 dark:hover:text-gray-100"
                   >
                     <Layers aria-hidden className="h-3.5 w-3.5 text-[#DE7356]/80" />
@@ -1228,11 +1230,11 @@ export default function HomePage() {
                     <button
                       type="button"
                       onClick={() => setShowPluginMenu(v => !v)}
-                      title="Start from a plugin command"
+                      title={t('home.pluginCommand')}
                       className="justify-center whitespace-nowrap text-sm font-medium transition-colors duration-100 ease-in-out border border-gray-200 dark:border-white/9 bg-transparent shadow-xs hover:bg-gray-50 dark:hover:bg-white/5 hover:border-gray-300 dark:hover:border-white/18 px-3 py-2 flex h-8 items-center gap-1.5 rounded-full text-gray-700 dark:text-gray-200 hover:text-gray-900 dark:hover:text-gray-100"
                     >
                       <Sparkles aria-hidden className="h-3.5 w-3.5 text-[#DE7356]/80" />
-                      <span className="hidden md:flex text-sm font-medium">Plugin</span>
+                      <span className="hidden md:flex text-sm font-medium">{t('home.plugin')}</span>
                     </button>
                     {showPluginMenu && (
                       <>
@@ -1265,7 +1267,7 @@ export default function HomePage() {
                   <button
                     type="button"
                     onClick={() => setShowBackendMenu(v => !v)}
-                    title="Add a backend"
+                    title={t('home.addBackend')}
                     className="justify-center whitespace-nowrap text-sm font-medium transition-colors duration-100 ease-in-out border border-gray-200 dark:border-white/9 bg-transparent shadow-xs hover:bg-gray-50 dark:hover:bg-white/5 hover:border-gray-300 dark:hover:border-white/18 px-3 py-2 flex h-8 items-center gap-1.5 rounded-full text-gray-700 dark:text-gray-200 hover:text-gray-900 dark:hover:text-gray-100"
                   >
                     <Server aria-hidden className="h-3.5 w-3.5 text-[#DE7356]/80" />
@@ -1280,10 +1282,10 @@ export default function HomePage() {
                         <button type="button" onClick={() => { setSelectedBackend(''); setShowBackendMenu(false); }}
                           className={`w-full text-left px-3 py-2 rounded-lg transition-colors ${!selectedBackend ? 'bg-gray-100 dark:bg-white/[0.07]' : 'hover:bg-gray-50 dark:hover:bg-white/5'}`}>
                           <div className="flex items-center justify-between">
-                            <span className="text-sm font-medium text-gray-900 dark:text-gray-50">No backend</span>
+                            <span className="text-sm font-medium text-gray-900 dark:text-gray-50">{t('home.noBackend')}</span>
                             {!selectedBackend && <span className="text-xs text-[#DE7356]">✓</span>}
                           </div>
-                          <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Frontend only.</p>
+                          <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{t('home.frontendOnly')}</p>
                         </button>
                         {BACKEND_STACKS.map(b => (
                           <button key={b.id} type="button" onClick={() => { setSelectedBackend(b.id); setShowBackendMenu(false); }}
@@ -1304,7 +1306,7 @@ export default function HomePage() {
                   <button
                     type="button"
                     onClick={() => setShowDatabaseMenu(v => !v)}
-                    title="Add a database"
+                    title={t('home.addDatabase')}
                     className="justify-center whitespace-nowrap text-sm font-medium transition-colors duration-100 ease-in-out border border-gray-200 dark:border-white/9 bg-transparent shadow-xs hover:bg-gray-50 dark:hover:bg-white/5 hover:border-gray-300 dark:hover:border-white/18 px-3 py-2 flex h-8 items-center gap-1.5 rounded-full text-gray-700 dark:text-gray-200 hover:text-gray-900 dark:hover:text-gray-100"
                   >
                     <Database aria-hidden className="h-3.5 w-3.5 text-[#DE7356]/80" />
@@ -1319,7 +1321,7 @@ export default function HomePage() {
                         <button type="button" onClick={() => { setSelectedDatabase(''); setShowDatabaseMenu(false); }}
                           className={`w-full text-left px-3 py-2 rounded-lg transition-colors ${!selectedDatabase ? 'bg-gray-100 dark:bg-white/[0.07]' : 'hover:bg-gray-50 dark:hover:bg-white/5'}`}>
                           <div className="flex items-center justify-between">
-                            <span className="text-sm font-medium text-gray-900 dark:text-gray-50">No database</span>
+                            <span className="text-sm font-medium text-gray-900 dark:text-gray-50">{t('home.noDatabase')}</span>
                             {!selectedDatabase && <span className="text-xs text-[#DE7356]">✓</span>}
                           </div>
                         </button>
@@ -1342,7 +1344,7 @@ export default function HomePage() {
                   <button
                     type="button"
                     onClick={() => setShowImageGenMenu(v => !v)}
-                    title="Pick an image-generation utility"
+                    title={t('home.pickImageGen')}
                     className="justify-center whitespace-nowrap text-sm font-medium transition-colors duration-100 ease-in-out border border-gray-200 dark:border-white/9 bg-transparent shadow-xs hover:bg-gray-50 dark:hover:bg-white/5 hover:border-gray-300 dark:hover:border-white/18 px-3 py-2 flex h-8 items-center gap-1.5 rounded-full text-gray-700 dark:text-gray-200 hover:text-gray-900 dark:hover:text-gray-100"
                   >
                     <Sparkles aria-hidden className="h-3.5 w-3.5 text-[#DE7356]/80" />
@@ -1497,14 +1499,14 @@ export default function HomePage() {
                     type="search"
                     value={projectSearch}
                     onChange={(e) => setProjectSearch(e.target.value)}
-                    placeholder="Search projects…"
-                    aria-label="Search projects"
+                    placeholder={t('home.searchProjects')}
+                    aria-label={t('home.searchProjects')}
                     className="w-full h-10 pl-10 pr-4 rounded-full border border-gray-200 dark:border-white/9 bg-white/80 dark:bg-white/4 text-sm text-gray-900 dark:text-gray-50 placeholder:text-gray-400 dark:placeholder:text-gray-500 shadow-xs focus:outline-hidden focus:border-[#DE7356]/50 focus:ring-2 focus:ring-[#DE7356]/15 transition-colors"
                   />
                 </div>
                 {visibleProjects.length === 0 && (
                   <p className="text-center text-sm text-gray-500 dark:text-gray-400 py-8">
-                    No projects match &quot;{projectSearch.trim()}&quot;
+                    {t('home.noProjectsMatch', { query: projectSearch.trim() })}
                   </p>
                 )}
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
@@ -1547,8 +1549,8 @@ export default function HomePage() {
                           </div>
                           {/* Primary metadata: last-edited time, then the creator. */}
                           <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
-                            Last edited {formatTime(project.lastActiveAt || project.updatedAt || project.createdAt)}
-                            {project.createdBy && <span> · Created by {project.createdBy}</span>}
+                            {t('home.lastEdited', { time: formatTime(project.lastActiveAt || project.updatedAt || project.createdAt) })}
+                            {project.createdBy && <span> · {t('home.createdBy', { name: project.createdBy })}</span>}
                           </p>
                           {(() => {
                             // Secondary line: the CLI, plus WHO last edited it only when a
@@ -1558,7 +1560,7 @@ export default function HomePage() {
                             if (!showEditor && !project.preferredCli) return null;
                             return (
                               <p className="mt-1 text-[11px] leading-tight text-gray-400 dark:text-gray-500 truncate">
-                                {showEditor && <span>Last edited by {project.lastEditedBy}</span>}
+                                {showEditor && <span>{t('home.lastEditedBy', { name: project.lastEditedBy! })}</span>}
                                 {showEditor && project.preferredCli && <span> · </span>}
                                 {project.preferredCli && (
                                   <span>{formatCliInfo(projectCli, project.selectedModel ?? undefined)}</span>
@@ -1583,9 +1585,9 @@ export default function HomePage() {
                       <path d="M5 12h14" />
                     </svg>
                   </div>
-                  <h3 className="text-base font-semibold text-gray-900 dark:text-gray-50">Your first app is one prompt away</h3>
+                  <h3 className="text-base font-semibold text-gray-900 dark:text-gray-50">{t('home.emptyTitle')}</h3>
                   <p className="mt-2 text-sm text-gray-500 dark:text-gray-400 max-w-md">
-                    Describe what you want to build in the box above — Claudable scaffolds it, runs it live, and you refine by chatting.
+                    {t('home.emptyBody')}
                   </p>
                 </div>
               </div>
@@ -1628,14 +1630,13 @@ export default function HomePage() {
                 </svg>
               </div>
               <div>
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-50 ">Delete Project</h3>
-                <p className="text-sm text-gray-500 dark:text-gray-400 ">This action cannot be undone</p>
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-50 ">{t('home.deleteTitle')}</h3>
+                <p className="text-sm text-gray-500 dark:text-gray-400 ">{t('home.deleteUndone')}</p>
               </div>
             </div>
             
             <p className="text-gray-700 dark:text-gray-200 mb-6">
-              Are you sure you want to delete <strong>&quot;{deleteModal.project.name}&quot;</strong>? 
-              This will permanently delete all project files and chat history.
+              {t('home.deleteConfirm', { name: deleteModal.project.name })}
             </p>
             
             <div className="flex gap-3 justify-end">
@@ -1644,7 +1645,7 @@ export default function HomePage() {
                 disabled={isDeleting}
                 className="px-4 py-2 text-gray-700 dark:text-gray-200 bg-gray-100 dark:bg-gray-800 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors disabled:opacity-50"
               >
-                Cancel
+                {t('common.cancel')}
               </button>
               <button
                 onClick={deleteProject}
@@ -1657,10 +1658,10 @@ export default function HomePage() {
                       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                     </svg>
-                    Deleting...
+                    {t('home.deleting')}
                   </>
                 ) : (
-                  'Delete Project'
+                  t('home.deleteTitle')
                 )}
               </button>
             </div>
