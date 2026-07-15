@@ -72,4 +72,11 @@ describe('toChatMessage', () => {
     const msg = toChatMessage({ content: [{ text: 'a' }, { text: 'b' }] });
     expect(msg.content).toBe('ab');
   });
+
+  it('carries commitSha (camel + snake) — the "Revert to here" checkpoint', () => {
+    // Regression guard: dropping commitSha here made the revert button never render.
+    expect(toChatMessage({ content: 'x', commitSha: 'abc123' }).commitSha).toBe('abc123');
+    expect(toChatMessage({ content: 'x', commit_sha: 'def456' }).commitSha).toBe('def456');
+    expect(toChatMessage({ content: 'x' }).commitSha).toBe(null);
+  });
 });
