@@ -15,7 +15,7 @@ import { generateFrames } from '@/lib/services/design-explorer/generate';
 import { serializeDesignCanvas } from '@/lib/serializers/design-explorer';
 import { listDesignCatalog } from '@/lib/services/design-skills';
 import { createSuccessResponse, createErrorResponse, handleApiError } from '@/lib/utils/api-response';
-import { bodyTooLarge } from '@/lib/utils/request-size';
+import { readJsonCapped, BodyTooLargeError } from '@/lib/utils/request-size';
 
 interface RouteContext { params: Promise<{ project_id: string }>; }
 
@@ -25,13 +25,15 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
     const _gate = await denyUnlessProjectAccess(project_id, { write: true });
     if (_gate) return _gate;
 
-    // Reject oversized bodies BEFORE parsing — the optional referenceImage is a
-    // base64 data URL, so cap the whole request generously (8MB image ≈ ~11MB b64).
-    if (bodyTooLarge(request, 12 * 1024 * 1024)) {
-      return createErrorResponse('too_large', 'Request too large (reference image max 8MB)', 413);
+    // Read + parse with a hard streaming ceiling (the optional referenceImage is a
+    // base64 data URL, so cap generously: 8MB image ≈ ~11MB base64).
+    let body: Record<string, unknown>;
+    try {
+      body = ((await readJsonCapped(request, 12 * 1024 * 1024)) as Record<string, unknown> | null) ?? {};
+    } catch (e) {
+      if (e instanceof BodyTooLargeError) return createErrorResponse('too_large', 'Request too large (reference image max 8MB)', 413);
+      throw e;
     }
-
-    const body = (await request.json().catch(() => null)) ?? {};
     const prompt = typeof body.prompt === 'string' ? body.prompt.trim() : '';
     if (!prompt) return createErrorResponse('invalid', 'A design brief (prompt) is required', 400);
     // Cap the brief so it can't bloat the (up to 6) per-frame generation prompts.

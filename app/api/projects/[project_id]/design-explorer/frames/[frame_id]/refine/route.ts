@@ -10,7 +10,7 @@ import { prisma } from '@/lib/db/client';
 import { generateFrames } from '@/lib/services/design-explorer/generate';
 import { serializeDesignFrame } from '@/lib/serializers/design-explorer';
 import { createSuccessResponse, createErrorResponse, handleApiError } from '@/lib/utils/api-response';
-import { bodyTooLarge, SMALL_JSON_LIMIT } from '@/lib/utils/request-size';
+import { readJsonCapped, BodyTooLargeError, SMALL_JSON_LIMIT } from '@/lib/utils/request-size';
 
 interface RouteContext { params: Promise<{ project_id: string; frame_id: string }>; }
 
@@ -19,9 +19,13 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
     const { project_id, frame_id } = await params;
     const _gate = await denyUnlessProjectAccess(project_id, { write: true });
     if (_gate) return _gate;
-    if (bodyTooLarge(request, SMALL_JSON_LIMIT)) return createErrorResponse('too_large', 'Request too large', 413);
-
-    const body = (await request.json().catch(() => null)) ?? {};
+    let body: Record<string, unknown>;
+    try {
+      body = ((await readJsonCapped(request, SMALL_JSON_LIMIT)) as Record<string, unknown> | null) ?? {};
+    } catch (e) {
+      if (e instanceof BodyTooLargeError) return createErrorResponse('too_large', 'Request too large', 413);
+      throw e;
+    }
     const refinement = typeof body.prompt === 'string' ? body.prompt.trim() : '';
     if (!refinement) return createErrorResponse('invalid', 'A refinement instruction is required', 400);
     if (refinement.length > 2000) return createErrorResponse('invalid', 'Refinement is too long (max 2000 characters)', 400);

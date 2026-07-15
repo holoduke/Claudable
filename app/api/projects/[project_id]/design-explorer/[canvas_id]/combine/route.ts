@@ -13,7 +13,7 @@ import { prisma } from '@/lib/db/client';
 import { generateFrames } from '@/lib/services/design-explorer/generate';
 import { serializeDesignFrame } from '@/lib/serializers/design-explorer';
 import { createSuccessResponse, createErrorResponse, handleApiError } from '@/lib/utils/api-response';
-import { bodyTooLarge, SMALL_JSON_LIMIT } from '@/lib/utils/request-size';
+import { readJsonCapped, BodyTooLargeError, SMALL_JSON_LIMIT } from '@/lib/utils/request-size';
 
 interface RouteContext { params: Promise<{ project_id: string; canvas_id: string }>; }
 
@@ -24,9 +24,13 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
     const { project_id, canvas_id } = await params;
     const _gate = await denyUnlessProjectAccess(project_id, { write: true });
     if (_gate) return _gate;
-    if (bodyTooLarge(request, SMALL_JSON_LIMIT)) return createErrorResponse('too_large', 'Request too large', 413);
-
-    const body = (await request.json().catch(() => null)) ?? {};
+    let body: Record<string, unknown>;
+    try {
+      body = ((await readJsonCapped(request, SMALL_JSON_LIMIT)) as Record<string, unknown> | null) ?? {};
+    } catch (e) {
+      if (e instanceof BodyTooLargeError) return createErrorResponse('too_large', 'Request too large', 413);
+      throw e;
+    }
     const ids: string[] = Array.isArray(body.frameIds) ? body.frameIds.filter((x: unknown): x is string => typeof x === 'string') : [];
     if (ids.length !== 2) return createErrorResponse('invalid', 'Pick exactly two designs to combine', 400);
     if (ids[0] === ids[1]) return createErrorResponse('invalid', 'Pick two different designs to combine', 400);

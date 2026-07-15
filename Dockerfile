@@ -59,7 +59,13 @@ RUN curl -fsSL https://download.docker.com/linux/static/stable/x86_64/docker-27.
   && docker --version
 
 # Claude Code CLI on PATH so the Agent SDK can spawn `claude` headless.
-RUN npm install -g @anthropic-ai/claude-code
+# PINNED (like CHROME_HEADLESS_VERSION above): reproducible builds + a stable,
+# audited CLI for the security controls that depend on its flags (notably
+# `--strict-mcp-config` and `--allowedTools`, which gate design-generation
+# isolation). Bump deliberately after verifying those flags still behave.
+ARG CLAUDE_CODE_VERSION=2.1.210
+RUN npm install -g @anthropic-ai/claude-code@${CLAUDE_CODE_VERSION} \
+  && claude --version
 
 # Run as the non-root `node` user (uid 1000, matches the host volume owner) — Claude
 # Code refuses --dangerously-skip-permissions as root. Building entirely as `node`
