@@ -42,6 +42,7 @@ export const nl: Record<keyof typeof en, string> = {
   'chat.reverting': 'Terugzetten…',
   'chat.agentWorking': 'Agent is bezig',
   'chat.emptyTitle': 'Begin een gesprek met je agent',
+  'chat.loadingHistory': 'Chatgeschiedenis laden…',
 
   'settings.title': 'Instellingen',
   'settings.tab.general': 'Algemeen',

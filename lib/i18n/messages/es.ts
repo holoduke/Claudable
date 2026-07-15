@@ -42,6 +42,7 @@ export const es: Record<keyof typeof en, string> = {
   'chat.reverting': 'Revirtiendo…',
   'chat.agentWorking': 'El agente está trabajando',
   'chat.emptyTitle': 'Inicia una conversación con tu agente',
+  'chat.loadingHistory': 'Cargando el historial…',
 
   'settings.title': 'Ajustes',
   'settings.tab.general': 'General',

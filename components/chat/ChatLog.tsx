@@ -10,6 +10,7 @@ import type { ChatMessage, RealtimeEvent, RealtimeStatus } from '@/types';
 import { toChatMessage, normalizeChatContent } from '@/lib/serializers/client/chat';
 import { toRelativePath } from '@/lib/utils/path';
 import { useToast } from '@/components/ui/Toast';
+import { useT } from '@/contexts/I18nContext';
 
 import { type ToolAction, normalizeAction, inferActionFromToolName, pickFirstString, extractPathFromInput } from '@/lib/services/cli/tool-metadata';
 
@@ -861,6 +862,7 @@ interface ChatLogProps {
 
 export default function ChatLog({ projectId, onSessionStatusChange, onProjectStatusUpdate, onSseFallbackActive, startRequest, completeRequest, onAddUserMessage, serverBusy = false, onReverted, onAgentStatus }: ChatLogProps) {
   const toast = useToast();
+  const tr = useT(); // `tr` (not `t`) — this file uses local `t` vars (timers/timestamps)
   const [revertingSha, setRevertingSha] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const copyMessage = useCallback(async (id: string, text: string) => {
@@ -2780,7 +2782,7 @@ export default function ChatLog({ projectId, onSessionStatusChange, onProjectSta
           <div className="flex items-center justify-center h-32 text-gray-400 dark:text-gray-500 text-sm">
             <div className="flex flex-col items-center">
               <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-gray-900 mb-2 mx-auto"></div>
-              <p>Loading chat history...</p>
+              <p>{tr('chat.loadingHistory')}</p>
             </div>
           </div>
         )}
@@ -2789,7 +2791,7 @@ export default function ChatLog({ projectId, onSessionStatusChange, onProjectSta
           <div className="flex items-center justify-center h-32 text-gray-400 dark:text-gray-500 text-sm">
             <div className="text-center">
               <div className="text-2xl mb-2">💬</div>
-              <p>Start a conversation with your agent</p>
+              <p>{tr('chat.emptyTitle')}</p>
             </div>
           </div>
         )}
@@ -3104,7 +3106,7 @@ export default function ChatLog({ projectId, onSessionStatusChange, onProjectSta
               <span className="w-1.5 h-1.5 rounded-full bg-gray-500 animate-bounce" style={{ animationDelay: '150ms' }} />
               <span className="w-1.5 h-1.5 rounded-full bg-gray-500 animate-bounce" style={{ animationDelay: '300ms' }} />
             </span>
-            <span className="text-sm font-medium">Agent is working</span>
+            <span className="text-sm font-medium">{tr('chat.agentWorking')}</span>
             {busyDetail && (
               <span className="text-sm text-gray-400 dark:text-gray-500 truncate max-w-[60%]">· {busyDetail}</span>
             )}

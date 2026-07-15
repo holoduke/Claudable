@@ -42,6 +42,7 @@ export const ja: Record<keyof typeof en, string> = {
   'chat.reverting': '復元中…',
   'chat.agentWorking': 'エージェントが作業中',
   'chat.emptyTitle': 'エージェントとの会話を始めましょう',
+  'chat.loadingHistory': 'チャット履歴を読み込み中…',
 
   'settings.title': '設定',
   'settings.tab.general': '一般',
