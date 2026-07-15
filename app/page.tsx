@@ -1545,23 +1545,24 @@ export default function HomePage() {
                             <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: projectColor }} />
                             <span className="text-sm font-medium text-gray-900 dark:text-gray-50 truncate">{project.name}</span>
                           </div>
+                          {/* Primary metadata: last-edited time, then the creator. */}
                           <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
-                            Updated {formatTime(project.lastActiveAt || project.updatedAt || project.createdAt)}
-                            {project.preferredCli && (
-                              <span> · {formatCliInfo(projectCli, project.selectedModel ?? undefined)}</span>
-                            )}
+                            Last edited {formatTime(project.lastActiveAt || project.updatedAt || project.createdAt)}
+                            {project.createdBy && <span> · Created by {project.createdBy}</span>}
                           </p>
                           {(() => {
-                            // Only surface "Last edited by" when a DIFFERENT person than the
-                            // creator last edited it — otherwise it redundantly repeats the
-                            // creator and reads as "creator is always the last editor".
-                            const showEdited = !!project.lastEditedBy && project.lastEditedBy !== project.createdBy;
-                            if (!project.createdBy && !showEdited) return null;
+                            // Secondary line: the CLI, plus WHO last edited it only when a
+                            // DIFFERENT person than the creator did (otherwise it just repeats
+                            // the creator).
+                            const showEditor = !!project.lastEditedBy && project.lastEditedBy !== project.createdBy;
+                            if (!showEditor && !project.preferredCli) return null;
                             return (
                               <p className="mt-1 text-[11px] leading-tight text-gray-400 dark:text-gray-500 truncate">
-                                {project.createdBy && <span>Created by {project.createdBy}</span>}
-                                {project.createdBy && showEdited && <span> · </span>}
-                                {showEdited && <span>Last edited by {project.lastEditedBy}</span>}
+                                {showEditor && <span>Last edited by {project.lastEditedBy}</span>}
+                                {showEditor && project.preferredCli && <span> · </span>}
+                                {project.preferredCli && (
+                                  <span>{formatCliInfo(projectCli, project.selectedModel ?? undefined)}</span>
+                                )}
                               </p>
                             );
                           })()}
