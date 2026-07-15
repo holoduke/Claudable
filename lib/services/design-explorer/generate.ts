@@ -62,6 +62,11 @@ async function safeUpdateFrame(frameId: string, data: Record<string, unknown>): 
   }
 }
 
+/** Friendly stack labels for the project-aware generation context. */
+const STACK_LABELS: Record<string, string> = {
+  nuxt: 'Nuxt (Vue)', next: 'Next.js (React)', angular: 'Angular', static: 'a static site', laravel: 'Laravel + Filament (Blade)', document: 'a document site',
+};
+
 /** Absolute scratch dir for a frame (under data/ so agentHostPath resolves it). */
 export function frameScratchDir(canvasId: string, frameId: string): string {
   return path.resolve(process.cwd(), 'data', 'design-canvases', canvasId, frameId);
@@ -77,8 +82,11 @@ const SYSTEM_PROMPT = [
   '- Do NOT explain anything in chat. Just create index.html.',
 ].join('\n');
 
-function framePrompt(brief: string, styleSpec: string | null, styleName: string | null, hasReference: boolean): string {
+function framePrompt(brief: string, styleSpec: string | null, styleName: string | null, hasReference: boolean, projectContext: string | null): string {
   const parts = [`Design brief: ${brief}`, ''];
+  if (projectContext) {
+    parts.push(projectContext, '');
+  }
   if (hasReference) {
     parts.push('A reference image is provided at ./reference (read it first) — match its overall visual style, layout, palette and mood.', '');
   }
@@ -187,13 +195,31 @@ export async function generateFrame(
     }
 
     const styleSpec = frame.styleId ? await readDesignSpec(frame.styleId) : null;
-    const model = normalizeModelId('claude', getDefaultModelForCli('claude'));
+
+    // Project-aware context (read-only): name/description/stack so the mockup
+    // fits the real app and ports cleanly. Generation stays isolated — this only
+    // informs the prompt; the agent still can't reach the project's code.
+    const project = await prisma.project.findUnique({
+      where: { id: projectId },
+      select: { name: true, description: true, templateType: true },
+    });
+    const projectContext = project
+      ? [
+          `This mockup is for an existing app called "${project.name}"${project.description ? ` — ${project.description}` : ''}.`,
+          project.templateType ? `The app is built with ${STACK_LABELS[project.templateType] || project.templateType}; design so it ports cleanly to that stack (component-based, responsive).` : '',
+        ].filter(Boolean).join(' ')
+      : null;
+
+    // A cheaper/faster model is plenty for single-file mockups. DESIGN_MODEL
+    // (a CLI alias like "sonnet"/"haiku" or a full id) overrides; else the
+    // project default. Keeps design exploration inexpensive.
+    const model = process.env.DESIGN_MODEL?.trim() || normalizeModelId('claude', getDefaultModelForCli('claude'));
 
     const usage: CapturedUsage = {};
     const { done, abort } = runAgentTurnContainerized(
       {
         projectHostPath: agentHostPath(scratch),
-        prompt: framePrompt(frame.prompt, styleSpec, frame.styleName, hasReference),
+        prompt: framePrompt(frame.prompt, styleSpec, frame.styleName, hasReference, projectContext),
         oauthToken,
         model,
         systemPrompt: SYSTEM_PROMPT,
