@@ -13,6 +13,7 @@ import { prisma } from '@/lib/db/client';
 import { generateFrames } from '@/lib/services/design-explorer/generate';
 import { serializeDesignFrame } from '@/lib/serializers/design-explorer';
 import { createSuccessResponse, createErrorResponse, handleApiError } from '@/lib/utils/api-response';
+import { bodyTooLarge, SMALL_JSON_LIMIT } from '@/lib/utils/request-size';
 
 interface RouteContext { params: Promise<{ project_id: string; canvas_id: string }>; }
 
@@ -23,6 +24,7 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
     const { project_id, canvas_id } = await params;
     const _gate = await denyUnlessProjectAccess(project_id, { write: true });
     if (_gate) return _gate;
+    if (bodyTooLarge(request, SMALL_JSON_LIMIT)) return createErrorResponse('too_large', 'Request too large', 413);
 
     const body = (await request.json().catch(() => null)) ?? {};
     const ids: string[] = Array.isArray(body.frameIds) ? body.frameIds.filter((x: unknown): x is string => typeof x === 'string') : [];
@@ -54,7 +56,7 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
       '```html',
       htmlB.slice(0, MAX_SRC),
       '```',
-    ].join('\n');
+    ].join('\n').slice(0, 16000); // cap the assembled prompt (two 8k sources + brief)
 
     const frame = await prisma.designFrame.create({
       data: { canvasId: canvas_id, styleId: null, styleName: 'Combined', prompt: combinePrompt, status: 'pending' },

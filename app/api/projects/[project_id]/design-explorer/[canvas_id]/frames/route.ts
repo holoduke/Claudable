@@ -12,6 +12,7 @@ import { listDesignCatalog } from '@/lib/services/design-skills';
 import { generateFrames } from '@/lib/services/design-explorer/generate';
 import { serializeDesignFrame } from '@/lib/serializers/design-explorer';
 import { createSuccessResponse, createErrorResponse, handleApiError } from '@/lib/utils/api-response';
+import { bodyTooLarge, SMALL_JSON_LIMIT } from '@/lib/utils/request-size';
 
 interface RouteContext { params: Promise<{ project_id: string; canvas_id: string }>; }
 
@@ -20,6 +21,7 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
     const { project_id, canvas_id } = await params;
     const _gate = await denyUnlessProjectAccess(project_id, { write: true });
     if (_gate) return _gate;
+    if (bodyTooLarge(request, SMALL_JSON_LIMIT)) return createErrorResponse('too_large', 'Request too large', 413);
 
     const body = (await request.json().catch(() => null)) ?? {};
     const count = Math.min(6, Math.max(1, Number.parseInt(String(body.count ?? 2), 10) || 2));

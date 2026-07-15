@@ -42,11 +42,14 @@ interface Props {
   projectId: string;
   onApply: (prompt: string) => void;
   busy?: boolean;
+  /** True while the Design tab is visible. The board stays mounted when false
+   *  (to preserve draft state), but defers its first fetch until first shown. */
+  active?: boolean;
 }
 
 const REGEN_PROMPT = 'Regenerate: produce a fresh alternative take in the same overall direction.';
 
-export default function DesignExplorerBoard({ projectId, onApply, busy }: Props) {
+export default function DesignExplorerBoard({ projectId, onApply, busy, active }: Props) {
   const t = useT();
   const [brief, setBrief] = useState('');
   const [count, setCount] = useState(3);
@@ -83,7 +86,12 @@ export default function DesignExplorerBoard({ projectId, onApply, busy }: Props)
     } catch { /* offline / none */ }
   }, [projectId]);
 
-  useEffect(() => { void loadList(true); }, [loadList]);
+  // Defer the first fetch until the Design tab is actually opened (the board is
+  // always mounted to preserve drafts, but shouldn't hit the API on every chat load).
+  const openedRef = useRef(false);
+  useEffect(() => {
+    if (active && !openedRef.current) { openedRef.current = true; void loadList(true); }
+  }, [active, loadList]);
 
   const refreshCanvas = useCallback(async (canvasId: string) => {
     try {
@@ -295,7 +303,7 @@ export default function DesignExplorerBoard({ projectId, onApply, busy }: Props)
           + {t('designExplorer.new')}
         </button>
         {canvas && (
-          <button onClick={deleteCanvas} title={t('designExplorer.deleteCanvas')} className="text-xs px-2 py-1 rounded-md border border-gray-200 dark:border-white/10 text-gray-500 hover:text-red-500">
+          <button onClick={deleteCanvas} aria-label={t('designExplorer.deleteCanvas')} title={t('designExplorer.deleteCanvas')} className="text-xs px-2 py-1 rounded-md border border-gray-200 dark:border-white/10 text-gray-500 hover:text-red-500">
             🗑
           </button>
         )}
@@ -350,7 +358,7 @@ export default function DesignExplorerBoard({ projectId, onApply, busy }: Props)
                 <span className="relative inline-flex shrink-0">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img src={refImage} alt="" className="w-8 h-8 rounded object-cover border border-gray-200 dark:border-white/10" />
-                  <button onClick={() => setRefImage(null)} title={t('designExplorer.removeImage')} className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-gray-700 text-white rounded-full text-[10px] leading-none">×</button>
+                  <button onClick={() => setRefImage(null)} aria-label={t('designExplorer.removeImage')} title={t('designExplorer.removeImage')} className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-gray-700 text-white rounded-full text-[10px] leading-none">×</button>
                 </span>
               ) : (
                 <label className="shrink-0 text-xs px-2 py-1 rounded-md border border-gray-200 dark:border-white/10 text-gray-500 dark:text-gray-400 cursor-pointer hover:text-gray-800 dark:hover:text-gray-100">
@@ -445,7 +453,7 @@ export default function DesignExplorerBoard({ projectId, onApply, busy }: Props)
                         <button onClick={() => refineFrame(f.id, REGEN_PROMPT)} disabled={f.status !== 'ready' || refineBusy === f.id} title={t('designExplorer.regenerate')} aria-label={t('designExplorer.regenerate')} className="text-xs px-2 py-1 text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 border border-gray-200 dark:border-white/10 rounded-md disabled:opacity-40">
                           ↻
                         </button>
-                        <button onClick={() => exportHtml(f)} disabled={f.status !== 'ready' || !html[f.id]} title={t('designExplorer.export')} className="text-xs px-2 py-1 text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 border border-gray-200 dark:border-white/10 rounded-md disabled:opacity-40">
+                        <button onClick={() => exportHtml(f)} disabled={f.status !== 'ready' || !html[f.id]} aria-label={t('designExplorer.export')} title={t('designExplorer.export')} className="text-xs px-2 py-1 text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 border border-gray-200 dark:border-white/10 rounded-md disabled:opacity-40">
                           ↓
                         </button>
                       </div>

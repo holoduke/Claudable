@@ -15,6 +15,7 @@ import { generateFrames } from '@/lib/services/design-explorer/generate';
 import { serializeDesignCanvas } from '@/lib/serializers/design-explorer';
 import { listDesignCatalog } from '@/lib/services/design-skills';
 import { createSuccessResponse, createErrorResponse, handleApiError } from '@/lib/utils/api-response';
+import { bodyTooLarge } from '@/lib/utils/request-size';
 
 interface RouteContext { params: Promise<{ project_id: string }>; }
 
@@ -24,11 +25,9 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
     const _gate = await denyUnlessProjectAccess(project_id, { write: true });
     if (_gate) return _gate;
 
-    // Reject oversized bodies BEFORE parsing into memory — the optional
-    // referenceImage is a base64 data URL, so cap the whole request generously
-    // (8MB image ≈ ~11MB base64 + prompt).
-    const declaredLen = Number(request.headers.get('content-length') || 0);
-    if (declaredLen && declaredLen > 12 * 1024 * 1024) {
+    // Reject oversized bodies BEFORE parsing — the optional referenceImage is a
+    // base64 data URL, so cap the whole request generously (8MB image ≈ ~11MB b64).
+    if (bodyTooLarge(request, 12 * 1024 * 1024)) {
       return createErrorResponse('too_large', 'Request too large (reference image max 8MB)', 413);
     }
 

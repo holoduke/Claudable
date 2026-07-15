@@ -29,7 +29,7 @@ export async function GET(_request: Request, { params }: RouteContext) {
 
     return new NextResponse(html, {
       status: 200,
-      headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'private, max-age=60' },
+      headers: { 'Content-Type': 'text/plain; charset=utf-8', 'X-Content-Type-Options': 'nosniff', 'Cache-Control': 'private, max-age=60' },
     });
   } catch {
     return NextResponse.json({ success: false, error: 'Failed to read design HTML' }, { status: 500 });

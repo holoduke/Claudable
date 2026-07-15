@@ -45,6 +45,7 @@ export interface ContainerTurnOptions {
   pluginDirs?: string[];                // in-container plugin roots → one --plugin-dir each (loaded for this turn only)
   settingSources?: string;              // --setting-sources value (e.g. "project,user"); enables skill loading
   systemPrompt?: string;                // REPLACES the CLI default (parity with the SDK's systemPrompt option)
+  allowedTools?: string;                // restrict built-in tools (space-separated, e.g. "Read Write")
   env?: Record<string, string>;         // extra project env (already secret-free)
   memory?: string;                      // e.g. "2g"
   cpus?: string;                        // e.g. "2.0"
@@ -135,6 +136,10 @@ export function buildAgentContainerArgs(o: ContainerTurnOptions): string[] {
   if (o.sessionId) args.push('--resume', o.sessionId);
   if (o.mcpConfigPath) args.push('--mcp-config', o.mcpConfigPath);
   if (o.strictMcpConfig) args.push('--strict-mcp-config');
+  // Restrict the built-in tool surface when set (e.g. design generation only
+  // needs "Read Write"), so a prompt-injected turn can't reach Bash/WebFetch to
+  // exfiltrate the (possibly shared) OAuth token. Space-separated tool names.
+  if (o.allowedTools && o.allowedTools.trim()) args.push('--allowedTools', o.allowedTools.trim());
   // Load skills: 'project' → /work/.claude/skills, 'user' → ~/.claude/skills (the
   // mounted global catalog). Without this the containerized CLI loads no skills.
   if (o.settingSources && o.settingSources.trim()) args.push('--setting-sources', o.settingSources.trim());

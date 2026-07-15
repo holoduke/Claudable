@@ -6,7 +6,7 @@ import { denyUnlessProjectAccess } from '@/lib/auth/gate';
 import { prisma } from '@/lib/db/client';
 import { serializeDesignCanvas } from '@/lib/serializers/design-explorer';
 import { removeCanvasScratch } from '@/lib/services/design-explorer/cleanup';
-import { cancelFrames } from '@/lib/services/design-explorer/generate';
+import { cancelFrames, clearCancelled } from '@/lib/services/design-explorer/generate';
 import { createSuccessResponse, createErrorResponse, handleApiError } from '@/lib/utils/api-response';
 
 interface RouteContext { params: Promise<{ project_id: string; canvas_id: string }>; }
@@ -39,8 +39,10 @@ export async function DELETE(_request: Request, { params }: RouteContext) {
     if (!canvas) return createErrorResponse('not_found', 'Canvas not found', 404);
     // Hard-stop any still-running generation BEFORE removing rows + scratch, so
     // we don't orphan containers that keep writing into a deleted dir.
-    cancelFrames(canvas.frames.map((f) => f.id));
+    const frameIds = canvas.frames.map((f) => f.id);
+    cancelFrames(frameIds);
     await prisma.designCanvas.delete({ where: { id: canvas_id } }); // frames cascade
+    clearCancelled(frameIds); // rows are gone now — safe to purge the markers
     await removeCanvasScratch(canvas_id);
     return createSuccessResponse({ deleted: true });
   } catch (error) {

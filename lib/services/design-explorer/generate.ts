@@ -59,6 +59,28 @@ export function cancelFrames(frameIds: string[]): void {
   }
 }
 
+/** Purge cancellation markers once the frames are gone (e.g. after the canvas is
+ *  deleted) so the `cancelled` Set can't grow unbounded — a cuid is never reused,
+ *  and any later generateFrame for a deleted id short-circuits on the missing row. */
+export function clearCancelled(frameIds: string[]): void {
+  for (const id of frameIds) cancelled.delete(id);
+}
+
+/** Boot/periodic recovery: frames left `pending`/`generating` by a crash/restart
+ *  have no in-memory worker anymore, so mark the stale ones `error` (the board
+ *  polls per-frame status, so this un-sticks their canvases). Guards on age +
+ *  `inflight` so it never touches a genuinely-running frame. */
+export async function recoverStuckFrames(): Promise<void> {
+  const cutoff = new Date(Date.now() - 15 * 60_000);
+  const rows = await prisma.designFrame
+    .findMany({ where: { status: { in: ['pending', 'generating'] }, updatedAt: { lt: cutoff } }, select: { id: true } })
+    .catch(() => [] as { id: string }[]);
+  for (const r of rows) {
+    if (inflight.has(r.id)) continue; // still actually running in this process
+    await safeUpdateFrame(r.id, { status: 'error', errorText: 'Generation was interrupted (server restarted).' });
+  }
+}
+
 /** Update a frame row, ignoring the "record deleted" race (canvas was removed
  *  mid-generation) so a cancelled turn doesn't throw an untracked rejection. */
 async function safeUpdateFrame(frameId: string, data: Record<string, unknown>): Promise<void> {
@@ -181,18 +203,21 @@ export async function generateFrame(
   // Wait for a global slot (bounds total containers across all requests). Stay
   // `pending` while queued so the UI doesn't claim "generating" prematurely.
   await acquireSlot();
-  // Register a placeholder abort IMMEDIATELY so a canvas-delete arriving during
-  // the (awaited) setup below still marks this frame cancelled — closing the gap
-  // where a container could spawn for an already-deleted canvas.
-  let aborted = false;
-  inflight.set(frameId, () => { aborted = true; });
-  if (cancelled.has(frameId)) aborted = true;
-
-  await safeUpdateFrame(frameId, { status: 'generating' });
-  await publishFrame(projectId, frameId);
-
+  // CRITICAL: everything after acquireSlot() runs inside the try so the finally
+  // ALWAYS releases the slot — even if the 'generating' write or publish throws a
+  // transient (non-P2025) DB error. Otherwise a single such error leaks a slot,
+  // and MAX_CONCURRENT of them deadlock the whole feature until restart.
   const scratch = frameScratchDir(frame.canvasId, frameId);
+  let aborted = false;
   try {
+    // Register a placeholder abort IMMEDIATELY (no await before this) so a
+    // canvas-delete arriving during the awaited setup still marks this cancelled.
+    inflight.set(frameId, () => { aborted = true; });
+    if (cancelled.has(frameId)) aborted = true;
+
+    await safeUpdateFrame(frameId, { status: 'generating' });
+    await publishFrame(projectId, frameId);
+
     if (aborted) throw new Error('cancelled');
     await fs.mkdir(scratch, { recursive: true });
     const oauthToken =
@@ -246,6 +271,11 @@ export async function generateFrame(
         memory: '1g',
         cpus: '1.0',
         timeoutMs: FRAME_TIMEOUT_MS,
+        // Generation only writes one HTML file (and may read the reference image),
+        // so restrict the built-in tools to Read/Write. This blocks Bash/WebFetch/
+        // Task, so a prompt-injected brief can't exfiltrate the (possibly shared)
+        // OAuth token from inside the container.
+        allowedTools: 'Read Write',
         // Design generation needs ZERO MCP tools — it only writes one HTML file.
         // Force strict mode so the agent can never inherit the credential owner's
         // account connectors (Gmail/Drive/Calendar/…) when a shared/global token
