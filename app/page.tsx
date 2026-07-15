@@ -15,6 +15,7 @@ import ConnectClaudePrompt from '@/components/auth/ConnectClaudePrompt';
 import ThemeToggle from '@/components/ui/ThemeToggle';
 import { useGlobalSettings } from '@/contexts/GlobalSettingsContext';
 import { useT } from '@/contexts/I18nContext';
+import { uploadFileChunked } from '@/lib/client/upload';
 import { getDefaultModelForCli, getModelDisplayName } from '@/lib/constants/cliModels';
 import Image from 'next/image';
 import { Image as ImageIcon, Palette, Layers, Server, Database, Sparkles, Search } from 'lucide-react';
@@ -615,35 +616,29 @@ export default function HomePage() {
       const attachedFileRefs: string[] = [];
 
       if (uploadedImages.length > 0) {
-        try {
-          for (let i = 0; i < uploadedImages.length; i++) {
-            const item = uploadedImages[i];
-            if (!item.file) continue;
-
-            const formData = new FormData();
-            formData.append('file', item.file);
-
-            const uploadResponse = await fetchAPI(`${API_BASE}/api/assets/${createdProjectId}/upload`, {
-              method: 'POST',
-              body: formData
-            });
-
-            if (uploadResponse.ok) {
-              const result = await uploadResponse.json();
-              if (item.isImage !== false && (item.isImage || item.file.type.startsWith('image/'))) {
-                imageData.push({
-                  name: result.filename || item.name,
-                  path: result.absolute_path,
-                  public_url: typeof result.public_url === 'string' ? result.public_url : undefined
-                });
-              } else {
-                attachedFileRefs.push(`"${item.name}" → ${result.path}`);
-              }
+        for (let i = 0; i < uploadedImages.length; i++) {
+          const item = uploadedImages[i];
+          if (!item.file) continue;
+          try {
+            // Chunked upload — REQUIRED for real files (e.g. a zip) that exceed
+            // the ~10MB single-request body cap. Previously this used a one-shot
+            // multipart POST, so large attachments silently failed *only* during
+            // creation (the chat composer already chunked). Same shared path now.
+            const result = await uploadFileChunked(createdProjectId, item.file);
+            if (item.isImage !== false && (item.isImage || item.file.type.startsWith('image/'))) {
+              imageData.push({
+                name: result.filename || item.name,
+                path: result.absolute_path,
+                public_url: typeof result.public_url === 'string' ? result.public_url : undefined,
+              });
+            } else {
+              attachedFileRefs.push(`"${item.name}" → ${result.path}`);
             }
+          } catch (uploadError) {
+            // One bad file shouldn't drop the others — report and keep going.
+            console.error(`File upload failed for "${item.name}":`, uploadError);
+            showToast(`"${item.name}" could not be uploaded, but the project was created`, 'error');
           }
-        } catch (uploadError) {
-          console.error('File upload failed:', uploadError);
-          showToast('Files could not be uploaded, but project was created', 'error');
         }
       }
 
