@@ -293,8 +293,8 @@ export default function DesignExplorerBoard({ projectId, onApply, busy }: Props)
         )}
         <div className="ml-auto flex items-center gap-2">
           {totalCost > 0 && (
-            <span className="text-[11px] text-gray-400 dark:text-gray-500 tabular-nums" title={t('designExplorer.totalCost')}>
-              {t('designExplorer.totalCost')} ${totalCost.toFixed(2)}
+            <span className="text-[11px] text-gray-400 dark:text-gray-500 tabular-nums" title={t('designExplorer.usageTip')}>
+              {t('designExplorer.totalCost')} ~${totalCost.toFixed(2)}
             </span>
           )}
           {canvas && (canvas.frames?.length ?? 0) >= 2 && (
