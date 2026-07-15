@@ -24,12 +24,15 @@ interface Frame {
   version: number;
   parentFrameId: string | null;
   hasHtml: boolean;
+  costUsd: number | null;
+  durationMs: number | null;
 }
 interface Canvas {
   id: string;
   title: string;
   prompt: string;
   status: string;
+  hasReference?: boolean;
   createdAt?: string;
   frames: Frame[];
 }
@@ -58,7 +61,14 @@ export default function DesignExplorerBoard({ projectId, onApply, busy }: Props)
   const [error, setError] = useState<string | null>(null);
   const [device, setDevice] = useState<'desktop' | 'mobile'>('desktop');
   const [versionIdx, setVersionIdx] = useState<Record<string, number>>({});
+  const [refImage, setRefImage] = useState<string | null>(null); // data URL
+  const [combineMode, setCombineMode] = useState(false);
+  const [selected, setSelected] = useState<string[]>([]);
+  const [combining, setCombining] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Total agent cost of the current canvas (sum of frame cost, when reported).
+  const totalCost = (canvas?.frames ?? []).reduce((sum, f) => sum + (f.costUsd ?? 0), 0);
 
   const loadList = useCallback(async (selectFirst = false) => {
     try {
@@ -151,11 +161,11 @@ export default function DesignExplorerBoard({ projectId, onApply, busy }: Props)
       const r = await fetch(`${API_BASE}/api/projects/${projectId}/design-explorer/generate`, {
         method: 'POST', credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt, count }),
+        body: JSON.stringify({ prompt, count, referenceImage: refImage || undefined }),
       });
       const j = await r.json().catch(() => null);
       if (!r.ok || !j?.data) { setError(j?.message || j?.error || 'Failed to start'); return; }
-      setHtml({}); setVersionIdx({});
+      setHtml({}); setVersionIdx({}); setRefImage(null);
       setCanvas(j.data as Canvas);
       setCanvases((cs) => [j.data as Canvas, ...cs]);
     } catch { setError('Failed to start generation'); } finally { setStarting(false); }
@@ -214,6 +224,46 @@ export default function DesignExplorerBoard({ projectId, onApply, busy }: Props)
     } catch { /* ignore */ } finally { setApplyingId(null); }
   }, [canvas, busy, projectId, onApply]);
 
+  const onPickImage = useCallback((file: File | null) => {
+    if (!file) { setRefImage(null); return; }
+    if (file.size > 8 * 1024 * 1024) { setError('Reference image is too large (max 8MB)'); return; }
+    const reader = new FileReader();
+    reader.onload = () => setRefImage(typeof reader.result === 'string' ? reader.result : null);
+    reader.readAsDataURL(file);
+  }, []);
+
+  const toggleSelect = useCallback((frameId: string) => {
+    setSelected((s) => (s.includes(frameId) ? s.filter((x) => x !== frameId) : [...s, frameId].slice(-2)));
+  }, []);
+
+  const combine = useCallback(async () => {
+    if (!canvas || selected.length !== 2 || combining) return;
+    setCombining(true);
+    try {
+      await fetch(`${API_BASE}/api/projects/${projectId}/design-explorer/${canvas.id}/combine`, {
+        method: 'POST', credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ frameIds: selected }),
+      });
+      setSelected([]); setCombineMode(false);
+      await refreshCanvas(canvas.id);
+    } catch { /* ignore */ } finally { setCombining(false); }
+  }, [canvas, selected, combining, projectId, refreshCanvas]);
+
+  const exportHtml = useCallback((frame: Frame) => {
+    const content = html[frame.id];
+    if (!content) return;
+    const blob = new Blob([content], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${(frame.styleName || 'design').toLowerCase().replace(/[^a-z0-9-]+/g, '-')}.html`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }, [html]);
+
   const iframeStyle = device === 'mobile'
     ? { width: '390px', height: '1400px', transform: 'scale(0.82)', transformOrigin: 'top center' as const }
     : { width: '1280px', height: '1600px', transform: 'scale(0.28)', transformOrigin: 'top left' as const };
@@ -240,14 +290,38 @@ export default function DesignExplorerBoard({ projectId, onApply, busy }: Props)
             🗑
           </button>
         )}
-        <div className="ml-auto flex items-center bg-gray-100 dark:bg-white/6 rounded-md p-0.5">
-          {(['desktop', 'mobile'] as const).map((d) => (
-            <button key={d} onClick={() => setDevice(d)} className={`text-xs px-2 py-0.5 rounded ${device === d ? 'bg-white dark:bg-white/12 text-gray-900 dark:text-gray-50' : 'text-gray-500 dark:text-gray-400'}`}>
-              {t(d === 'desktop' ? 'designExplorer.desktop' : 'designExplorer.mobile')}
+        <div className="ml-auto flex items-center gap-2">
+          {totalCost > 0 && (
+            <span className="text-[11px] text-gray-400 dark:text-gray-500 tabular-nums" title={t('designExplorer.totalCost')}>
+              {t('designExplorer.totalCost')} ${totalCost.toFixed(2)}
+            </span>
+          )}
+          {canvas && (canvas.frames?.length ?? 0) >= 2 && (
+            <button
+              onClick={() => { setCombineMode((v) => !v); setSelected([]); }}
+              className={`text-xs px-2 py-1 rounded-md border ${combineMode ? 'border-[#DE7356] text-[#DE7356]' : 'border-gray-200 dark:border-white/10 text-gray-600 dark:text-gray-300'}`}
+            >
+              {t('designExplorer.combine')}
             </button>
-          ))}
+          )}
+          <div className="flex items-center bg-gray-100 dark:bg-white/6 rounded-md p-0.5">
+            {(['desktop', 'mobile'] as const).map((d) => (
+              <button key={d} onClick={() => setDevice(d)} className={`text-xs px-2 py-0.5 rounded ${device === d ? 'bg-white dark:bg-white/12 text-gray-900 dark:text-gray-50' : 'text-gray-500 dark:text-gray-400'}`}>
+                {t(d === 'desktop' ? 'designExplorer.desktop' : 'designExplorer.mobile')}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
+      {/* Combine hint / action bar */}
+      {combineMode && (
+        <div className="sticky top-[41px] z-10 flex items-center justify-between px-4 py-1.5 bg-[#DE7356]/10 text-[#DE7356] text-xs">
+          <span>{t('designExplorer.combineSelect')} ({selected.length}/2)</span>
+          <button onClick={combine} disabled={selected.length !== 2 || combining} className="px-3 py-1 bg-[#DE7356] text-white rounded-md disabled:opacity-40">
+            {combining ? '…' : t('designExplorer.combine')}
+          </button>
+        </div>
+      )}
 
       <div className="p-4">
         {/* Brief bar */}
@@ -262,6 +336,18 @@ export default function DesignExplorerBoard({ projectId, onApply, busy }: Props)
               className="w-full resize-none bg-transparent text-sm text-gray-900 dark:text-gray-50 placeholder:text-gray-400 focus:outline-none"
             />
             <div className="flex items-center justify-between gap-3">
+              {refImage ? (
+                <span className="relative inline-flex shrink-0">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={refImage} alt="" className="w-8 h-8 rounded object-cover border border-gray-200 dark:border-white/10" />
+                  <button onClick={() => setRefImage(null)} title={t('designExplorer.removeImage')} className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-gray-700 text-white rounded-full text-[10px] leading-none">×</button>
+                </span>
+              ) : (
+                <label className="shrink-0 text-xs px-2 py-1 rounded-md border border-gray-200 dark:border-white/10 text-gray-500 dark:text-gray-400 cursor-pointer hover:text-gray-800 dark:hover:text-gray-100">
+                  🖼 {t('designExplorer.attachImage')}
+                  <input type="file" accept="image/*" className="hidden" onChange={(e) => onPickImage(e.target.files?.[0] ?? null)} />
+                </label>
+              )}
               <label className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
                 {t('designExplorer.variations')}
                 <select value={count} onChange={(e) => setCount(Number(e.target.value))} className="bg-transparent border border-gray-200 dark:border-white/10 rounded-md px-1.5 py-0.5 text-gray-900 dark:text-gray-100">
@@ -291,7 +377,7 @@ export default function DesignExplorerBoard({ projectId, onApply, busy }: Props)
               const idx = Math.min(versionIdx[root] ?? versions.length - 1, versions.length - 1);
               const f = versions[idx];
               return (
-                <div key={root} className="group rounded-xl border border-gray-200 dark:border-white/8 bg-white dark:bg-white/3 overflow-hidden">
+                <div key={root} className={`group rounded-xl border bg-white dark:bg-white/3 overflow-hidden transition-colors ${selected.includes(f.id) ? 'ring-2 ring-[#DE7356] border-[#DE7356]' : 'border-gray-200 dark:border-white/8'}`}>
                   <div className="aspect-4/3 relative bg-gray-100 dark:bg-gray-900 overflow-hidden flex justify-center">
                     {f.status === 'ready' && html[f.id] ? (
                       <iframe title={f.styleName || 'design'} srcDoc={html[f.id]} sandbox="allow-scripts" className="border-0 bg-white" style={{ position: 'absolute', top: 0, ...iframeStyle }} />
@@ -307,7 +393,16 @@ export default function DesignExplorerBoard({ projectId, onApply, busy }: Props)
                       </div>
                     )}
                     {f.status === 'ready' && html[f.id] && (
-                      <button aria-label={t('designExplorer.fullscreen')} onClick={() => setFullscreenId(f.id)} className="absolute inset-0 w-full h-full cursor-zoom-in" />
+                      <button
+                        aria-label={combineMode ? t('designExplorer.combine') : t('designExplorer.fullscreen')}
+                        onClick={() => (combineMode ? toggleSelect(f.id) : setFullscreenId(f.id))}
+                        className={`absolute inset-0 w-full h-full ${combineMode ? 'cursor-pointer' : 'cursor-zoom-in'}`}
+                      />
+                    )}
+                    {combineMode && f.status === 'ready' && (
+                      <span className={`absolute top-2 left-2 w-5 h-5 rounded-full border-2 flex items-center justify-center text-[10px] ${selected.includes(f.id) ? 'bg-[#DE7356] border-[#DE7356] text-white' : 'bg-white/80 border-gray-300'}`}>
+                        {selected.includes(f.id) ? selected.indexOf(f.id) + 1 : ''}
+                      </span>
                     )}
                   </div>
                   <div className="p-2.5">
@@ -340,6 +435,9 @@ export default function DesignExplorerBoard({ projectId, onApply, busy }: Props)
                         <button onClick={() => refineFrame(f.id, REGEN_PROMPT)} disabled={f.status !== 'ready'} title={t('designExplorer.regenerate')} className="text-xs px-2 py-1 text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 border border-gray-200 dark:border-white/10 rounded-md disabled:opacity-40">
                           ↻
                         </button>
+                        <button onClick={() => exportHtml(f)} disabled={f.status !== 'ready' || !html[f.id]} title={t('designExplorer.export')} className="text-xs px-2 py-1 text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 border border-gray-200 dark:border-white/10 rounded-md disabled:opacity-40">
+                          ↓
+                        </button>
                       </div>
                     )}
                   </div>
@@ -364,6 +462,7 @@ export default function DesignExplorerBoard({ projectId, onApply, busy }: Props)
           <div className={`relative bg-white rounded-lg shadow-2xl h-[85vh] overflow-hidden ${device === 'mobile' ? 'w-[390px]' : 'w-full max-w-5xl'}`} onClick={(e) => e.stopPropagation()}>
             <iframe title="design-fullscreen" srcDoc={html[fullscreenFrame.id]} sandbox="allow-scripts" className="w-full h-full border-0" />
             <div className="absolute top-2 right-2 flex gap-2">
+              <button onClick={() => exportHtml(fullscreenFrame)} className="px-3 py-1.5 bg-white/90 text-gray-800 rounded-lg text-sm shadow" title={t('designExplorer.export')}>↓</button>
               <button onClick={() => { void use(fullscreenFrame.id); setFullscreenId(null); }} disabled={busy} className="px-3 py-1.5 bg-[#DE7356] text-white rounded-lg text-sm font-medium hover:bg-[#c9634a] disabled:opacity-40 shadow">
                 {t('designExplorer.use')}
               </button>

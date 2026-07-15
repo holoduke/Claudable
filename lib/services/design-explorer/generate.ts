@@ -40,8 +40,11 @@ const SYSTEM_PROMPT = [
   '- Do NOT explain anything in chat. Just create index.html.',
 ].join('\n');
 
-function framePrompt(brief: string, styleSpec: string | null, styleName: string | null): string {
+function framePrompt(brief: string, styleSpec: string | null, styleName: string | null, hasReference: boolean): string {
   const parts = [`Design brief: ${brief}`, ''];
+  if (hasReference) {
+    parts.push('A reference image is provided at ./reference (read it first) — match its overall visual style, layout, palette and mood.', '');
+  }
   if (styleSpec) {
     parts.push(
       `Apply this design direction${styleName ? ` ("${styleName}")` : ''} — adopt its palette, typography, spacing and overall feel:`,
@@ -53,6 +56,19 @@ function framePrompt(brief: string, styleSpec: string | null, styleName: string 
   }
   parts.push('', 'Create `index.html` now.');
   return parts.join('\n');
+}
+
+/** Extract usage/cost from the CLI's final `result` stream-json event. */
+interface CapturedUsage { costUsd?: number; inputTokens?: number; outputTokens?: number; durationMs?: number; }
+function captureUsage(evt: Record<string, unknown>, sink: CapturedUsage): void {
+  if (evt?.type !== 'result') return;
+  if (typeof evt.total_cost_usd === 'number') sink.costUsd = evt.total_cost_usd;
+  if (typeof evt.duration_ms === 'number') sink.durationMs = evt.duration_ms;
+  const usage = evt.usage as Record<string, unknown> | undefined;
+  if (usage) {
+    if (typeof usage.input_tokens === 'number') sink.inputTokens = usage.input_tokens;
+    if (typeof usage.output_tokens === 'number') sink.outputTokens = usage.output_tokens;
+  }
 }
 
 async function publishFrame(projectId: string, frameId: string): Promise<void> {
@@ -122,13 +138,22 @@ export async function generateFrame(
       '';
     if (!oauthToken) throw new Error('No Claude credential available for design generation');
 
+    // Copy the canvas's reference image into the scratch so the agent can read it.
+    const canvas = await prisma.designCanvas.findUnique({ where: { id: frame.canvasId }, select: { referenceImagePath: true } });
+    let hasReference = false;
+    if (canvas?.referenceImagePath) {
+      const ext = path.extname(canvas.referenceImagePath) || '.png';
+      await fs.copyFile(canvas.referenceImagePath, path.join(scratch, `reference${ext}`)).then(() => { hasReference = true; }).catch(() => {});
+    }
+
     const styleSpec = frame.styleId ? await readDesignSpec(frame.styleId) : null;
     const model = normalizeModelId('claude', getDefaultModelForCli('claude'));
 
+    const usage: CapturedUsage = {};
     const { done } = runAgentTurnContainerized(
       {
         projectHostPath: agentHostPath(scratch),
-        prompt: framePrompt(frame.prompt, styleSpec, frame.styleName),
+        prompt: framePrompt(frame.prompt, styleSpec, frame.styleName, hasReference),
         oauthToken,
         model,
         systemPrompt: SYSTEM_PROMPT,
@@ -138,7 +163,7 @@ export async function generateFrame(
         cpus: '1.0',
         timeoutMs: FRAME_TIMEOUT_MS,
       },
-      () => { /* per-event streaming not needed; we publish on completion */ },
+      (evt) => captureUsage(evt as Record<string, unknown>, usage),
     );
     const result = await done;
 
@@ -150,7 +175,11 @@ export async function generateFrame(
     await fs.writeFile(htmlPath, html, 'utf8'); // normalize to index.html
     await prisma.designFrame.update({
       where: { id: frameId },
-      data: { status: 'ready', htmlPath, errorText: null },
+      data: {
+        status: 'ready', htmlPath, errorText: null,
+        costUsd: usage.costUsd ?? null, inputTokens: usage.inputTokens ?? null,
+        outputTokens: usage.outputTokens ?? null, durationMs: usage.durationMs ?? null,
+      },
     });
   } catch (error) {
     await prisma.designFrame.update({

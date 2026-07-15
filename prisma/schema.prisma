@@ -552,10 +552,11 @@ model ServiceToken {
 model DesignCanvas {
   id          String   @id @default(cuid())
   projectId   String   @map("project_id")
-  title       String
-  prompt      String
-  status      String   @default("idle") // idle | generating | ready
-  createdById String?  @map("created_by_id")
+  title              String
+  prompt             String
+  status             String   @default("idle") // idle | generating | ready
+  referenceImagePath String?  @map("reference_image_path")
+  createdById        String?  @map("created_by_id")
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
@@ -579,6 +580,10 @@ model DesignFrame {
   errorText     String?  @map("error_text")
   version       Int      @default(1)
   parentFrameId String?  @map("parent_frame_id")
+  costUsd       Float?   @map("cost_usd")
+  inputTokens   Int?     @map("input_tokens")
+  outputTokens  Int?     @map("output_tokens")
+  durationMs    Int?     @map("duration_ms")
   createdAt     DateTime @default(now()) @map("created_at")
   updatedAt     DateTime @updatedAt @map("updated_at")
 
