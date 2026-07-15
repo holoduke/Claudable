@@ -41,22 +41,22 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
       : [];
 
     const specs = seeds.length > 0 ? seeds : [null];
-    await prisma.designFrame.createMany({
-      data: specs.map((seed) => ({
-        canvasId: canvas.id,
-        styleId: seed?.id ?? null,
-        styleName: seed?.name ?? null,
-        prompt: canvas.prompt,
-        status: 'pending',
+    // Create rows individually so we capture the exact IDs we made — re-querying
+    // "newest N pending" races with a concurrent add-more on the same canvas and
+    // could strand rows in `pending` forever.
+    const added = await Promise.all(
+      specs.map((seed) => prisma.designFrame.create({
+        data: {
+          canvasId: canvas.id,
+          styleId: seed?.id ?? null,
+          styleName: seed?.name ?? null,
+          prompt: canvas.prompt,
+          status: 'pending',
+        },
       })),
-    });
+    );
     await prisma.designCanvas.update({ where: { id: canvas.id }, data: { status: 'generating' } });
 
-    const added = await prisma.designFrame.findMany({
-      where: { canvasId: canvas.id, status: 'pending' },
-      orderBy: { createdAt: 'desc' },
-      take: specs.length,
-    });
     const requester = await getSessionUser();
     void generateFrames(project_id, added.map((f) => f.id), requester?.id).catch((e) => {
       console.error('[DesignExplorer] add-more failed:', e);

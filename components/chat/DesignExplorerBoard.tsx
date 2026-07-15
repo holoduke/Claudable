@@ -169,7 +169,7 @@ export default function DesignExplorerBoard({ projectId, onApply, busy }: Props)
       setCanvas(j.data as Canvas);
       setCanvases((cs) => [j.data as Canvas, ...cs]);
     } catch { setError('Failed to start generation'); } finally { setStarting(false); }
-  }, [brief, count, starting, projectId]);
+  }, [brief, count, starting, projectId, refImage]);
 
   const addMore = useCallback(async () => {
     if (!canvas || addingMore) return;

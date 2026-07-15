@@ -6,7 +6,12 @@
 import { denyUnlessProjectAccess } from '@/lib/auth/gate';
 import { prisma } from '@/lib/db/client';
 import { serializeDesignCanvas } from '@/lib/serializers/design-explorer';
+import { sweepOrphanedCanvasScratch } from '@/lib/services/design-explorer/cleanup';
 import { createSuccessResponse, handleApiError } from '@/lib/utils/api-response';
+
+// Best-effort reclaim of scratch dirs whose canvas is gone (crash/redeploy
+// orphans). Fire-and-forget on list — cheap and self-throttling by traffic.
+let lastSweep = 0;
 
 interface RouteContext { params: Promise<{ project_id: string }>; }
 
@@ -15,6 +20,13 @@ export async function GET(_request: Request, { params }: RouteContext) {
     const { project_id } = await params;
     const _gate = await denyUnlessProjectAccess(project_id);
     if (_gate) return _gate;
+
+    // At most once per hour across the process — avoids scanning on every list.
+    const now = Date.now();
+    if (now - lastSweep > 60 * 60 * 1000) {
+      lastSweep = now;
+      void sweepOrphanedCanvasScratch().catch(() => {});
+    }
 
     const canvases = await prisma.designCanvas.findMany({
       where: { projectId: project_id },

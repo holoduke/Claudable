@@ -26,8 +26,14 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
     const frameId = typeof body.frameId === 'string' ? body.frameId : '';
     if (!frameId) return createErrorResponse('invalid', 'frameId is required', 400);
 
+    // Scope the canvas to THIS project (IDOR guard) before trusting frameId — a
+    // caller with write access to project A must not stage a frame from a canvas
+    // belonging to another project B they can only read.
+    const canvas = await prisma.designCanvas.findFirst({ where: { id: canvas_id, projectId: project_id } });
+    if (!canvas) return createErrorResponse('not_found', 'Canvas not found', 404);
+
     const frame = await prisma.designFrame.findUnique({ where: { id: frameId } });
-    if (!frame || frame.canvasId !== canvas_id) return createErrorResponse('not_found', 'Frame not found', 404);
+    if (!frame || frame.canvasId !== canvas.id) return createErrorResponse('not_found', 'Frame not found', 404);
     if (frame.status !== 'ready') return createErrorResponse('invalid', 'That design is not ready yet', 400);
 
     const project = await getProjectById(project_id);
