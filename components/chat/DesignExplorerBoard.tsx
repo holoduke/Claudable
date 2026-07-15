@@ -272,14 +272,15 @@ export default function DesignExplorerBoard({ projectId, onApply, busy }: Props)
 
   return (
     <div className="w-full h-full overflow-y-auto bg-gray-50 dark:bg-[#0c0a09]">
-      {/* Toolbar: history switcher + new + device */}
+      {/* Toolbar: history switcher + new + device. Hidden until there's at least
+          one exploration, so the first-run screen is just the brief box. */}
+      {(canvases.length > 0 || canvas) && (
       <div className="sticky top-0 z-10 flex items-center gap-2 px-4 py-2 border-b border-gray-200 dark:border-white/8 bg-gray-50/90 dark:bg-[#0c0a09]/90 backdrop-blur">
         <select
           value={canvas?.id ?? ''}
           onChange={(e) => { const c = canvases.find((x) => x.id === e.target.value); if (c) { setHtml({}); setVersionIdx({}); void refreshCanvas(c.id); } }}
           className="max-w-[40%] truncate bg-transparent border border-gray-200 dark:border-white/10 rounded-md px-2 py-1 text-xs text-gray-700 dark:text-gray-200"
         >
-          {canvases.length === 0 && <option value="">{t('designExplorer.history')}</option>}
           {canvases.map((c) => <option key={c.id} value={c.id} className="dark:bg-[#181310]">{c.title || t('designExplorer.title')}</option>)}
         </select>
         <button onClick={() => { setCanvas(null); setError(null); }} className="text-xs px-2 py-1 rounded-md border border-gray-200 dark:border-white/10 text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100">
@@ -313,6 +314,7 @@ export default function DesignExplorerBoard({ projectId, onApply, busy }: Props)
           </div>
         </div>
       </div>
+      )}
       {/* Combine hint / action bar */}
       {combineMode && (
         <div className="sticky top-[41px] z-10 flex items-center justify-between px-4 py-1.5 bg-[#DE7356]/10 text-[#DE7356] text-xs">
