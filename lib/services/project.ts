@@ -47,12 +47,19 @@ export async function getAllProjects(): Promise<Project[]> {
 export async function getProjectById(id: string): Promise<Project | null> {
   const project = await prisma.project.findUnique({
     where: { id },
+    // Creator + last-editor (name/email) so the single-project response can show
+    // the project-info panel. Two tiny joins; other callers just ignore the extra
+    // relation fields.
+    include: {
+      owner: { select: { name: true, email: true } },
+      lastEditedBy: { select: { name: true, email: true } },
+    },
   });
   if (!project) return null;
   return {
     ...project,
     selectedModel: normalizeModelId(project.preferredCli ?? 'claude', project.selectedModel ?? undefined),
-  } as Project;
+  } as unknown as Project;
 }
 
 /**

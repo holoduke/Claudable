@@ -1542,27 +1542,29 @@ export default function HomePage() {
                             <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: projectColor }} />
                             <span className="text-sm font-medium text-gray-900 dark:text-gray-50 truncate">{project.name}</span>
                           </div>
-                          {/* Primary metadata: last-edited time, then the creator. */}
+                          {/* Primary metadata: last-edited time + who. Once a project has
+                              been edited we show the editor and DROP the creator (the
+                              creator lives in the project ⓘ info panel); an untouched
+                              project shows its creator instead. */}
                           <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
-                            {t('home.lastEdited', { time: formatTime(project.lastActiveAt || project.updatedAt || project.createdAt) })}
-                            {project.createdBy && <span> · {t('home.createdBy', { name: project.createdBy })}</span>}
+                            {project.lastEditedBy ? (
+                              t('home.lastEditedTimeBy', {
+                                time: formatTime(project.lastActiveAt || project.updatedAt || project.createdAt),
+                                name: project.lastEditedBy,
+                              })
+                            ) : (
+                              <>
+                                {t('home.lastEdited', { time: formatTime(project.lastActiveAt || project.updatedAt || project.createdAt) })}
+                                {project.createdBy && <span> · {t('home.createdBy', { name: project.createdBy })}</span>}
+                              </>
+                            )}
                           </p>
-                          {(() => {
-                            // Secondary line: the CLI, plus WHO last edited it only when a
-                            // DIFFERENT person than the creator did (otherwise it just repeats
-                            // the creator).
-                            const showEditor = !!project.lastEditedBy && project.lastEditedBy !== project.createdBy;
-                            if (!showEditor && !project.preferredCli) return null;
-                            return (
-                              <p className="mt-1 text-[11px] leading-tight text-gray-400 dark:text-gray-500 truncate">
-                                {showEditor && <span>{t('home.lastEditedBy', { name: project.lastEditedBy! })}</span>}
-                                {showEditor && project.preferredCli && <span> · </span>}
-                                {project.preferredCli && (
-                                  <span>{formatCliInfo(projectCli, project.selectedModel ?? undefined)}</span>
-                                )}
-                              </p>
-                            );
-                          })()}
+                          {/* Secondary line: the assistant (CLI · model). */}
+                          {project.preferredCli && (
+                            <p className="mt-1 text-[11px] leading-tight text-gray-400 dark:text-gray-500 truncate">
+                              {formatCliInfo(projectCli, project.selectedModel ?? undefined)}
+                            </p>
+                          )}
                         </div>
                       </button>
                     );
