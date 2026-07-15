@@ -13,6 +13,7 @@ import { randomUUID } from 'crypto';
 import { promisify } from 'util';
 import fs from 'fs/promises';
 import path from 'path';
+import sharp from 'sharp';
 import { previewManager } from './preview';
 
 const execFileP = promisify(execFile);
@@ -28,13 +29,26 @@ function safeId(projectId: string): string {
   return safe;
 }
 
+/** Canonical thumbnail path (WebP — ~70-90% lighter than the old PNG). */
 export function thumbnailFile(projectId: string): string {
+  return path.join(THUMBS_DIR, `${safeId(projectId)}.webp`);
+}
+/** Pre-WebP thumbnails were PNGs; still read them until a fresh capture replaces them. */
+function legacyThumbnailFile(projectId: string): string {
   return path.join(THUMBS_DIR, `${safeId(projectId)}.png`);
 }
 
-export async function getThumbnail(projectId: string): Promise<Buffer | null> {
+export interface ThumbnailData {
+  buffer: Buffer;
+  contentType: string;
+}
+
+export async function getThumbnail(projectId: string): Promise<ThumbnailData | null> {
   try {
-    return await fs.readFile(thumbnailFile(projectId));
+    return { buffer: await fs.readFile(thumbnailFile(projectId)), contentType: 'image/webp' };
+  } catch { /* no WebP yet — fall back to a legacy PNG if one exists */ }
+  try {
+    return { buffer: await fs.readFile(legacyThumbnailFile(projectId)), contentType: 'image/png' };
   } catch {
     return null;
   }
@@ -67,9 +81,10 @@ export async function captureThumbnail(projectId: string): Promise<boolean> {
   if (status.status !== 'running' || !status.port) return false;
 
   await fs.mkdir(THUMBS_DIR, { recursive: true });
-  const out = thumbnailFile(projectId);
+  const out = thumbnailFile(projectId); // .webp
   // Unique tmp per capture: the retry loop and a client-triggered POST can run
   // concurrently, and a shared tmp name made one rename fail with ENOENT.
+  // Chromium only writes PNG, so we shoot a tmp PNG then re-encode it to WebP.
   const tmp = `${out}.${randomUUID().slice(0, 8)}.tmp.png`;
   // Containerized previews publish on the docker-bridge gateway (PREVIEW_PUBLISH_HOST,
   // e.g. 10.0.1.1), NOT on localhost inside this container — probing localhost made
@@ -115,7 +130,19 @@ export async function captureThumbnail(projectId: string): Promise<boolean> {
     );
     const st = await fs.stat(tmp);
     if (st.size === 0) throw new Error('empty screenshot');
-    await fs.rename(tmp, out);
+    // Re-encode the PNG to WebP: dashboard tiles are ~300px, so 800px wide is
+    // plenty (crisp on 2x/retina) and WebP is ~70-90% lighter than the PNG for
+    // a screenshot. Written to a tmp then renamed so a good thumbnail is never
+    // clobbered by a half-written one.
+    const tmpWebp = `${out}.${randomUUID().slice(0, 8)}.tmp.webp`;
+    await sharp(tmp)
+      .resize({ width: 800, withoutEnlargement: true })
+      .webp({ quality: 72 })
+      .toFile(tmpWebp);
+    await fs.rm(tmp, { force: true }).catch(() => {});
+    await fs.rename(tmpWebp, out);
+    // Drop the pre-WebP PNG so getThumbnail's legacy fallback can't serve a stale shot.
+    await fs.rm(legacyThumbnailFile(projectId), { force: true }).catch(() => {});
     return true;
   } catch (error) {
     console.error('[thumbnail] capture failed for', projectId, error);

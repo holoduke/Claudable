@@ -16,14 +16,14 @@ export async function GET(_req: NextRequest, { params }: Ctx) {
   const { project_id } = await params;
   const _gate = await denyUnlessProjectAccess(project_id);
   if (_gate) return _gate;
-  const png = await getThumbnail(project_id);
-  if (!png) {
+  const thumb = await getThumbnail(project_id);
+  if (!thumb) {
     return NextResponse.json({ success: false, error: 'No thumbnail' }, { status: 404 });
   }
-  return new NextResponse(new Uint8Array(png), {
+  return new NextResponse(new Uint8Array(thumb.buffer), {
     status: 200,
     headers: {
-      'Content-Type': 'image/png',
+      'Content-Type': thumb.contentType,
       // The tile URL carries a ?v=<thumbsVersion> that the homepage bumps whenever
       // thumbnails are refreshed, so we can cache hard and let the version param
       // bust it — instead of re-downloading every screenshot every 60s (the old
