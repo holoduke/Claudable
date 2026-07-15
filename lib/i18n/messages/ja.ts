@@ -126,6 +126,8 @@ export const ja: Record<keyof typeof en, string> = {
   'designExplorer.usageTip': 'API換算の推定使用量 — Claudeサブスクリプションでカバーされ、課金されません。',
   'designExplorer.actionFailed': '問題が発生しました。もう一度お試しください。',
   'designExplorer.imageTooLarge': '画像が大きすぎます（最大8MB）。',
+  'designExplorer.previousVersion': '前のバージョン',
+  'designExplorer.nextVersion': '次のバージョン',
   'home.emptyTitle': '最初のアプリはプロンプト一つで',
   'home.emptyBody': '作りたいものを上のボックスに記入してください。Claudable が生成してライブ実行し、チャットで調整できます。',
   'home.deleteTitle': 'プロジェクトを削除',

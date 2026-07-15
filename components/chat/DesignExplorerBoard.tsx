@@ -428,9 +428,9 @@ export default function DesignExplorerBoard({ projectId, onApply, busy, active }
                       <span className="text-xs font-medium text-gray-700 dark:text-gray-200 truncate">{f.styleName || '—'}</span>
                       {versions.length > 1 && (
                         <span className="flex items-center gap-1 text-[11px] text-gray-400 dark:text-gray-500 shrink-0">
-                          <button aria-label="Previous version" onClick={() => setVersionIdx((v) => ({ ...v, [root]: Math.max(0, idx - 1) }))} disabled={idx === 0} className="disabled:opacity-30">‹</button>
+                          <button aria-label={t('designExplorer.previousVersion')} onClick={() => setVersionIdx((v) => ({ ...v, [root]: Math.max(0, idx - 1) }))} disabled={idx === 0} className="disabled:opacity-30">‹</button>
                           v{f.version}
-                          <button aria-label="Next version" onClick={() => setVersionIdx((v) => ({ ...v, [root]: Math.min(versions.length - 1, idx + 1) }))} disabled={idx === versions.length - 1} className="disabled:opacity-30">›</button>
+                          <button aria-label={t('designExplorer.nextVersion')} onClick={() => setVersionIdx((v) => ({ ...v, [root]: Math.min(versions.length - 1, idx + 1) }))} disabled={idx === versions.length - 1} className="disabled:opacity-30">›</button>
                         </span>
                       )}
                     </div>
