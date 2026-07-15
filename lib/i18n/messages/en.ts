@@ -49,6 +49,7 @@ export const en = {
   'chat.reverting': 'Reverting…',
   'chat.agentWorking': 'Agent is working',
   'chat.emptyTitle': 'Start a conversation with your agent',
+  'chat.loadingHistory': 'Loading chat history…',
 
   // Settings shell
   'settings.title': 'Settings',

@@ -42,6 +42,7 @@ export const it: Record<keyof typeof en, string> = {
   'chat.reverting': 'Ripristino…',
   'chat.agentWorking': 'L’agente sta lavorando',
   'chat.emptyTitle': 'Avvia una conversazione con il tuo agente',
+  'chat.loadingHistory': 'Caricamento cronologia…',
 
   'settings.title': 'Impostazioni',
   'settings.tab.general': 'Generali',
