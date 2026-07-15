@@ -7,6 +7,14 @@ services:
     container_name: claudable
     network_mode: host
     restart: unless-stopped
+    # Control-plane memory safety net. Previews/agents run in their own hardened
+    # cgroups (2g / 512m each); the main Node app had NO limit, so a leak here
+    # could OOM the whole box instead of just restarting this container. The app
+    # normally sits ~350MB (previews/agents are separate containers, not children),
+    # so 3g is generous headroom — hitting it means something is genuinely wrong,
+    # and `restart: unless-stopped` then brings it back cleanly.
+    mem_limit: 3g
+    mem_reservation: 512m
     healthcheck:
       # node (not curl — the slim image has no curl); exit 0 while the app serves.
       test: ["CMD", "node", "-e", "require('http').get('http://localhost:3700/',r=>process.exit(r.statusCode<500?0:1)).on('error',()=>process.exit(1))"]
