@@ -54,7 +54,19 @@ works; this fork adds:
 - **Checkpoints & revert** — every agent turn is checkpointed; restore the project to any
   step in one click. The agent also detects build/runtime errors and offers a fix.
 - **Multi-user** — Google login with an auth gate, per-project access control, and
-  per-user Claude credentials (paste your own `claude setup-token`).
+  per-user Claude credentials (paste your own `claude setup-token`). Chat is
+  **collaborative in real time**: everyone viewing a project sees messages and the agent's
+  streaming output appear live (one agent turn at a time per project).
+- **Internationalization** — the whole interface is translatable, shipping with **8
+  languages** (English, Dutch, German, French, Spanish, Italian, Portuguese, Japanese).
+  Pick the display language in Settings → General; it saves **per user** and follows your
+  account across devices.
+- **Design Explorer** — a Claude-Design-style canvas. Describe a page and get several
+  standalone design mockups generated **side-by-side**, each seeded with a different style
+  from the catalog. Compare them live, **refine**/**regenerate** any one (kept as versions),
+  **combine** two into a hybrid, or seed from a **reference image** — then **Use this** to
+  port the chosen design into your real project (checkpointed, so it's revertible). Mockups
+  are generated in isolated, tool-restricted sandboxes and rendered in locked-down iframes.
 - **Visual editor** — an *Edit* mode to click elements in the live preview and tweak text
   & CSS, then apply the change to code through the agent.
 - **Preview comments** — Figma-style pinned, per-route review comments overlaid on the
