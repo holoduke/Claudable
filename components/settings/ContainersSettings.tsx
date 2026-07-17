@@ -23,7 +23,7 @@ const KIND_ICON: Record<string, string> = { frontend: '🖥️', backend: '⚙�
 
 function statusColor(s: string): string {
   if (s === 'running' || s === 'provisioned' || s === 'container') return 'bg-emerald-500';
-  if (s === 'file') return 'bg-[#DE7356]';
+  if (s === 'file') return 'bg-brand-500';
   if (s === 'starting' || s === 'restarting' || s === 'created') return 'bg-amber-500';
   return 'bg-gray-400';
 }
@@ -195,7 +195,7 @@ export default function ContainersSettings({ projectId }: { projectId: string })
                     </div>
                     {c.url && (
                       /^https?:\/\//.test(c.url)
-                        ? <a href={c.url} target="_blank" rel="noreferrer" className="text-xs text-[#DE7356] break-all mt-1 inline-block">{c.url}</a>
+                        ? <a href={c.url} target="_blank" rel="noreferrer" className="text-xs text-brand-500 break-all mt-1 inline-block">{c.url}</a>
                         : <div className="text-xs font-mono text-gray-500 dark:text-gray-400 mt-1">{c.url}</div>
                     )}
                   </div>
@@ -305,7 +305,7 @@ export default function ContainersSettings({ projectId }: { projectId: string })
                 className="w-full text-sm px-3 py-2 rounded-lg border border-gray-200 dark:border-white/8 bg-transparent text-gray-900 dark:text-gray-100 font-mono" />
               <div className="flex gap-2">
                 <button onClick={addCustom} disabled={busy || !custom.image.trim()}
-                  className="text-sm px-4 py-2 rounded-lg bg-[#DE7356] hover:bg-[#c9634a] text-white disabled:opacity-50">Add</button>
+                  className="text-sm px-4 py-2 rounded-lg bg-brand-500 hover:bg-brand-600 text-white disabled:opacity-50">Add</button>
                 <button onClick={() => setCustomOpen(false)} className="text-sm px-3 py-2 rounded-lg border border-gray-200 dark:border-white/8 text-gray-600 dark:text-gray-300">Cancel</button>
               </div>
               <p className="text-xs text-gray-400 dark:text-gray-500">No host port is published — reachable only by this project’s other containers at its alias.</p>
@@ -345,7 +345,7 @@ export default function ContainersSettings({ projectId }: { projectId: string })
                     className="flex-1 text-sm px-3 py-2 rounded-lg border border-gray-200 dark:border-white/8 bg-transparent text-gray-900 dark:text-gray-100"
                   />
                   <button onClick={connectImg} disabled={imgBusy || (!img?.globalAvailable && !imgKey.trim())}
-                    className="text-sm px-4 py-2 rounded-lg bg-[#DE7356] hover:bg-[#c9634a] text-white disabled:opacity-50 whitespace-nowrap">Connect</button>
+                    className="text-sm px-4 py-2 rounded-lg bg-brand-500 hover:bg-brand-600 text-white disabled:opacity-50 whitespace-nowrap">Connect</button>
                 </div>
               )}
             </div>

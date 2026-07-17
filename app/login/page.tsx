@@ -24,7 +24,7 @@ export default async function LoginPage({
       <div aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden">
         <div
           className="absolute left-1/2 top-[-16%] h-184 w-184 -translate-x-1/2 rounded-full blur-[140px] opacity-[0.30]"
-          style={{ background: 'radial-gradient(circle at 50% 50%, #DE7356, transparent 70%)', animation: 'loginAurora 26s ease-in-out infinite' }}
+          style={{ background: 'radial-gradient(circle at 50% 50%, var(--color-brand-500), transparent 70%)', animation: 'loginAurora 26s ease-in-out infinite' }}
         />
         <div
           className="absolute bottom-[-22%] right-[-8%] h-160 w-160 rounded-full blur-[150px] opacity-[0.20]"

@@ -77,7 +77,7 @@ export default function MyAccountSettings({ user, onToast, onChanged }: MyAccoun
               role="switch"
               aria-checked={itops}
               className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors disabled:opacity-50 ${
-                itops ? 'bg-[#DE7356]' : 'bg-gray-300'
+                itops ? 'bg-brand-500' : 'bg-gray-300'
               }`}
               title={itops ? 'Disable it-ops tools' : 'Enable it-ops tools'}
             >

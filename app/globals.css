@@ -20,6 +20,22 @@ layer(base);
   --color-brand-800: #833c2a;
   --color-brand-900: #6b3324;
 
+  /* Claudable (default theme) neutrals — a subtle warm tint that sits better
+     with the terracotta brand than Tailwind's cool default grays. Every
+     gray-* utility resolves through these vars, so the [data-theme] blocks
+     below can re-tint the whole app without touching class names. */
+  --color-gray-50: #fafaf9;
+  --color-gray-100: #f4f4f2;
+  --color-gray-200: #e7e5e2;
+  --color-gray-300: #d6d3cf;
+  --color-gray-400: #a3a09b;
+  --color-gray-500: #737069;
+  --color-gray-600: #56534d;
+  --color-gray-700: #403d38;
+  --color-gray-800: #282623;
+  --color-gray-900: #1b1916;
+  --color-gray-950: #0f0d0b;
+
   --color-bolt-bg-primary: #0c0a14;
   --color-bolt-bg-secondary: #15111e;
   --color-bolt-bg-tertiary: #1e1a2a;
@@ -27,6 +43,110 @@ layer(base);
   --color-bolt-text-primary: #e5e2ff;
   --color-bolt-text-secondary: #a8a4ce;
   --color-bolt-text-tertiary: #6b6685;
+}
+
+/* ---------------------------------------------------------------------------
+   Theme palettes. The palette is orthogonal to light/dark: `data-theme` on
+   <html> re-tints the brand + neutral tokens, while the `dark` class keeps
+   picking the light or dark end of whatever ramp is active. These blocks are
+   unlayered, so they win over the @theme defaults above. Registry of themes:
+   lib/themes.ts (picker UI: components/ui/PaletteToggle.tsx).
+--------------------------------------------------------------------------- */
+
+[data-theme='midnight'] {
+  --color-brand-50: #f3f2ff;
+  --color-brand-100: #e9e7ff;
+  --color-brand-200: #d4d0ff;
+  --color-brand-300: #b6adfd;
+  --color-brand-400: #9a8bf9;
+  --color-brand-500: #7f6bf3;
+  --color-brand-600: #6a52e0;
+  --color-brand-700: #5741bd;
+  --color-brand-800: #463699;
+  --color-brand-900: #3a2f7d;
+  --color-gray-50: #f7f8fc;
+  --color-gray-100: #eef0f8;
+  --color-gray-200: #dcdff0;
+  --color-gray-300: #c3c8e0;
+  --color-gray-400: #8f95b8;
+  --color-gray-500: #646a90;
+  --color-gray-600: #4a5074;
+  --color-gray-700: #363b59;
+  --color-gray-800: #232742;
+  --color-gray-900: #161a30;
+  --color-gray-950: #0b0d1e;
+}
+
+[data-theme='forest'] {
+  --color-brand-50: #effaf3;
+  --color-brand-100: #d9f2e3;
+  --color-brand-200: #b3e4c8;
+  --color-brand-300: #83d0a7;
+  --color-brand-400: #4fb682;
+  --color-brand-500: #2f9d68;
+  --color-brand-600: #238055;
+  --color-brand-700: #1d6645;
+  --color-brand-800: #1a5139;
+  --color-brand-900: #164230;
+  --color-gray-50: #f7faf8;
+  --color-gray-100: #eef4f0;
+  --color-gray-200: #dde8e1;
+  --color-gray-300: #c3d4c9;
+  --color-gray-400: #93a89b;
+  --color-gray-500: #66796d;
+  --color-gray-600: #4c5c52;
+  --color-gray-700: #38453d;
+  --color-gray-800: #242e28;
+  --color-gray-900: #171e1a;
+  --color-gray-950: #0c1210;
+}
+
+[data-theme='ocean'] {
+  --color-brand-50: #eff8ff;
+  --color-brand-100: #dbeefe;
+  --color-brand-200: #bfe2fd;
+  --color-brand-300: #93cffb;
+  --color-brand-400: #5fb2f5;
+  --color-brand-500: #3694e8;
+  --color-brand-600: #2578c8;
+  --color-brand-700: #2061a2;
+  --color-brand-800: #1f5285;
+  --color-brand-900: #1e456d;
+  --color-gray-50: #f6f9fc;
+  --color-gray-100: #ecf1f7;
+  --color-gray-200: #dae3ee;
+  --color-gray-300: #bfcede;
+  --color-gray-400: #8ba0b8;
+  --color-gray-500: #5f7490;
+  --color-gray-600: #465a74;
+  --color-gray-700: #334357;
+  --color-gray-800: #212d3d;
+  --color-gray-900: #141d29;
+  --color-gray-950: #0a1017;
+}
+
+[data-theme='mono'] {
+  --color-brand-50: #f7f7f8;
+  --color-brand-100: #eeeef0;
+  --color-brand-200: #d9d9de;
+  --color-brand-300: #b9b9c1;
+  --color-brand-400: #8e8e99;
+  --color-brand-500: #55555e;
+  --color-brand-600: #3d3d45;
+  --color-brand-700: #2c2c33;
+  --color-brand-800: #1f1f24;
+  --color-brand-900: #131317;
+  --color-gray-50: #fafafa;
+  --color-gray-100: #f4f4f5;
+  --color-gray-200: #e4e4e7;
+  --color-gray-300: #d4d4d8;
+  --color-gray-400: #a1a1aa;
+  --color-gray-500: #71717a;
+  --color-gray-600: #52525b;
+  --color-gray-700: #3f3f46;
+  --color-gray-800: #27272a;
+  --color-gray-900: #18181b;
+  --color-gray-950: #09090b;
 }
 
 /*
@@ -93,7 +213,7 @@ button:focus-visible,
 select:focus-visible,
 summary:focus-visible,
 [tabindex]:focus-visible {
-  outline: 2px solid #DE7356;
+  outline: 2px solid var(--color-brand-500);
   outline-offset: 2px;
 }
 

@@ -296,7 +296,7 @@ export default function CodeExplorer({
           <>
             {/* File Tab */}
             <div className="shrink-0 bg-gray-100 dark:bg-white/3 ">
-              <div className="flex items-center gap-3 bg-white dark:bg-[#0c0a09] px-3 py-1.5 border-t-2 border-t-[#DE7356] ">
+              <div className="flex items-center gap-3 bg-white dark:bg-[#0c0a09] px-3 py-1.5 border-t-2 border-t-brand-500 ">
                 <div className="flex items-center gap-2 min-w-0">
                   <span className="w-4 h-4 flex items-center justify-center">
                     {getFileIcon(tree.find(e => e.path === selectedFile) || { path: selectedFile, type: 'file' })}
@@ -330,7 +330,7 @@ export default function CodeExplorer({
                 )}
                 <div className="ml-auto flex items-center gap-2">
                   <button
-                    className="px-3 py-1 text-xs font-medium rounded-sm bg-[#DE7356] text-white hover:bg-[#c9634a] disabled:bg-gray-300 disabled:text-gray-600 disabled:cursor-not-allowed "
+                    className="px-3 py-1 text-xs font-medium rounded-sm bg-brand-500 text-white hover:bg-brand-600 disabled:bg-gray-300 disabled:text-gray-600 disabled:cursor-not-allowed "
                     onClick={onSaveFile}
                     disabled={!hasUnsavedChanges || isSavingFile}
                     title="Save (Ctrl+S)"

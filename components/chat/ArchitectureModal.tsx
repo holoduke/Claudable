@@ -60,7 +60,7 @@ export default function ArchitectureModal({
       <div className="relative w-full max-w-2xl max-h-[82vh] overflow-hidden rounded-2xl border border-gray-200 dark:border-white/10 bg-white dark:bg-[#181310] shadow-2xl flex flex-col">
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-white/8 bg-linear-to-r from-gray-50 to-gray-100 dark:from-white/6 dark:to-white/3">
           <div className="flex items-center gap-2.5">
-            <span className="h-8 w-8 flex items-center justify-center rounded-lg bg-[#DE7356]/15 text-[#DE7356] text-sm font-bold">i</span>
+            <span className="h-8 w-8 flex items-center justify-center rounded-lg bg-brand-500/15 text-brand-500 text-sm font-bold">i</span>
             <h2 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Containers</h2>
           </div>
           <button

@@ -686,10 +686,10 @@ export default function ChatInput({
                   // onMouseDown (not onClick) so we select before the textarea blurs.
                   onMouseDown={(e) => { e.preventDefault(); chooseSkill(s); }}
                   onMouseEnter={() => setSkillActiveIdx(i)}
-                  className={`w-full text-left px-3 py-2 flex flex-col gap-0.5 ${i === skillActiveIdx ? 'bg-[#DE7356]/10' : 'hover:bg-gray-50 dark:hover:bg-gray-800'}`}
+                  className={`w-full text-left px-3 py-2 flex flex-col gap-0.5 ${i === skillActiveIdx ? 'bg-brand-500/10' : 'hover:bg-gray-50 dark:hover:bg-gray-800'}`}
                 >
                   <span className="flex items-center gap-2">
-                    <span className="text-sm font-medium text-[#DE7356]">/{s.name}</span>
+                    <span className="text-sm font-medium text-brand-500">/{s.name}</span>
                     <span className="text-[9px] uppercase tracking-wide text-gray-400 dark:text-gray-500 bg-gray-100 dark:bg-gray-800 px-1.5 py-0.5 rounded-sm">{s.scope}</span>
                   </span>
                   {s.description && <span className="text-xs text-gray-500 dark:text-gray-400 line-clamp-2">{s.description}</span>}
@@ -768,7 +768,7 @@ export default function ChatInput({
             <button
               id="chatinput-send-message-button"
               type="submit"
-              className="flex size-8 items-center justify-center rounded-full bg-[#DE7356] text-white transition-all duration-150 ease-out disabled:cursor-not-allowed disabled:opacity-50 hover:bg-[#c9634a] hover:scale-110 disabled:hover:scale-100 disabled:hover:bg-[#DE7356]"
+              className="flex size-8 items-center justify-center rounded-full bg-brand-500 text-white transition-all duration-150 ease-out disabled:cursor-not-allowed disabled:opacity-50 hover:bg-brand-600 hover:scale-110 disabled:hover:scale-100 disabled:hover:bg-brand-500"
               disabled={disabled || isSubmitting || isUploading || (!message.trim() && uploadedImages.length === 0)}
             >
               <SendHorizontal className="h-4 w-4" />

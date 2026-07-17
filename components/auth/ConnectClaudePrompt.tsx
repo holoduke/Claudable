@@ -91,14 +91,14 @@ export default function ConnectClaudePrompt() {
                 value={label}
                 onChange={(e) => setLabel(e.target.value)}
                 placeholder="Label (e.g. your name)"
-                className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-white/8 bg-white dark:bg-white/6 text-sm text-gray-800 dark:text-gray-100 focus:outline-hidden focus:ring-2 focus:ring-[#DE7356]/40"
+                className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-white/8 bg-white dark:bg-white/6 text-sm text-gray-800 dark:text-gray-100 focus:outline-hidden focus:ring-2 focus:ring-brand-500/40"
               />
               <input
                 value={token}
                 onChange={(e) => setToken(e.target.value)}
                 placeholder="sk-ant-oat…"
                 type="password"
-                className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-white/8 bg-white dark:bg-white/6 text-sm font-mono text-gray-800 dark:text-gray-100 focus:outline-hidden focus:ring-2 focus:ring-[#DE7356]/40"
+                className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-white/8 bg-white dark:bg-white/6 text-sm font-mono text-gray-800 dark:text-gray-100 focus:outline-hidden focus:ring-2 focus:ring-brand-500/40"
               />
               {error && <p className="text-xs text-red-500">{error}</p>}
             </div>
@@ -112,7 +112,7 @@ export default function ConnectClaudePrompt() {
               <button
                 onClick={connect}
                 disabled={busy || !token.trim()}
-                className="px-4 py-2 text-sm font-medium bg-[#DE7356] hover:bg-[#c9634a] text-white rounded-lg disabled:opacity-50"
+                className="px-4 py-2 text-sm font-medium bg-brand-500 hover:bg-brand-600 text-white rounded-lg disabled:opacity-50"
               >
                 {busy ? 'Connecting…' : 'Connect'}
               </button>

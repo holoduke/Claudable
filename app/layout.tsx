@@ -23,10 +23,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
-        {/* Set the theme class before paint to avoid a light flash. */}
+        {/* Set the mode class + theme palette before paint to avoid a flash.
+            The palette whitelist must match lib/themes.ts. */}
         <script
           dangerouslySetInnerHTML={{
-            __html: `(function(){try{var t=localStorage.getItem('claudable-theme');var d=t?t==='dark':window.matchMedia('(prefers-color-scheme: dark)').matches;if(d)document.documentElement.classList.add('dark');}catch(e){}})();`,
+            __html: `(function(){try{var t=localStorage.getItem('claudable-theme');var d=t?t==='dark':window.matchMedia('(prefers-color-scheme: dark)').matches;if(d)document.documentElement.classList.add('dark');var p=localStorage.getItem('claudable-palette');if(p&&['midnight','forest','ocean','mono'].indexOf(p)>=0)document.documentElement.setAttribute('data-theme',p);}catch(e){}})();`,
           }}
         />
       </head>

@@ -143,4 +143,12 @@ export const ja: Record<keyof typeof en, string> = {
   'settings.general.theme.dark': 'ダーク',
   'settings.general.language': '言語',
   'settings.general.languageDesc': 'インターフェースの表示言語を選択します。',
+
+  // Color themes (palette picker)
+  'theme.pick': 'カラーテーマ',
+  'theme.claudable': 'Claudable',
+  'theme.midnight': 'ミッドナイト',
+  'theme.forest': 'フォレスト',
+  'theme.ocean': 'オーシャン',
+  'theme.mono': 'モノ',
 };

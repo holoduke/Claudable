@@ -40,7 +40,7 @@ function SkillCard({
       <div className="flex items-start gap-3 p-3.5">
         <div
           className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-sm ${
-            isGlobal ? 'bg-violet-50 text-violet-600' : 'bg-[#DE7356]/10 text-[#DE7356]'
+            isGlobal ? 'bg-violet-50 text-violet-600' : 'bg-brand-500/10 text-brand-500'
           }`}
         >
           ✦
@@ -50,7 +50,7 @@ function SkillCard({
             <span className="font-mono text-sm font-medium text-gray-900 dark:text-gray-50 wrap-break-word">{skill.name}</span>
             <span
               className={`rounded-full px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
-                isGlobal ? 'bg-violet-100 text-violet-700' : 'bg-[#DE7356]/10 text-[#DE7356]'
+                isGlobal ? 'bg-violet-100 text-violet-700' : 'bg-brand-500/10 text-brand-500'
               }`}
             >
               {isGlobal ? 'Global' : 'Project'}
@@ -67,7 +67,7 @@ function SkillCard({
               {open ? 'Hide' : 'View'} instructions
             </button>
             {onEdit && (
-              <button onClick={onEdit} className="text-xs font-medium text-[#DE7356] hover:text-[#c9634a]">
+              <button onClick={onEdit} className="text-xs font-medium text-brand-500 hover:text-brand-600">
                 Edit
               </button>
             )}
@@ -208,7 +208,7 @@ export function SkillsSettings({ projectId }: SkillsSettingsProps) {
           {editing === null && (
             <button
               onClick={startNew}
-              className="rounded-lg bg-[#DE7356] px-3 py-1.5 text-sm font-medium text-white hover:bg-[#c9634a]"
+              className="rounded-lg bg-brand-500 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-600"
             >
               + Add skill
             </button>
@@ -225,7 +225,7 @@ export function SkillsSettings({ projectId }: SkillsSettingsProps) {
         )}
 
         {editing !== null && (
-          <div className="space-y-3 rounded-xl border border-[#DE7356]/30 bg-[#DE7356]/5 p-4">
+          <div className="space-y-3 rounded-xl border border-brand-500/30 bg-brand-500/5 p-4">
             <div className="text-sm font-medium text-gray-900 dark:text-gray-50">
               {editing === '__new__' ? 'New skill' : `Edit: ${editing}`}
             </div>
@@ -254,7 +254,7 @@ export function SkillsSettings({ projectId }: SkillsSettingsProps) {
               <button
                 onClick={save}
                 disabled={saving}
-                className="rounded-lg bg-[#DE7356] px-3 py-1.5 text-sm font-medium text-white hover:bg-[#c9634a] disabled:opacity-50"
+                className="rounded-lg bg-brand-500 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-600 disabled:opacity-50"
               >
                 {saving ? 'Saving…' : 'Save skill'}
               </button>

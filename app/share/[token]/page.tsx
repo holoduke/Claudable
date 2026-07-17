@@ -154,7 +154,7 @@ export default function SharePage({ params }: { params: Promise<{ token: string 
   if (error) return <div className="h-screen flex items-center justify-center text-gray-500 dark:text-gray-400">{error}</div>;
   if (!info) return (
     <div className="h-screen flex flex-col items-center justify-center gap-3 text-gray-400 dark:text-gray-500">
-      <svg className="animate-spin text-[#DE7356]" width="26" height="26" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" className="opacity-20" /><path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" strokeWidth="4" strokeLinecap="round" /></svg>
+      <svg className="animate-spin text-brand-500" width="26" height="26" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" className="opacity-20" /><path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" strokeWidth="4" strokeLinecap="round" /></svg>
       <p className="text-sm">Starting the preview… this can take up to a minute on first open.</p>
     </div>
   );
@@ -168,12 +168,12 @@ export default function SharePage({ params }: { params: Promise<{ token: string 
           <input
             autoFocus value={guestName} onChange={(e) => setGuestName(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter' && guestName.trim()) { try { localStorage.setItem('claudable-guest-name', guestName.trim()); } catch {} setNameConfirmed(true); } }}
-            placeholder="Your name" className="w-full border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 text-sm mb-3 focus:outline-hidden focus:ring-2 focus:ring-[#DE7356]/30"
+            placeholder="Your name" className="w-full border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 text-sm mb-3 focus:outline-hidden focus:ring-2 focus:ring-brand-500/30"
           />
           <button
             onClick={() => { if (guestName.trim()) { try { localStorage.setItem('claudable-guest-name', guestName.trim()); } catch {} setNameConfirmed(true); } }}
             disabled={!guestName.trim()}
-            className="w-full h-9 rounded-lg bg-[#DE7356] text-white text-sm font-medium hover:bg-brand-600 disabled:opacity-40"
+            className="w-full h-9 rounded-lg bg-brand-500 text-white text-sm font-medium hover:bg-brand-600 disabled:opacity-40"
           >Start reviewing</button>
         </div>
       </div>
@@ -183,13 +183,13 @@ export default function SharePage({ params }: { params: Promise<{ token: string 
   return (
     <div className="h-screen flex flex-col bg-gray-100 dark:bg-gray-800">
       <div className="h-12 shrink-0 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 flex items-center px-4 gap-3">
-        <span className="w-2 h-2 rounded-full bg-[#DE7356]" />
+        <span className="w-2 h-2 rounded-full bg-brand-500" />
         <span className="font-semibold text-gray-900 dark:text-gray-50 text-sm">{info.projectName}</span>
         <button
           onClick={() => setCommentMode((v) => !v)}
           title={commentMode ? 'Commenting on — click the page to leave a comment. Click to browse instead.' : 'Browsing — links work. Click to leave comments.'}
           className={`h-8 flex items-center gap-1.5 px-2.5 rounded-lg text-xs font-medium border transition-colors ${
-            commentMode ? 'bg-[#DE7356] text-white border-[#DE7356]' : 'bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-200 border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800'
+            commentMode ? 'bg-brand-500 text-white border-brand-500' : 'bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-200 border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800'
           }`}
         >
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2Z" /></svg>
@@ -218,7 +218,7 @@ export default function SharePage({ params }: { params: Promise<{ token: string 
         )}
         {info.previewUrl && !previewLoaded && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-gray-50 dark:bg-gray-900/95 text-gray-500 dark:text-gray-400 z-40 pointer-events-none">
-            <svg className="animate-spin text-[#DE7356]" width="26" height="26" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" className="opacity-20" /><path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" strokeWidth="4" strokeLinecap="round" /></svg>
+            <svg className="animate-spin text-brand-500" width="26" height="26" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" className="opacity-20" /><path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" strokeWidth="4" strokeLinecap="round" /></svg>
             <p className="text-sm">Starting the preview… this can take up to a minute on first open.</p>
           </div>
         )}

@@ -158,11 +158,11 @@ export function ProjectSettings({
                 onClick={() => setActiveTab(tab.id)}
                 className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-left transition-all duration-200 ${
                   activeTab === tab.id
-                    ? 'bg-[#DE7356]/10 text-[#DE7356] border border-[#DE7356]/25 shadow-xs '
+                    ? 'bg-brand-500/10 text-brand-500 border border-brand-500/25 shadow-xs '
                     : 'hover:bg-gray-50 dark:hover:bg-white/6 text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 '
                 }`}
               >
-                <span className={activeTab === tab.id ? 'text-[#DE7356] ' : 'text-gray-500 dark:text-gray-400 '}>
+                <span className={activeTab === tab.id ? 'text-brand-500 ' : 'text-gray-500 dark:text-gray-400 '}>
                   {tab.icon}
                 </span>
                 <span className="text-sm font-medium">{tab.label}</span>

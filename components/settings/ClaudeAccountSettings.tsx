@@ -126,7 +126,7 @@ export default function ClaudeAccountSettings({ onToast }: Props) {
           <button
             onClick={add}
             disabled={busy || !token.trim()}
-            className="px-4 py-2 text-sm font-medium bg-[#DE7356] hover:bg-[#c9634a] text-white rounded-lg disabled:opacity-50"
+            className="px-4 py-2 text-sm font-medium bg-brand-500 hover:bg-brand-600 text-white rounded-lg disabled:opacity-50"
           >
             {busy ? 'Connecting…' : 'Connect'}
           </button>

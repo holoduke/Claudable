@@ -368,7 +368,7 @@ export function ServiceSettings({ projectId, projectName }: ServiceSettingsProps
                                 <a
                                   href={service.connection.service_data.repo_url}
                                   target="_blank" rel="noopener noreferrer"
-                                  className="truncate font-mono text-[#DE7356] hover:underline"
+                                  className="truncate font-mono text-brand-500 hover:underline"
                                 >
                                   {service.connection.service_data.repo_name || service.connection.service_data.repo_url}
                                 </a>
@@ -379,7 +379,7 @@ export function ServiceSettings({ projectId, projectName }: ServiceSettingsProps
                                   value={branchInput}
                                   onChange={(e) => { branchDirty.current = true; setBranchInput(e.target.value); }}
                                   spellCheck={false}
-                                  className="w-36 px-2 py-1 text-sm font-mono rounded-lg border border-gray-300 dark:border-white/12 bg-white dark:bg-white/6 text-gray-800 dark:text-gray-100 focus:outline-hidden focus:ring-1 focus:ring-[#DE7356]"
+                                  className="w-36 px-2 py-1 text-sm font-mono rounded-lg border border-gray-300 dark:border-white/12 bg-white dark:bg-white/6 text-gray-800 dark:text-gray-100 focus:outline-hidden focus:ring-1 focus:ring-brand-500"
                                 />
                                 <button
                                   onClick={handleSaveBranch}
@@ -391,7 +391,7 @@ export function ServiceSettings({ projectId, projectName }: ServiceSettingsProps
                                 <button
                                   onClick={handleSync}
                                   disabled={syncing}
-                                  className="px-3 py-1 text-xs rounded-lg bg-[#DE7356] hover:bg-[#c9634a] text-white disabled:opacity-50 flex items-center gap-1.5"
+                                  className="px-3 py-1 text-xs rounded-lg bg-brand-500 hover:bg-brand-600 text-white disabled:opacity-50 flex items-center gap-1.5"
                                   title="Pull the latest changes from the branch into this project (restarts the preview when something changed)"
                                 >
                                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" className={syncing ? 'animate-spin' : ''}>
@@ -408,7 +408,7 @@ export function ServiceSettings({ projectId, projectName }: ServiceSettingsProps
                                     checked={autoSync}
                                     disabled={autoSyncSaving}
                                     onChange={(e) => saveAutoSync(e.target.checked, autoSyncMinutes)}
-                                    className="h-4 w-4 rounded-sm border-gray-300 dark:border-white/20 text-[#DE7356] focus:ring-[#DE7356] accent-[#DE7356]"
+                                    className="h-4 w-4 rounded-sm border-gray-300 dark:border-white/20 text-brand-500 focus:ring-brand-500 accent-brand-500"
                                   />
                                   <span className="shrink-0">Auto-sync from remote</span>
                                 </label>
@@ -422,7 +422,7 @@ export function ServiceSettings({ projectId, projectName }: ServiceSettingsProps
                                       value={autoSyncMinutes}
                                       disabled={autoSyncSaving}
                                       onChange={(e) => { autoSyncMinutesDirty.current = true; setAutoSyncMinutes(Number(e.target.value)); }}
-                                      className="w-16 px-2 py-1 text-sm font-mono rounded-lg border border-gray-300 dark:border-white/12 bg-white dark:bg-white/6 text-gray-800 dark:text-gray-100 focus:outline-hidden focus:ring-1 focus:ring-[#DE7356]"
+                                      className="w-16 px-2 py-1 text-sm font-mono rounded-lg border border-gray-300 dark:border-white/12 bg-white dark:bg-white/6 text-gray-800 dark:text-gray-100 focus:outline-hidden focus:ring-1 focus:ring-brand-500"
                                     />
                                     <span className="text-gray-500 dark:text-gray-400">min</span>
                                     <button
@@ -447,7 +447,7 @@ export function ServiceSettings({ projectId, projectName }: ServiceSettingsProps
                               <a 
                                 href={service.connection.service_data.project_url}
                                 target="_blank" rel="noopener noreferrer"
-                                className="truncate font-mono text-[#DE7356] hover:underline"
+                                className="truncate font-mono text-brand-500 hover:underline"
                               >
                                 {service.connection.service_data.project_name || service.connection.service_data.project_url}
                               </a>
@@ -458,7 +458,7 @@ export function ServiceSettings({ projectId, projectName }: ServiceSettingsProps
                               <a 
                                 href={service.connection.service_data.project_url}
                                 target="_blank" rel="noopener noreferrer"
-                                className="truncate font-mono text-[#DE7356] hover:underline"
+                                className="truncate font-mono text-brand-500 hover:underline"
                               >
                                 {service.connection.service_data.project_name || service.connection.service_data.project_id}
                               </a>
@@ -492,7 +492,7 @@ export function ServiceSettings({ projectId, projectName }: ServiceSettingsProps
                     ) : (
                       <button
                         onClick={() => handleConnect(service.id)}
-                        className="px-4 py-2.5 text-sm rounded-xl bg-[#DE7356] hover:bg-[#c9634a] text-white shadow-xs transition disabled:opacity-50 whitespace-nowrap w-full sm:w-auto"
+                        className="px-4 py-2.5 text-sm rounded-xl bg-brand-500 hover:bg-brand-600 text-white shadow-xs transition disabled:opacity-50 whitespace-nowrap w-full sm:w-auto"
                         disabled={isLoading || tokenStatus[service.id as keyof typeof tokenStatus] === null}
                       >
                         {tokenStatus[service.id as keyof typeof tokenStatus] === null ? 'Checking...' : 'Connect'}

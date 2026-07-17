@@ -276,7 +276,7 @@ export default function PublishPanel({
             className={`w-full px-4 py-3 rounded-xl font-medium text-white transition ${
               publishLoading || deploymentStatus === 'deploying' || !githubConnected || (!isGitea && !vercelConnected)
                 ? 'bg-gray-400 cursor-not-allowed'
-                : 'bg-[#DE7356] hover:bg-[#c9634a]'
+                : 'bg-brand-500 hover:bg-brand-600'
             }`}
           >
             {publishLoading ? 'Publishing…' : deploymentStatus === 'deploying' ? 'Deploying…' : (!githubConnected || (!isGitea && !vercelConnected)) ? 'Connect Services First' : (publishedUrl ? 'Update' : 'Publish')}

@@ -143,4 +143,12 @@ export const nl: Record<keyof typeof en, string> = {
   'settings.general.theme.dark': 'Donker',
   'settings.general.language': 'Taal',
   'settings.general.languageDesc': 'Kies de weergavetaal voor de interface.',
+
+  // Color themes (palette picker)
+  'theme.pick': 'Kleurthema',
+  'theme.claudable': 'Claudable',
+  'theme.midnight': 'Middernacht',
+  'theme.forest': 'Bos',
+  'theme.ocean': 'Oceaan',
+  'theme.mono': 'Mono',
 };

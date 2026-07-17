@@ -145,7 +145,7 @@ export default function UsersSettings({ currentUserId, onToast }: UsersSettingsP
         <button
           onClick={addUser}
           disabled={adding || !newEmail.trim()}
-          className="px-4 py-2 text-sm font-medium bg-[#DE7356] hover:bg-[#c9634a] text-white rounded-lg transition-colors disabled:opacity-50"
+          className="px-4 py-2 text-sm font-medium bg-brand-500 hover:bg-brand-600 text-white rounded-lg transition-colors disabled:opacity-50"
         >
           {adding ? 'Inviting…' : 'Invite'}
         </button>
@@ -187,7 +187,7 @@ export default function UsersSettings({ currentUserId, onToast }: UsersSettingsP
                         </span>
                       )}
                       {u.lastLoginAt === null && u.isActive && (
-                        <span className="text-[11px] font-medium text-[#DE7356] bg-[#DE7356]/10 px-1.5 py-0.5 rounded-sm">
+                        <span className="text-[11px] font-medium text-brand-500 bg-brand-500/10 px-1.5 py-0.5 rounded-sm">
                           invited
                         </span>
                       )}

@@ -24,7 +24,7 @@ function Pill({ tone, children }: { tone: 'green' | 'amber' | 'gray' | 'blue'; c
     green: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300',
     amber: 'bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300',
     gray: 'bg-gray-100 text-gray-500 dark:bg-white/6 dark:text-gray-400',
-    blue: 'bg-[#DE7356]/10 text-[#DE7356] dark:bg-[#DE7356]/20 dark:text-[#DE7356]',
+    blue: 'bg-brand-500/10 text-brand-500 dark:bg-brand-500/20 dark:text-brand-500',
   };
   return <span className={`text-[10px] px-1.5 py-0.5 rounded-sm font-medium ${map[tone]}`}>{children}</span>;
 }
@@ -101,7 +101,7 @@ export default function SystemOverviewSettings() {
                 </div>
                 {p.previewUrl && (
                   <a href={p.previewUrl} target="_blank" rel="noopener noreferrer"
-                     className="text-xs px-2.5 py-1 rounded-lg border border-gray-200 dark:border-white/8 hover:bg-white dark:hover:bg-white/6 text-[#DE7356] shrink-0">
+                     className="text-xs px-2.5 py-1 rounded-lg border border-gray-200 dark:border-white/8 hover:bg-white dark:hover:bg-white/6 text-brand-500 shrink-0">
                     Open ↗
                   </a>
                 )}
@@ -110,7 +110,7 @@ export default function SystemOverviewSettings() {
               {/* Addresses */}
               <div className="px-4 py-2 flex flex-wrap gap-x-5 gap-y-1 text-[11px] border-b border-gray-100 dark:border-white/6">
                 {p.previewUrl
-                  ? <span className="text-gray-500">Public: <a href={p.previewUrl} target="_blank" rel="noopener noreferrer" className="font-mono text-[#DE7356] hover:underline">{p.previewUrl.replace(/^https?:\/\//, '')}</a></span>
+                  ? <span className="text-gray-500">Public: <a href={p.previewUrl} target="_blank" rel="noopener noreferrer" className="font-mono text-brand-500 hover:underline">{p.previewUrl.replace(/^https?:\/\//, '')}</a></span>
                   : <span className="text-gray-400">Public: — (local only)</span>}
                 {p.internalNetwork
                   ? <span className="text-gray-500">Internal net: <span className="font-mono text-gray-600 dark:text-gray-300">{p.internalNetwork}</span></span>

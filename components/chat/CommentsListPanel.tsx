@@ -66,7 +66,7 @@ export default function CommentsListPanel({ comments, currentRoute, activeId, on
               key={key}
               onClick={() => setFilter(key)}
               className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${
-                filter === key ? 'bg-[#DE7356] text-white border-[#DE7356]' : 'bg-white dark:bg-white/6 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-white/8 hover:bg-gray-50 dark:hover:bg-white/6'
+                filter === key ? 'bg-brand-500 text-white border-brand-500' : 'bg-white dark:bg-white/6 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-white/8 hover:bg-gray-50 dark:hover:bg-white/6'
               }`}
             >{label}</button>
           ))}
@@ -91,16 +91,16 @@ export default function CommentsListPanel({ comments, currentRoute, activeId, on
             <div key={g.route}>
               <div className="sticky top-0 z-10 bg-gray-50 dark:bg-white/3 backdrop-blur-sm px-4 py-1.5 text-[11px] font-medium text-gray-500 dark:text-gray-400 border-b border-gray-100 dark:border-white/8 flex items-center gap-2">
                 <span className="truncate">{g.route}</span>
-                {g.route === (currentRoute || '/') && <span className="text-[9px] uppercase tracking-wide text-[#DE7356] bg-[#DE7356]/10 px-1.5 py-0.5 rounded-sm">current</span>}
+                {g.route === (currentRoute || '/') && <span className="text-[9px] uppercase tracking-wide text-brand-500 bg-brand-500/10 px-1.5 py-0.5 rounded-sm">current</span>}
                 <span className="ml-auto text-gray-400 dark:text-gray-500">{g.items.length}</span>
               </div>
               {g.items.map((c) => (
                 <button
                   key={c.id}
                   onClick={() => onSelect(c)}
-                  className={`w-full text-left px-4 py-3 border-b border-gray-100 dark:border-white/8 hover:bg-gray-50 dark:hover:bg-white/6 transition-colors flex gap-3 ${activeId === c.id ? 'bg-[#DE7356]/5' : ''}`}
+                  className={`w-full text-left px-4 py-3 border-b border-gray-100 dark:border-white/8 hover:bg-gray-50 dark:hover:bg-white/6 transition-colors flex gap-3 ${activeId === c.id ? 'bg-brand-500/5' : ''}`}
                 >
-                  <span className={`shrink-0 w-6 h-6 rounded-full text-[11px] font-semibold flex items-center justify-center ${c.resolved ? 'bg-gray-100 dark:bg-white/6 text-gray-400 dark:text-gray-500' : 'bg-[#DE7356] text-white'}`}>{c.index}</span>
+                  <span className={`shrink-0 w-6 h-6 rounded-full text-[11px] font-semibold flex items-center justify-center ${c.resolved ? 'bg-gray-100 dark:bg-white/6 text-gray-400 dark:text-gray-500' : 'bg-brand-500 text-white'}`}>{c.index}</span>
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
                       <span className="text-xs font-medium text-gray-800 dark:text-gray-100 truncate">{c.authorName || 'Anonymous'}</span>

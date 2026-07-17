@@ -158,6 +158,14 @@ export const en = {
   'settings.general.theme.dark': 'Dark',
   'settings.general.language': 'Language',
   'settings.general.languageDesc': 'Choose the display language for the interface.',
+
+  // Color themes (palette picker)
+  'theme.pick': 'Color theme',
+  'theme.claudable': 'Claudable',
+  'theme.midnight': 'Midnight',
+  'theme.forest': 'Forest',
+  'theme.ocean': 'Ocean',
+  'theme.mono': 'Mono',
 };
 
 export type MessageKey = keyof typeof en;

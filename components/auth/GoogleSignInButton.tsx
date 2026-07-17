@@ -15,7 +15,7 @@ export default function GoogleSignInButton() {
       type="submit"
       disabled={pending}
       aria-busy={pending}
-      className="group relative flex w-full items-center justify-center gap-3 overflow-hidden rounded-xl bg-white px-5 py-3 text-[15px] font-medium text-[#1f1f1f] shadow-[0_1px_2px_rgba(0,0,0,0.4)] transition-all duration-200 hover:shadow-[0_8px_30px_-8px_rgba(222,115,86,0.55)] hover:-translate-y-px focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-[#DE7356] focus-visible:ring-offset-2 focus-visible:ring-offset-transparent active:translate-y-0 disabled:cursor-not-allowed disabled:opacity-80"
+      className="group relative flex w-full items-center justify-center gap-3 overflow-hidden rounded-xl bg-white px-5 py-3 text-[15px] font-medium text-[#1f1f1f] shadow-[0_1px_2px_rgba(0,0,0,0.4)] transition-all duration-200 hover:shadow-[0_8px_30px_-8px_rgba(222,115,86,0.55)] hover:-translate-y-px focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 focus-visible:ring-offset-transparent active:translate-y-0 disabled:cursor-not-allowed disabled:opacity-80"
     >
       {/* Sheen sweep on hover */}
       <span
@@ -24,7 +24,7 @@ export default function GoogleSignInButton() {
       />
       {pending ? (
         <>
-          <svg className="h-[18px] w-[18px] animate-spin text-[#DE7356]" viewBox="0 0 24 24" fill="none" aria-hidden>
+          <svg className="h-[18px] w-[18px] animate-spin text-brand-500" viewBox="0 0 24 24" fill="none" aria-hidden>
             <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="3" className="opacity-20" />
             <path d="M21 12a9 9 0 0 0-9-9" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
           </svg>

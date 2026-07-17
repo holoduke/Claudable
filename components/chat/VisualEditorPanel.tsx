@@ -84,7 +84,7 @@ export default function VisualEditorPanel({
     <div className="h-full flex flex-col bg-white dark:bg-[#0c0a09]">
       <div className="flex items-center justify-between px-4 h-[73px] border-b border-gray-200 dark:border-white/8">
         <div className="flex items-center gap-2">
-          <span className="inline-block w-2 h-2 rounded-full bg-[#DE7356]" />
+          <span className="inline-block w-2 h-2 rounded-full bg-brand-500" />
           <span className="font-semibold text-gray-900 dark:text-gray-50">Visual editor</span>
         </div>
         <button onClick={onClose} className="text-sm text-gray-500 dark:text-gray-400 hover:text-gray-800 px-2 py-1 rounded-sm hover:bg-gray-100 dark:hover:bg-white/6">Done</button>
@@ -101,7 +101,7 @@ export default function VisualEditorPanel({
           {/* Selected element summary */}
           <div className="px-4 py-3 border-b border-gray-100 dark:border-white/8 bg-gray-50 dark:bg-white/3">
             <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-xs font-mono bg-[#DE7356]/10 text-[#DE7356] px-1.5 py-0.5 rounded-sm">{element.tag}</span>
+              <span className="text-xs font-mono bg-brand-500/10 text-brand-500 px-1.5 py-0.5 rounded-sm">{element.tag}</span>
               {element.id && <span className="text-xs font-mono text-gray-500 dark:text-gray-400">#{element.id}</span>}
               {element.classes.slice(0, 4).map((c) => (
                 <span key={c} className="text-xs font-mono text-gray-400 dark:text-gray-500">.{c}</span>
@@ -118,7 +118,7 @@ export default function VisualEditorPanel({
                 value={textEdit !== null ? textEdit : element.text}
                 onChange={(e) => onApplyText(e.target.value)}
                 rows={2}
-                className="w-full text-sm border border-gray-200 dark:border-white/8 rounded-md p-2 focus:outline-hidden focus:ring-2 focus:ring-[#DE7356]/30"
+                className="w-full text-sm border border-gray-200 dark:border-white/8 rounded-md p-2 focus:outline-hidden focus:ring-2 focus:ring-brand-500/30"
               />
             </div>
           )}
@@ -135,7 +135,7 @@ export default function VisualEditorPanel({
                       <select
                         value={val(f.prop)}
                         onChange={(e) => onApplyStyle(f.prop, e.target.value)}
-                        className="text-xs border border-gray-200 dark:border-white/8 rounded-sm px-1.5 py-1 bg-white dark:bg-white/6 focus:outline-hidden focus:ring-1 focus:ring-[#DE7356]/40"
+                        className="text-xs border border-gray-200 dark:border-white/8 rounded-sm px-1.5 py-1 bg-white dark:bg-white/6 focus:outline-hidden focus:ring-1 focus:ring-brand-500/40"
                       >
                         <option value="">—</option>
                         {f.options!.map((o) => <option key={o} value={o}>{o}</option>)}
@@ -152,7 +152,7 @@ export default function VisualEditorPanel({
                           type="text"
                           value={val(f.prop)}
                           onChange={(e) => onApplyStyle(f.prop, e.target.value)}
-                          className="min-w-0 flex-1 text-xs border border-gray-200 dark:border-white/8 rounded-sm px-1.5 py-1 font-mono focus:outline-hidden focus:ring-1 focus:ring-[#DE7356]/40"
+                          className="min-w-0 flex-1 text-xs border border-gray-200 dark:border-white/8 rounded-sm px-1.5 py-1 font-mono focus:outline-hidden focus:ring-1 focus:ring-brand-500/40"
                         />
                       </div>
                     ) : (
@@ -160,7 +160,7 @@ export default function VisualEditorPanel({
                         type="text"
                         value={val(f.prop)}
                         onChange={(e) => onApplyStyle(f.prop, e.target.value)}
-                        className="text-xs border border-gray-200 dark:border-white/8 rounded-sm px-1.5 py-1 font-mono focus:outline-hidden focus:ring-1 focus:ring-[#DE7356]/40"
+                        className="text-xs border border-gray-200 dark:border-white/8 rounded-sm px-1.5 py-1 font-mono focus:outline-hidden focus:ring-1 focus:ring-brand-500/40"
                       />
                     )}
                   </div>
@@ -177,7 +177,7 @@ export default function VisualEditorPanel({
           onClick={onPersist}
           disabled={!element || dirtyCount === 0 || persisting || busy}
           title={busy ? 'The agent is busy — apply once it finishes' : undefined}
-          className="w-full h-9 rounded-lg bg-[#DE7356] text-white text-sm font-medium hover:bg-brand-600 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+          className="w-full h-9 rounded-lg bg-brand-500 text-white text-sm font-medium hover:bg-brand-600 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
         >
           {busy ? 'Agent busy…' : persisting ? 'Applying…' : dirtyCount === 0 ? 'No changes yet' : `Apply ${dirtyCount} change${dirtyCount > 1 ? 's' : ''} to code`}
         </button>

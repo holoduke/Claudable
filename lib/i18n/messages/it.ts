@@ -143,4 +143,12 @@ export const it: Record<keyof typeof en, string> = {
   'settings.general.theme.dark': 'Scuro',
   'settings.general.language': 'Lingua',
   'settings.general.languageDesc': 'Scegli la lingua dell’interfaccia.',
+
+  // Color themes (palette picker)
+  'theme.pick': 'Tema colore',
+  'theme.claudable': 'Claudable',
+  'theme.midnight': 'Mezzanotte',
+  'theme.forest': 'Foresta',
+  'theme.ocean': 'Oceano',
+  'theme.mono': 'Mono',
 };
