@@ -46,107 +46,140 @@ layer(base);
 }
 
 /* ---------------------------------------------------------------------------
-   Theme palettes. The palette is orthogonal to light/dark: `data-theme` on
-   <html> re-tints the brand + neutral tokens, while the `dark` class keeps
-   picking the light or dark end of whatever ramp is active. These blocks are
-   unlayered, so they win over the @theme defaults above. Registry of themes:
-   lib/themes.ts (picker UI: components/ui/PaletteToggle.tsx).
+   Theme palettes. Each theme is a complete look: lib/themes.ts pins its
+   light/dark mode and `data-theme` on <html> re-tints the brand + neutral
+   ramps AND the white surface tint, so themes are unmistakably different.
+   Light + Dark use the default terracotta ramp above (no block needed).
+   These blocks are unlayered, so they win over the @theme defaults.
+   Registry: lib/themes.ts (picker UI: components/ui/PaletteToggle.tsx).
 --------------------------------------------------------------------------- */
 
+/* Midnight — deep violet-navy, vivid violet accent (dark). */
 [data-theme='midnight'] {
-  --color-brand-50: #f3f2ff;
-  --color-brand-100: #e9e7ff;
-  --color-brand-200: #d4d0ff;
-  --color-brand-300: #b6adfd;
-  --color-brand-400: #9a8bf9;
-  --color-brand-500: #7f6bf3;
-  --color-brand-600: #6a52e0;
-  --color-brand-700: #5741bd;
-  --color-brand-800: #463699;
-  --color-brand-900: #3a2f7d;
-  --color-gray-50: #f7f8fc;
-  --color-gray-100: #eef0f8;
-  --color-gray-200: #dcdff0;
-  --color-gray-300: #c3c8e0;
-  --color-gray-400: #8f95b8;
-  --color-gray-500: #646a90;
-  --color-gray-600: #4a5074;
-  --color-gray-700: #363b59;
-  --color-gray-800: #232742;
-  --color-gray-900: #161a30;
-  --color-gray-950: #0b0d1e;
+  --color-white: #f3f1ff;
+  --color-brand-50: #f2efff; --color-brand-100: #e7e2ff; --color-brand-200: #d1c8ff;
+  --color-brand-300: #b4a5ff; --color-brand-400: #a191ff; --color-brand-500: #8b76ff;
+  --color-brand-600: #7257f0; --color-brand-700: #5d43cc; --color-brand-800: #4b36a3;
+  --color-brand-900: #3d2e85;
+  --color-gray-50: #f5f4fc; --color-gray-100: #ecebf8; --color-gray-200: #dcdaf0;
+  --color-gray-300: #c2bfe3; --color-gray-400: #918cc4; --color-gray-500: #6862a3;
+  --color-gray-600: #4a4680; --color-gray-700: #322e5c; --color-gray-800: #201d42;
+  --color-gray-900: #14122e; --color-gray-950: #0d0b24;
 }
 
+/* Forest — sage paper, deep green accent (light). */
 [data-theme='forest'] {
-  --color-brand-50: #effaf3;
-  --color-brand-100: #d9f2e3;
-  --color-brand-200: #b3e4c8;
-  --color-brand-300: #83d0a7;
-  --color-brand-400: #4fb682;
-  --color-brand-500: #2f9d68;
-  --color-brand-600: #238055;
-  --color-brand-700: #1d6645;
-  --color-brand-800: #1a5139;
-  --color-brand-900: #164230;
-  --color-gray-50: #f7faf8;
-  --color-gray-100: #eef4f0;
-  --color-gray-200: #dde8e1;
-  --color-gray-300: #c3d4c9;
-  --color-gray-400: #93a89b;
-  --color-gray-500: #66796d;
-  --color-gray-600: #4c5c52;
-  --color-gray-700: #38453d;
-  --color-gray-800: #242e28;
-  --color-gray-900: #171e1a;
-  --color-gray-950: #0c1210;
+  --color-white: #f7fbf6;
+  --color-brand-50: #ecf8f1; --color-brand-100: #d7efe1; --color-brand-200: #b1dfc5;
+  --color-brand-300: #7cc49c; --color-brand-400: #3f9d68; --color-brand-500: #217a48;
+  --color-brand-600: #1a6239; --color-brand-700: #155031; --color-brand-800: #124228;
+  --color-brand-900: #0e3721;
+  --color-gray-50: #eef4ed; --color-gray-100: #e3ece2; --color-gray-200: #d1dfd0;
+  --color-gray-300: #b5cbb5; --color-gray-400: #85a087; --color-gray-500: #5c7a5f;
+  --color-gray-600: #45604a; --color-gray-700: #334938; --color-gray-800: #223026;
+  --color-gray-900: #16201a; --color-gray-950: #0c130f;
 }
 
+/* Ocean — deep steel blue, cyan accent (dark). */
 [data-theme='ocean'] {
-  --color-brand-50: #eff8ff;
-  --color-brand-100: #dbeefe;
-  --color-brand-200: #bfe2fd;
-  --color-brand-300: #93cffb;
-  --color-brand-400: #5fb2f5;
-  --color-brand-500: #3694e8;
-  --color-brand-600: #2578c8;
-  --color-brand-700: #2061a2;
-  --color-brand-800: #1f5285;
-  --color-brand-900: #1e456d;
-  --color-gray-50: #f6f9fc;
-  --color-gray-100: #ecf1f7;
-  --color-gray-200: #dae3ee;
-  --color-gray-300: #bfcede;
-  --color-gray-400: #8ba0b8;
-  --color-gray-500: #5f7490;
-  --color-gray-600: #465a74;
-  --color-gray-700: #334357;
-  --color-gray-800: #212d3d;
-  --color-gray-900: #141d29;
-  --color-gray-950: #0a1017;
+  --color-white: #eef7fd;
+  --color-brand-50: #effafe; --color-brand-100: #dff4fc; --color-brand-200: #bfeafa;
+  --color-brand-300: #8fdaf6; --color-brand-400: #4fb3e8; --color-brand-500: #2196dd;
+  --color-brand-600: #1a7ab8; --color-brand-700: #16639a; --color-brand-800: #175380;
+  --color-brand-900: #174467;
+  --color-gray-50: #f2f7fb; --color-gray-100: #e4edf5; --color-gray-200: #d0deeb;
+  --color-gray-300: #aec3d8; --color-gray-400: #7492b0; --color-gray-500: #46688f;
+  --color-gray-600: #2f5077; --color-gray-700: #1f3a5a; --color-gray-800: #142942;
+  --color-gray-900: #0b1a2e; --color-gray-950: #061120;
 }
 
+/* Ice — frosted pale blue, cold cyan accent (light). */
+[data-theme='ice'] {
+  --color-white: #f8fcff;
+  --color-brand-50: #eefafd; --color-brand-100: #d9f3fa; --color-brand-200: #b6e7f5;
+  --color-brand-300: #86d3ec; --color-brand-400: #4bb6da; --color-brand-500: #2497c2;
+  --color-brand-600: #1c7aa0; --color-brand-700: #196384; --color-brand-800: #18516c;
+  --color-brand-900: #164358;
+  --color-gray-50: #f2f8fc; --color-gray-100: #e8f1f8; --color-gray-200: #d7e6f1;
+  --color-gray-300: #bcd4e6; --color-gray-400: #8fb0c9; --color-gray-500: #6389a8;
+  --color-gray-600: #4a6b87; --color-gray-700: #375067; --color-gray-800: #24364a;
+  --color-gray-900: #16222f; --color-gray-950: #0b141d;
+}
+
+/* Cyberpunk — purple-black night city, hot magenta accent (dark). */
+[data-theme='cyberpunk'] {
+  --color-white: #fdf0fa;
+  --color-brand-50: #ffeef7; --color-brand-100: #ffd9ee; --color-brand-200: #ffb3dd;
+  --color-brand-300: #ff80c5; --color-brand-400: #fd4aab; --color-brand-500: #ef2495;
+  --color-brand-600: #d40f7f; --color-brand-700: #b00b69; --color-brand-800: #8e0c56;
+  --color-brand-900: #750d49;
+  --color-gray-50: #f9f3fb; --color-gray-100: #f1e6f6; --color-gray-200: #e2cdec;
+  --color-gray-300: #c9a4d9; --color-gray-400: #9f6cb4; --color-gray-500: #7a4691;
+  --color-gray-600: #5c3070; --color-gray-700: #442254; --color-gray-800: #2d1538;
+  --color-gray-900: #1d0c26; --color-gray-950: #120617;
+}
+
+/* Neon — glowing green on near-black (dark). */
+[data-theme='neon'] {
+  --color-white: #f0fff2;
+  --color-brand-50: #efffee; --color-brand-100: #d8ffd6; --color-brand-200: #adffab;
+  --color-brand-300: #71fa74; --color-brand-400: #3ce04a; --color-brand-500: #22c73c;
+  --color-brand-600: #16a32e; --color-brand-700: #128427; --color-brand-800: #126824;
+  --color-brand-900: #10551f;
+  --color-gray-50: #f2faf4; --color-gray-100: #e4f4e9; --color-gray-200: #c9e8d3;
+  --color-gray-300: #a2d4b2; --color-gray-400: #6ba57e; --color-gray-500: #47775a;
+  --color-gray-600: #345a43; --color-gray-700: #264432; --color-gray-800: #182e21;
+  --color-gray-900: #0e1d15; --color-gray-950: #07120c;
+}
+
+/* Ferrari — carbon black, racing red accent (dark). */
+[data-theme='ferrari'] {
+  --color-white: #fdf6f4;
+  --color-brand-50: #fff0f0; --color-brand-100: #ffdcdc; --color-brand-200: #ffb9b9;
+  --color-brand-300: #ff8585; --color-brand-400: #f74c4c; --color-brand-500: #e11b2b;
+  --color-brand-600: #c40f22; --color-brand-700: #a30d1e; --color-brand-800: #870f1d;
+  --color-brand-900: #72101c;
+  --color-gray-50: #faf7f7; --color-gray-100: #f3eeee; --color-gray-200: #e5dddd;
+  --color-gray-300: #d0c4c4; --color-gray-400: #a19191; --color-gray-500: #746666;
+  --color-gray-600: #574c4c; --color-gray-700: #403737; --color-gray-800: #292322;
+  --color-gray-900: #1a1615; --color-gray-950: #100d0c;
+}
+
+/* Party — pink paper, hot pink accent (light). */
+[data-theme='party'] {
+  --color-white: #fef9fc;
+  --color-brand-50: #fdf2f8; --color-brand-100: #fce7f3; --color-brand-200: #fbcfe8;
+  --color-brand-300: #f9a8d4; --color-brand-400: #f472b6; --color-brand-500: #ec4899;
+  --color-brand-600: #db2777; --color-brand-700: #be185d; --color-brand-800: #9d174d;
+  --color-brand-900: #831843;
+  --color-gray-50: #fdf2f8; --color-gray-100: #fae7f1; --color-gray-200: #f5d3e6;
+  --color-gray-300: #ecb3d3; --color-gray-400: #d97fb2; --color-gray-500: #b3548c;
+  --color-gray-600: #8f3d6e; --color-gray-700: #6d2d53; --color-gray-800: #481e38;
+  --color-gray-900: #2e1224; --color-gray-950: #1c0a15;
+}
+
+/* Business — crisp cool slate, corporate navy accent (light). */
+[data-theme='business'] {
+  --color-brand-50: #eff4fb; --color-brand-100: #dfe9f7; --color-brand-200: #c0d3ee;
+  --color-brand-300: #93b3e0; --color-brand-400: #5c88c9; --color-brand-500: #2f62ae;
+  --color-brand-600: #234e91; --color-brand-700: #1d4077; --color-brand-800: #1b3763;
+  --color-brand-900: #182e51;
+  --color-gray-50: #f8fafc; --color-gray-100: #f1f5f9; --color-gray-200: #e2e8f0;
+  --color-gray-300: #cbd5e1; --color-gray-400: #94a3b8; --color-gray-500: #64748b;
+  --color-gray-600: #475569; --color-gray-700: #334155; --color-gray-800: #1e293b;
+  --color-gray-900: #0f172a; --color-gray-950: #020617;
+}
+
+/* Mono — minimal black-and-white, charcoal accent (light). */
 [data-theme='mono'] {
-  --color-brand-50: #f7f7f8;
-  --color-brand-100: #eeeef0;
-  --color-brand-200: #d9d9de;
-  --color-brand-300: #b9b9c1;
-  --color-brand-400: #8e8e99;
-  --color-brand-500: #55555e;
-  --color-brand-600: #3d3d45;
-  --color-brand-700: #2c2c33;
-  --color-brand-800: #1f1f24;
-  --color-brand-900: #131317;
-  --color-gray-50: #fafafa;
-  --color-gray-100: #f4f4f5;
-  --color-gray-200: #e4e4e7;
-  --color-gray-300: #d4d4d8;
-  --color-gray-400: #a1a1aa;
-  --color-gray-500: #71717a;
-  --color-gray-600: #52525b;
-  --color-gray-700: #3f3f46;
-  --color-gray-800: #27272a;
-  --color-gray-900: #18181b;
-  --color-gray-950: #09090b;
+  --color-brand-50: #f7f7f8; --color-brand-100: #eeeef0; --color-brand-200: #d9d9de;
+  --color-brand-300: #b9b9c1; --color-brand-400: #8e8e99; --color-brand-500: #4a4a52;
+  --color-brand-600: #343439; --color-brand-700: #27272c; --color-brand-800: #1d1d21;
+  --color-brand-900: #131316;
+  --color-gray-50: #fafafa; --color-gray-100: #f4f4f5; --color-gray-200: #e4e4e7;
+  --color-gray-300: #d4d4d8; --color-gray-400: #a1a1aa; --color-gray-500: #71717a;
+  --color-gray-600: #52525b; --color-gray-700: #3f3f46; --color-gray-800: #27272a;
+  --color-gray-900: #18181b; --color-gray-950: #09090b;
 }
 
 /*

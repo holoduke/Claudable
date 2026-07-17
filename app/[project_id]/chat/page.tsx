@@ -13,7 +13,6 @@ import CommentsLayer, { type CommentPin, type ComposeAnchor } from '@/components
 import { useToast } from '@/components/ui/Toast';
 import { useT } from '@/contexts/I18nContext';
 import ConfirmDialog from '@/components/ui/ConfirmDialog';
-import ThemeToggle from '@/components/ui/ThemeToggle';
 import PaletteToggle from '@/components/ui/PaletteToggle';
 import ChatInput from '@/components/chat/ChatInput';
 import AgentStatusBar from '@/components/chat/AgentStatusBar';
@@ -3319,7 +3318,6 @@ const persistProjectPreferences = useCallback(
                 
                 <div className="flex items-center gap-2">
                   <PaletteToggle />
-                  <ThemeToggle />
                   {/* Project info (ⓘ) — everything about this project at a glance. */}
                   <div className="relative">
                     <button

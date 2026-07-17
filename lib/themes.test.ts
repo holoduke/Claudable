@@ -5,10 +5,10 @@ import { THEMES, DEFAULT_THEME_ID, isThemeId } from './themes';
 import { en } from './i18n/messages/en';
 
 describe('theme registry', () => {
-  it('has 5 themes with unique ids and the expected default', () => {
-    expect(THEMES).toHaveLength(5);
+  it('has 12 themes with unique ids and light as the default', () => {
+    expect(THEMES).toHaveLength(12);
     expect(new Set(THEMES.map((t) => t.id)).size).toBe(THEMES.length);
-    expect(DEFAULT_THEME_ID).toBe('claudable');
+    expect(DEFAULT_THEME_ID).toBe('light');
   });
 
   it('every theme name key exists in the en messages', () => {
@@ -17,26 +17,31 @@ describe('theme registry', () => {
     }
   });
 
-  it('every non-default theme has a [data-theme] palette block in globals.css', () => {
+  it('palette blocks in globals.css match the registry exactly', () => {
     const css = fs.readFileSync(path.join(__dirname, '../app/globals.css'), 'utf-8');
     for (const theme of THEMES) {
-      if (theme.id === DEFAULT_THEME_ID) continue;
-      expect(css, theme.id).toContain(`[data-theme='${theme.id}']`);
+      const hasBlock = css.includes(`[data-theme='${theme.id}']`);
+      expect(hasBlock, `${theme.id} block`).toBe(theme.hasPaletteBlock);
+    }
+    // No orphaned blocks for unknown ids.
+    const blockIds = [...css.matchAll(/\[data-theme='([a-z]+)'\]/g)].map((m) => m[1]);
+    for (const id of blockIds) {
+      expect(isThemeId(id), `orphan block ${id}`).toBe(true);
     }
   });
 
-  it('the layout no-flash whitelist covers exactly the non-default themes', () => {
+  it('the layout no-flash map mirrors every theme id and mode', () => {
     const layout = fs.readFileSync(path.join(__dirname, '../app/layout.tsx'), 'utf-8');
     for (const theme of THEMES) {
-      if (theme.id === DEFAULT_THEME_ID) continue;
-      expect(layout, theme.id).toContain(`'${theme.id}'`);
+      const expected = `${theme.id}:${theme.mode === 'dark' ? 1 : 0}`;
+      expect(layout, expected).toContain(expected);
     }
   });
 
   it('validates theme ids', () => {
-    expect(isThemeId('midnight')).toBe(true);
-    expect(isThemeId('claudable')).toBe(true);
-    expect(isThemeId('neon')).toBe(false);
+    expect(isThemeId('cyberpunk')).toBe(true);
+    expect(isThemeId('light')).toBe(true);
+    expect(isThemeId('claudable')).toBe(false);
     expect(isThemeId(null)).toBe(false);
   });
 });
