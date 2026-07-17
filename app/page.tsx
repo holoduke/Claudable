@@ -885,7 +885,7 @@ export default function HomePage() {
                       key={project.id}
                       className="p-2 px-3 rounded-lg transition-all group"
                     onMouseEnter={(e) => {
-                      e.currentTarget.style.backgroundColor = `${projectColor}15`;
+                      e.currentTarget.style.backgroundColor = `color-mix(in srgb, ${projectColor} 8%, transparent)`;
                     }}
                     onMouseLeave={(e) => {
                       e.currentTarget.style.backgroundColor = 'transparent';
@@ -972,7 +972,7 @@ export default function HomePage() {
                                 <span
                                   className="text-xs transition-colors"
                                   style={{
-                                    color: (projectColor || '#6B7280') + 'CC'
+                                    color: `color-mix(in srgb, ${projectColor || '#6B7280'} 80%, transparent)`
                                   }}
                                 >
                                   {formatCliInfo(projectCli, project.selectedModel ?? undefined)}
@@ -1043,7 +1043,7 @@ export default function HomePage() {
                   alt=""
                   width={48}
                   height={48}
-                  className="h-12 w-12 rounded-xl ring-1 ring-black/5 dark:ring-white/10 shadow-[0_8px_30px_-6px_rgba(222,115,86,0.45)]"
+                  className="themed-logo h-12 w-12 rounded-xl ring-1 ring-black/5 dark:ring-white/10 shadow-[0_8px_30px_-6px_color-mix(in_srgb,var(--color-brand-500)_45%,transparent)]"
                 />
                 {/* Brand wordmark, tinted by the selected assistant's color —
                     solid in light mode, white→brand gradient in dark. */}
@@ -1110,7 +1110,7 @@ export default function HomePage() {
               className={`group flex flex-col gap-4 p-4 w-full rounded-[28px] border backdrop-blur-xl text-base shadow-xl transition-all duration-200 ease-in-out mb-6 relative overflow-visible ${
                 isDragOver
                   ? 'border-brand-500 bg-brand-500/10 '
-                  : 'border-gray-200 bg-white/90 dark:border-white/8 dark:bg-white/4 focus-within:border-brand-500/50 dark:focus-within:border-brand-500/45 focus-within:shadow-[0_0_0_4px_rgba(222,115,86,0.08),0_20px_60px_-20px_rgba(222,115,86,0.25)]'
+                  : 'border-gray-200 bg-white/90 dark:border-white/8 dark:bg-white/4 focus-within:border-brand-500/50 dark:focus-within:border-brand-500/45 focus-within:shadow-[0_0_0_4px_color-mix(in_srgb,var(--color-brand-500)_8%,transparent),0_20px_60px_-20px_color-mix(in_srgb,var(--color-brand-500)_25%,transparent)]'
               }`}
             >
               <div className="relative flex flex-1 items-center">
@@ -1465,7 +1465,7 @@ export default function HomePage() {
                   <button
                     type="submit"
                     disabled={(!prompt.trim() && uploadedImages.length === 0) || isCreatingProject}
-                    className="flex h-8 w-8 items-center justify-center rounded-full bg-brand-500 text-white shadow-[0_4px_16px_-4px_rgba(222,115,86,0.6)] transition-all duration-150 ease-out hover:bg-brand-600 hover:scale-105 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-[#0c0a09] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:scale-100 disabled:hover:bg-brand-500"
+                    className="flex h-8 w-8 items-center justify-center rounded-full bg-brand-500 text-white shadow-[0_4px_16px_-4px_color-mix(in_srgb,var(--color-brand-500)_60%,transparent)] transition-all duration-150 ease-out hover:bg-brand-600 hover:scale-105 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-gray-950 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:scale-100 disabled:hover:bg-brand-500"
                   >
                     {isCreatingProject ? (
                       <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
@@ -1517,7 +1517,7 @@ export default function HomePage() {
                           if (selectedModel) params.set('model', selectedModel);
                           router.push(`/${project.id}/chat${params.toString() ? '?' + params.toString() : ''}`);
                         }}
-                        className="group text-left rounded-xl border border-gray-200 dark:border-white/8 bg-white dark:bg-white/3 hover:border-brand-500/40 dark:hover:border-brand-500/35 hover:shadow-[0_12px_40px_-12px_rgba(222,115,86,0.25)] hover:-translate-y-0.5 transition-all duration-200 overflow-hidden"
+                        className="group text-left rounded-xl border border-gray-200 dark:border-white/8 bg-white dark:bg-white/3 hover:border-brand-500/40 dark:hover:border-brand-500/35 hover:shadow-[0_12px_40px_-12px_color-mix(in_srgb,var(--color-brand-500)_25%,transparent)] hover:-translate-y-0.5 transition-all duration-200 overflow-hidden"
                       >
                         {/* Site thumbnail (headless screenshot of the preview). When
                             none exists yet (preview never run), a branded placeholder

@@ -28,11 +28,11 @@ export default async function LoginPage({
         />
         <div
           className="absolute bottom-[-22%] right-[-8%] h-160 w-160 rounded-full blur-[150px] opacity-[0.20]"
-          style={{ background: 'radial-gradient(circle at 50% 50%, #E8A87C, transparent 70%)', animation: 'loginAurora 32s ease-in-out infinite reverse' }}
+          style={{ background: 'radial-gradient(circle at 50% 50%, var(--color-brand-300), transparent 70%)', animation: 'loginAurora 32s ease-in-out infinite reverse' }}
         />
         <div
           className="absolute left-[-10%] top-1/3 h-128 w-lg rounded-full blur-[150px] opacity-[0.15]"
-          style={{ background: 'radial-gradient(circle at 50% 50%, #8f2f1c, transparent 70%)', animation: 'loginAurora 38s ease-in-out infinite' }}
+          style={{ background: 'radial-gradient(circle at 50% 50%, var(--color-brand-800), transparent 70%)', animation: 'loginAurora 38s ease-in-out infinite' }}
         />
       </div>
 
@@ -65,11 +65,11 @@ export default async function LoginPage({
             alt=""
             width={56}
             height={56}
-            className="h-14 w-14 rounded-[15px] shadow-[0_10px_40px_-6px_rgba(222,115,86,0.55),0_2px_8px_rgba(0,0,0,0.5)] ring-1 ring-white/10"
+            className="themed-logo h-14 w-14 rounded-[15px] shadow-[0_10px_40px_-6px_color-mix(in_srgb,var(--color-brand-500)_55%,transparent),0_2px_8px_rgba(0,0,0,0.5)] ring-1 ring-white/10"
           />
           <BrandWordmark
             className="mt-6 h-[30px] w-[174px]"
-            style={{ background: 'linear-gradient(180deg, #ffffff 30%, #ecc7b2 100%)' }}
+            style={{ background: 'linear-gradient(180deg, #ffffff 30%, var(--color-brand-200) 100%)' }}
           />
         </div>
 

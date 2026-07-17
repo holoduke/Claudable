@@ -3730,9 +3730,9 @@ const persistProjectPreferences = useCallback(
                         className="absolute inset-0 hidden dark:block transition-all duration-1000 ease-in-out"
                         style={{
                           background: `radial-gradient(circle at 50% 100%,
-                            ${activeBrandColor}66 0%,
-                            ${activeBrandColor}4D 25%,
-                            ${activeBrandColor}33 50%,
+                            color-mix(in srgb, ${activeBrandColor} 40%, transparent) 0%,
+                            color-mix(in srgb, ${activeBrandColor} 30%, transparent) 25%,
+                            color-mix(in srgb, ${activeBrandColor} 20%, transparent) 50%,
                             transparent 70%)`
                         }}
                       />
@@ -3741,8 +3741,8 @@ const persistProjectPreferences = useCallback(
                         className="absolute inset-0 block dark:hidden transition-all duration-1000 ease-in-out"
                         style={{
                           background: `radial-gradient(circle at 50% 100%, 
-                            ${activeBrandColor}40 0%, 
-                            ${activeBrandColor}26 25%, 
+                            color-mix(in srgb, ${activeBrandColor} 25%, transparent) 0%, 
+                            color-mix(in srgb, ${activeBrandColor} 15%, transparent) 25%, 
                             transparent 50%)`
                         }}
                       />

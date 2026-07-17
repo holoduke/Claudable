@@ -53,8 +53,8 @@ const CLI_OPTIONS: CLIOption[] = [
     name: 'Claude Code',
     icon: '',
     description: 'Anthropic Claude with advanced reasoning',
-    color: 'from-orange-500 to-red-600',
-    brandColor: '#DE7356',
+    color: 'from-brand-400 to-brand-700',
+    brandColor: 'var(--color-brand-500)',
     downloadUrl: 'https://docs.anthropic.com/en/docs/claude-code/overview',
     installCommand: 'npm install -g @anthropic-ai/claude-code',
     enabled: true,
@@ -676,7 +676,7 @@ export default function GlobalSettings({ isOpen, onClose, initialTab = 'general'
                       alt="Claudable Icon"
                       width={80}
                       height={80}
-                      className="relative z-10 w-full h-full object-contain rounded-2xl shadow-lg"
+                      className="themed-logo relative z-10 w-full h-full object-contain rounded-2xl shadow-lg"
                     />
                   </div>
                   <BrandWordmark className="mx-auto h-[26px] w-[150px] bg-gray-900 dark:bg-white" />

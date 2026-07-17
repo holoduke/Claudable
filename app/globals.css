@@ -56,6 +56,7 @@ layer(base);
 
 /* Midnight — deep violet-navy, vivid violet accent (dark). */
 [data-theme='midnight'] {
+  --logo-filter: hue-rotate(236deg);
   --color-white: #f3f1ff;
   --color-brand-50: #f2efff; --color-brand-100: #e7e2ff; --color-brand-200: #d1c8ff;
   --color-brand-300: #b4a5ff; --color-brand-400: #a191ff; --color-brand-500: #8b76ff;
@@ -69,6 +70,7 @@ layer(base);
 
 /* Forest — sage paper, deep green accent (light). */
 [data-theme='forest'] {
+  --logo-filter: hue-rotate(133deg) saturate(0.9) brightness(0.92);
   --color-white: #f7fbf6;
   --color-brand-50: #ecf8f1; --color-brand-100: #d7efe1; --color-brand-200: #b1dfc5;
   --color-brand-300: #7cc49c; --color-brand-400: #3f9d68; --color-brand-500: #217a48;
@@ -82,6 +84,7 @@ layer(base);
 
 /* Ocean — deep steel blue, cyan accent (dark). */
 [data-theme='ocean'] {
+  --logo-filter: hue-rotate(190deg);
   --color-white: #eef7fd;
   --color-brand-50: #effafe; --color-brand-100: #dff4fc; --color-brand-200: #bfeafa;
   --color-brand-300: #8fdaf6; --color-brand-400: #4fb3e8; --color-brand-500: #2196dd;
@@ -95,6 +98,7 @@ layer(base);
 
 /* Ice — frosted pale blue, cold cyan accent (light). */
 [data-theme='ice'] {
+  --logo-filter: hue-rotate(183deg) saturate(0.85);
   --color-white: #f8fcff;
   --color-brand-50: #eefafd; --color-brand-100: #d9f3fa; --color-brand-200: #b6e7f5;
   --color-brand-300: #86d3ec; --color-brand-400: #4bb6da; --color-brand-500: #2497c2;
@@ -108,6 +112,7 @@ layer(base);
 
 /* Cyberpunk — purple-black night city, hot magenta accent (dark). */
 [data-theme='cyberpunk'] {
+  --logo-filter: hue-rotate(314deg) saturate(1.2);
   --color-white: #fdf0fa;
   --color-brand-50: #ffeef7; --color-brand-100: #ffd9ee; --color-brand-200: #ffb3dd;
   --color-brand-300: #ff80c5; --color-brand-400: #fd4aab; --color-brand-500: #ef2495;
@@ -121,6 +126,7 @@ layer(base);
 
 /* Neon — glowing green on near-black (dark). */
 [data-theme='neon'] {
+  --logo-filter: hue-rotate(117deg) saturate(1.35);
   --color-white: #f0fff2;
   --color-brand-50: #efffee; --color-brand-100: #d8ffd6; --color-brand-200: #adffab;
   --color-brand-300: #71fa74; --color-brand-400: #3ce04a; --color-brand-500: #22c73c;
@@ -134,6 +140,7 @@ layer(base);
 
 /* Ferrari — carbon black, racing red accent (dark). */
 [data-theme='ferrari'] {
+  --logo-filter: hue-rotate(342deg) saturate(1.4);
   --color-white: #fdf6f4;
   --color-brand-50: #fff0f0; --color-brand-100: #ffdcdc; --color-brand-200: #ffb9b9;
   --color-brand-300: #ff8585; --color-brand-400: #f74c4c; --color-brand-500: #e11b2b;
@@ -147,6 +154,7 @@ layer(base);
 
 /* Party — pink paper, hot pink accent (light). */
 [data-theme='party'] {
+  --logo-filter: hue-rotate(321deg);
   --color-white: #fef9fc;
   --color-brand-50: #fdf2f8; --color-brand-100: #fce7f3; --color-brand-200: #fbcfe8;
   --color-brand-300: #f9a8d4; --color-brand-400: #f472b6; --color-brand-500: #ec4899;
@@ -160,6 +168,7 @@ layer(base);
 
 /* Business — crisp cool slate, corporate navy accent (light). */
 [data-theme='business'] {
+  --logo-filter: hue-rotate(203deg) saturate(0.75);
   --color-brand-50: #eff4fb; --color-brand-100: #dfe9f7; --color-brand-200: #c0d3ee;
   --color-brand-300: #93b3e0; --color-brand-400: #5c88c9; --color-brand-500: #2f62ae;
   --color-brand-600: #234e91; --color-brand-700: #1d4077; --color-brand-800: #1b3763;
@@ -172,6 +181,7 @@ layer(base);
 
 /* Mono — minimal black-and-white, charcoal accent (light). */
 [data-theme='mono'] {
+  --logo-filter: grayscale(1);
   --color-brand-50: #f7f7f8; --color-brand-100: #eeeef0; --color-brand-200: #d9d9de;
   --color-brand-300: #b9b9c1; --color-brand-400: #8e8e99; --color-brand-500: #4a4a52;
   --color-brand-600: #343439; --color-brand-700: #27272c; --color-brand-800: #1d1d21;
@@ -236,6 +246,12 @@ layer(base);
     transition: none !important;
     animation: none !important;
   }
+}
+
+/* The PNG logo mark can't read CSS vars directly, so themes re-tint it with
+   a filter (set per-theme above; identity in Light/Dark). */
+.themed-logo {
+  filter: var(--logo-filter, none);
 }
 
 /* Accessible focus ring for interactive elements (scoped so inputs with
