@@ -1486,7 +1486,7 @@ export default function HomePage() {
                 /api/projects, which already filters to the projects the signed-in
                 user may access when the auth gate is on. */}
             {projects.length > 0 && (
-              <div className="mt-12 w-full max-w-3xl mx-auto text-left">
+              <div className="mt-12 w-full max-w-6xl mx-auto text-left">
                 {/* Live project search — centered, replaces the old heading. */}
                 <div className="relative w-full max-w-sm mx-auto mb-5">
                   <Search aria-hidden className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 dark:text-gray-500 pointer-events-none" />
@@ -1504,7 +1504,7 @@ export default function HomePage() {
                     {t('home.noProjectsMatch', { query: projectSearch.trim() })}
                   </p>
                 )}
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
                   {visibleProjects.map((project) => {
                     const projectCli = sanitizeAssistant(project.preferredCli);
                     const projectColor = assistantBrandColors[projectCli] || assistantBrandColors[DEFAULT_ASSISTANT];
