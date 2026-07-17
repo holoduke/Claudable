@@ -161,7 +161,14 @@ export const en = {
 
   // Color themes (palette picker)
   'theme.pick': 'Color theme',
-  'theme.claudable': 'Claudable',
+  'theme.light': 'Light',
+  'theme.dark': 'Dark',
+  'theme.ice': 'Ice',
+  'theme.cyberpunk': 'Cyberpunk',
+  'theme.neon': 'Neon',
+  'theme.ferrari': 'Ferrari',
+  'theme.party': 'Party',
+  'theme.business': 'Business',
   'theme.midnight': 'Midnight',
   'theme.forest': 'Forest',
   'theme.ocean': 'Ocean',

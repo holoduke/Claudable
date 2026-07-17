@@ -146,7 +146,14 @@ export const pt: Record<keyof typeof en, string> = {
 
   // Color themes (palette picker)
   'theme.pick': 'Tema de cor',
-  'theme.claudable': 'Claudable',
+  'theme.light': 'Claro',
+  'theme.dark': 'Escuro',
+  'theme.ice': 'Gelo',
+  'theme.cyberpunk': 'Cyberpunk',
+  'theme.neon': 'Néon',
+  'theme.ferrari': 'Ferrari',
+  'theme.party': 'Festa',
+  'theme.business': 'Negócios',
   'theme.midnight': 'Meia-noite',
   'theme.forest': 'Floresta',
   'theme.ocean': 'Oceano',

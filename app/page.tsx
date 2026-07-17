@@ -12,7 +12,6 @@ const DesignPickerModal = dynamic(() => import('@/components/modals/DesignPicker
 const GlobalSettings = dynamic(() => import('@/components/settings/GlobalSettings'), { ssr: false });
 import UserMenu from '@/components/layout/UserMenu';
 import ConnectClaudePrompt from '@/components/auth/ConnectClaudePrompt';
-import ThemeToggle from '@/components/ui/ThemeToggle';
 import PaletteToggle from '@/components/ui/PaletteToggle';
 import { useGlobalSettings } from '@/contexts/GlobalSettingsContext';
 import { useT } from '@/contexts/I18nContext';
@@ -785,7 +784,7 @@ export default function HomePage() {
       {/* First-open nudge: connect your own Claude account (dismissible). */}
       <ConnectClaudePrompt />
       {/* My account (always top-right) */}
-      <div className="fixed top-3 right-4 z-50 flex items-center gap-2"><PaletteToggle /><ThemeToggle /><UserMenu /></div>
+      <div className="fixed top-3 right-4 z-50 flex items-center gap-2"><PaletteToggle /><UserMenu /></div>
       {/* Radial gradient background from bottom center */}
       <div className="absolute inset-0">
         <div className="absolute inset-0 bg-white dark:bg-[#0c0a09]" />
