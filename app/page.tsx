@@ -1482,97 +1482,6 @@ export default function HomePage() {
               </div>
             </form>
             
-            {/* Your projects — tiles below the prompt. The list comes from
-                /api/projects, which already filters to the projects the signed-in
-                user may access when the auth gate is on. */}
-            {projects.length > 0 && (
-              <div className="mt-12 w-full max-w-6xl mx-auto text-left">
-                {/* Live project search — centered, replaces the old heading. */}
-                <div className="relative w-full max-w-sm mx-auto mb-5">
-                  <Search aria-hidden className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 dark:text-gray-500 pointer-events-none" />
-                  <input
-                    type="search"
-                    value={projectSearch}
-                    onChange={(e) => setProjectSearch(e.target.value)}
-                    placeholder={t('home.searchProjects')}
-                    aria-label={t('home.searchProjects')}
-                    className="w-full h-10 pl-10 pr-4 rounded-full border border-gray-200 dark:border-white/9 bg-white/80 dark:bg-white/4 text-sm text-gray-900 dark:text-gray-50 placeholder:text-gray-400 dark:placeholder:text-gray-500 shadow-xs focus:outline-hidden focus:border-brand-500/50 focus:ring-2 focus:ring-brand-500/15 transition-colors"
-                  />
-                </div>
-                {visibleProjects.length === 0 && (
-                  <p className="text-center text-sm text-gray-500 dark:text-gray-400 py-8">
-                    {t('home.noProjectsMatch', { query: projectSearch.trim() })}
-                  </p>
-                )}
-                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
-                  {visibleProjects.map((project) => {
-                    const projectCli = sanitizeAssistant(project.preferredCli);
-                    const projectColor = assistantBrandColors[projectCli] || assistantBrandColors[DEFAULT_ASSISTANT];
-                    return (
-                      <button
-                        key={project.id}
-                        onClick={() => {
-                          const params = new URLSearchParams();
-                          if (selectedAssistant) params.set('cli', selectedAssistant);
-                          if (selectedModel) params.set('model', selectedModel);
-                          router.push(`/${project.id}/chat${params.toString() ? '?' + params.toString() : ''}`);
-                        }}
-                        className="group text-left rounded-xl border border-gray-200 dark:border-white/8 bg-white dark:bg-white/3 hover:border-brand-500/40 dark:hover:border-brand-500/35 hover:shadow-[0_12px_40px_-12px_color-mix(in_srgb,var(--color-brand-500)_25%,transparent)] hover:-translate-y-0.5 transition-all duration-200 overflow-hidden"
-                      >
-                        {/* Site thumbnail (headless screenshot of the preview). When
-                            none exists yet (preview never run), a branded placeholder
-                            with the project's initial shows instead of flat grey; the
-                            img hides itself on 404 to reveal it. */}
-                        <div className="aspect-video w-full relative bg-linear-to-br from-brand-500/8 via-gray-50 to-brand-500/5 dark:from-brand-500/12 dark:via-gray-900 dark:to-gray-950 flex items-center justify-center overflow-hidden">
-                          <span className="text-4xl font-bold text-brand-500/25 dark:text-brand-500/35 select-none" aria-hidden>
-                            {(project.name || '?').trim().charAt(0).toUpperCase()}
-                          </span>
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img
-                            src={`${API_BASE}/api/projects/${project.id}/thumbnail${thumbsVersion ? `?v=${thumbsVersion}` : ''}`}
-                            alt=""
-                            loading="lazy"
-                            className="absolute inset-0 w-full h-full object-cover object-top"
-                            onError={(e) => { (e.currentTarget as HTMLImageElement).style.visibility = 'hidden'; }}
-                            onLoad={(e) => { (e.currentTarget as HTMLImageElement).style.visibility = 'visible'; }}
-                          />
-                        </div>
-                        <div className="p-3">
-                          <div className="flex items-center gap-2 mb-1">
-                            <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: projectColor }} />
-                            <span className="text-sm font-medium text-gray-900 dark:text-gray-50 truncate">{project.name}</span>
-                          </div>
-                          {/* Primary metadata: last-edited time + who. Once a project has
-                              been edited we show the editor and DROP the creator (the
-                              creator lives in the project ⓘ info panel); an untouched
-                              project shows its creator instead. */}
-                          <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
-                            {project.lastEditedBy ? (
-                              t('home.lastEditedTimeBy', {
-                                time: formatTime(project.lastActiveAt || project.updatedAt || project.createdAt),
-                                name: project.lastEditedBy,
-                              })
-                            ) : (
-                              <>
-                                {t('home.lastEdited', { time: formatTime(project.lastActiveAt || project.updatedAt || project.createdAt) })}
-                                {project.createdBy && <span> · {t('home.createdBy', { name: project.createdBy })}</span>}
-                              </>
-                            )}
-                          </p>
-                          {/* Secondary line: the assistant (CLI · model). */}
-                          {project.preferredCli && (
-                            <p className="mt-1 text-[11px] leading-tight text-gray-400 dark:text-gray-500 truncate">
-                              {formatCliInfo(projectCli, project.selectedModel ?? undefined)}
-                            </p>
-                          )}
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-
             {projects.length === 0 && projectsLoaded && (
               <div className="mt-12 w-full max-w-3xl mx-auto">
                 <div className="rounded-2xl border border-gray-200 dark:border-white/8 bg-white dark:bg-white/3 px-6 py-12 flex flex-col items-center text-center">
@@ -1590,6 +1499,96 @@ export default function HomePage() {
               </div>
             )}
           </div>
+          {/* Your projects — tiles below the prompt. The list comes from
+              /api/projects, which already filters to the projects the signed-in
+              user may access when the auth gate is on. */}
+          {projects.length > 0 && (
+            <div className="mt-12 w-full lg:w-[80%] mx-auto text-left">
+              {/* Live project search — centered, replaces the old heading. */}
+              <div className="relative w-full max-w-sm mx-auto mb-5">
+                <Search aria-hidden className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 dark:text-gray-500 pointer-events-none" />
+                <input
+                  type="search"
+                  value={projectSearch}
+                  onChange={(e) => setProjectSearch(e.target.value)}
+                  placeholder={t('home.searchProjects')}
+                  aria-label={t('home.searchProjects')}
+                  className="w-full h-10 pl-10 pr-4 rounded-full border border-gray-200 dark:border-white/9 bg-white/80 dark:bg-white/4 text-sm text-gray-900 dark:text-gray-50 placeholder:text-gray-400 dark:placeholder:text-gray-500 shadow-xs focus:outline-hidden focus:border-brand-500/50 focus:ring-2 focus:ring-brand-500/15 transition-colors"
+                />
+              </div>
+              {visibleProjects.length === 0 && (
+                <p className="text-center text-sm text-gray-500 dark:text-gray-400 py-8">
+                  {t('home.noProjectsMatch', { query: projectSearch.trim() })}
+                </p>
+              )}
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
+                {visibleProjects.map((project) => {
+                  const projectCli = sanitizeAssistant(project.preferredCli);
+                  const projectColor = assistantBrandColors[projectCli] || assistantBrandColors[DEFAULT_ASSISTANT];
+                  return (
+                    <button
+                      key={project.id}
+                      onClick={() => {
+                        const params = new URLSearchParams();
+                        if (selectedAssistant) params.set('cli', selectedAssistant);
+                        if (selectedModel) params.set('model', selectedModel);
+                        router.push(`/${project.id}/chat${params.toString() ? '?' + params.toString() : ''}`);
+                      }}
+                      className="group text-left rounded-xl border border-gray-200 dark:border-white/8 bg-white dark:bg-white/3 hover:border-brand-500/40 dark:hover:border-brand-500/35 hover:shadow-[0_12px_40px_-12px_color-mix(in_srgb,var(--color-brand-500)_25%,transparent)] hover:-translate-y-0.5 transition-all duration-200 overflow-hidden"
+                    >
+                      {/* Site thumbnail (headless screenshot of the preview). When
+                          none exists yet (preview never run), a branded placeholder
+                          with the project's initial shows instead of flat grey; the
+                          img hides itself on 404 to reveal it. */}
+                      <div className="aspect-video w-full relative bg-linear-to-br from-brand-500/8 via-gray-50 to-brand-500/5 dark:from-brand-500/12 dark:via-gray-900 dark:to-gray-950 flex items-center justify-center overflow-hidden">
+                        <span className="text-4xl font-bold text-brand-500/25 dark:text-brand-500/35 select-none" aria-hidden>
+                          {(project.name || '?').trim().charAt(0).toUpperCase()}
+                        </span>
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={`${API_BASE}/api/projects/${project.id}/thumbnail${thumbsVersion ? `?v=${thumbsVersion}` : ''}`}
+                          alt=""
+                          loading="lazy"
+                          className="absolute inset-0 w-full h-full object-cover object-top"
+                          onError={(e) => { (e.currentTarget as HTMLImageElement).style.visibility = 'hidden'; }}
+                          onLoad={(e) => { (e.currentTarget as HTMLImageElement).style.visibility = 'visible'; }}
+                        />
+                      </div>
+                      <div className="p-3">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: projectColor }} />
+                          <span className="text-sm font-medium text-gray-900 dark:text-gray-50 truncate">{project.name}</span>
+                        </div>
+                        {/* Primary metadata: last-edited time + who. Once a project has
+                            been edited we show the editor and DROP the creator (the
+                            creator lives in the project ⓘ info panel); an untouched
+                            project shows its creator instead. */}
+                        <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
+                          {project.lastEditedBy ? (
+                            t('home.lastEditedTimeBy', {
+                              time: formatTime(project.lastActiveAt || project.updatedAt || project.createdAt),
+                              name: project.lastEditedBy,
+                            })
+                          ) : (
+                            <>
+                              {t('home.lastEdited', { time: formatTime(project.lastActiveAt || project.updatedAt || project.createdAt) })}
+                              {project.createdBy && <span> · {t('home.createdBy', { name: project.createdBy })}</span>}
+                            </>
+                          )}
+                        </p>
+                        {/* Secondary line: the assistant (CLI · model). */}
+                        {project.preferredCli && (
+                          <p className="mt-1 text-[11px] leading-tight text-gray-400 dark:text-gray-500 truncate">
+                            {formatCliInfo(projectCli, project.selectedModel ?? undefined)}
+                          </p>
+                        )}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
