@@ -13,6 +13,7 @@ const GlobalSettings = dynamic(() => import('@/components/settings/GlobalSetting
 import UserMenu from '@/components/layout/UserMenu';
 import ConnectClaudePrompt from '@/components/auth/ConnectClaudePrompt';
 import ThemeToggle from '@/components/ui/ThemeToggle';
+import PaletteToggle from '@/components/ui/PaletteToggle';
 import { useGlobalSettings } from '@/contexts/GlobalSettingsContext';
 import { useT } from '@/contexts/I18nContext';
 import { uploadFileChunked } from '@/lib/client/upload';
@@ -784,7 +785,7 @@ export default function HomePage() {
       {/* First-open nudge: connect your own Claude account (dismissible). */}
       <ConnectClaudePrompt />
       {/* My account (always top-right) */}
-      <div className="fixed top-3 right-4 z-50 flex items-center gap-2"><ThemeToggle /><UserMenu /></div>
+      <div className="fixed top-3 right-4 z-50 flex items-center gap-2"><PaletteToggle /><ThemeToggle /><UserMenu /></div>
       {/* Radial gradient background from bottom center */}
       <div className="absolute inset-0">
         <div className="absolute inset-0 bg-white dark:bg-[#0c0a09]" />
@@ -907,7 +908,7 @@ export default function HomePage() {
                         <input
                           name="name"
                           defaultValue={project.name}
-                          className="w-full px-2 py-1 text-sm bg-white dark:bg-white/6 border border-gray-300 dark:border-white/10 rounded-sm text-gray-900 dark:text-gray-50 focus:outline-hidden focus:ring-2 focus:ring-[#DE7356]"
+                          className="w-full px-2 py-1 text-sm bg-white dark:bg-white/6 border border-gray-300 dark:border-white/10 rounded-sm text-gray-900 dark:text-gray-50 focus:outline-hidden focus:ring-2 focus:ring-brand-500"
                           autoFocus
                           onBlur={() => setEditingProject(null)}
                         />
@@ -918,7 +919,7 @@ export default function HomePage() {
                             // input's onBlur closes the editor, which would otherwise
                             // unmount the form before this submit fires (rename lost).
                             onMouseDown={(e) => e.preventDefault()}
-                            className="px-2 py-1 text-xs bg-[#DE7356] text-white rounded-sm hover:bg-[#c9634a] transition-colors"
+                            className="px-2 py-1 text-xs bg-brand-500 text-white rounded-sm hover:bg-brand-600 transition-colors"
                           >
                             Save
                           </button>
@@ -947,7 +948,7 @@ export default function HomePage() {
                           <h3 
                             className="text-gray-900 dark:text-gray-50 text-sm transition-colors truncate"
                             style={{
-                              '--hover-color': projectColor || '#DE7356'
+                              '--hover-color': projectColor || 'var(--color-brand-500)'
                             } as React.CSSProperties}
                           >
                             <span 
@@ -987,7 +988,7 @@ export default function HomePage() {
                               e.stopPropagation();
                               setEditingProject(project);
                             }}
-                            className="p-1 text-gray-400 dark:text-gray-500 hover:text-[#DE7356] transition-colors"
+                            className="p-1 text-gray-400 dark:text-gray-500 hover:text-brand-500 transition-colors"
                             title={t('home.editProjectName')}
                           >
                             <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1109,8 +1110,8 @@ export default function HomePage() {
               onDrop={handleDrop}
               className={`group flex flex-col gap-4 p-4 w-full rounded-[28px] border backdrop-blur-xl text-base shadow-xl transition-all duration-200 ease-in-out mb-6 relative overflow-visible ${
                 isDragOver
-                  ? 'border-[#DE7356] bg-[#DE7356]/10 '
-                  : 'border-gray-200 bg-white/90 dark:border-white/8 dark:bg-white/4 focus-within:border-[#DE7356]/50 dark:focus-within:border-[#DE7356]/45 focus-within:shadow-[0_0_0_4px_rgba(222,115,86,0.08),0_20px_60px_-20px_rgba(222,115,86,0.25)]'
+                  ? 'border-brand-500 bg-brand-500/10 '
+                  : 'border-gray-200 bg-white/90 dark:border-white/8 dark:bg-white/4 focus-within:border-brand-500/50 dark:focus-within:border-brand-500/45 focus-within:shadow-[0_0_0_4px_rgba(222,115,86,0.08),0_20px_60px_-20px_rgba(222,115,86,0.25)]'
               }`}
             >
               <div className="relative flex flex-1 items-center">
@@ -1138,13 +1139,13 @@ export default function HomePage() {
               
               {/* Drag overlay */}
               {isDragOver && (
-                <div className="absolute inset-0 bg-[#DE7356]/10 rounded-[28px] flex items-center justify-center z-10 border-2 border-dashed border-[#DE7356]">
+                <div className="absolute inset-0 bg-brand-500/10 rounded-[28px] flex items-center justify-center z-10 border-2 border-dashed border-brand-500">
                   <div className="text-center">
                     <div className="text-3xl mb-3">📸</div>
-                    <div className="text-lg font-semibold text-[#DE7356] mb-2">
+                    <div className="text-lg font-semibold text-brand-500 mb-2">
                       {t('home.dropImages')}
                     </div>
-                    <div className="text-sm text-[#DE7356] ">
+                    <div className="text-sm text-brand-500 ">
                       {t('home.dropSupports')}
                     </div>
                   </div>
@@ -1176,7 +1177,7 @@ export default function HomePage() {
                   title={t('home.pickDesign')}
                   className="justify-center whitespace-nowrap text-sm font-medium transition-colors duration-100 ease-in-out border border-gray-200 dark:border-white/9 bg-transparent shadow-xs hover:bg-gray-50 dark:hover:bg-white/5 hover:border-gray-300 dark:hover:border-white/18 px-3 py-2 flex h-8 items-center gap-1.5 rounded-full text-gray-700 dark:text-gray-200 hover:text-gray-900 dark:hover:text-gray-100"
                 >
-                  <Palette aria-hidden className="h-3.5 w-3.5 text-[#DE7356]/80" />
+                  <Palette aria-hidden className="h-3.5 w-3.5 text-brand-500/80" />
                   <span className="hidden md:flex text-sm font-medium">
                     {selectedDesign ? selectedDesign.name : 'Design'}
                   </span>
@@ -1189,7 +1190,7 @@ export default function HomePage() {
                     title={t('home.pickStack')}
                     className="justify-center whitespace-nowrap text-sm font-medium transition-colors duration-100 ease-in-out border border-gray-200 dark:border-white/9 bg-transparent shadow-xs hover:bg-gray-50 dark:hover:bg-white/5 hover:border-gray-300 dark:hover:border-white/18 px-3 py-2 flex h-8 items-center gap-1.5 rounded-full text-gray-700 dark:text-gray-200 hover:text-gray-900 dark:hover:text-gray-100"
                   >
-                    <Layers aria-hidden className="h-3.5 w-3.5 text-[#DE7356]/80" />
+                    <Layers aria-hidden className="h-3.5 w-3.5 text-brand-500/80" />
                     <span className="hidden md:flex text-sm font-medium">
                       {STACKS.find(s => s.id === selectedStack)?.name ?? 'Stack'}
                     </span>
@@ -1207,7 +1208,7 @@ export default function HomePage() {
                           >
                             <div className="flex items-center justify-between">
                               <span className="text-sm font-medium text-gray-900 dark:text-gray-50">{s.name}</span>
-                              {selectedStack === s.id && <span className="text-xs text-[#DE7356]">✓</span>}
+                              {selectedStack === s.id && <span className="text-xs text-brand-500">✓</span>}
                             </div>
                             <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{s.description}</p>
                           </button>
@@ -1228,7 +1229,7 @@ export default function HomePage() {
                       title={t('home.pluginCommand')}
                       className="justify-center whitespace-nowrap text-sm font-medium transition-colors duration-100 ease-in-out border border-gray-200 dark:border-white/9 bg-transparent shadow-xs hover:bg-gray-50 dark:hover:bg-white/5 hover:border-gray-300 dark:hover:border-white/18 px-3 py-2 flex h-8 items-center gap-1.5 rounded-full text-gray-700 dark:text-gray-200 hover:text-gray-900 dark:hover:text-gray-100"
                     >
-                      <Sparkles aria-hidden className="h-3.5 w-3.5 text-[#DE7356]/80" />
+                      <Sparkles aria-hidden className="h-3.5 w-3.5 text-brand-500/80" />
                       <span className="hidden md:flex text-sm font-medium">{t('home.plugin')}</span>
                     </button>
                     {showPluginMenu && (
@@ -1265,7 +1266,7 @@ export default function HomePage() {
                     title={t('home.addBackend')}
                     className="justify-center whitespace-nowrap text-sm font-medium transition-colors duration-100 ease-in-out border border-gray-200 dark:border-white/9 bg-transparent shadow-xs hover:bg-gray-50 dark:hover:bg-white/5 hover:border-gray-300 dark:hover:border-white/18 px-3 py-2 flex h-8 items-center gap-1.5 rounded-full text-gray-700 dark:text-gray-200 hover:text-gray-900 dark:hover:text-gray-100"
                   >
-                    <Server aria-hidden className="h-3.5 w-3.5 text-[#DE7356]/80" />
+                    <Server aria-hidden className="h-3.5 w-3.5 text-brand-500/80" />
                     <span className="hidden md:flex text-sm font-medium">
                       {BACKEND_STACKS.find(b => b.id === selectedBackend)?.name ?? 'No backend'}
                     </span>
@@ -1278,7 +1279,7 @@ export default function HomePage() {
                           className={`w-full text-left px-3 py-2 rounded-lg transition-colors ${!selectedBackend ? 'bg-gray-100 dark:bg-white/[0.07]' : 'hover:bg-gray-50 dark:hover:bg-white/5'}`}>
                           <div className="flex items-center justify-between">
                             <span className="text-sm font-medium text-gray-900 dark:text-gray-50">{t('home.noBackend')}</span>
-                            {!selectedBackend && <span className="text-xs text-[#DE7356]">✓</span>}
+                            {!selectedBackend && <span className="text-xs text-brand-500">✓</span>}
                           </div>
                           <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{t('home.frontendOnly')}</p>
                         </button>
@@ -1287,7 +1288,7 @@ export default function HomePage() {
                             className={`w-full text-left px-3 py-2 rounded-lg transition-colors ${selectedBackend === b.id ? 'bg-gray-100 dark:bg-white/[0.07]' : 'hover:bg-gray-50 dark:hover:bg-white/5'}`}>
                             <div className="flex items-center justify-between">
                               <span className="text-sm font-medium text-gray-900 dark:text-gray-50">{b.name}</span>
-                              {selectedBackend === b.id && <span className="text-xs text-[#DE7356]">✓</span>}
+                              {selectedBackend === b.id && <span className="text-xs text-brand-500">✓</span>}
                             </div>
                             <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{b.description}</p>
                           </button>
@@ -1304,7 +1305,7 @@ export default function HomePage() {
                     title={t('home.addDatabase')}
                     className="justify-center whitespace-nowrap text-sm font-medium transition-colors duration-100 ease-in-out border border-gray-200 dark:border-white/9 bg-transparent shadow-xs hover:bg-gray-50 dark:hover:bg-white/5 hover:border-gray-300 dark:hover:border-white/18 px-3 py-2 flex h-8 items-center gap-1.5 rounded-full text-gray-700 dark:text-gray-200 hover:text-gray-900 dark:hover:text-gray-100"
                   >
-                    <Database aria-hidden className="h-3.5 w-3.5 text-[#DE7356]/80" />
+                    <Database aria-hidden className="h-3.5 w-3.5 text-brand-500/80" />
                     <span className="hidden md:flex text-sm font-medium">
                       {DATABASES.find(d => d.id === selectedDatabase)?.name ?? 'No database'}
                     </span>
@@ -1317,7 +1318,7 @@ export default function HomePage() {
                           className={`w-full text-left px-3 py-2 rounded-lg transition-colors ${!selectedDatabase ? 'bg-gray-100 dark:bg-white/[0.07]' : 'hover:bg-gray-50 dark:hover:bg-white/5'}`}>
                           <div className="flex items-center justify-between">
                             <span className="text-sm font-medium text-gray-900 dark:text-gray-50">{t('home.noDatabase')}</span>
-                            {!selectedDatabase && <span className="text-xs text-[#DE7356]">✓</span>}
+                            {!selectedDatabase && <span className="text-xs text-brand-500">✓</span>}
                           </div>
                         </button>
                         {DATABASES.map(d => (
@@ -1325,7 +1326,7 @@ export default function HomePage() {
                             className={`w-full text-left px-3 py-2 rounded-lg transition-colors ${selectedDatabase === d.id ? 'bg-gray-100 dark:bg-white/[0.07]' : 'hover:bg-gray-50 dark:hover:bg-white/5'}`}>
                             <div className="flex items-center justify-between">
                               <span className="text-sm font-medium text-gray-900 dark:text-gray-50">{d.name}</span>
-                              {selectedDatabase === d.id && <span className="text-xs text-[#DE7356]">✓</span>}
+                              {selectedDatabase === d.id && <span className="text-xs text-brand-500">✓</span>}
                             </div>
                             <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{d.description}</p>
                           </button>
@@ -1342,7 +1343,7 @@ export default function HomePage() {
                     title={t('home.pickImageGen')}
                     className="justify-center whitespace-nowrap text-sm font-medium transition-colors duration-100 ease-in-out border border-gray-200 dark:border-white/9 bg-transparent shadow-xs hover:bg-gray-50 dark:hover:bg-white/5 hover:border-gray-300 dark:hover:border-white/18 px-3 py-2 flex h-8 items-center gap-1.5 rounded-full text-gray-700 dark:text-gray-200 hover:text-gray-900 dark:hover:text-gray-100"
                   >
-                    <Sparkles aria-hidden className="h-3.5 w-3.5 text-[#DE7356]/80" />
+                    <Sparkles aria-hidden className="h-3.5 w-3.5 text-brand-500/80" />
                     <span className="hidden md:flex text-sm font-medium">
                       {IMAGE_GEN_OPTIONS.find(o => o.id === selectedImageGen)?.name.replace('No image generation', 'No image gen') ?? 'No image gen'}
                     </span>
@@ -1356,7 +1357,7 @@ export default function HomePage() {
                             className={`w-full text-left px-3 py-2 rounded-lg transition-colors ${selectedImageGen === o.id ? 'bg-gray-100 dark:bg-white/[0.07]' : 'hover:bg-gray-50 dark:hover:bg-white/5'}`}>
                             <div className="flex items-center justify-between">
                               <span className="text-sm font-medium text-gray-900 dark:text-gray-50">{o.name}</span>
-                              {selectedImageGen === o.id && <span className="text-xs text-[#DE7356]">✓</span>}
+                              {selectedImageGen === o.id && <span className="text-xs text-brand-500">✓</span>}
                             </div>
                             <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{o.description}</p>
                           </button>
@@ -1465,7 +1466,7 @@ export default function HomePage() {
                   <button
                     type="submit"
                     disabled={(!prompt.trim() && uploadedImages.length === 0) || isCreatingProject}
-                    className="flex h-8 w-8 items-center justify-center rounded-full bg-[#DE7356] text-white shadow-[0_4px_16px_-4px_rgba(222,115,86,0.6)] transition-all duration-150 ease-out hover:bg-[#c9634a] hover:scale-105 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-[#DE7356] focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-[#0c0a09] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:scale-100 disabled:hover:bg-[#DE7356]"
+                    className="flex h-8 w-8 items-center justify-center rounded-full bg-brand-500 text-white shadow-[0_4px_16px_-4px_rgba(222,115,86,0.6)] transition-all duration-150 ease-out hover:bg-brand-600 hover:scale-105 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-[#0c0a09] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:scale-100 disabled:hover:bg-brand-500"
                   >
                     {isCreatingProject ? (
                       <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
@@ -1496,7 +1497,7 @@ export default function HomePage() {
                     onChange={(e) => setProjectSearch(e.target.value)}
                     placeholder={t('home.searchProjects')}
                     aria-label={t('home.searchProjects')}
-                    className="w-full h-10 pl-10 pr-4 rounded-full border border-gray-200 dark:border-white/9 bg-white/80 dark:bg-white/4 text-sm text-gray-900 dark:text-gray-50 placeholder:text-gray-400 dark:placeholder:text-gray-500 shadow-xs focus:outline-hidden focus:border-[#DE7356]/50 focus:ring-2 focus:ring-[#DE7356]/15 transition-colors"
+                    className="w-full h-10 pl-10 pr-4 rounded-full border border-gray-200 dark:border-white/9 bg-white/80 dark:bg-white/4 text-sm text-gray-900 dark:text-gray-50 placeholder:text-gray-400 dark:placeholder:text-gray-500 shadow-xs focus:outline-hidden focus:border-brand-500/50 focus:ring-2 focus:ring-brand-500/15 transition-colors"
                   />
                 </div>
                 {visibleProjects.length === 0 && (
@@ -1517,14 +1518,14 @@ export default function HomePage() {
                           if (selectedModel) params.set('model', selectedModel);
                           router.push(`/${project.id}/chat${params.toString() ? '?' + params.toString() : ''}`);
                         }}
-                        className="group text-left rounded-xl border border-gray-200 dark:border-white/8 bg-white dark:bg-white/3 hover:border-[#DE7356]/40 dark:hover:border-[#DE7356]/35 hover:shadow-[0_12px_40px_-12px_rgba(222,115,86,0.25)] hover:-translate-y-0.5 transition-all duration-200 overflow-hidden"
+                        className="group text-left rounded-xl border border-gray-200 dark:border-white/8 bg-white dark:bg-white/3 hover:border-brand-500/40 dark:hover:border-brand-500/35 hover:shadow-[0_12px_40px_-12px_rgba(222,115,86,0.25)] hover:-translate-y-0.5 transition-all duration-200 overflow-hidden"
                       >
                         {/* Site thumbnail (headless screenshot of the preview). When
                             none exists yet (preview never run), a branded placeholder
                             with the project's initial shows instead of flat grey; the
                             img hides itself on 404 to reveal it. */}
-                        <div className="aspect-video w-full relative bg-linear-to-br from-[#DE7356]/8 via-gray-50 to-[#DE7356]/5 dark:from-[#DE7356]/12 dark:via-gray-900 dark:to-gray-950 flex items-center justify-center overflow-hidden">
-                          <span className="text-4xl font-bold text-[#DE7356]/25 dark:text-[#DE7356]/35 select-none" aria-hidden>
+                        <div className="aspect-video w-full relative bg-linear-to-br from-brand-500/8 via-gray-50 to-brand-500/5 dark:from-brand-500/12 dark:via-gray-900 dark:to-gray-950 flex items-center justify-center overflow-hidden">
+                          <span className="text-4xl font-bold text-brand-500/25 dark:text-brand-500/35 select-none" aria-hidden>
                             {(project.name || '?').trim().charAt(0).toUpperCase()}
                           </span>
                           {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -1576,7 +1577,7 @@ export default function HomePage() {
             {projects.length === 0 && projectsLoaded && (
               <div className="mt-12 w-full max-w-3xl mx-auto">
                 <div className="rounded-2xl border border-gray-200 dark:border-white/8 bg-white dark:bg-white/3 px-6 py-12 flex flex-col items-center text-center">
-                  <div className="w-12 h-12 rounded-xl bg-[#DE7356]/10 text-[#DE7356] flex items-center justify-center mb-4">
+                  <div className="w-12 h-12 rounded-xl bg-brand-500/10 text-brand-500 flex items-center justify-center mb-4">
                     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                       <path d="M12 5v14" />
                       <path d="M5 12h14" />

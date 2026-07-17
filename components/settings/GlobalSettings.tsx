@@ -395,7 +395,7 @@ export default function GlobalSettings({ isOpen, onClose, initialTab = 'general'
                   onClick={() => setActiveTab(tab.id)}
                   className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-all ${
                     activeTab === tab.id
-                      ? 'border-[#DE7356] text-gray-900 dark:text-gray-50 '
+                      ? 'border-brand-500 text-gray-900 dark:text-gray-50 '
                       : 'border-transparent text-gray-600 dark:text-gray-300 hover:text-gray-700 dark:hover:text-gray-200 hover:border-gray-300 dark:hover:border-white/18 '
                   }`}
                 >
@@ -493,7 +493,7 @@ export default function GlobalSettings({ isOpen, onClose, initialTab = 'general'
                       <button
                         onClick={saveGlobalSettings}
                         disabled={isLoading}
-                        className="px-3 py-1.5 text-xs font-medium bg-[#DE7356] hover:bg-[#c9634a] text-white rounded-full transition-colors disabled:opacity-50"
+                        className="px-3 py-1.5 text-xs font-medium bg-brand-500 hover:bg-brand-600 text-white rounded-full transition-colors disabled:opacity-50"
                       >
                         {isLoading ? 'Saving...' : 'Save Settings'}
                       </button>
@@ -586,7 +586,7 @@ export default function GlobalSettings({ isOpen, onClose, initialTab = 'general'
                                     value={settings.apiKey ?? ''}
                                     onChange={(e) => setCliApiKey(cli.id, e.target.value)}
                                     placeholder="Enter GLM API key"
-                                    className="flex-1 px-3 py-1.5 rounded-lg border border-gray-200 dark:border-white/8 bg-white dark:bg-white/6 text-sm text-gray-700 dark:text-gray-200 focus:outline-hidden focus:ring-2 focus:ring-[#DE7356]/50"
+                                    className="flex-1 px-3 py-1.5 rounded-lg border border-gray-200 dark:border-white/8 bg-white dark:bg-white/6 text-sm text-gray-700 dark:text-gray-200 focus:outline-hidden focus:ring-2 focus:ring-brand-500/50"
                                   />
                                   <button
                                     type="button"
@@ -613,7 +613,7 @@ export default function GlobalSettings({ isOpen, onClose, initialTab = 'general'
                                     value={settings.apiKey ?? ''}
                                     onChange={(e) => setCliApiKey(cli.id, e.target.value)}
                                     placeholder="Enter Cursor API key"
-                                    className="flex-1 px-3 py-1.5 rounded-lg border border-gray-200 dark:border-white/8 bg-white dark:bg-white/6 text-sm text-gray-700 dark:text-gray-200 focus:outline-hidden focus:ring-2 focus:ring-[#DE7356]/50"
+                                    className="flex-1 px-3 py-1.5 rounded-lg border border-gray-200 dark:border-white/8 bg-white dark:bg-white/6 text-sm text-gray-700 dark:text-gray-200 focus:outline-hidden focus:ring-2 focus:ring-brand-500/50"
                                   />
                                   <button
                                     type="button"
@@ -637,7 +637,7 @@ export default function GlobalSettings({ isOpen, onClose, initialTab = 'general'
                                 setSelectedCLI(cli);
                                 setInstallModalOpen(true);
                               }}
-                              className="w-full px-3 py-1.5 rounded-full bg-[#DE7356] hover:bg-[#c9634a] text-white text-xs font-semibold transition-all transform hover:scale-105"
+                              className="w-full px-3 py-1.5 rounded-full bg-brand-500 hover:bg-brand-600 text-white text-xs font-semibold transition-all transform hover:scale-105"
                             >
                               View Guide
                             </button>
@@ -670,7 +670,7 @@ export default function GlobalSettings({ isOpen, onClose, initialTab = 'general'
               <div className="space-y-6">
                 <div className="text-center">
                   <div className="w-20 h-20 mx-auto mb-4 relative">
-                    <div className="absolute inset-0 bg-linear-to-br from-[#DE7356]/20 to-[#DE7356]/5 blur-xl rounded-2xl" />
+                    <div className="absolute inset-0 bg-linear-to-br from-brand-500/20 to-brand-500/5 blur-xl rounded-2xl" />
                     <Image
                       src="/Claudable_Icon.png"
                       alt="Claudable Icon"
@@ -689,7 +689,7 @@ export default function GlobalSettings({ isOpen, onClose, initialTab = 'general'
                       href="https://github.com/opactorai/Claudable" 
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="text-sm text-[#DE7356] hover:text-[#c95940] transition-colors"
+                      className="text-sm text-brand-500 hover:text-[#c95940] transition-colors"
                     >
                       GitHub
                     </a>
@@ -697,7 +697,7 @@ export default function GlobalSettings({ isOpen, onClose, initialTab = 'general'
                       href="https://discord.gg/NJNbafHNQC" 
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="text-sm text-[#DE7356] hover:text-[#c95940] transition-colors"
+                      className="text-sm text-brand-500 hover:text-[#c95940] transition-colors"
                     >
                       Discord
                     </a>
@@ -906,7 +906,7 @@ export default function GlobalSettings({ isOpen, onClose, initialTab = 'general'
                   setInstallModalOpen(false);
                   setSelectedCLI(null);
                 }}
-                className="px-4 py-2 text-sm bg-[#DE7356] hover:bg-[#c9634a] text-white rounded-lg transition-colors"
+                className="px-4 py-2 text-sm bg-brand-500 hover:bg-brand-600 text-white rounded-lg transition-colors"
               >
                 Done
               </button>

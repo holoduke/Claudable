@@ -155,7 +155,7 @@ export function GeneralSettings({
                   setName(event.target.value);
                   if (status?.type) setStatus(null);
                 }}
-                className="w-full rounded-lg border border-gray-300 dark:border-white/8 px-3 py-2 focus:outline-hidden focus:ring-2 focus:ring-[#DE7356]"
+                className="w-full rounded-lg border border-gray-300 dark:border-white/8 px-3 py-2 focus:outline-hidden focus:ring-2 focus:ring-brand-500"
                 placeholder="Enter project name"
               />
               {nameError && (
@@ -184,7 +184,7 @@ export function GeneralSettings({
                   if (status?.type) setStatus(null);
                 }}
                 rows={4}
-                className="w-full rounded-lg border border-gray-300 dark:border-white/8 px-3 py-2 focus:outline-hidden focus:ring-2 focus:ring-[#DE7356]"
+                className="w-full rounded-lg border border-gray-300 dark:border-white/8 px-3 py-2 focus:outline-hidden focus:ring-2 focus:ring-brand-500"
                 placeholder="Describe your project..."
               />
             </div>
@@ -205,7 +205,7 @@ export function GeneralSettings({
               <button
                 onClick={handleSave}
                 disabled={isSaveDisabled}
-                className="rounded-lg bg-[#DE7356] px-4 py-2 text-white transition-colors hover:bg-[#c9634a] disabled:cursor-not-allowed disabled:opacity-50"
+                className="rounded-lg bg-brand-500 px-4 py-2 text-white transition-colors hover:bg-brand-600 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {isSaving ? 'Saving...' : 'Save Changes'}
               </button>

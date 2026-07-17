@@ -14,6 +14,7 @@ import { useToast } from '@/components/ui/Toast';
 import { useT } from '@/contexts/I18nContext';
 import ConfirmDialog from '@/components/ui/ConfirmDialog';
 import ThemeToggle from '@/components/ui/ThemeToggle';
+import PaletteToggle from '@/components/ui/PaletteToggle';
 import ChatInput from '@/components/chat/ChatInput';
 import AgentStatusBar from '@/components/chat/AgentStatusBar';
 import type { AgentUsageSnapshot } from '@/types/agent-usage';
@@ -2945,7 +2946,7 @@ const persistProjectPreferences = useCallback(
                       }}
                       autoFocus
                       maxLength={80}
-                      className="text-lg font-semibold text-gray-900 dark:text-gray-50 bg-transparent border-b border-[#DE7356] focus:outline-hidden w-full max-w-md"
+                      className="text-lg font-semibold text-gray-900 dark:text-gray-50 bg-transparent border-b border-brand-500 focus:outline-hidden w-full max-w-md"
                       aria-label="Project name"
                     />
                   ) : (
@@ -2977,7 +2978,7 @@ const persistProjectPreferences = useCallback(
                       autoFocus
                       maxLength={160}
                       placeholder={t('topbar.addDescription')}
-                      className="text-sm text-gray-500 dark:text-gray-400 bg-transparent border-b border-[#DE7356] focus:outline-hidden w-full max-w-md mt-0.5"
+                      className="text-sm text-gray-500 dark:text-gray-400 bg-transparent border-b border-brand-500 focus:outline-hidden w-full max-w-md mt-0.5"
                       aria-label="Project description"
                     />
                   ) : projectName ? (
@@ -3140,12 +3141,12 @@ const persistProjectPreferences = useCallback(
             role="separator"
             aria-orientation="vertical"
             title="Drag to resize"
-            className="group relative z-30 h-full w-px shrink-0 cursor-col-resize bg-gray-200 dark:bg-white/6 hover:bg-[#DE7356] transition-colors"
+            className="group relative z-30 h-full w-px shrink-0 cursor-col-resize bg-gray-200 dark:bg-white/6 hover:bg-brand-500 transition-colors"
           >
             {/* wider invisible hit area for easier grabbing */}
             <div className="absolute inset-y-0 -left-1.5 -right-1.5" />
             {/* visible grip so the divider is discoverable */}
-            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 h-8 w-3 rounded-full bg-gray-200 dark:bg-white/6 group-hover:bg-[#DE7356] flex flex-col items-center justify-center gap-0.5 transition-colors">
+            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 h-8 w-3 rounded-full bg-gray-200 dark:bg-white/6 group-hover:bg-brand-500 flex flex-col items-center justify-center gap-0.5 transition-colors">
               <span className="w-0.5 h-0.5 rounded-full bg-gray-400 group-hover:bg-white" />
               <span className="w-0.5 h-0.5 rounded-full bg-gray-400 group-hover:bg-white" />
               <span className="w-0.5 h-0.5 rounded-full bg-gray-400 group-hover:bg-white" />
@@ -3298,7 +3299,7 @@ const persistProjectPreferences = useCallback(
                                   <button
                                     key={d.id}
                                     onClick={() => { setDeviceId(d.id); setDeviceMenuOpen(false); }}
-                                    className={`w-full flex items-center justify-between gap-2 px-3 py-1.5 text-sm text-left hover:bg-gray-50 dark:hover:bg-white/6 ${d.id === deviceId ? 'text-[#DE7356] font-medium' : 'text-gray-700 dark:text-gray-200'}`}
+                                    className={`w-full flex items-center justify-between gap-2 px-3 py-1.5 text-sm text-left hover:bg-gray-50 dark:hover:bg-white/6 ${d.id === deviceId ? 'text-brand-500 font-medium' : 'text-gray-700 dark:text-gray-200'}`}
                                   >
                                     <span className="flex items-center gap-2 min-w-0">
                                       {d.desktop ? <FaDesktop size={12} className="shrink-0 text-gray-400 dark:text-gray-500" /> : <FaMobileAlt size={12} className="shrink-0 text-gray-400 dark:text-gray-500" />}
@@ -3317,6 +3318,7 @@ const persistProjectPreferences = useCallback(
                 </div>
                 
                 <div className="flex items-center gap-2">
+                  <PaletteToggle />
                   <ThemeToggle />
                   {/* Project info (ⓘ) — everything about this project at a glance. */}
                   <div className="relative">
@@ -3394,7 +3396,7 @@ const persistProjectPreferences = useCallback(
                               onClick={() => { setDesignMode(false); setShowPreview(true); setEditMode((v) => !v); setOverflowMenuOpen(false); }}
                               disabled={bridgeAbsent}
                               title={bridgeAbsent ? 'Visual editing needs the preview bridge (currently Nuxt only)' : undefined}
-                              className={`w-full flex items-center gap-2.5 px-3 py-1.5 text-sm text-left transition-colors disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-50 dark:hover:bg-white/6 ${editMode ? 'text-[#DE7356] font-medium' : 'text-gray-700 dark:text-gray-200'}`}
+                              className={`w-full flex items-center gap-2.5 px-3 py-1.5 text-sm text-left transition-colors disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-50 dark:hover:bg-white/6 ${editMode ? 'text-brand-500 font-medium' : 'text-gray-700 dark:text-gray-200'}`}
                             >
                               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0"><path d="M12 20h9" /><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" /></svg>
                               <span>Edit elements</span>
@@ -3408,7 +3410,7 @@ const persistProjectPreferences = useCallback(
                               onClick={() => { setDesignMode(false); setShowPreview(true); setCommentMode((v) => !v); setOverflowMenuOpen(false); }}
                               disabled={bridgeAbsent}
                               title={bridgeAbsent ? 'Comments need the preview bridge (currently Nuxt only)' : undefined}
-                              className={`w-full flex items-center gap-2.5 px-3 py-1.5 text-sm text-left transition-colors disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-50 dark:hover:bg-white/6 ${commentMode ? 'text-[#DE7356] font-medium' : 'text-gray-700 dark:text-gray-200'}`}
+                              className={`w-full flex items-center gap-2.5 px-3 py-1.5 text-sm text-left transition-colors disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-50 dark:hover:bg-white/6 ${commentMode ? 'text-brand-500 font-medium' : 'text-gray-700 dark:text-gray-200'}`}
                             >
                               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2Z" /></svg>
                               <span>Comments{comments.length > 0 ? ` (${comments.length})` : ''}</span>
@@ -3420,7 +3422,7 @@ const persistProjectPreferences = useCallback(
                             <button
                               role="menuitem"
                               onClick={() => { setShowCommentsList((v) => !v); setOverflowMenuOpen(false); }}
-                              className={`w-full flex items-center gap-2.5 px-3 py-1.5 text-sm text-left transition-colors hover:bg-gray-50 dark:hover:bg-white/6 ${showCommentsList ? 'text-[#DE7356] font-medium' : 'text-gray-700 dark:text-gray-200'}`}
+                              className={`w-full flex items-center gap-2.5 px-3 py-1.5 text-sm text-left transition-colors hover:bg-gray-50 dark:hover:bg-white/6 ${showCommentsList ? 'text-brand-500 font-medium' : 'text-gray-700 dark:text-gray-200'}`}
                             >
                               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0"><line x1="8" y1="6" x2="21" y2="6" /><line x1="8" y1="12" x2="21" y2="12" /><line x1="8" y1="18" x2="21" y2="18" /><line x1="3" y1="6" x2="3.01" y2="6" /><line x1="3" y1="12" x2="3.01" y2="12" /><line x1="3" y1="18" x2="3.01" y2="18" /></svg>
                               <span>Comments list</span>
@@ -3526,7 +3528,7 @@ const persistProjectPreferences = useCallback(
                     const publishing = deploymentStatus === 'deploying' || publishLoading;
                     return (
                     <button
-                      className="relative h-9 flex items-center gap-2 px-4 bg-[#DE7356] hover:bg-brand-600 text-white rounded-lg transition-colors shadow-xs font-medium text-sm"
+                      className="relative h-9 flex items-center gap-2 px-4 bg-brand-500 hover:bg-brand-600 text-white rounded-lg transition-colors shadow-xs font-medium text-sm"
                       onClick={() => setShowPublishPanel(true)}
                       title={publishing ? t('topbar.publishing') : t('topbar.publishTitle')}
                     >
@@ -3630,7 +3632,7 @@ const persistProjectPreferences = useCallback(
                           The preview couldn&apos;t load properly. Try clicking the refresh button to reload the page.
                         </p>
                         <button
-                          className="flex items-center gap-2 mx-auto px-4 py-2 bg-[#DE7356] hover:bg-[#c9634a] text-white rounded-lg transition-colors"
+                          className="flex items-center gap-2 mx-auto px-4 py-2 bg-brand-500 hover:bg-brand-600 text-white rounded-lg transition-colors"
                           onClick={() => {
                             refreshPreview();
                             const overlay = document.getElementById('iframe-error-overlay');
@@ -3654,7 +3656,7 @@ const persistProjectPreferences = useCallback(
                     {showColdStart && !previewLoaded && (
                       <div className="absolute inset-0 z-20 bg-gray-50/95 dark:bg-[#0c0a09]/95 flex items-center justify-center">
                         <div className="text-center max-w-sm mx-auto p-6">
-                          <div className="w-8 h-8 mx-auto mb-4 border-2 border-[#DE7356] border-t-transparent rounded-full animate-spin" />
+                          <div className="w-8 h-8 mx-auto mb-4 border-2 border-brand-500 border-t-transparent rounded-full animate-spin" />
                           <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-100 mb-1">
                             Building your app
                           </h3>
@@ -3677,7 +3679,7 @@ const persistProjectPreferences = useCallback(
                     {previewDown && previewLoaded && (
                       <div className="absolute inset-0 z-20 bg-gray-50/95 dark:bg-[#0c0a09]/95 flex items-center justify-center">
                         <div className="text-center max-w-sm mx-auto p-6">
-                          <div className="w-8 h-8 mx-auto mb-4 border-2 border-[#DE7356] border-t-transparent rounded-full animate-spin" />
+                          <div className="w-8 h-8 mx-auto mb-4 border-2 border-brand-500 border-t-transparent rounded-full animate-spin" />
                           <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-100 mb-1">
                             Preview is restarting
                           </h3>

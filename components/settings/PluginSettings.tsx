@@ -222,13 +222,13 @@ export default function PluginSettings() {
               </div>
               <div className="flex items-center justify-end gap-2 pt-1">
                 <button onClick={() => { setAdding(false); setForm({ ...EMPTY_FORM }); }} className="text-xs text-gray-500 px-2 py-1">Cancel</button>
-                <button onClick={addMarketplace} disabled={saving || !form.name.trim() || !form.gitUrl.trim()} className="text-xs font-medium text-white bg-[#DE7356] hover:bg-brand-600 rounded px-3 py-1 disabled:opacity-50">
+                <button onClick={addMarketplace} disabled={saving || !form.name.trim() || !form.gitUrl.trim()} className="text-xs font-medium text-white bg-brand-500 hover:bg-brand-600 rounded px-3 py-1 disabled:opacity-50">
                   {saving ? 'Adding…' : 'Add & sync'}
                 </button>
               </div>
             </div>
           ) : (
-            <button onClick={() => setAdding(true)} className="text-sm text-[#DE7356] hover:underline">+ Register a marketplace</button>
+            <button onClick={() => setAdding(true)} className="text-sm text-brand-500 hover:underline">+ Register a marketplace</button>
           )}
         </div>
       )}

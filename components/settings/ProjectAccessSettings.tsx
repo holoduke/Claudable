@@ -191,7 +191,7 @@ export default function ProjectAccessSettings({ projectId }: Props) {
             disabled={busy}
             onChange={(e) => setVisibility(e.target.checked ? 'restricted' : 'org')}
           />
-          <div className="w-11 h-6 bg-gray-200 dark:bg-white/6 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:inset-s-[2px] after:bg-white after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#DE7356]" />
+          <div className="w-11 h-6 bg-gray-200 dark:bg-white/6 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:inset-s-[2px] after:bg-white after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-brand-500" />
         </label>
       </div>
 
@@ -210,7 +210,7 @@ export default function ProjectAccessSettings({ projectId }: Props) {
               onChange={(e) => setQuery(e.target.value)}
               onFocus={() => { if (results.length) setOpen(true); }}
               placeholder="Search by name or email…"
-              className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-white/8 bg-white dark:bg-white/6 text-sm text-gray-800 dark:text-gray-100 focus:outline-hidden focus:ring-2 focus:ring-[#DE7356]"
+              className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-white/8 bg-white dark:bg-white/6 text-sm text-gray-800 dark:text-gray-100 focus:outline-hidden focus:ring-2 focus:ring-brand-500"
             />
             {open && (
               <div className="absolute z-10 mt-1 w-full rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-[#181310] shadow-lg max-h-60 overflow-y-auto">

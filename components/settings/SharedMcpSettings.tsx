@@ -156,7 +156,7 @@ export default function SharedMcpSettings() {
       )}
 
       {!adding ? (
-        <button onClick={() => { setForm({ ...EMPTY_FORM }); setAdding(true); }} className="text-sm px-3 py-2 rounded-lg bg-[#DE7356] text-white hover:bg-[#c9634a] transition-colors">
+        <button onClick={() => { setForm({ ...EMPTY_FORM }); setAdding(true); }} className="text-sm px-3 py-2 rounded-lg bg-brand-500 text-white hover:bg-brand-600 transition-colors">
           Add shared MCP server
         </button>
       ) : (
@@ -209,7 +209,7 @@ export default function SharedMcpSettings() {
             </>
           )}
           <div className="flex gap-2 pt-1">
-            <button disabled={saving} onClick={submit} className="text-sm px-3 py-2 rounded-lg bg-[#DE7356] text-white hover:bg-[#c9634a] disabled:opacity-50 transition-colors">
+            <button disabled={saving} onClick={submit} className="text-sm px-3 py-2 rounded-lg bg-brand-500 text-white hover:bg-brand-600 disabled:opacity-50 transition-colors">
               {saving ? 'Adding…' : 'Add server'}
             </button>
             <button onClick={() => { setAdding(false); setForm({ ...EMPTY_FORM }); }} className="text-sm px-3 py-2 rounded-lg border border-gray-200 dark:border-white/8 text-gray-600 dark:text-gray-300">

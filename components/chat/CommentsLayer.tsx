@@ -75,7 +75,7 @@ function Avatar({ name, image }: { name: string; image: string | null }) {
     // eslint-disable-next-line @next/next/no-img-element
     <img src={image} alt="" className="w-6 h-6 rounded-full object-cover" />
   ) : (
-    <span className="w-6 h-6 rounded-full bg-[#DE7356]/15 text-[#DE7356] text-xs font-semibold flex items-center justify-center">
+    <span className="w-6 h-6 rounded-full bg-brand-500/15 text-brand-500 text-xs font-semibold flex items-center justify-center">
       {name.charAt(0).toUpperCase()}
     </span>
   );
@@ -88,7 +88,7 @@ export function MentionedBody({ body, mentions }: { body: string; mentions?: Com
     <>
       {segments.map((seg, i) =>
         seg.type === 'mention' ? (
-          <span key={i} className="text-[#DE7356] font-medium bg-[#DE7356]/8 rounded px-0.5">
+          <span key={i} className="text-brand-500 font-medium bg-brand-500/8 rounded px-0.5">
             {seg.text}
           </span>
         ) : (
@@ -225,7 +225,7 @@ export default function CommentsLayer({
             placeholder={searchMentionUsers ? 'Add a comment… (@ to tag someone)' : 'Add a comment…'}
             rows={3}
             disabled={submitting}
-            className="w-full text-sm border border-gray-200 dark:border-white/8 rounded-md p-2 focus:outline-hidden focus:ring-2 focus:ring-[#DE7356]/30 resize-none disabled:opacity-60"
+            className="w-full text-sm border border-gray-200 dark:border-white/8 rounded-md p-2 focus:outline-hidden focus:ring-2 focus:ring-brand-500/30 resize-none disabled:opacity-60"
           />
           {mentionQuery && mentionResults.length > 0 && (
             <div className="border border-gray-200 dark:border-white/10 rounded-md mt-1 max-h-40 overflow-y-auto bg-white dark:bg-[#181310] shadow-lg">
@@ -234,7 +234,7 @@ export default function CommentsLayer({
                   key={u.id}
                   onMouseDown={(e) => { e.preventDefault(); pickMention(u); }}
                   onMouseEnter={() => setMentionIndex(i)}
-                  className={`w-full flex items-center gap-2 px-2 py-1.5 text-left ${i === mentionIndex ? 'bg-[#DE7356]/10' : ''}`}
+                  className={`w-full flex items-center gap-2 px-2 py-1.5 text-left ${i === mentionIndex ? 'bg-brand-500/10' : ''}`}
                 >
                   <Avatar name={u.name} image={u.image ?? null} />
                   <span className="min-w-0">
@@ -251,7 +251,7 @@ export default function CommentsLayer({
             <button
               onClick={() => void doSubmit()}
               disabled={!draft.trim() || submitting}
-              className="text-xs font-medium text-white bg-[#DE7356] hover:bg-brand-600 rounded-md px-3 py-1 disabled:opacity-40 flex items-center gap-1.5"
+              className="text-xs font-medium text-white bg-brand-500 hover:bg-brand-600 rounded-md px-3 py-1 disabled:opacity-40 flex items-center gap-1.5"
             >
               {submitting && (
                 <svg className="animate-spin" width="11" height="11" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" className="opacity-25" /><path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" strokeWidth="4" strokeLinecap="round" /></svg>

@@ -316,7 +316,7 @@ export default function DesignExplorerBoard({ projectId, onApply, busy, active }
           {canvas && (canvas.frames?.length ?? 0) >= 2 && (
             <button
               onClick={() => { setCombineMode((v) => !v); setSelected([]); }}
-              className={`text-xs px-2 py-1 rounded-md border ${combineMode ? 'border-[#DE7356] text-[#DE7356]' : 'border-gray-200 dark:border-white/10 text-gray-600 dark:text-gray-300'}`}
+              className={`text-xs px-2 py-1 rounded-md border ${combineMode ? 'border-brand-500 text-brand-500' : 'border-gray-200 dark:border-white/10 text-gray-600 dark:text-gray-300'}`}
             >
               {t('designExplorer.combine')}
             </button>
@@ -333,9 +333,9 @@ export default function DesignExplorerBoard({ projectId, onApply, busy, active }
       )}
       {/* Combine hint / action bar */}
       {combineMode && (
-        <div className="sticky top-[41px] z-10 flex items-center justify-between px-4 py-1.5 bg-[#DE7356]/10 text-[#DE7356] text-xs">
+        <div className="sticky top-[41px] z-10 flex items-center justify-between px-4 py-1.5 bg-brand-500/10 text-brand-500 text-xs">
           <span>{t('designExplorer.combineSelect')} ({selected.length}/2)</span>
-          <button onClick={combine} disabled={selected.length !== 2 || combining} className="px-3 py-1 bg-[#DE7356] text-white rounded-md disabled:opacity-40">
+          <button onClick={combine} disabled={selected.length !== 2 || combining} className="px-3 py-1 bg-brand-500 text-white rounded-md disabled:opacity-40">
             {combining ? '…' : t('designExplorer.combine')}
           </button>
         </div>
@@ -373,7 +373,7 @@ export default function DesignExplorerBoard({ projectId, onApply, busy, active }
                 </select>
                 <span className="hidden sm:inline text-gray-400 dark:text-gray-500">· {t('designExplorer.costHint')}</span>
               </label>
-              <button onClick={generate} disabled={!brief.trim() || starting} className="px-4 py-1.5 bg-[#DE7356] text-white rounded-lg text-sm font-medium hover:bg-[#c9634a] disabled:opacity-40 flex items-center gap-2">
+              <button onClick={generate} disabled={!brief.trim() || starting} className="px-4 py-1.5 bg-brand-500 text-white rounded-lg text-sm font-medium hover:bg-brand-600 disabled:opacity-40 flex items-center gap-2">
                 {starting && <span className="w-3.5 h-3.5 rounded-full border-2 border-white/40 border-t-white animate-spin" />}
                 {starting ? t('designExplorer.generating') : t('designExplorer.generate')}
               </button>
@@ -395,18 +395,18 @@ export default function DesignExplorerBoard({ projectId, onApply, busy, active }
               const idx = Math.min(versionIdx[root] ?? versions.length - 1, versions.length - 1);
               const f = versions[idx];
               return (
-                <div key={root} className={`group rounded-xl border bg-white dark:bg-white/3 overflow-hidden transition-colors ${selected.includes(f.id) ? 'ring-2 ring-[#DE7356] border-[#DE7356]' : 'border-gray-200 dark:border-white/8'}`}>
+                <div key={root} className={`group rounded-xl border bg-white dark:bg-white/3 overflow-hidden transition-colors ${selected.includes(f.id) ? 'ring-2 ring-brand-500 border-brand-500' : 'border-gray-200 dark:border-white/8'}`}>
                   <div className="aspect-4/3 relative bg-gray-100 dark:bg-gray-900 overflow-hidden">
                     {f.status === 'ready' && html[f.id] ? (
                       <iframe title={f.styleName || t('designExplorer.title')} srcDoc={html[f.id]} sandbox="allow-scripts" className="border-0 bg-white" style={{ position: 'absolute', top: 0, left: 0, ...iframeStyle }} />
                     ) : f.status === 'error' ? (
                       <div className="absolute inset-0 flex flex-col items-center justify-center text-center p-3 gap-2">
                         <span className="text-xs text-red-500">{t('designExplorer.failed')}</span>
-                        <button onClick={() => refineFrame(f.id, REGEN_PROMPT)} className="text-xs text-[#DE7356] hover:underline">{t('designExplorer.retry')}</button>
+                        <button onClick={() => refineFrame(f.id, REGEN_PROMPT)} className="text-xs text-brand-500 hover:underline">{t('designExplorer.retry')}</button>
                       </div>
                     ) : (
-                      <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-linear-to-br from-[#DE7356]/8 via-gray-50 to-[#DE7356]/5 dark:from-[#DE7356]/12 dark:via-gray-900 dark:to-gray-950">
-                        <span className="w-6 h-6 rounded-full border-2 border-gray-300 dark:border-white/8 border-t-[#DE7356] animate-spin" />
+                      <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-linear-to-br from-brand-500/8 via-gray-50 to-brand-500/5 dark:from-brand-500/12 dark:via-gray-900 dark:to-gray-950">
+                        <span className="w-6 h-6 rounded-full border-2 border-gray-300 dark:border-white/8 border-t-brand-500 animate-spin" />
                         <span className="text-xs text-gray-500 dark:text-gray-400">{f.status === 'generating' ? t('designExplorer.working') : t('designExplorer.pending')}</span>
                       </div>
                     )}
@@ -418,7 +418,7 @@ export default function DesignExplorerBoard({ projectId, onApply, busy, active }
                       />
                     )}
                     {combineMode && f.status === 'ready' && (
-                      <span className={`absolute top-2 left-2 w-5 h-5 rounded-full border-2 flex items-center justify-center text-[10px] ${selected.includes(f.id) ? 'bg-[#DE7356] border-[#DE7356] text-white' : 'bg-white/80 border-gray-300'}`}>
+                      <span className={`absolute top-2 left-2 w-5 h-5 rounded-full border-2 flex items-center justify-center text-[10px] ${selected.includes(f.id) ? 'bg-brand-500 border-brand-500 text-white' : 'bg-white/80 border-gray-300'}`}>
                         {selected.includes(f.id) ? selected.indexOf(f.id) + 1 : ''}
                       </span>
                     )}
@@ -439,12 +439,12 @@ export default function DesignExplorerBoard({ projectId, onApply, busy, active }
                         <input autoFocus value={refineText} onChange={(e) => setRefineText(e.target.value)}
                           onKeyDown={(e) => { if (e.key === 'Enter') refineFrame(f.id, refineText); if (e.key === 'Escape') setRefiningId(null); }}
                           placeholder={t('designExplorer.refinePlaceholder')}
-                          className="flex-1 min-w-0 text-xs bg-transparent border border-gray-200 dark:border-white/10 rounded-md px-2 py-1 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-[#DE7356] focus:outline-none" />
-                        <button aria-label={t('designExplorer.refine')} onClick={() => refineFrame(f.id, refineText)} disabled={refineBusy === f.id} className="text-xs px-2 py-1 bg-[#DE7356] text-white rounded-md hover:bg-[#c9634a] disabled:opacity-40">↵</button>
+                          className="flex-1 min-w-0 text-xs bg-transparent border border-gray-200 dark:border-white/10 rounded-md px-2 py-1 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-brand-500 focus:outline-none" />
+                        <button aria-label={t('designExplorer.refine')} onClick={() => refineFrame(f.id, refineText)} disabled={refineBusy === f.id} className="text-xs px-2 py-1 bg-brand-500 text-white rounded-md hover:bg-brand-600 disabled:opacity-40">↵</button>
                       </div>
                     ) : (
                       <div className="flex items-center gap-1.5">
-                        <button onClick={() => use(f.id)} disabled={f.status !== 'ready' || busy || applyingId === f.id} className="flex-1 text-xs px-2 py-1 bg-[#DE7356] text-white rounded-md hover:bg-[#c9634a] disabled:opacity-40">
+                        <button onClick={() => use(f.id)} disabled={f.status !== 'ready' || busy || applyingId === f.id} className="flex-1 text-xs px-2 py-1 bg-brand-500 text-white rounded-md hover:bg-brand-600 disabled:opacity-40">
                           {applyingId === f.id ? '…' : t('designExplorer.use')}
                         </button>
                         <button onClick={() => { setRefiningId(f.id); setRefineText(''); }} disabled={f.status !== 'ready'} className="text-xs px-2 py-1 text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 border border-gray-200 dark:border-white/10 rounded-md disabled:opacity-40">
@@ -465,8 +465,8 @@ export default function DesignExplorerBoard({ projectId, onApply, busy, active }
 
             {/* Add more */}
             {canvas && (
-              <button onClick={addMore} disabled={addingMore} className="rounded-xl border-2 border-dashed border-gray-200 dark:border-white/10 aspect-4/3 flex flex-col items-center justify-center gap-2 text-gray-400 dark:text-gray-500 hover:border-[#DE7356]/40 hover:text-[#DE7356] transition-colors disabled:opacity-50">
-                {addingMore ? <span className="w-5 h-5 rounded-full border-2 border-gray-300 dark:border-white/8 border-t-[#DE7356] animate-spin" /> : <span className="text-2xl">+</span>}
+              <button onClick={addMore} disabled={addingMore} className="rounded-xl border-2 border-dashed border-gray-200 dark:border-white/10 aspect-4/3 flex flex-col items-center justify-center gap-2 text-gray-400 dark:text-gray-500 hover:border-brand-500/40 hover:text-brand-500 transition-colors disabled:opacity-50">
+                {addingMore ? <span className="w-5 h-5 rounded-full border-2 border-gray-300 dark:border-white/8 border-t-brand-500 animate-spin" /> : <span className="text-2xl">+</span>}
                 <span className="text-xs">{t('designExplorer.addMore')}</span>
               </button>
             )}
@@ -481,7 +481,7 @@ export default function DesignExplorerBoard({ projectId, onApply, busy, active }
             <iframe title={fullscreenFrame.styleName || t('designExplorer.title')} srcDoc={html[fullscreenFrame.id]} sandbox="allow-scripts" className="w-full h-full border-0" />
             <div className="absolute top-2 right-2 flex gap-2">
               <button onClick={() => exportHtml(fullscreenFrame)} aria-label={t('designExplorer.export')} className="px-3 py-1.5 bg-white/90 text-gray-800 rounded-lg text-sm shadow" title={t('designExplorer.export')}>↓</button>
-              <button onClick={() => { void use(fullscreenFrame.id); setFullscreenId(null); }} disabled={busy} className="px-3 py-1.5 bg-[#DE7356] text-white rounded-lg text-sm font-medium hover:bg-[#c9634a] disabled:opacity-40 shadow">
+              <button onClick={() => { void use(fullscreenFrame.id); setFullscreenId(null); }} disabled={busy} className="px-3 py-1.5 bg-brand-500 text-white rounded-lg text-sm font-medium hover:bg-brand-600 disabled:opacity-40 shadow">
                 {t('designExplorer.use')}
               </button>
               <button onClick={() => setFullscreenId(null)} aria-label={t('common.close')} className="px-3 py-1.5 bg-white/90 text-gray-800 rounded-lg text-sm shadow">✕</button>

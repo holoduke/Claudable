@@ -258,7 +258,7 @@ export default function DesignImportModal({
                 onDragLeave={() => setDragOver(false)}
                 onDrop={onDrop}
                 className={`cursor-pointer rounded-xl border-2 border-dashed px-6 py-10 text-center transition-colors ${
-                  dragOver ? 'border-[#DE7356] bg-[#DE7356]/10' : 'border-gray-300 dark:border-white/8 hover:border-gray-400 bg-gray-50 dark:bg-white/3'
+                  dragOver ? 'border-brand-500 bg-brand-500/10' : 'border-gray-300 dark:border-white/8 hover:border-gray-400 bg-gray-50 dark:bg-white/3'
                 }`}
               >
                 <FaFileImport className="mx-auto text-gray-400 dark:text-gray-500 mb-3" size={26} />
@@ -288,7 +288,7 @@ export default function DesignImportModal({
                           key={p.id}
                           onClick={() => importRemote(p)}
                           disabled={importingId !== null}
-                          className="w-full flex items-center gap-3 text-left rounded-lg border border-gray-200 dark:border-white/8 px-3 py-2.5 hover:border-[#DE7356]/40 hover:bg-[#DE7356]/3 disabled:opacity-50 transition-colors"
+                          className="w-full flex items-center gap-3 text-left rounded-lg border border-gray-200 dark:border-white/8 px-3 py-2.5 hover:border-brand-500/40 hover:bg-brand-500/3 disabled:opacity-50 transition-colors"
                         >
                           <div className="min-w-0 flex-1">
                             <p className="text-sm font-medium text-gray-900 dark:text-gray-50 truncate">{p.name}</p>
@@ -296,7 +296,7 @@ export default function DesignImportModal({
                               {[p.ownerName, timeAgo(p.updatedAt)].filter(Boolean).join(' · ') || 'Claude Design'}
                             </p>
                           </div>
-                          <span className="text-xs text-[#DE7356] font-medium shrink-0">
+                          <span className="text-xs text-brand-500 font-medium shrink-0">
                             {importingId === p.id ? 'Importing…' : 'Import'}
                           </span>
                         </button>
@@ -311,7 +311,7 @@ export default function DesignImportModal({
           {/* Uploading */}
           {phase === 'preparing' && (
             <div className="py-8 text-center">
-              <div className="mx-auto mb-3 h-6 w-6 animate-spin rounded-full border-2 border-gray-300 dark:border-white/8 border-t-[#DE7356]" />
+              <div className="mx-auto mb-3 h-6 w-6 animate-spin rounded-full border-2 border-gray-300 dark:border-white/8 border-t-brand-500" />
               <p className="text-sm text-gray-700 dark:text-gray-200 truncate">Preparing {fileName}…</p>
               <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">Extracting just the design files (skipping screenshots &amp; raw uploads)</p>
             </div>
@@ -321,7 +321,7 @@ export default function DesignImportModal({
             <div className="py-6">
               <p className="text-sm text-gray-700 dark:text-gray-200 mb-3 truncate">Uploading {fileName}…</p>
               <div className="h-2 w-full bg-gray-100 dark:bg-white/6 rounded-full overflow-hidden">
-                <div className="h-full bg-[#DE7356] transition-all" style={{ width: `${progress}%` }} />
+                <div className="h-full bg-brand-500 transition-all" style={{ width: `${progress}%` }} />
               </div>
               <p className="text-xs text-gray-400 dark:text-gray-500 mt-2">{progress}%{progress === 100 ? ' · extracting…' : ''}</p>
             </div>
@@ -373,7 +373,7 @@ export default function DesignImportModal({
                 value={prompt}
                 onChange={(e) => setPrompt(e.target.value)}
                 rows={7}
-                className="w-full text-sm border border-gray-200 dark:border-white/8 rounded-lg p-3 focus:outline-hidden focus:ring-2 focus:ring-[#DE7356] resize-y"
+                className="w-full text-sm border border-gray-200 dark:border-white/8 rounded-lg p-3 focus:outline-hidden focus:ring-2 focus:ring-brand-500 resize-y"
               />
 
               <div className="flex items-center justify-between gap-3 mt-4">
@@ -389,7 +389,7 @@ export default function DesignImportModal({
                     handleClose();
                   }}
                   disabled={!prompt.trim()}
-                  className="h-9 px-4 bg-[#DE7356] text-white rounded-lg text-sm font-medium hover:bg-[#c9634a] disabled:opacity-40 flex items-center gap-2"
+                  className="h-9 px-4 bg-brand-500 text-white rounded-lg text-sm font-medium hover:bg-brand-600 disabled:opacity-40 flex items-center gap-2"
                 >
                   <FaMagic size={13} />
                   Send to AI

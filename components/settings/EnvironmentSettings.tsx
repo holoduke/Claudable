@@ -271,14 +271,14 @@ export function EnvironmentSettings({ projectId }: EnvironmentSettingsProps) {
                     .toUpperCase();
                   setNewKey(cleaned);
                 }}
-                className="flex-1 px-3 py-2 border border-gray-300 dark:border-white/8 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-[#DE7356] "
+                className="flex-1 px-3 py-2 border border-gray-300 dark:border-white/8 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-brand-500 "
               />
               <input
                 type={isSecret ? 'password' : 'text'}
                 placeholder="Value"
                 value={newValue}
                 onChange={(e) => setNewValue(e.target.value)}
-                className="flex-1 px-3 py-2 border border-gray-300 dark:border-white/8 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-[#DE7356] "
+                className="flex-1 px-3 py-2 border border-gray-300 dark:border-white/8 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-brand-500 "
               />
             </div>
 
@@ -288,7 +288,7 @@ export function EnvironmentSettings({ projectId }: EnvironmentSettingsProps) {
                   type="checkbox"
                   checked={isSecret}
                   onChange={(e) => setIsSecret(e.target.checked)}
-                  className="w-4 h-4 text-[#DE7356] border-gray-300 dark:border-white/8 rounded-sm focus:ring-[#DE7356]"
+                  className="w-4 h-4 text-brand-500 border-gray-300 dark:border-white/8 rounded-sm focus:ring-brand-500"
                 />
                 <span className="text-sm text-gray-700 dark:text-gray-200 ">
                   Mark as secret
@@ -298,7 +298,7 @@ export function EnvironmentSettings({ projectId }: EnvironmentSettingsProps) {
               <button
                 onClick={handleAdd}
                 disabled={!newKey || !newValue || isBusy}
-                className="px-4 py-2 bg-[#DE7356] text-white rounded-lg hover:bg-[#c9634a] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                className="px-4 py-2 bg-brand-500 text-white rounded-lg hover:bg-brand-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
                 {isBusy ? 'Working…' : 'Add Variable'}
               </button>

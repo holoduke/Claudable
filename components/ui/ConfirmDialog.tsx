@@ -46,7 +46,7 @@ export default function ConfirmDialog({
 
   const confirmClass = destructive
     ? 'bg-red-600 hover:bg-red-700 text-white'
-    : 'bg-[#DE7356] hover:bg-brand-600 text-white';
+    : 'bg-brand-500 hover:bg-brand-600 text-white';
 
   return (
     <div
@@ -80,7 +80,7 @@ export default function ConfirmDialog({
             ref={confirmRef}
             type="button"
             onClick={onConfirm}
-            className={`rounded-lg px-3.5 py-1.5 text-sm font-medium transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-offset-1 ${destructive ? 'focus-visible:ring-red-500' : 'focus-visible:ring-[#DE7356]'} ${confirmClass}`}
+            className={`rounded-lg px-3.5 py-1.5 text-sm font-medium transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-offset-1 ${destructive ? 'focus-visible:ring-red-500' : 'focus-visible:ring-brand-500'} ${confirmClass}`}
           >
             {confirmLabel}
           </button>
