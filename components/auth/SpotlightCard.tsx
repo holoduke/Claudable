@@ -24,7 +24,7 @@ export default function SpotlightCard({
     const rect = e.currentTarget.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
-    glow.style.background = `radial-gradient(280px circle at ${x}px ${y}px, rgba(232,168,124,0.09), transparent 72%)`;
+    glow.style.background = `radial-gradient(280px circle at ${x}px ${y}px, color-mix(in srgb, var(--color-brand-300) 9%, transparent), transparent 72%)`;
     glow.style.opacity = '1';
   };
 
