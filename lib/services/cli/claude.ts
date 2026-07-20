@@ -27,7 +27,7 @@ import { attachAgentAbort, unregisterAgentRun } from './run-registry';
 import { prepareAgentMcpTurnConfig } from '../agent-mcp-http';
 import { buildProjectMcpConfig } from '../project-mcp';
 import { buildSharedMcpConfig } from '../shared-mcp';
-import { previewSlug, ensureProjectNetwork } from '../preview';
+import { previewSlug, ensureProjectNetwork, ensureSandboxNetwork } from '../preview';
 import { getInjectedEnv, ensureServicesRunning } from '../managed-containers';
 import { buildImagesMcpServer, imagesEnabledFor } from '../images-mcp';
 import { getProjectService } from '../project-services';
@@ -516,6 +516,10 @@ async function runContainerizedTurn(args: {
     // Ensure the net EXISTS before the run and attach it at creation (below), so
     // `db`/`cache` resolve from the agent's first command — no post-spawn race.
     // The --internal project net has no gateway → intra-project reach without egress.
+    // Self-heal the shared egress-locked net first (a prune has removed it in
+    // prod), else this turn fails with "network claudable-sandbox not found".
+    try { await ensureSandboxNetwork(); }
+    catch (e) { console.error('[ClaudeContainer] ensureSandboxNetwork failed:', e); }
     let projectNet: string | undefined;
     try { projectNet = await ensureProjectNetwork(projectId); }
     catch (e) { console.error('[ClaudeContainer] ensureProjectNetwork failed:', e); }

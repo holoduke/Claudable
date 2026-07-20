@@ -88,6 +88,45 @@ export async function ensureProjectNetwork(projectId: string): Promise<string> {
   await dockerCli(['network', 'create', '--internal', name]); // no-op if it already exists
   return name;
 }
+
+// --- Shared egress-locked SANDBOX network -----------------------------------
+// The one external network every preview + agent container attaches to. It has
+// vanished twice in prod (a `docker system prune` / `docker network prune`
+// removing it while idle), which breaks ALL previews with "network
+// claudable-sandbox not found". This recreates it (idempotently) so Claudable
+// self-heals instead of needing a manual `docker network create`.
+//
+// IMPORTANT: the egress LOCK is host iptables (DOCKER-USER/INPUT DROP rules for
+// the subnet) which this containerised process CANNOT set. Those rules are
+// subnet-matched, so recreating with the SAME subnet re-applies the existing
+// lock automatically. The authoritative owner of both the net AND the firewall
+// is the host self-heal (/opt/claudable-sandbox-heal.sh via cron); this is the
+// fast in-app backstop. The subnet MUST match that script's (default
+// 172.31.99.0/24) — override both together via PREVIEW_SANDBOX_SUBNET.
+let sandboxNetEnsured = false;
+export async function ensureSandboxNetwork(force = false): Promise<void> {
+  const name = process.env.PREVIEW_SANDBOX_NETWORK?.trim();
+  if (!name) return; // isolation disabled — nothing to ensure
+  if (sandboxNetEnsured && !force) return; // once per boot is enough on the hot path
+  const exists = await dockerCli(['network', 'inspect', name]);
+  if (!exists) {
+    const subnet = process.env.PREVIEW_SANDBOX_SUBNET?.trim() || '172.31.99.0/24';
+    const created = await dockerCli([
+      'network', 'create', '--driver', 'bridge',
+      '--subnet', subnet,
+      '--opt', 'com.docker.network.bridge.enable_icc=false',
+      name,
+    ]);
+    // eslint-disable-next-line no-console
+    console.warn(
+      created
+        ? `[preview] recreated missing sandbox network '${name}' (${subnet}). ` +
+          `Egress lock relies on host iptables for this subnet — ensure /opt/claudable-sandbox-heal.sh is active.`
+        : `[preview] FAILED to recreate sandbox network '${name}'; previews will not start until it exists.`,
+    );
+  }
+  sandboxNetEnsured = true;
+}
 /** Join a container to the project net (container may not be running yet → retry). */
 export async function connectToProjectNet(net: string, container: string, alias?: string): Promise<void> {
   for (let i = 0; i < 12; i++) {
