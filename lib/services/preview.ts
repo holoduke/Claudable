@@ -23,6 +23,7 @@ import {
 } from './preview/routes';
 import {
   sweepOrphanedPreviewContainers,
+  ensureSandboxNetwork,
   isolationEnabled,
   backendContainerName,
   removeBackendContainer,
@@ -60,6 +61,7 @@ export { previewSlug, projectPreviewUrl } from './preview/routes';
 export {
   ensureProjectNetwork,
   removeProjectNetwork,
+  ensureSandboxNetwork,
 } from './preview/docker';
 export type { PreviewInfo } from './preview/types';
 
@@ -118,6 +120,7 @@ class PreviewManager {
     void clearAllPreviewState();
     void sweepPreviewRoutes();
     void sweepOrphanedPreviewContainers(); // free ports held by containers from before the restart
+    void ensureSandboxNetwork(); // self-heal the shared egress-locked net if a prune removed it
   }
 
   /** Ports currently held (live processes) or reserved in-flight. */
@@ -533,6 +536,10 @@ class PreviewManager {
     try {
     const cfg = await readPreviewConfig(projectPath);
     const sandboxNet = process.env.PREVIEW_SANDBOX_NETWORK?.trim();
+    // Self-heal: recreate the shared egress-locked net if it went missing (a
+    // prune has removed it in prod), so this start doesn't fail with
+    // "network claudable-sandbox not found".
+    if (sandboxNet) await ensureSandboxNetwork();
 
     // Phase 2: run a framework project's dev server in an isolated container.
     // AGNOSTIC — auto-applies to ANY nuxt/next/angular project when
