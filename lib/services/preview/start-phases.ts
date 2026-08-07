@@ -631,9 +631,19 @@ export async function buildFrontendContainerArgs(
   // --prefer-offline: reuse the shared npm cache (mounted below) instead of
   // re-downloading packages on every project's first install. Laravel supplies
   // its own bootstrap+serve script (composer, not npm), so use it verbatim.
+  // The install guard tests for a NON-EMPTY node_modules, not merely for the
+  // directory: a failed/aborted install (or a bind-mount that pre-creates it)
+  // leaves an EMPTY node_modules behind, which `[ -d ]` accepts as "installed".
+  // The install is then skipped on every subsequent start, so the dev server
+  // keeps failing and restarting the preview never heals it.
+  // --include=dev: the dev server IS the dev toolchain (vite, @angular/cli,
+  // next), which lives in devDependencies. npm omits those whenever NODE_ENV=
+  // production leaks into the install, and Claudable's own container sets
+  // exactly that — so pin it here rather than relying on every spawn path
+  // remembering to override NODE_ENV.
   const devScript = isLaravel
     ? inner
-    : `rm -rf .next/dev/lock 2>/dev/null; [ -d node_modules ] || npm install --prefer-offline --no-audit --no-fund; ${inner}`;
+    : `rm -rf .next/dev/lock 2>/dev/null; [ -n "$(ls -A node_modules 2>/dev/null)" ] || npm install --include=dev --prefer-offline --no-audit --no-fund; ${inner}`;
 
   // Shared package cache across ALL preview containers so a project's first
   // install reuses what others pulled. npm cacache (node) or composer cache
