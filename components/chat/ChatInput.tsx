@@ -215,7 +215,7 @@ export default function ChatInput({
   const supportsImageUpload = preferredCli !== 'cursor' && preferredCli !== 'qwen' && preferredCli !== 'glm';
   // Client-side cap mirrors the server's MAX_UPLOAD_BYTES so oversized files fail
   // instantly with a clear message instead of after a long, doomed transfer.
-  const maxUploadMb = Number(process.env.NEXT_PUBLIC_MAX_UPLOAD_MB) || 500;
+  const maxUploadMb = Number(process.env.NEXT_PUBLIC_MAX_UPLOAD_MB) || 5 * 1024;
 
   // Upload a file in sub-limit CHUNKS (shared with the new-project screen so
   // attachments behave identically before and after project creation). Chunking
@@ -376,7 +376,8 @@ export default function ChatInput({
         // Guard size up front so a large file fails fast with a clear message
         // instead of uploading for minutes and then being rejected by the server.
         if (file.size > maxUploadMb * 1024 * 1024) {
-          setUploadError(`"${file.name}" is ${(file.size / 1024 / 1024).toFixed(0)}MB — over the ${maxUploadMb}MB limit.`);
+          const limitLabel = maxUploadMb >= 1024 ? `${(maxUploadMb / 1024).toFixed(0)}GB` : `${maxUploadMb}MB`;
+          setUploadError(`"${file.name}" is ${(file.size / 1024 / 1024).toFixed(0)}MB — over the ${limitLabel} limit.`);
           continue;
         }
 
