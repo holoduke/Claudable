@@ -2269,6 +2269,17 @@ const persistProjectPreferences = useCallback(
       setUsingGlobalDefaults(false);
       updateSelectedModel(modelParam, sanitizedCli);
     }
+    // Strip the one-shot params from the address bar: a lingering ?model= would
+    // silently re-force that model on every reload/share of this URL, shadowing
+    // the project's saved preference (and any model the user picks later).
+    try {
+      const cleaned = new URL(window.location.href);
+      cleaned.searchParams.delete('cli');
+      cleaned.searchParams.delete('model');
+      window.history.replaceState(window.history.state, '', cleaned.toString());
+    } catch {
+      // Non-fatal: worst case the params stay visible until the next navigation.
+    }
   }, [searchParams, preferredCli, updatePreferredCli, updateSelectedModel, setUsingGlobalDefaults]);
 
   const loadSettingsRef = useRef(loadSettings);
