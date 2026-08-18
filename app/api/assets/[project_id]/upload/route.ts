@@ -17,7 +17,7 @@ const PROJECTS_DIR_ABSOLUTE = path.isAbsolute(PROJECTS_DIR)
   ? PROJECTS_DIR
   : path.resolve(process.cwd(), PROJECTS_DIR);
 
-const MAX_UPLOAD_BYTES = Number(process.env.MAX_UPLOAD_BYTES || 500 * 1024 * 1024);
+const MAX_UPLOAD_BYTES = Number(process.env.MAX_UPLOAD_BYTES || 5 * 1024 * 1024 * 1024);
 const UUID_RE = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/u;
 
 function resolveAssetsPath(projectId: string): string {
@@ -42,8 +42,10 @@ async function sweepStaleParts(tmpDir: string): Promise<void> {
 }
 
 function tooLarge(): NextResponse {
+  const mb = Math.round(MAX_UPLOAD_BYTES / 1024 / 1024);
+  const label = mb >= 1024 ? `${Math.round(mb / 1024)}GB` : `${mb}MB`;
   return NextResponse.json(
-    { success: false, error: `File too large (max ${Math.round(MAX_UPLOAD_BYTES / 1024 / 1024)}MB)` },
+    { success: false, error: `File too large (max ${label})` },
     { status: 413 },
   );
 }
