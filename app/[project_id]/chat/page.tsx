@@ -785,8 +785,10 @@ const persistProjectPreferences = useCallback(
     }
     if (Object.keys(payload).length === 0) return;
 
-    const response = await fetch(`${API_BASE}/api/projects/${projectId}`, {
-      method: 'PUT',
+    // The cli-preference endpoint is write-gated (editor members may switch
+    // model/CLI); PUT /api/projects is manage-gated and would 403 for them.
+    const response = await fetch(`${API_BASE}/api/chat/${projectId}/cli-preference`, {
+      method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     });
