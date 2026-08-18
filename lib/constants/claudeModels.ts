@@ -1,5 +1,7 @@
 export type ClaudeModelId =
   | 'claude-fable-5'
+  | 'claude-opus-5'
+  | 'claude-sonnet-5'
   | 'claude-opus-4-8'
   | 'claude-opus-4-6'
   | 'claude-sonnet-4-6'
@@ -34,20 +36,49 @@ export const CLAUDE_MODEL_DEFINITIONS: ClaudeModelDefinition[] = [
     ],
   },
   {
+    id: 'claude-opus-5',
+    name: 'Claude Opus 5',
+    description: 'Claude 5 family — deepest reasoning',
+    supportsImages: true,
+    aliases: [
+      'claude-opus-5',
+      'claude-opus-5-latest',
+      'claude-opus5',
+      'opus-5',
+      'opus5',
+      // Generic opus aliases resolve to the newest Opus
+      'claude-opus',
+      'opus',
+    ],
+  },
+  {
+    id: 'claude-sonnet-5',
+    name: 'Claude Sonnet 5',
+    description: 'Claude 5 family — fast and highly capable',
+    supportsImages: true,
+    aliases: [
+      'claude-sonnet-5',
+      'claude-sonnet-5-latest',
+      'claude-sonnet5',
+      'sonnet-5',
+      'sonnet5',
+      // Generic sonnet aliases resolve to the newest Sonnet
+      'claude-sonnet',
+      'sonnet',
+    ],
+  },
+  {
     id: 'claude-opus-4-8',
     name: 'Claude Opus 4.8',
-    description: 'The most intelligent model for building agents and coding',
+    description: 'The most intelligent Claude 4 model for building agents and coding',
     supportsImages: true,
     aliases: [
       'claude-opus-4-8',
       'claude-opus-4.8',
       'opus-4-8',
       'opus-4.8',
-      // Generic opus aliases resolve to the newest Opus
       'claude-opus-4',
-      'claude-opus',
       'opus-4',
-      'opus',
     ],
   },
   {
@@ -81,11 +112,9 @@ export const CLAUDE_MODEL_DEFINITIONS: ClaudeModelDefinition[] = [
       'claude-sonnet-4-6',
       'claude-sonnet-4.6',
       'claude-sonnet-4',
-      'claude-sonnet',
       'sonnet-4-6',
       'sonnet-4.6',
       'sonnet-4',
-      'sonnet',
       // Legacy aliases
       'claude-sonnet-4-5-20250929',
       'claude-sonnet-4-5',
