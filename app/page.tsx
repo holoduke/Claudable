@@ -937,11 +937,9 @@ export default function HomePage() {
                         <div 
                           className="flex-1 cursor-pointer min-w-0"
                           onClick={() => {
-                            // Pass current model selection when navigating from sidebar
-                            const params = new URLSearchParams();
-                            if (selectedAssistant) params.set('cli', selectedAssistant);
-                            if (selectedModel) params.set('model', selectedModel);
-                            router.push(`/${project.id}/chat${params.toString() ? '?' + params.toString() : ''}`);
+                            // Existing projects keep their own saved CLI/model preference —
+                            // carrying the homepage picker's values here overrode it on load.
+                            router.push(`/${project.id}/chat`);
                           }}
                         >
                           <h3 
@@ -1529,10 +1527,9 @@ export default function HomePage() {
                     <button
                       key={project.id}
                       onClick={() => {
-                        const params = new URLSearchParams();
-                        if (selectedAssistant) params.set('cli', selectedAssistant);
-                        if (selectedModel) params.set('model', selectedModel);
-                        router.push(`/${project.id}/chat${params.toString() ? '?' + params.toString() : ''}`);
+                        // Existing projects keep their own saved CLI/model preference —
+                        // carrying the homepage picker's values here overrode it on load.
+                        router.push(`/${project.id}/chat`);
                       }}
                       className="group text-left rounded-xl border border-gray-200 dark:border-white/8 bg-white dark:bg-white/3 hover:border-brand-500/40 dark:hover:border-brand-500/35 hover:shadow-[0_12px_40px_-12px_color-mix(in_srgb,var(--color-brand-500)_25%,transparent)] hover:-translate-y-0.5 transition-all duration-200 overflow-hidden"
                     >
