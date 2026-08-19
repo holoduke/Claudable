@@ -557,10 +557,20 @@ async function pushProjectToGitHubImpl(projectId: string): Promise<boolean> {
   }
 }
 
+export interface DeployRunJob {
+  name: string;
+  /** Normalized job state. */
+  status: 'queued' | 'running' | 'success' | 'failure' | 'cancelled' | 'skipped' | 'unknown';
+  startedAt?: string;
+  updatedAt?: string;
+}
+
 export interface DeployRunStatus {
   found: boolean;
   /** Normalized run state. */
   state: 'queued' | 'running' | 'success' | 'failure' | 'cancelled' | 'unknown';
+  /** The run's jobs in execution order — lets the UI show step-by-step progress. */
+  jobs?: DeployRunJob[];
   runNumber?: number;
   /** Link to the CI run page (the user's own Git server). */
   url?: string;
@@ -631,9 +641,29 @@ export async function getDeployRunStatus(projectId: string): Promise<DeployRunSt
     : has('success') ? 'success'
     : 'unknown';
 
+  const normalizeJobStatus = (raw: string): DeployRunJob['status'] =>
+    raw === 'success' ? 'success'
+    : raw === 'failure' || raw === 'error' ? 'failure'
+    : raw === 'cancelled' || raw === 'canceled' ? 'cancelled'
+    : raw === 'running' || raw === 'in_progress' ? 'running'
+    : raw === 'waiting' || raw === 'queued' || raw === 'blocked' || raw === 'pending' ? 'queued'
+    : raw === 'skipped' ? 'skipped'
+    : 'unknown';
+
+  // Execution order ≈ creation order (the API returns newest-first).
+  const jobList: DeployRunJob[] = [...jobs]
+    .sort((a, b) => (typeof a.id === 'number' && typeof b.id === 'number' ? a.id - b.id : 0))
+    .map((j) => ({
+      name: typeof j.name === 'string' && j.name ? j.name : 'job',
+      status: normalizeJobStatus(String(j.status ?? '').toLowerCase()),
+      startedAt: typeof j.run_started_at === 'string' ? j.run_started_at : undefined,
+      updatedAt: typeof j.updated_at === 'string' ? j.updated_at : undefined,
+    }));
+
   return {
     found: true,
     state,
+    jobs: jobList,
     runNumber: typeof run.run_number === 'number' ? run.run_number : undefined,
     url: typeof run.url === 'string' ? run.url : undefined,
     title: typeof run.display_title === 'string' ? run.display_title : undefined,

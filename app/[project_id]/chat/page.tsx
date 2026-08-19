@@ -2316,7 +2316,7 @@ const persistProjectPreferences = useCallback(
         const d = await r.json().catch(() => null);
         if (cancelled || !d?.found) return;
         if (d.state === 'failure' || d.state === 'cancelled') {
-          setDeployRun({ state: d.state, runNumber: d.runNumber, url: d.url, title: d.title, sha: d.sha, updatedAt: d.updatedAt });
+          setDeployRun({ state: d.state, jobs: d.jobs, runNumber: d.runNumber, url: d.url, title: d.title, sha: d.sha, updatedAt: d.updatedAt });
           setDeploymentStatus('error');
         } else if (d.state === 'success' && deploymentStatus === 'error') {
           // The build recovered (someone fixed it and CI passed) — clear the alarm.
