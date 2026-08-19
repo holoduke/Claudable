@@ -151,7 +151,9 @@ export default function PublishPanel({
           {deploymentStatus === 'error' && (
             <div className="p-4 rounded-xl border border-red-200 bg-red-50 dark:border-red-900 dark:bg-red-950/40 ">
               <p className="text-sm font-medium text-red-700 dark:text-red-300 ">
-                {deployRun?.state === 'cancelled' ? 'Deployment was cancelled.' : 'Deployment failed.'}
+                {deployRun?.state === 'cancelled' ? 'Deployment was cancelled.'
+                  : deployRun?.state === 'unknown' ? 'Deployment did not finish in time — check the CI run on your Git server.'
+                  : 'Deployment failed — the CI build did not pass.'}
               </p>
               {isGitea && deployRun?.url && (
                 <p className="text-xs text-red-600 dark:text-red-400 mt-1">
@@ -207,9 +209,26 @@ export default function PublishPanel({
                   if (url) setPublishedUrl(url);
                   setPublishLoading(false);
                   if (pushBody.pushed === false) {
-                    // Nothing changed since the last deploy — it's already live.
-                    setDeployRun(null);
-                    setDeploymentStatus('ready');
+                    // Nothing new to push — but that does NOT mean the site is
+                    // live: the code may have been pushed earlier (auto-sync)
+                    // with its CI run FAILING. Report the latest run's real
+                    // state instead of claiming success.
+                    const s = await fetch(`${API_BASE}/api/projects/${projectId}/deploy/status`, { cache: 'no-store' })
+                      .then(r => (r.ok ? r.json() : null))
+                      .catch(() => null);
+                    if (s?.found && (s.state === 'failure' || s.state === 'cancelled')) {
+                      setDeployRun({ state: s.state, runNumber: s.runNumber, url: s.url, title: s.title, sha: s.sha, updatedAt: s.updatedAt });
+                      setDeploymentStatus('error');
+                      toast.error('Nothing new to publish — and the last deploy FAILED in CI. Fix the build and publish again.');
+                    } else if (s?.found && (s.state === 'queued' || s.state === 'running')) {
+                      // A run for the already-pushed commit is still going —
+                      // track it to its real outcome.
+                      startGiteaDeployPolling(null);
+                    } else {
+                      // Latest run succeeded (or no CI configured) — already live.
+                      setDeployRun(null);
+                      setDeploymentStatus('ready');
+                    }
                   } else {
                     // Track the real Gitea Actions run (queued -> running ->
                     // success/failure) instead of guessing with a timer.
