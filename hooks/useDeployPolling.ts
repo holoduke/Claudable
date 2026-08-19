@@ -4,7 +4,8 @@ import type { Dispatch, SetStateAction } from 'react';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? '';
 
-export type DeployRun = { state: string; runNumber?: number; url?: string; title?: string; sha?: string; updatedAt?: string };
+export type DeployRunJob = { name: string; status: string; startedAt?: string; updatedAt?: string };
+export type DeployRun = { state: string; jobs?: DeployRunJob[]; runNumber?: number; url?: string; title?: string; sha?: string; updatedAt?: string };
 export type DeploymentStatus = 'idle' | 'deploying' | 'ready' | 'error';
 
 /**
@@ -56,7 +57,7 @@ export function useDeployPolling({
               // run actually succeeded — surface its failure otherwise.
               if (Date.now() - startedAt > 40000) {
                 if (d.state === 'failure' || d.state === 'cancelled') {
-                  setDeployRun({ state: d.state, runNumber: d.runNumber, url: d.url, title: d.title, sha: d.sha, updatedAt: d.updatedAt });
+                  setDeployRun({ state: d.state, jobs: d.jobs, runNumber: d.runNumber, url: d.url, title: d.title, sha: d.sha, updatedAt: d.updatedAt });
                   setDeploymentStatus('error');
                 } else {
                   setDeploymentStatus('ready');
@@ -64,7 +65,7 @@ export function useDeployPolling({
                 stop(); return;
               }
             } else {
-              setDeployRun({ state: d.state, runNumber: d.runNumber, url: d.url, title: d.title, sha: d.sha, updatedAt: d.updatedAt });
+              setDeployRun({ state: d.state, jobs: d.jobs, runNumber: d.runNumber, url: d.url, title: d.title, sha: d.sha, updatedAt: d.updatedAt });
               if (d.state === 'success') {
                 if (d.liveUrl) setPublishedUrl(d.liveUrl);
                 setDeploymentStatus('ready'); stop(); return;

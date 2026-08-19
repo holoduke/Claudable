@@ -1,8 +1,62 @@
 "use client";
 import { FaRocket } from 'react-icons/fa';
 import { formatTimeAgo } from '@/lib/utils/format';
-import type { DeployRun, DeploymentStatus } from '@/hooks/useDeployPolling';
+import type { DeployRun, DeployRunJob, DeploymentStatus } from '@/hooks/useDeployPolling';
 import { useToast } from '@/components/ui/Toast';
+
+/**
+ * Pipeline step checklist + progress bar for a CI run (Vercel-style deploy
+ * feedback): every job with a live state icon, and completed-vs-total
+ * progress. Rendered in both the "deploying" and "failed" panels.
+ */
+function DeployJobList({ jobs, tone }: { jobs?: DeployRunJob[]; tone: 'blue' | 'red' }) {
+  if (!jobs || jobs.length === 0) return null;
+  const terminal = ['success', 'failure', 'cancelled', 'skipped'];
+  const done = jobs.filter((j) => terminal.includes(j.status)).length;
+  const pct = Math.round((done / jobs.length) * 100);
+  const barBg = tone === 'blue' ? 'bg-blue-200/60 dark:bg-blue-900/50' : 'bg-red-200/60 dark:bg-red-900/50';
+  const barFill = tone === 'blue' ? 'bg-blue-600 dark:bg-blue-400' : 'bg-red-600 dark:bg-red-400';
+  const textDim = tone === 'blue' ? 'text-blue-700/80 dark:text-blue-300/80' : 'text-red-700/80 dark:text-red-300/80';
+
+  const icon = (status: string) => {
+    switch (status) {
+      case 'success':
+        return <svg className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-label="succeeded"><polyline points="20 6 9 17 4 12" /></svg>;
+      case 'failure':
+        return <svg className="w-3.5 h-3.5 text-red-600 dark:text-red-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" aria-label="failed"><path d="M18 6L6 18M6 6l12 12" /></svg>;
+      case 'cancelled':
+        return <svg className="w-3.5 h-3.5 text-gray-500 dark:text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-label="cancelled"><circle cx="12" cy="12" r="9" /><line x1="7" y1="12" x2="17" y2="12" /></svg>;
+      case 'skipped':
+        return <svg className="w-3.5 h-3.5 text-gray-400 dark:text-gray-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-label="skipped"><polyline points="13 17 18 12 13 7" /><polyline points="6 17 11 12 6 7" /></svg>;
+      case 'running':
+        return <span className="w-3.5 h-3.5 border-2 border-blue-600 dark:border-blue-400 border-t-transparent rounded-full animate-spin" aria-label="running" />;
+      default: // queued / unknown
+        return <span className="w-3.5 h-3.5 rounded-full border-2 border-gray-300 dark:border-gray-600" aria-label="pending" />;
+    }
+  };
+
+  return (
+    <div className="mt-3 space-y-2">
+      <div className="flex items-center gap-2">
+        <div className={`h-1.5 flex-1 rounded-full overflow-hidden ${barBg}`}>
+          <div className={`h-full rounded-full transition-all duration-500 ${barFill}`} style={{ width: `${pct}%` }} />
+        </div>
+        <span className={`text-[10px] tabular-nums ${textDim}`}>{done}/{jobs.length} · {pct}%</span>
+      </div>
+      <ul className="space-y-1">
+        {jobs.map((j, i) => (
+          <li key={`${j.name}-${i}`} className="flex items-center gap-2 text-xs">
+            <span className="shrink-0 flex items-center justify-center w-4">{icon(j.status)}</span>
+            <span className={`truncate ${j.status === 'skipped' || j.status === 'cancelled' ? 'text-gray-400 dark:text-gray-500 line-through' : 'text-gray-700 dark:text-gray-200'}`}>
+              {j.name}
+            </span>
+            {j.status === 'running' && <span className={`ml-auto shrink-0 ${textDim}`}>running…</span>}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? '';
 
@@ -87,9 +141,10 @@ export default function PublishPanel({
               </div>
               <p className="text-xs text-blue-700/80 dark:text-blue-300/80">
                 {isGitea
-                  ? 'Live status from CI — clone, build, route, health check.'
+                  ? 'Live status from CI — each pipeline step reports as it runs.'
                   : 'Building and deploying your project. This may take a few minutes.'}
               </p>
+              <DeployJobList jobs={deployRun?.jobs} tone="blue" />
               {isGitea && publishedUrl && (
                 <p className="text-xs text-blue-700/80 dark:text-blue-300/80mt-1">Will be live at <a href={publishedUrl} target="_blank" rel="noopener noreferrer" className="font-mono underline">{publishedUrl}</a></p>
               )}
@@ -155,6 +210,7 @@ export default function PublishPanel({
                   : deployRun?.state === 'unknown' ? 'Deployment did not finish in time — check the CI run on your Git server.'
                   : 'Deployment failed — the CI build did not pass.'}
               </p>
+              <DeployJobList jobs={deployRun?.jobs} tone="red" />
               {isGitea && deployRun?.url && (
                 <p className="text-xs text-red-600 dark:text-red-400 mt-1">
                   <a href={deployRun.url} target="_blank" rel="noopener noreferrer" className="underline">
@@ -217,7 +273,7 @@ export default function PublishPanel({
                       .then(r => (r.ok ? r.json() : null))
                       .catch(() => null);
                     if (s?.found && (s.state === 'failure' || s.state === 'cancelled')) {
-                      setDeployRun({ state: s.state, runNumber: s.runNumber, url: s.url, title: s.title, sha: s.sha, updatedAt: s.updatedAt });
+                      setDeployRun({ state: s.state, jobs: s.jobs, runNumber: s.runNumber, url: s.url, title: s.title, sha: s.sha, updatedAt: s.updatedAt });
                       setDeploymentStatus('error');
                       toast.error('Nothing new to publish — and the last deploy FAILED in CI. Fix the build and publish again.');
                     } else if (s?.found && (s.state === 'queued' || s.state === 'running')) {
