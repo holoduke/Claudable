@@ -40,6 +40,11 @@ export function useDeployPolling({
     if (giteaPollRef.current) { clearInterval(giteaPollRef.current); giteaPollRef.current = null; }
     setDeploymentStatus('deploying');
     const startedAt = Date.now();
+    // Timeouts must distinguish "no evidence anything is happening" from "run
+    // confirmed running, just slow" — long pipelines (e2e suites) legitimately
+    // exceed a few minutes and used to be cut off mid-deploy.
+    let sawRun = false;           // the publish's run registered at least once
+    let lastEvidenceAt = Date.now(); // last successful non-terminal status read
     const stop = () => { if (giteaPollRef.current) { clearInterval(giteaPollRef.current); giteaPollRef.current = null; } };
     const poll = async () => {
       try {
@@ -47,8 +52,10 @@ export function useDeployPolling({
         if (r.ok) {
           const d = await r.json();
           if (d?.found) {
+            lastEvidenceAt = Date.now();
             const isNewRun = baselineRun == null
               || (typeof d.runNumber === 'number' && d.runNumber > baselineRun);
+            if (isNewRun) sawRun = true;
             if (!isNewRun) {
               // The new run hasn't registered yet — keep showing "queued".
               setDeployRun({ state: 'queued' });
@@ -79,10 +86,17 @@ export function useDeployPolling({
       } catch {
         // transient; keep polling
       }
-      // Safety timeout (~6 min) so it never spins forever — and say so,
-      // instead of leaving the panel on "deploying" with no outcome.
-      if (Date.now() - startedAt > 6 * 60 * 1000) {
-        setDeployRun({ state: 'unknown' });
+      // Safety timeouts — and say so, instead of leaving "deploying" forever:
+      //  - the run never registered within 6 min (nothing is happening), or
+      //  - status reads kept failing for 6 min (evidence went dark), or
+      //  - a confirmed run exceeded 60 min (Gitea's own job timeout region).
+      // A CONFIRMED still-running run keeps polling — slow e2e pipelines are
+      // legitimate and used to be cut off mid-deploy by a flat 6-min limit.
+      const totalMs = Date.now() - startedAt;
+      const darkMs = Date.now() - lastEvidenceAt;
+      if ((!sawRun && totalMs > 6 * 60 * 1000) || darkMs > 6 * 60 * 1000 || totalMs > 60 * 60 * 1000) {
+        // Keep whatever run info we have (log link) — only mark the outcome unknown.
+        setDeployRun((prev) => (prev ? { ...prev, state: 'unknown' } : { state: 'unknown' }));
         setDeploymentStatus('error');
         stop();
       }
