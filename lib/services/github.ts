@@ -596,23 +596,39 @@ export async function getDeployRunStatus(projectId: string): Promise<DeployRunSt
   let body: any;
   try {
     const token = await resolveGitToken();
-    body = await githubFetch(token, `/repos/${owner}/${repo}/actions/tasks?limit=1`);
+    // The tasks endpoint returns JOB-level rows (one per job, newest first).
+    // Fetch enough rows to cover every job of the newest run — reading just
+    // one row can land on a 'skipped' job of a run whose tests FAILED, which
+    // used to report the whole deploy as 'unknown'.
+    body = await githubFetch(token, `/repos/${owner}/${repo}/actions/tasks?limit=30`);
   } catch {
     return { found: false, state: 'unknown' };
   }
 
-  const run = (body?.workflow_runs ?? [])[0];
-  if (!run) {
+  const rows: any[] = body?.workflow_runs ?? [];
+  if (rows.length === 0) {
     return { found: false, state: 'unknown' };
   }
 
-  const raw = String(run.status ?? '').toLowerCase();
+  // All jobs of the newest run (highest run_number; rows without one are
+  // treated as a single-job run keyed by 0).
+  const latestRunNumber = rows.reduce(
+    (max, r) => (typeof r.run_number === 'number' && r.run_number > max ? r.run_number : max),
+    0,
+  );
+  const jobs = rows.filter((r) => (typeof r.run_number === 'number' ? r.run_number : 0) === latestRunNumber);
+  const run = jobs[0];
+
+  // Aggregate the run's job statuses: one failed job fails the run even when
+  // the remaining jobs were skipped (a failed test job skips the deploy job).
+  const statuses = jobs.map((j) => String(j.status ?? '').toLowerCase());
+  const has = (...names: string[]) => statuses.some((s) => names.includes(s));
   const state: DeployRunStatus['state'] =
-    raw === 'success' ? 'success'
-    : raw === 'failure' || raw === 'error' ? 'failure'
-    : raw === 'cancelled' || raw === 'canceled' ? 'cancelled'
-    : raw === 'running' || raw === 'in_progress' ? 'running'
-    : raw === 'waiting' || raw === 'queued' || raw === 'blocked' ? 'queued'
+    has('failure', 'error') ? 'failure'
+    : has('cancelled', 'canceled') ? 'cancelled'
+    : has('running', 'in_progress') ? 'running'
+    : has('waiting', 'queued', 'blocked', 'pending') ? 'queued'
+    : has('success') ? 'success'
     : 'unknown';
 
   return {

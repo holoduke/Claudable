@@ -52,9 +52,16 @@ export function useDeployPolling({
               // The new run hasn't registered yet — keep showing "queued".
               setDeployRun({ state: 'queued' });
               // If no new run appears within 40s, there was nothing to deploy
-              // (no changes) — the site is already live from the prior run.
+              // (no changes). The site is only "already live" if the PRIOR
+              // run actually succeeded — surface its failure otherwise.
               if (Date.now() - startedAt > 40000) {
-                setDeploymentStatus('ready'); stop(); return;
+                if (d.state === 'failure' || d.state === 'cancelled') {
+                  setDeployRun({ state: d.state, runNumber: d.runNumber, url: d.url, title: d.title, sha: d.sha, updatedAt: d.updatedAt });
+                  setDeploymentStatus('error');
+                } else {
+                  setDeploymentStatus('ready');
+                }
+                stop(); return;
               }
             } else {
               setDeployRun({ state: d.state, runNumber: d.runNumber, url: d.url, title: d.title, sha: d.sha, updatedAt: d.updatedAt });
@@ -71,8 +78,13 @@ export function useDeployPolling({
       } catch {
         // transient; keep polling
       }
-      // Safety timeout (~6 min) so it never spins forever.
-      if (Date.now() - startedAt > 6 * 60 * 1000) stop();
+      // Safety timeout (~6 min) so it never spins forever — and say so,
+      // instead of leaving the panel on "deploying" with no outcome.
+      if (Date.now() - startedAt > 6 * 60 * 1000) {
+        setDeployRun({ state: 'unknown' });
+        setDeploymentStatus('error');
+        stop();
+      }
     };
     poll();
     giteaPollRef.current = setInterval(poll, 4000);
