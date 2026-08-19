@@ -32,6 +32,8 @@ export const en = {
   'topbar.publish': 'Publish',
   'topbar.publishing': 'Publishing…',
   'topbar.publishTitle': 'Publish this project',
+  'topbar.buildFailing': 'Build failing',
+  'topbar.buildFailingTitle': 'The last CI build FAILED — the live site was not updated. Click for details.',
   'topbar.settings': 'Settings',
   'topbar.home': 'Home',
   'topbar.addDescription': 'Add a description…',
