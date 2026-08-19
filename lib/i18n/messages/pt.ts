@@ -26,6 +26,8 @@ export const pt: Record<keyof typeof en, string> = {
   'topbar.publish': 'Publicar',
   'topbar.publishing': 'Publicando…',
   'topbar.publishTitle': 'Publicar este projeto',
+  'topbar.buildFailing': 'Build com falha',
+  'topbar.buildFailingTitle': 'O último build de CI FALHOU — o site ao vivo não foi atualizado. Clique para detalhes.',
   'topbar.settings': 'Configurações',
   'topbar.home': 'Início',
   'topbar.addDescription': 'Adicionar uma descrição…',

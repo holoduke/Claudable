@@ -26,6 +26,8 @@ export const nl: Record<keyof typeof en, string> = {
   'topbar.publish': 'Publiceren',
   'topbar.publishing': 'Publiceren…',
   'topbar.publishTitle': 'Dit project publiceren',
+  'topbar.buildFailing': 'Build mislukt',
+  'topbar.buildFailingTitle': 'De laatste CI-build is MISLUKT — de live site is niet bijgewerkt. Klik voor details.',
   'topbar.settings': 'Instellingen',
   'topbar.home': 'Start',
   'topbar.addDescription': 'Voeg een beschrijving toe…',

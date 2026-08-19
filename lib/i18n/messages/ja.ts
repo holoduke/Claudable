@@ -26,6 +26,8 @@ export const ja: Record<keyof typeof en, string> = {
   'topbar.publish': '公開',
   'topbar.publishing': '公開中…',
   'topbar.publishTitle': 'このプロジェクトを公開',
+  'topbar.buildFailing': 'ビルド失敗',
+  'topbar.buildFailingTitle': '直近のCIビルドが失敗しました — 公開サイトは更新されていません。クリックで詳細を表示。',
   'topbar.settings': '設定',
   'topbar.home': 'ホーム',
   'topbar.addDescription': '説明を追加…',

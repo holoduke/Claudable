@@ -2302,6 +2302,36 @@ const persistProjectPreferences = useCallback(
     checkCurrentDeploymentRef.current = checkCurrentDeployment;
   }, [checkCurrentDeployment]);
 
+  // Passive CI watchdog: keep the latest Actions run's outcome visible even
+  // when nobody opens the publish panel — auto-sync pushes commits in the
+  // background, and a failing build silently freezes the live site otherwise.
+  // Only transitions idle <-> error; an active publish flow owns the state.
+  useEffect(() => {
+    if (!projectId || deploymentStatus === 'deploying') return;
+    let cancelled = false;
+    const check = async () => {
+      try {
+        const r = await fetch(`${API_BASE}/api/projects/${projectId}/deploy/status`, { cache: 'no-store' });
+        if (!r.ok) return;
+        const d = await r.json().catch(() => null);
+        if (cancelled || !d?.found) return;
+        if (d.state === 'failure' || d.state === 'cancelled') {
+          setDeployRun({ state: d.state, runNumber: d.runNumber, url: d.url, title: d.title, sha: d.sha, updatedAt: d.updatedAt });
+          setDeploymentStatus('error');
+        } else if (d.state === 'success' && deploymentStatus === 'error') {
+          // The build recovered (someone fixed it and CI passed) — clear the alarm.
+          setDeployRun(null);
+          setDeploymentStatus('idle');
+        }
+      } catch {
+        // transient — next tick retries
+      }
+    };
+    check();
+    const interval = setInterval(check, 120_000);
+    return () => { cancelled = true; clearInterval(interval); };
+  }, [projectId, deploymentStatus, setDeployRun, setDeploymentStatus]);
+
   // Stable message handlers with useCallback to prevent reassignment
   const createStableMessageHandlers = useCallback(() => {
     const addMessage = (message: any) => {
@@ -3534,23 +3564,34 @@ const persistProjectPreferences = useCallback(
                     </button>
                   )}
 
-                  {/* Publish/Update — primary CTA, labeled brand button */}
+                  {/* Publish/Update — primary CTA, labeled brand button. Turns
+                      into a red "Build failing" alarm when the latest CI run
+                      failed, so a broken deploy is visible without opening
+                      the panel. */}
                   {showPreview && previewUrl && (() => {
                     const publishing = deploymentStatus === 'deploying' || publishLoading;
+                    const buildFailing = deploymentStatus === 'error' && !publishing;
                     return (
                     <button
-                      className="relative h-9 flex items-center gap-2 px-4 bg-brand-500 hover:bg-brand-600 text-white rounded-lg transition-colors shadow-xs font-medium text-sm"
+                      className={`relative h-9 flex items-center gap-2 px-4 text-white rounded-lg transition-colors shadow-xs font-medium text-sm ${
+                        buildFailing ? 'bg-red-500 hover:bg-red-600' : 'bg-brand-500 hover:bg-brand-600'
+                      }`}
                       onClick={() => setShowPublishPanel(true)}
-                      title={publishing ? t('topbar.publishing') : t('topbar.publishTitle')}
+                      title={publishing ? t('topbar.publishing') : buildFailing ? t('topbar.buildFailingTitle') : t('topbar.publishTitle')}
                     >
                       {publishing ? (
                         <span className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" aria-hidden="true" />
+                      ) : buildFailing ? (
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
                       ) : (
                         <FaRocket size={13} />
                       )}
-                      <span>{publishing ? t('topbar.publishing') : t('topbar.publish')}</span>
+                      <span>{publishing ? t('topbar.publishing') : buildFailing ? t('topbar.buildFailing') : t('topbar.publish')}</span>
                       {deploymentStatus === 'ready' && !publishing && (
                         <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-emerald-400 ring-2 ring-white"></span>
+                      )}
+                      {buildFailing && (
+                        <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-red-500 ring-2 ring-white animate-pulse"></span>
                       )}
                     </button>
                     );
