@@ -3,11 +3,15 @@
 FROM node:22-bookworm-slim
 
 # Tooling the agent needs at runtime: git (push), ripgrep (claude search), ca-certs.
-# The lib list is chrome-headless-shell's runtime deps (thumbnails + PDF export).
+# The lib list is chrome-headless-shell's runtime deps (thumbnails + PDF export),
+# plus the Cypress/Electron runtime set (xvfb, GTK, …) so agent containers can
+# actually RUN a project's e2e suite instead of falling back to static analysis
+# ("cypress verify" needs Xvfb, and agents have no sudo to install it).
 RUN apt-get update \
   && apt-get install -y --no-install-recommends git ca-certificates ripgrep curl unzip fonts-liberation \
      libnss3 libnspr4 libatk1.0-0 libatk-bridge2.0-0 libcups2 libdrm2 libxkbcommon0 \
      libxcomposite1 libxdamage1 libxfixes3 libxrandr2 libgbm1 libasound2 libpango-1.0-0 libcairo2 \
+     libgtk2.0-0 libgtk-3-0 libnotify4 libxss1 libxtst6 xauth xvfb \
   && rm -rf /var/lib/apt/lists/*
 
 # PINNED headless browser (Chrome for Testing "chrome-headless-shell") for
@@ -24,6 +28,11 @@ RUN curl -fsSL "https://storage.googleapis.com/chrome-for-testing-public/${CHROM
 
 # Path to the headless browser used by thumbnail capture + PDF export.
 ENV CHROMIUM_PATH=/opt/chrome-headless-shell/chrome-headless-shell
+
+# Agent containers run --cap-drop ALL, so Chrome/Electron's user-namespace
+# sandbox cannot start; Cypress's bundled Electron needs --no-sandbox there
+# (the standard containerized-Cypress setup).
+ENV ELECTRON_EXTRA_LAUNCH_ARGS=--no-sandbox
 
 # Go toolchain — lets the preview build+run a project's Go backend (the `static`
 # import mode's backend sidecar). Pinned; copied from the official image.
