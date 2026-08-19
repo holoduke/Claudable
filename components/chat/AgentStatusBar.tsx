@@ -5,9 +5,11 @@
  * subscription 5-hour / weekly windows, with a click-to-open details popover
  * (last-turn tokens & cost, cumulative totals, reset times, command hints).
  *
- * Data: initial GET /api/chat/:id/agent-status, then live `agent_status` SSE
- * events forwarded by the parent. Rate-limit windows only exist after the
- * agent has run once (the SDK reports them per turn) — shown as “–” until then.
+ * Data: initial GET /api/chat/:id/agent-status (re-fetched each time the
+ * popover opens — the server merges real utilization from the OAuth usage
+ * endpoint there), then live `agent_status` SSE events forwarded by the
+ * parent. When no percentage is available, the window meters fall back to the
+ * event-reported status (OK / limit reached) instead of a bare “no data”.
  */
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import type { AgentRateLimitWindow, AgentUsageSnapshot } from '@/types/agent-usage';
@@ -66,17 +68,48 @@ const textColor = (pct?: number): string => {
   return 'text-gray-500 dark:text-gray-400';
 };
 
-function Meter({ label, pct, sub }: { label: string; pct?: number; sub?: string | null }) {
+function Meter({
+  label,
+  pct,
+  sub,
+  status,
+}: {
+  label: string;
+  pct?: number;
+  sub?: string | null;
+  /** Window status when no percentage is available (rate-limit meters only). */
+  status?: string;
+}) {
+  // No percentage → fall back to the reported status so the meter still says
+  // something useful ('no data yet' only when nothing was reported at all).
+  const rejected = status === 'rejected';
+  const effectivePct = pct ?? (rejected ? 100 : undefined);
+  const valueText =
+    pct !== undefined
+      ? `${pct}%`
+      : rejected
+      ? 'limit reached'
+      : status
+      ? 'OK'
+      : 'no data yet';
+  const valueColor =
+    pct !== undefined
+      ? textColor(pct)
+      : rejected
+      ? 'text-red-500'
+      : status
+      ? 'text-emerald-600 dark:text-emerald-400'
+      : 'text-gray-400 dark:text-gray-500';
   return (
     <div>
       <div className="flex items-baseline justify-between text-xs">
         <span className="text-gray-600 dark:text-gray-300">{label}</span>
-        <span className={textColor(pct)}>{pct === undefined ? 'not reported yet' : `${pct}%`}</span>
+        <span className={valueColor}>{valueText}</span>
       </div>
       <div className="mt-1 h-1.5 rounded-full bg-gray-100 dark:bg-white/8 overflow-hidden">
         <div
-          className={`h-full rounded-full transition-all ${meterColor(pct)}`}
-          style={{ width: `${pct ?? 0}%` }}
+          className={`h-full rounded-full transition-all ${meterColor(effectivePct)}`}
+          style={{ width: `${effectivePct ?? 0}%` }}
         />
       </div>
       {sub && <div className="mt-0.5 text-[10px] text-gray-400 dark:text-gray-500">{sub}</div>}
@@ -87,9 +120,14 @@ function Meter({ label, pct, sub }: { label: string; pct?: number; sub?: string 
 export default function AgentStatusBar({ projectId, liveStatus, open, onOpenChange }: AgentStatusBarProps) {
   const [fetched, setFetched] = useState<AgentUsageSnapshot | null>(null);
   const panelRef = useRef<HTMLDivElement>(null);
+  const hasFetchedRef = useRef(false);
 
+  // Initial load, then a refresh every time the popover opens — the server
+  // merges fresh utilization from the OAuth usage endpoint on this request.
   useEffect(() => {
     if (!projectId) return;
+    if (!open && hasFetchedRef.current) return;
+    hasFetchedRef.current = true;
     let cancelled = false;
     fetch(`${API_BASE}/api/chat/${projectId}/agent-status`)
       .then((r) => (r.ok ? r.json() : null))
@@ -98,10 +136,20 @@ export default function AgentStatusBar({ projectId, liveStatus, open, onOpenChan
       })
       .catch(() => {});
     return () => { cancelled = true; };
-  }, [projectId]);
+  }, [projectId, open]);
 
-  // Live SSE snapshots supersede the initial fetch.
-  const status = liveStatus ?? fetched;
+  // Live SSE snapshots supersede the initial fetch — except the rate-limit
+  // block, where whichever side carries the newer API refresh wins (an SSE
+  // snapshot published mid-run would otherwise shadow a fresher popover fetch).
+  const status = useMemo(() => {
+    if (!liveStatus) return fetched;
+    if (!fetched) return liveStatus;
+    const liveAt = Date.parse(liveStatus.rateLimits?.updatedAt ?? '') || 0;
+    const fetchedAt = Date.parse(fetched.rateLimits?.updatedAt ?? '') || 0;
+    return fetchedAt > liveAt
+      ? { ...liveStatus, rateLimits: fetched.rateLimits }
+      : liveStatus;
+  }, [liveStatus, fetched]);
 
   useEffect(() => {
     if (!open) return;
@@ -187,8 +235,18 @@ export default function AgentStatusBar({ projectId, liveStatus, open, onOpenChan
                 : null
             }
           />
-          <Meter label="5-hour limit" pct={fiveHourPct} sub={formatReset(status.rateLimits?.fiveHour?.resetsAt)} />
-          <Meter label="Weekly limit" pct={weekPct} sub={formatReset(status.rateLimits?.sevenDay?.resetsAt)} />
+          <Meter
+            label="5-hour limit"
+            pct={fiveHourPct}
+            status={status.rateLimits?.fiveHour?.status}
+            sub={formatReset(status.rateLimits?.fiveHour?.resetsAt)}
+          />
+          <Meter
+            label="Weekly limit"
+            pct={weekPct}
+            status={status.rateLimits?.sevenDay?.status}
+            sub={formatReset(status.rateLimits?.sevenDay?.resetsAt)}
+          />
 
           {status.lastTurn && (
             <div className="text-xs text-gray-600 dark:text-gray-300 space-y-1">

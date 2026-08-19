@@ -13,6 +13,7 @@ import { prisma } from '@/lib/db/client';
 import { streamManager } from './stream';
 import type {
   AgentRateLimits,
+  AgentRateLimitWindow,
   AgentTurnUsage,
   AgentUsageSnapshot,
   AgentUsageTotals,
@@ -235,6 +236,38 @@ export async function recordTurnResult(projectId: string, resultMessage: unknown
   projectUsage.set(projectId, next);
   publishSnapshot(projectId, next);
   await persistState(projectId, next);
+}
+
+/**
+ * Merge utilization fetched from the OAuth usage endpoint (the CLI stream no
+ * longer reports percentages). API values win over event-derived ones — they
+ * carry the real numbers — but an event-pegged `rejected` status is kept until
+ * the API confirms the window recovered.
+ */
+export function mergeApiRateLimits(limits: AgentRateLimits): void {
+  const mergeWindow = (
+    existing: AgentRateLimitWindow | undefined,
+    incoming: AgentRateLimitWindow | undefined,
+  ): AgentRateLimitWindow | undefined => {
+    if (!incoming) return existing;
+    const merged = { ...existing, ...incoming };
+    // An event-pegged 'rejected' is stale once the API reports the window
+    // back under its cap (the API itself never reports a status).
+    if (
+      merged.status === 'rejected' &&
+      typeof incoming.utilization === 'number' &&
+      incoming.utilization < 1
+    ) {
+      merged.status = 'allowed';
+    }
+    return merged;
+  };
+  globalRateLimits = {
+    ...globalRateLimits,
+    fiveHour: mergeWindow(globalRateLimits.fiveHour, limits.fiveHour),
+    sevenDay: mergeWindow(globalRateLimits.sevenDay, limits.sevenDay),
+    updatedAt: limits.updatedAt ?? nowIso(),
+  };
 }
 
 /** SDK `rate_limit_event` → account-wide window utilization. Publishes to the project stream. */
