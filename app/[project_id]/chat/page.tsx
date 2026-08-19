@@ -2318,6 +2318,12 @@ const persistProjectPreferences = useCallback(
         if (d.state === 'failure' || d.state === 'cancelled') {
           setDeployRun({ state: d.state, jobs: d.jobs, runNumber: d.runNumber, url: d.url, title: d.title, sha: d.sha, updatedAt: d.updatedAt });
           setDeploymentStatus('error');
+        } else if (d.state === 'running' || d.state === 'queued') {
+          // A CI run is in flight — publish state only lives in the tab that
+          // clicked it, so after a reload (or in a teammate's tab) nothing
+          // showed a deploy in progress. Hand off to the live poller: it sets
+          // 'deploying', streams the job checklist, and resolves the outcome.
+          startGiteaDeployPolling(null);
         } else if (d.state === 'success' && deploymentStatus === 'error') {
           // The build recovered (someone fixed it and CI passed) — clear the alarm.
           setDeployRun(null);
@@ -2330,7 +2336,7 @@ const persistProjectPreferences = useCallback(
     check();
     const interval = setInterval(check, 120_000);
     return () => { cancelled = true; clearInterval(interval); };
-  }, [projectId, deploymentStatus, setDeployRun, setDeploymentStatus]);
+  }, [projectId, deploymentStatus, setDeployRun, setDeploymentStatus, startGiteaDeployPolling]);
 
   // Stable message handlers with useCallback to prevent reassignment
   const createStableMessageHandlers = useCallback(() => {
