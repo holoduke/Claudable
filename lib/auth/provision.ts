@@ -60,7 +60,7 @@ export async function provisionUser(
   // upsert avoids a TOCTOU race between concurrent first sign-ins. The bootstrap
   // admin is always (re)promoted AND reactivated, so they can never be locked
   // out by a deactivation/demotion — their next sign-in restores access.
-  return prisma.user.upsert({
+  const user = await prisma.user.upsert({
     where: { email: lower },
     update: {
       name: name ?? undefined,
@@ -78,4 +78,18 @@ export async function provisionUser(
       lastLoginAt: new Date(),
     },
   });
+
+  // Lidmaatschap van de org waarin de gebruiker geprovisioneerd is. Idempotent,
+  // en herstelt zichzelf voor bestaande gebruikers van vóór het OrgMember-model.
+  await prisma.orgMember.upsert({
+    where: { orgId_userId: { orgId: user.orgId, userId: user.id } },
+    update: {},
+    create: {
+      orgId: user.orgId,
+      userId: user.id,
+      role: user.role === 'admin' ? 'beheerder' : 'lid',
+    },
+  });
+
+  return user;
 }
