@@ -624,6 +624,13 @@ async function pushProjectToGitHubImpl(projectId: string): Promise<boolean> {
       // The base branch only accepts pull requests (org ruleset). Push to a
       // working branch and merge a PR through the API instead of pushing base
       // directly. The repo host still runs its deploy workflow on the merge.
+      //
+      // FIRST pull the base branch into the local tree. A direct push rejects
+      // divergence, but a PR quietly carries the WHOLE local tree — if the
+      // remote base gained commits we don't have (infra changes merged on the
+      // host), the auto-merged PR would silently revert them. A merge conflict
+      // here surfaces as a clear "sync first" error instead.
+      pullFromRemote(repoPath, 'origin', baseBranch, authenticatedUrl);
       const prBranch = typeof data.pr_branch === 'string' && data.pr_branch.trim()
         ? data.pr_branch.trim()
         : 'claudable-publish';
