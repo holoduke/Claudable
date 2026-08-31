@@ -747,7 +747,7 @@ export async function executeClaude(
   // path (PREVIEW_ISOLATION / AGENT_CONTAINERIZED=true). DATABASE_URL is excluded
   // (it's a local sqlite file path here, not a shared secret).
   if (!containerize) {
-    const sensitive = ['AUTH_SECRET', 'ENCRYPTION_KEY', 'GIT_TOKEN', 'COOLIFY_API_TOKEN', 'GOOGLE_CLIENT_SECRET'];
+    const sensitive = ['AUTH_SECRET', 'ENCRYPTION_KEY', 'GIT_TOKEN', 'GITHUB_TOKEN', 'COOLIFY_API_TOKEN', 'GOOGLE_CLIENT_SECRET'];
     const present = sensitive.filter((k) => (process.env[k] ?? '').trim().length > 0);
     if (present.length > 0) {
       throw new Error(

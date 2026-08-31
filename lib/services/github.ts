@@ -5,7 +5,8 @@ import { getProjectById, updateProject } from '@/lib/services/project';
 import { getProjectService, upsertProjectServiceConnection, updateProjectServiceData } from '@/lib/services/project-services';
 import { clampAutoSyncMinutes, AUTO_SYNC_DEFAULT_MINUTES } from '@/lib/services/auto-sync-schedule';
 import { ensureGitRepository, ensureGitConfig, initializeMainBranch, addOrUpdateRemote, commitAll, pushToRemote, pullFromRemote, checkoutRemoteBranch } from '@/lib/services/git';
-import { getGitProviderConfig, getEnvGitToken } from '@/lib/services/git-provider';
+import { getGitProviderConfig, getGitProviderConfigFor, getEnvGitToken, getEnvGitTokenFor } from '@/lib/services/git-provider';
+import type { GitProviderConfig } from '@/lib/services/git-provider';
 import { injectDeployScaffolding } from '@/lib/services/scaffold-deploy';
 import { getDatabaseUrl } from '@/lib/services/database';
 import { stackKind } from '@/lib/config/stacks';
@@ -40,8 +41,19 @@ async function withGitLock<T>(projectId: string, fn: () => Promise<T>): Promise<
   }
 }
 
-/** Resolve the API token: env (server automation) first, then DB-stored token. */
-async function resolveGitToken(): Promise<string> {
+/** Resolve the API token: env (server automation) first, then DB-stored token.
+    With a per-project provider override, only that provider's env token fits. */
+async function resolveGitToken(cfg?: GitProviderConfig): Promise<string> {
+  if (cfg && cfg.provider !== getGitProviderConfig().provider) {
+    const overrideToken = getEnvGitTokenFor(cfg);
+    if (!overrideToken) {
+      throw new GitHubError(
+        `Token for provider override '${cfg.provider}' not configured (set GITHUB_TOKEN)`,
+        401,
+      );
+    }
+    return overrideToken;
+  }
   const envToken = getEnvGitToken();
   if (envToken) {
     return envToken;
@@ -63,8 +75,8 @@ async function resolveOwner(): Promise<string> {
   return user.login;
 }
 
-async function githubFetch(token: string, endpoint: string, init?: RequestInit) {
-  const { apiBaseUrl, authScheme } = getGitProviderConfig();
+async function githubFetch(token: string, endpoint: string, init?: RequestInit, cfg?: GitProviderConfig) {
+  const { apiBaseUrl, authScheme } = cfg ?? getGitProviderConfig();
   const response = await fetch(`${apiBaseUrl}${endpoint}`, {
     ...init,
     headers: {
@@ -116,10 +128,10 @@ async function githubFetch(token: string, endpoint: string, init?: RequestInit) 
   return body;
 }
 
-export async function getGithubUser(): Promise<GitHubUserInfo> {
-  const token = await resolveGitToken();
+export async function getGithubUser(cfg?: GitProviderConfig): Promise<GitHubUserInfo> {
+  const token = await resolveGitToken(cfg);
 
-  const data = (await githubFetch(token, '/user')) as any;
+  const data = (await githubFetch(token, '/user', undefined, cfg)) as any;
   return {
     login: data.login,
     // GitHub returns `name`; Gitea uses `full_name`.
@@ -381,10 +393,11 @@ export async function setProjectGitBranch(projectId: string, branch: string): Pr
   if (!data?.owner || !data?.repo_name) {
     throw new GitHubError('Git repository not connected', 404);
   }
-  const token = await resolveGitToken();
+  const cfg = getGitProviderConfigFor(data);
+  const token = await resolveGitToken(cfg);
   try {
     // Both GitHub and Gitea expose /repos/{owner}/{repo}/branches/{branch}.
-    await githubFetch(token, `/repos/${data.owner}/${data.repo_name}/branches/${encodeURIComponent(trimmed)}`);
+    await githubFetch(token, `/repos/${data.owner}/${data.repo_name}/branches/${encodeURIComponent(trimmed)}`, undefined, cfg);
   } catch (error) {
     if (error instanceof GitHubError && error.status === 404) {
       throw new GitHubError(`Branch "${trimmed}" does not exist on ${data.owner}/${data.repo_name}`, 404);
@@ -448,16 +461,17 @@ async function pullProjectFromGitHubImpl(projectId: string): Promise<SyncResult>
   if (!project) {
     throw new Error('Project not found');
   }
-  const token = await resolveGitToken();
   const service = await getProjectService(projectId, 'github');
   const data = service?.serviceData as Record<string, any> | undefined;
   if (!data?.clone_url || !data?.owner) {
     throw new GitHubError('Git repository not connected', 404);
   }
+  const cfg = getGitProviderConfigFor(data);
+  const token = await resolveGitToken(cfg);
 
   const repoPath = await ensureProjectRepository(projectId, project.repoPath);
   ensureGitRepository(repoPath);
-  const user = await getGithubUser();
+  const user = await getGithubUser(cfg);
   ensureGitConfig(repoPath, user.name || user.login, user.email || `${user.login}@users.noreply.github.com`);
 
   const branch = projectGitBranch(data);
@@ -485,6 +499,68 @@ async function pullProjectFromGitHubImpl(projectId: string): Promise<SyncResult>
 }
 
 /** @returns whether new changes were actually pushed (false = already up to date). */
+/**
+ * Publish via pull request: find or create a PR from the working branch and
+ * merge it immediately through the API. Used when the base branch is guarded
+ * by a rules-based "pull request required" policy (e.g. a GitHub org ruleset)
+ * that blocks direct pushes but needs zero approvals.
+ */
+async function mergePublishPr(
+  token: string,
+  cfg: GitProviderConfig,
+  owner: string,
+  repo: string,
+  prBranch: string,
+  baseBranch: string,
+): Promise<void> {
+  const open = (await githubFetch(
+    token,
+    `/repos/${owner}/${repo}/pulls?state=open&head=${encodeURIComponent(`${owner}:${prBranch}`)}`,
+    undefined,
+    cfg,
+  )) as any[];
+  let pr = Array.isArray(open) ? open[0] : undefined;
+
+  if (!pr) {
+    try {
+      pr = await githubFetch(token, `/repos/${owner}/${repo}/pulls`, {
+        method: 'POST',
+        body: JSON.stringify({ title: 'Update from Claudable', head: prBranch, base: baseBranch }),
+      }, cfg);
+    } catch (error) {
+      // "No commits between base and head" — the branch holds nothing new.
+      if (error instanceof GitHubError && error.status === 422 && /no commits between/i.test(error.message)) {
+        return;
+      }
+      throw error;
+    }
+  }
+
+  // GitHub computes mergeability asynchronously right after a push; a merge
+  // attempt in that window returns 405/409. Retry briefly before giving up.
+  let lastError: unknown;
+  for (let attempt = 0; attempt < 5; attempt++) {
+    try {
+      await githubFetch(token, `/repos/${owner}/${repo}/pulls/${pr.number}/merge`, {
+        method: 'PUT',
+        body: JSON.stringify({ merge_method: 'merge' }),
+      }, cfg);
+      return;
+    } catch (error) {
+      lastError = error;
+      const status = error instanceof GitHubError ? error.status : undefined;
+      if (status !== 405 && status !== 409) break;
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+    }
+  }
+  const reason = lastError instanceof Error ? lastError.message : 'unknown error';
+  const url = typeof pr?.html_url === 'string' ? pr.html_url : `${cfg.httpBase}/${owner}/${repo}/pulls`;
+  throw new GitHubError(
+    `Changes are pushed and waiting in a pull request, but it could not be merged automatically (${reason}). Merge it manually: ${url}`,
+    502,
+  );
+}
+
 export async function pushProjectToGitHub(projectId: string): Promise<boolean> {
   return withGitLock(projectId, () => pushProjectToGitHubImpl(projectId));
 }
@@ -496,17 +572,17 @@ async function pushProjectToGitHubImpl(projectId: string): Promise<boolean> {
       throw new Error('Project not found');
     }
 
-    const token = await resolveGitToken();
-
     const service = await getProjectService(projectId, 'github');
     const data = service?.serviceData as Record<string, any> | undefined;
     if (!data?.clone_url || !data?.owner) {
       throw new GitHubError('Git repository not connected', 404);
     }
+    const cfg = getGitProviderConfigFor(data);
+    const token = await resolveGitToken(cfg);
 
     const repoPath = await ensureProjectRepository(projectId, project.repoPath);
     ensureGitRepository(repoPath);
-    const user = await getGithubUser();
+    const user = await getGithubUser(cfg);
     const userName = user.name || user.login;
     const userEmail = user.email || `${user.login}@users.noreply.github.com`;
     ensureGitConfig(repoPath, userName, userEmail);
@@ -533,7 +609,7 @@ async function pushProjectToGitHubImpl(projectId: string): Promise<boolean> {
         await githubFetch(token, `/repos/${data.owner}/${repoName}/actions/secrets/DATABASE_URL`, {
           method: 'PUT',
           body: JSON.stringify({ data: dbUrl }),
-        });
+        }, cfg);
       }
     } catch (e) {
       console.warn('[GitService] Could not sync DATABASE_URL secret:', e instanceof Error ? e.message : e);
@@ -542,7 +618,20 @@ async function pushProjectToGitHubImpl(projectId: string): Promise<boolean> {
     // Basic-auth the push with the token. The username must be the token-owning
     // user (not the org) for Gitea/GitHub basic auth to succeed.
     const authenticatedUrl = String(data.clone_url).replace('https://', `https://${encodeURIComponent(user.login)}:${token}@`);
-    pushToRemote(repoPath, 'origin', projectGitBranch(data), authenticatedUrl);
+    const baseBranch = projectGitBranch(data);
+
+    if (data.push_mode === 'pr') {
+      // The base branch only accepts pull requests (org ruleset). Push to a
+      // working branch and merge a PR through the API instead of pushing base
+      // directly. The repo host still runs its deploy workflow on the merge.
+      const prBranch = typeof data.pr_branch === 'string' && data.pr_branch.trim()
+        ? data.pr_branch.trim()
+        : 'claudable-publish';
+      pushToRemote(repoPath, 'origin', prBranch, authenticatedUrl);
+      await mergePublishPr(token, cfg, String(data.owner), repoName, prBranch, baseBranch);
+    } else {
+      pushToRemote(repoPath, 'origin', baseBranch, authenticatedUrl);
+    }
 
     await updateProjectServiceData(projectId, 'github', {
       last_pushed_at: new Date().toISOString(),
@@ -590,16 +679,21 @@ export interface DeployRunStatus {
  * show queued -> running -> success/failure and link to the run log.
  */
 export async function getDeployRunStatus(projectId: string): Promise<DeployRunStatus> {
-  const { provider, deployDomain } = getGitProviderConfig();
-  if (provider !== 'gitea') {
-    return { found: false, state: 'unknown' };
-  }
-
   const service = await getProjectService(projectId, 'github');
   const data = service?.serviceData as Record<string, any> | undefined;
   const owner = data?.owner as string | undefined;
   const repo = data?.repo_name as string | undefined;
   if (!owner || !repo) {
+    return { found: false, state: 'unknown' };
+  }
+
+  const cfg = getGitProviderConfigFor(data);
+  if (cfg.provider === 'github') {
+    return getGithubDeployRunStatus(cfg, data!, owner, repo);
+  }
+
+  const { provider, deployDomain } = getGitProviderConfig();
+  if (provider !== 'gitea') {
     return { found: false, state: 'unknown' };
   }
 
@@ -670,6 +764,79 @@ export async function getDeployRunStatus(projectId: string): Promise<DeployRunSt
     sha: typeof run.head_sha === 'string' ? run.head_sha.slice(0, 7) : undefined,
     startedAt: run.run_started_at,
     updatedAt: run.updated_at,
-    liveUrl: deployDomain ? `https://${repo}.${deployDomain}` : undefined,
+    liveUrl: typeof data?.live_url === 'string' && data.live_url
+      ? data.live_url
+      : deployDomain ? `https://${repo}.${deployDomain}` : undefined,
+  };
+}
+
+/**
+ * Deploy status against the real GitHub Actions API (provider override).
+ * Two calls: the newest run on the base branch, then that run's jobs.
+ */
+async function getGithubDeployRunStatus(
+  cfg: GitProviderConfig,
+  data: Record<string, any>,
+  owner: string,
+  repo: string,
+): Promise<DeployRunStatus> {
+  let run: any;
+  let jobRows: any[] = [];
+  try {
+    const token = await resolveGitToken(cfg);
+    const branch = projectGitBranch(data);
+    const runsBody = await githubFetch(
+      token,
+      `/repos/${owner}/${repo}/actions/runs?branch=${encodeURIComponent(branch)}&per_page=1`,
+      undefined,
+      cfg,
+    );
+    run = runsBody?.workflow_runs?.[0];
+    if (!run) {
+      return { found: false, state: 'unknown' };
+    }
+    const jobsBody = await githubFetch(
+      token,
+      `/repos/${owner}/${repo}/actions/runs/${run.id}/jobs?per_page=50`,
+      undefined,
+      cfg,
+    );
+    jobRows = Array.isArray(jobsBody?.jobs) ? jobsBody.jobs : [];
+  } catch {
+    return { found: false, state: 'unknown' };
+  }
+
+  // GitHub splits state over `status` (queued|in_progress|completed) and
+  // `conclusion` (success|failure|cancelled|skipped|…, only when completed).
+  const normalize = (status: string, conclusion: string): DeployRunJob['status'] =>
+    status === 'queued' || status === 'waiting' || status === 'pending' ? 'queued'
+    : status === 'in_progress' ? 'running'
+    : conclusion === 'success' ? 'success'
+    : conclusion === 'failure' || conclusion === 'timed_out' || conclusion === 'startup_failure' ? 'failure'
+    : conclusion === 'cancelled' ? 'cancelled'
+    : conclusion === 'skipped' ? 'skipped'
+    : 'unknown';
+
+  const runState = normalize(String(run.status ?? ''), String(run.conclusion ?? ''));
+  const state: DeployRunStatus['state'] = runState === 'skipped' ? 'unknown' : runState;
+
+  const jobs: DeployRunJob[] = jobRows.map((j) => ({
+    name: typeof j.name === 'string' && j.name ? j.name : 'job',
+    status: normalize(String(j.status ?? ''), String(j.conclusion ?? '')),
+    startedAt: typeof j.started_at === 'string' ? j.started_at : undefined,
+    updatedAt: typeof j.completed_at === 'string' ? j.completed_at : undefined,
+  }));
+
+  return {
+    found: true,
+    state,
+    jobs,
+    runNumber: typeof run.run_number === 'number' ? run.run_number : undefined,
+    url: typeof run.html_url === 'string' ? run.html_url : undefined,
+    title: typeof run.display_title === 'string' ? run.display_title : undefined,
+    sha: typeof run.head_sha === 'string' ? run.head_sha.slice(0, 7) : undefined,
+    startedAt: typeof run.run_started_at === 'string' ? run.run_started_at : undefined,
+    updatedAt: typeof run.updated_at === 'string' ? run.updated_at : undefined,
+    liveUrl: typeof data.live_url === 'string' && data.live_url ? data.live_url : undefined,
   };
 }
