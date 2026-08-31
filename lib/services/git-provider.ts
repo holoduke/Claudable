@@ -61,3 +61,42 @@ export function getEnvGitToken(): string | null {
   const token = process.env.GIT_TOKEN;
   return token && token.trim().length > 0 ? token.trim() : null;
 }
+
+/**
+ * Per-project provider override. A project whose git connection carries
+ * `provider_override: 'github'` targets github.com even when the instance
+ * default is a self-hosted Gitea (e.g. a repo that moved to a customer's
+ * GitHub org while every other project stays on Gitea). Only the
+ * github.com override exists; anything else falls back to the instance
+ * config unchanged.
+ */
+export function getGitProviderConfigFor(
+  serviceData?: Record<string, unknown> | null,
+): GitProviderConfig {
+  const base = getGitProviderConfig();
+  if (serviceData?.provider_override !== 'github' || base.provider === 'github') {
+    return base;
+  }
+  return {
+    provider: 'github',
+    apiBaseUrl: 'https://api.github.com',
+    httpBase: 'https://github.com',
+    org: null,
+    deployDomain: null,
+    authScheme: 'Bearer',
+  };
+}
+
+/**
+ * Token for a (possibly overridden) provider config. The instance token
+ * (GIT_TOKEN / DB) only fits the instance provider; an override to github.com
+ * authenticates with GITHUB_TOKEN instead.
+ */
+export function getEnvGitTokenFor(cfg: GitProviderConfig): string | null {
+  const base = getGitProviderConfig();
+  if (cfg.provider === base.provider) {
+    return getEnvGitToken();
+  }
+  const token = process.env.GITHUB_TOKEN;
+  return token && token.trim().length > 0 ? token.trim() : null;
+}
