@@ -3580,7 +3580,7 @@ const persistProjectPreferences = useCallback(
                     return (
                     <button
                       className={`relative h-9 flex items-center gap-2 px-4 text-white rounded-lg transition-colors shadow-xs font-medium text-sm ${
-                        buildFailing ? 'bg-red-500 hover:bg-red-600' : 'bg-brand-500 hover:bg-brand-600'
+                        publishing ? 'publish-regenboog' : buildFailing ? 'bg-red-500 hover:bg-red-600' : 'bg-brand-500 hover:bg-brand-600'
                       }`}
                       onClick={() => setShowPublishPanel(true)}
                       title={publishing ? t('topbar.publishing') : buildFailing ? t('topbar.buildFailingTitle') : t('topbar.publishTitle')}
