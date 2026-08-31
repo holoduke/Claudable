@@ -128,13 +128,43 @@ model ProjectShare {
 model Organization {
   id        String   @id @default(cuid())
   name      String
-  domain    String   @unique
+  // E-maildomein voor automatische provisioning (interne org). Klant-orgs
+  // hebben er doorgaans geen; leden komen daar via uitnodiging/OrgMember.
+  domain    String?  @unique
+  // intern (New Story zelf) | klant — bepaalt o.a. de versimpelde
+  // klantweergave en waar quota/facturatie aan hangen.
+  type      String   @default("intern")
   createdAt DateTime @default(now()) @map("created_at")
 
   users    User[]
   projects Project[]
+  members  OrgMember[]
 
   @@map("organizations")
+}
+
+/**
+ * Lidmaatschap van een organisatie — de tenant-grens voor het klantportaal.
+ * Eén gebruiker kan lid zijn van meerdere organisaties (New Story-collega's
+ * bijvoorbeeld ook van klant-orgs om te ondersteunen); een klant is alleen
+ * lid van de eigen org. Rollen: eigenaar | beheerder | lid.
+ * NB: User.orgId blijft als legacy-veld bestaan totdat de toegangslogica
+ * (project-access.ts) op memberships draait; tot die tijd verandert er niets
+ * aan het gedrag.
+ */
+model OrgMember {
+  id        String   @id @default(cuid())
+  orgId     String   @map("org_id")
+  userId    String   @map("user_id")
+  role      String   @default("lid") // eigenaar | beheerder | lid
+  createdAt DateTime @default(now()) @map("created_at")
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([orgId, userId])
+  @@index([userId])
+  @@map("org_members")
 }
 
 model User {
@@ -158,6 +188,7 @@ model User {
   ownedProjects Project[]       @relation("OwnedProjects")
   editedProjects Project[]      @relation("EditedProjects")
   memberships   ProjectMember[]
+  orgMemberships OrgMember[]
   claudeCredentials ClaudeCredential[]
   comments      Comment[]
 

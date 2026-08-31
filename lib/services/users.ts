@@ -48,6 +48,7 @@ export async function addExternalUser(
         role: 'user',
         orgId,
         isActive: true,
+        orgMemberships: { create: { orgId, role: 'lid' } },
       },
     });
     return { user, created: true };
