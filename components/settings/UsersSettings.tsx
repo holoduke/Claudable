@@ -208,8 +208,11 @@ export default function UsersSettings({ currentUserId, onToast }: UsersSettingsP
                     className="px-2.5 py-1.5 text-xs font-medium border border-gray-200 dark:border-white/8 rounded-full bg-white dark:bg-white/6 text-gray-700 dark:text-gray-200 focus:outline-hidden focus:ring-0 disabled:opacity-50 cursor-pointer"
                     title={isSelf ? 'You cannot change your own role' : 'Change role'}
                   >
+                    {/* 'admin' is de opgeslagen waarde; getoond als "Superadmin":
+                        instantie-breed beheer (alle organisaties, alle projecten),
+                        niet te verwarren met org-rollen (eigenaar/beheerder/lid). */}
                     <option value="user">User</option>
-                    <option value="admin">Admin</option>
+                    <option value="admin">Superadmin</option>
                   </select>
 
                   {/* Activate / deactivate */}
