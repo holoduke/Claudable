@@ -52,6 +52,7 @@ export const fr: Record<keyof typeof en, string> = {
   'settings.tab.claude': 'Claude',
   'settings.tab.account': 'Compte',
   'settings.tab.users': 'Utilisateurs',
+  'settings.tab.orgs': 'Organisations',
   'settings.tab.sharedMcp': 'MCP partagé',
   'settings.tab.plugins': 'Plug-ins',
   'settings.tab.system': 'Système',

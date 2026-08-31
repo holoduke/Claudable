@@ -52,6 +52,7 @@ export const ja: Record<keyof typeof en, string> = {
   'settings.tab.claude': 'Claude',
   'settings.tab.account': 'アカウント',
   'settings.tab.users': 'ユーザー',
+  'settings.tab.orgs': '組織',
   'settings.tab.sharedMcp': '共有 MCP',
   'settings.tab.plugins': 'プラグイン',
   'settings.tab.system': 'システム',

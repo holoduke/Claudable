@@ -60,6 +60,7 @@ export const en = {
   'settings.tab.claude': 'Claude',
   'settings.tab.account': 'Account',
   'settings.tab.users': 'Users',
+  'settings.tab.orgs': 'Organizations',
   'settings.tab.sharedMcp': 'Shared MCP',
   'settings.tab.plugins': 'Plugins',
   'settings.tab.system': 'System',

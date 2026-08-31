@@ -4,6 +4,7 @@ import Image from 'next/image';
 import { AnimatePresence } from 'framer-motion';
 import { MotionDiv } from '@/lib/motion';
 import UsersSettings from '@/components/settings/UsersSettings';
+import OrgsSettings from '@/components/settings/OrgsSettings';
 import SystemOverviewSettings from '@/components/settings/SystemOverviewSettings';
 import SharedMcpSettings from '@/components/settings/SharedMcpSettings';
 import PluginSettings from '@/components/settings/PluginSettings';
@@ -19,7 +20,7 @@ import type { CLIStatus } from '@/types/cli';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? '';
 
-type SettingsTab = 'general' | 'ai-agents' | 'claude' | 'account' | 'users' | 'shared-mcp' | 'plugins' | 'system' | 'about';
+type SettingsTab = 'general' | 'ai-agents' | 'claude' | 'account' | 'users' | 'orgs' | 'shared-mcp' | 'plugins' | 'system' | 'about';
 
 interface GlobalSettingsProps {
   isOpen: boolean;
@@ -225,7 +226,7 @@ export default function GlobalSettings({ isOpen, onClose, initialTab = 'general'
     // a single-tenant (auth-off) user opening initialTab='shared-mcp' gets bounced
     // to General if /api/users/me resolves before /api/auth/config.
     if (
-      (userLoaded && !isAdmin && (activeTab === 'users' || activeTab === 'system')) ||
+      (userLoaded && !isAdmin && (activeTab === 'users' || activeTab === 'orgs' || activeTab === 'system')) ||
       (userLoaded && authConfigLoaded && !canManageOrg && (activeTab === 'shared-mcp' || activeTab === 'plugins'))
     ) {
       setActiveTab('general');
@@ -385,6 +386,7 @@ export default function GlobalSettings({ isOpen, onClose, initialTab = 'general'
                 ...(currentUser ? [{ id: 'claude' as const, label: t('settings.tab.claude') }] : []),
                 ...(currentUser ? [{ id: 'account' as const, label: t('settings.tab.account') }] : []),
                 ...(isAdmin ? [{ id: 'users' as const, label: t('settings.tab.users') }] : []),
+                ...(isAdmin ? [{ id: 'orgs' as const, label: t('settings.tab.orgs') }] : []),
                 ...(canManageOrg ? [{ id: 'shared-mcp' as const, label: t('settings.tab.sharedMcp') }] : []),
                 ...(canManageOrg ? [{ id: 'plugins' as const, label: t('settings.tab.plugins') }] : []),
                 ...(isAdmin ? [{ id: 'system' as const, label: t('settings.tab.system') }] : []),
@@ -665,6 +667,7 @@ export default function GlobalSettings({ isOpen, onClose, initialTab = 'general'
             {activeTab === 'users' && isAdmin && currentUser && (
               <UsersSettings currentUserId={currentUser.id} onToast={showToast} />
             )}
+            {activeTab === 'orgs' && isAdmin && <OrgsSettings onToast={showToast} />}
 
             {activeTab === 'about' && (
               <div className="space-y-6">
