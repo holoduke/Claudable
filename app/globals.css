@@ -280,6 +280,22 @@ summary:focus-visible,
   to { opacity: 1; transform: translateY(0) scale(1); }
 }
 
+/* Publish-knop tijdens een lopende publish/deploy: doorlopende regenboog.
+   Eerste en laatste kleur zijn gelijk en de positie schuift één volledige
+   tegel (200% → 0%), zodat de loop naadloos is. */
+@keyframes publishRegenboog {
+  from { background-position: 200% 50%; }
+  to { background-position: 0% 50%; }
+}
+.publish-regenboog {
+  background-image: linear-gradient(90deg, #f43f5e, #f59e0b, #22c55e, #0ea5e9, #8b5cf6, #f43f5e);
+  background-size: 200% 100%;
+  animation: publishRegenboog 2.2s linear infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .publish-regenboog { animation: none; }
+}
+
 /* Salsa Shop display + body fonts, reused on the login page. */
 @font-face {
   font-family: 'Gill Sans Nova';
