@@ -75,3 +75,8 @@ temp/
 # Electron build artifacts (too large for GitHub)
 dist/
 release/
+# Agent session transcripts (runtime data, per-project, large)
+claude-sessions/
+
+# Editor/ops backup copies
+*.bak
