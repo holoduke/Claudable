@@ -107,16 +107,20 @@ async function githubFetch(token: string, endpoint: string, init?: RequestInit, 
       } else if (typeof body === 'object') {
         const errorMessage = (body as Record<string, unknown>).message;
         const errors = (body as Record<string, unknown>).errors;
+        const aggregated = Array.isArray(errors)
+          ? errors
+              .map((err) => (err && typeof err === 'object' ? (err as Record<string, unknown>).message : null))
+              .filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
+              .join(', ')
+          : '';
         if (typeof errorMessage === 'string' && errorMessage.trim().length > 0) {
-          message = errorMessage;
-        } else if (Array.isArray(errors) && errors.length > 0) {
-          const aggregated = errors
-            .map((err) => (err && typeof err === 'object' ? (err as Record<string, unknown>).message : null))
-            .filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
-            .join(', ');
-          if (aggregated) {
-            message = aggregated;
-          }
+          // GitHub sends a generic "Validation Failed" in `message` and the real
+          // reason in `errors[]` (e.g. "No commits between main and X"). Keep
+          // both: callers match on the detail, and dropping it turned a benign
+          // nothing-to-publish into a failed publish.
+          message = aggregated ? `${errorMessage}: ${aggregated}` : errorMessage;
+        } else if (aggregated) {
+          message = aggregated;
         } else {
           message = JSON.stringify(body);
         }
