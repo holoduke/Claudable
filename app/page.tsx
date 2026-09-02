@@ -1104,7 +1104,7 @@ export default function HomePage() {
                 </div>
               </div>
               <p className="text-xl text-gray-700 dark:text-gray-200 font-light tracking-tight">
-                Newstory Portal
+                Newstory Application Design Portal
               </p>
               {/* Which organisation you are working in — customers see their own org; staff see all. */}
               {!isSuperadmin && myOrgs.length > 0 && (
@@ -1601,7 +1601,8 @@ export default function HomePage() {
               user may access when the auth gate is on. */}
           {projects.length > 0 && (
             <div className="mt-12 w-full lg:w-[80%] mx-auto text-left">
-              {/* Live project search — centered, replaces the old heading. */}
+              {/* Live project search — only worth showing once there is something to search (10+ projects). */}
+              {projects.length >= 10 && (
               <div className="relative w-full max-w-sm mx-auto mb-5">
                 <Search aria-hidden className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 dark:text-gray-500 pointer-events-none" />
                 <input
@@ -1613,6 +1614,7 @@ export default function HomePage() {
                   className="w-full h-10 pl-10 pr-4 rounded-full border border-gray-200 dark:border-white/9 bg-white/80 dark:bg-white/4 text-sm text-gray-900 dark:text-gray-50 placeholder:text-gray-400 dark:placeholder:text-gray-500 shadow-xs focus:outline-hidden focus:border-brand-500/50 focus:ring-2 focus:ring-brand-500/15 transition-colors"
                 />
               </div>
+              )}
               {visibleProjects.length === 0 && (
                 <p className="text-center text-sm text-gray-500 dark:text-gray-400 py-8">
                   {t('home.noProjectsMatch', { query: projectSearch.trim() })}
