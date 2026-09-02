@@ -8,6 +8,22 @@
  */
 import { prisma } from '@/lib/db/client';
 import { addExternalUser } from '@/lib/services/users';
+import { canActorSetRole, type OrgActor, type OrgRole } from '@/lib/services/org-access';
+
+/** Who performs a member mutation; drives the role policy in org-access.ts. */
+export type MemberActor = Pick<OrgActor, 'superadmin' | 'role'>;
+const SUPERADMIN: MemberActor = { superadmin: true, role: null };
+
+class OrgPolicyError extends Error {
+  constructor(message: string) { super(message); this.name = 'OrgPolicyError'; }
+}
+export function isOrgPolicyError(e: unknown): boolean { return e instanceof OrgPolicyError; }
+
+function assertPolicy(actor: MemberActor, targetRole: OrgRole | null, newRole: OrgRole | null) {
+  if (!canActorSetRole(actor, targetRole, newRole)) {
+    throw new OrgPolicyError('Alleen een eigenaar kan eigenaren toevoegen, wijzigen of verwijderen');
+  }
+}
 
 export const ORG_TYPES = ['intern', 'klant'] as const;
 export const ORG_MEMBER_ROLES = ['eigenaar', 'beheerder', 'lid'] as const;
@@ -120,7 +136,7 @@ export async function listOrgMembers(orgId: string) {
  * dan alleen een membership erbij; anders wordt een slapende externe gebruiker
  * aangemaakt (mag daarna via Google inloggen) met deze org als thuisorg.
  */
-export async function addOrgMember(orgId: string, email: string, role: string) {
+export async function addOrgMember(orgId: string, email: string, role: string, actor: MemberActor = SUPERADMIN) {
   assertRole(role);
   const lower = email.trim().toLowerCase();
   if (!EMAIL_RE.test(lower)) throw new Error('Een geldig e-mailadres is verplicht');
@@ -129,6 +145,10 @@ export async function addOrgMember(orgId: string, email: string, role: string) {
   if (!org) throw new Error('Organisatie niet gevonden');
 
   let user = await prisma.user.findUnique({ where: { email: lower } });
+  const existing = user
+    ? await prisma.orgMember.findUnique({ where: { orgId_userId: { orgId, userId: user.id } } })
+    : null;
+  assertPolicy(actor, (existing?.role as OrgRole | undefined) ?? null, role);
   if (!user) {
     ({ user } = await addExternalUser(orgId, lower));
   }
@@ -152,8 +172,11 @@ async function assertNotLastOwner(orgId: string, userId: string) {
   }
 }
 
-export async function updateOrgMemberRole(orgId: string, userId: string, role: string) {
+export async function updateOrgMemberRole(orgId: string, userId: string, role: string, actor: MemberActor = SUPERADMIN) {
   assertRole(role);
+  const current = await prisma.orgMember.findUnique({ where: { orgId_userId: { orgId, userId } } });
+  if (!current) throw new Error('Lidmaatschap niet gevonden');
+  assertPolicy(actor, current.role as OrgRole, role);
   if (role !== 'eigenaar') await assertNotLastOwner(orgId, userId);
   return prisma.orgMember.update({
     where: { orgId_userId: { orgId, userId } },
@@ -161,7 +184,10 @@ export async function updateOrgMemberRole(orgId: string, userId: string, role: s
   });
 }
 
-export async function removeOrgMember(orgId: string, userId: string) {
+export async function removeOrgMember(orgId: string, userId: string, actor: MemberActor = SUPERADMIN) {
+  const current = await prisma.orgMember.findUnique({ where: { orgId_userId: { orgId, userId } } });
+  if (!current) throw new Error('Lidmaatschap niet gevonden');
+  assertPolicy(actor, current.role as OrgRole, null);
   await assertNotLastOwner(orgId, userId);
   // NB: is dit de thuisorg van de gebruiker (User.orgId), dan maakt een
   // volgende sign-in het lidmaatschap idempotent opnieuw aan (provision.ts).

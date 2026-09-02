@@ -7,14 +7,16 @@
  * projects) is applied by the API routes only when the auth gate is enabled.
  *
  * Tenant rule: a project belongs to exactly one organisation (Project.orgId)
- * and org-visible projects are visible to that org ONLY. A project with no org
- * is a data error under auth (it can't happen via the API any more) and is
- * therefore closed to everyone except its owner and global admins — never the
- * old "legacy: visible to all" fallback, which would cross tenant boundaries.
+ * and org-visible projects are visible to the MEMBERS of that org only (see
+ * org-access.ts — membership, not the legacy User.orgId home-org field). A
+ * project with no org is a data error under auth (it can't happen via the API
+ * any more) and is therefore closed to everyone except its owner and global
+ * admins — never the old "legacy: visible to all" fallback.
  */
 import { prisma } from '@/lib/db/client';
 import { getSessionUser } from '@/lib/auth/session';
 import type { User, Project } from '@prisma/client';
+import { isOrgMember, orgIdsFor } from '@/lib/services/org-access';
 
 export type Visibility = 'org' | 'restricted';
 
@@ -58,11 +60,6 @@ type AccessProject = {
   visibility: string;
 };
 
-/** Org-visible project: same tenant only. A null org is closed (see header). */
-function sameOrg(user: { orgId: string | null }, project: { orgId: string | null }): boolean {
-  return project.orgId != null && project.orgId === user.orgId;
-}
-
 /** Owner or global admin may toggle restriction and assign members. */
 export function canManageProject(user: User, project: { ownerId: string | null }): boolean {
   return user.role === 'admin' || project.ownerId === user.id;
@@ -80,7 +77,8 @@ export async function canWriteProject(user: User, project: AccessProject): Promi
   if (user.role === 'admin') return true;
   if (project.ownerId === user.id) return true;
   if (project.visibility !== 'restricted') {
-    return sameOrg(user, project);
+    // Open to the org — i.e. to its members, and only to them.
+    return isOrgMember(user.id, project.orgId);
   }
   const member = await prisma.projectMember.findUnique({
     where: { projectId_userId: { projectId: project.id, userId: user.id } },
@@ -93,8 +91,8 @@ export async function canAccessProject(user: User, project: AccessProject): Prom
   if (user.role === 'admin') return true;
   if (project.ownerId === user.id) return true;
   if (project.visibility !== 'restricted') {
-    // Open to the org — and only to the org.
-    return sameOrg(user, project);
+    // Open to the org — i.e. to its members, and only to them.
+    return isOrgMember(user.id, project.orgId);
   }
   const member = await prisma.projectMember.findUnique({
     where: { projectId_userId: { projectId: project.id, userId: user.id } },
@@ -159,6 +157,9 @@ export async function accessibleProjectIds(
 ): Promise<Set<string>> {
   if (user.role === 'admin') return new Set(projects.map((p) => p.id));
 
+  // One query for the caller's org memberships, one for restricted assignments.
+  const myOrgs = await orgIdsFor(user.id);
+
   const restrictedIds = projects
     .filter((p) => p.visibility === 'restricted' && p.ownerId !== user.id)
     .map((p) => p.id);
@@ -176,21 +177,21 @@ export async function accessibleProjectIds(
     projects
       .filter((p) => {
         if (p.ownerId === user.id) return true;
-        if (p.visibility !== 'restricted') return sameOrg(user, p);
+        if (p.visibility !== 'restricted') return p.orgId != null && myOrgs.has(p.orgId);
         return memberIds.has(p.id);
       })
       .map((p) => p.id),
   );
 }
 
-/** Org-scoped active-user search powering the assignment autocomplete. */
+/** Org-scoped active-user search (members of `orgId`) powering the assignment autocomplete. */
 export async function searchOrgUsers(orgId: string, query: string, limit = 10) {
   const q = query.trim();
   // SQLite LIKE is case-insensitive for ASCII, so `contains` needs no mode flag
   // (which SQLite doesn't support anyway).
   const users = await prisma.user.findMany({
     where: {
-      orgId,
+      orgMemberships: { some: { orgId } },
       isActive: true,
       ...(q ? { OR: [{ email: { contains: q } }, { name: { contains: q } }] } : {}),
     },

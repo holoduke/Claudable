@@ -36,7 +36,7 @@ export async function GET(_req: NextRequest, { params }: Ctx) {
 
 export async function POST(_req: NextRequest, { params }: Ctx) {
   const { project_id } = await params;
-  const _gate = await denyUnlessProjectAccess(project_id);
+  const _gate = await denyUnlessProjectAccess(project_id, { write: true });
   if (_gate) return _gate;
   const ok = await captureThumbnail(project_id);
   return NextResponse.json({ success: ok }, { status: ok ? 200 : 202 });

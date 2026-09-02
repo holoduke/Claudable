@@ -1,12 +1,14 @@
 /**
- * Org-scoped user search — GET /api/users/search?q=
- * Powers the project-access assignment autocomplete. Available to any signed-in
- * user (project owners need it, not just admins); results are limited to the
- * caller's own organization.
+ * Org-scoped user search — GET /api/users/search?q=&project=
+ * Powers the project-access assignment and @-mention autocompletes. Available
+ * to any signed-in user (project owners need it, not just admins). With
+ * `project`, results are the members of THAT project's organisation (the caller
+ * must be able to access the project); without it, the caller's home org.
  */
 import { NextRequest } from 'next/server';
 import { getSessionUser } from '@/lib/auth/session';
-import { searchOrgUsers } from '@/lib/services/project-access';
+import { prisma } from '@/lib/db/client';
+import { canAccessProject, searchOrgUsers } from '@/lib/services/project-access';
 import { createSuccessResponse, createErrorResponse, handleApiError } from '@/lib/utils/api-response';
 
 export const runtime = 'nodejs';
@@ -17,6 +19,15 @@ export async function GET(request: NextRequest) {
     if (!me) return createErrorResponse('unauthorized', 'Sign in required', 401);
 
     const q = request.nextUrl.searchParams.get('q') ?? '';
+    const projectId = request.nextUrl.searchParams.get('project');
+    if (projectId) {
+      const project = await prisma.project.findUnique({ where: { id: projectId } });
+      if (!project || !(await canAccessProject(me, project))) {
+        return createErrorResponse('not_found', 'Project not found', 404);
+      }
+      if (!project.orgId) return createSuccessResponse([]);
+      return createSuccessResponse(await searchOrgUsers(project.orgId, q));
+    }
     return createSuccessResponse(await searchOrgUsers(me.orgId, q));
   } catch (error) {
     return handleApiError(error, 'API', 'Failed to search users');

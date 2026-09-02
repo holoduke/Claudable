@@ -28,16 +28,22 @@ function serializeComment(c: CommentWithAuthor) {
 }
 
 /**
- * Keep only mentions that point at real, active users in the author's org —
+ * Keep only mentions that point at real, active MEMBERS of the project's org —
  * the client payload is untrusted, and cross-org user ids must never be
  * echoed back to other viewers. Names are re-snapshotted from the DB so a
  * spoofed payload can't attach an arbitrary label to a real user id.
  */
-async function resolveMentions(raw: unknown, authorOrgId: string | undefined): Promise<CommentMention[]> {
+async function resolveMentions(raw: unknown, projectId: string): Promise<CommentMention[]> {
   const candidates = sanitizeMentions(raw);
-  if (!candidates.length || !authorOrgId) return [];
+  if (!candidates.length) return [];
+  const project = await prisma.project.findUnique({ where: { id: projectId }, select: { orgId: true } });
+  if (!project?.orgId) return [];
   const users = await prisma.user.findMany({
-    where: { id: { in: candidates.map((m) => m.id) }, orgId: authorOrgId, isActive: true },
+    where: {
+      id: { in: candidates.map((m) => m.id) },
+      isActive: true,
+      orgMemberships: { some: { orgId: project.orgId } },
+    },
     select: { id: true, name: true, email: true },
   });
   return users.map((u) => ({ id: u.id, name: u.name || u.email.split('@')[0] }));
@@ -61,11 +67,12 @@ export async function createComment(input: {
   body: string;
   authorId?: string | null;
   authorName?: string | null;
-  /** Untrusted @-mention payload; validated against the author's org. */
+  /** Untrusted @-mention payload; validated against the project's org members. */
   mentions?: unknown;
+  /** @deprecated no longer used — mentions are scoped by the project's org. */
   authorOrgId?: string;
 }) {
-  const mentions = await resolveMentions(input.mentions, input.authorOrgId);
+  const mentions = await resolveMentions(input.mentions, input.projectId);
   const created = await prisma.comment.create({
     data: {
       projectId: input.projectId,
