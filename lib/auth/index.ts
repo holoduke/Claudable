@@ -32,8 +32,14 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       // the session cookie, which logs out a user who has been deactivated.
       const email = (user?.email ?? token.email)?.toLowerCase();
       if (!email) return token;
-      const dbUser = await prisma.user.findUnique({ where: { email } });
+      const dbUser = await prisma.user.findUnique({
+        where: { email },
+        include: { _count: { select: { orgMemberships: true } } },
+      });
       if (!dbUser || !dbUser.isActive) return null;
+      // Removed from their last organisation → no tenant left to act in; end
+      // the session instead of leaving a signed-in user who can see nothing.
+      if (dbUser.role !== 'admin' && dbUser._count.orgMemberships === 0) return null;
       (token as any).uid = dbUser.id;
       (token as any).role = dbUser.role;
       (token as any).orgId = dbUser.orgId;

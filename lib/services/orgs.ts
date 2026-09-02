@@ -7,12 +7,15 @@
  * eigenaar van een org kan niet gedegradeerd of verwijderd worden.
  */
 import { prisma } from '@/lib/db/client';
-import { addExternalUser } from '@/lib/services/users';
 import { canActorSetRole, type OrgActor, type OrgRole } from '@/lib/services/org-access';
+import { recordAudit, type AuditActor } from '@/lib/services/audit';
 
-/** Who performs a member mutation; drives the role policy in org-access.ts. */
-export type MemberActor = Pick<OrgActor, 'superadmin' | 'role'>;
+/** Who performs a mutation; drives the role policy in org-access.ts and the audit trail. */
+export type MemberActor = Pick<OrgActor, 'superadmin' | 'role'> & { user?: AuditActor | null };
 const SUPERADMIN: MemberActor = { superadmin: true, role: null };
+
+/** How long an invitation stays valid. */
+export const INVITE_TTL_DAYS = 14;
 
 class OrgPolicyError extends Error {
   constructor(message: string) { super(message); this.name = 'OrgPolicyError'; }
@@ -70,19 +73,25 @@ export async function listOrgs() {
   }));
 }
 
-export async function createOrg(input: { name: string; type?: string; domain?: string | null }) {
+export async function createOrg(
+  input: { name: string; type?: string; domain?: string | null },
+  actor?: AuditActor | null,
+) {
   const name = input.name?.trim();
   if (!name) throw new Error('Naam is verplicht');
   const type = input.type?.trim() || 'klant';
   assertType(type);
-  return prisma.organization.create({
+  const org = await prisma.organization.create({
     data: { name, type, domain: normalizeDomain(input.domain) },
   });
+  await recordAudit({ orgId: org.id, actor, action: 'org.created', targetType: 'org', targetId: org.id, meta: { name, type, domain: org.domain } });
+  return org;
 }
 
 export async function updateOrg(
   id: string,
   input: { name?: string; type?: string; domain?: string | null },
+  actor?: AuditActor | null,
 ) {
   const data: { name?: string; type?: string; domain?: string | null } = {};
   if (input.name !== undefined) {
@@ -96,10 +105,12 @@ export async function updateOrg(
     data.type = type;
   }
   if (input.domain !== undefined) data.domain = normalizeDomain(input.domain);
-  return prisma.organization.update({ where: { id }, data });
+  const org = await prisma.organization.update({ where: { id }, data });
+  await recordAudit({ orgId: id, actor, action: 'org.updated', targetType: 'org', targetId: id, meta: data });
+  return org;
 }
 
-export async function deleteOrg(id: string) {
+export async function deleteOrg(id: string, actor?: AuditActor | null) {
   const counts = await prisma.organization.findUnique({
     where: { id },
     include: { _count: { select: { members: true, projects: true, users: true } } },
@@ -112,6 +123,8 @@ export async function deleteOrg(id: string) {
     throw new Error('Kan niet verwijderen: de organisatie heeft nog leden');
   }
   await prisma.organization.delete({ where: { id } });
+  // orgId is nulled by the cascade; keep the name in meta so the trail stays readable.
+  await recordAudit({ orgId: null, actor, action: 'org.deleted', targetType: 'org', targetId: id, meta: { name: counts.name } });
 }
 
 export async function listOrgMembers(orgId: string) {
@@ -132,9 +145,10 @@ export async function listOrgMembers(orgId: string) {
 }
 
 /**
- * Lid toevoegen op e-mailadres. Bestaat de gebruiker al (bijv. een collega),
- * dan alleen een membership erbij; anders wordt een slapende externe gebruiker
- * aangemaakt (mag daarna via Google inloggen) met deze org als thuisorg.
+ * Lid toevoegen op e-mailadres (elk domein). Bestaat de gebruiker al (bijv. een
+ * collega), dan direct een lidmaatschap erbij. Een onbekend adres krijgt een
+ * UITNODIGING (OrgInvite, 14 dagen geldig): de gebruiker ontstaat pas bij de
+ * eerste Google-login met dat adres (provision.ts) — geen slapende accounts meer.
  */
 export async function addOrgMember(orgId: string, email: string, role: string, actor: MemberActor = SUPERADMIN) {
   assertRole(role);
@@ -144,20 +158,63 @@ export async function addOrgMember(orgId: string, email: string, role: string, a
   const org = await prisma.organization.findUnique({ where: { id: orgId } });
   if (!org) throw new Error('Organisatie niet gevonden');
 
-  let user = await prisma.user.findUnique({ where: { email: lower } });
+  const user = await prisma.user.findUnique({ where: { email: lower } });
   const existing = user
     ? await prisma.orgMember.findUnique({ where: { orgId_userId: { orgId, userId: user.id } } })
     : null;
   assertPolicy(actor, (existing?.role as OrgRole | undefined) ?? null, role);
+
   if (!user) {
-    ({ user } = await addExternalUser(orgId, lower));
+    const expiresAt = new Date(Date.now() + INVITE_TTL_DAYS * 24 * 60 * 60 * 1000);
+    const invite = await prisma.orgInvite.upsert({
+      where: { orgId_email: { orgId, email: lower } },
+      update: { role, expiresAt, revokedAt: null, acceptedAt: null, invitedById: actor.user?.id ?? null },
+      create: { orgId, email: lower, role, expiresAt, invitedById: actor.user?.id ?? null },
+    });
+    await recordAudit({ orgId, actor: actor.user, action: 'org.invite.created', targetType: 'invite', targetId: invite.id, meta: { email: lower, role, expiresAt } });
+    return { invited: true as const, inviteId: invite.id, email: lower, role, expiresAt };
   }
+
   await prisma.orgMember.upsert({
     where: { orgId_userId: { orgId, userId: user.id } },
     update: { role },
     create: { orgId, userId: user.id, role },
   });
-  return { userId: user.id, email: user.email };
+  await recordAudit({
+    orgId, actor: actor.user,
+    action: existing ? 'org.member.role_changed' : 'org.member.added',
+    targetType: 'user', targetId: user.id,
+    meta: { email: user.email, role, ...(existing ? { from: existing.role } : {}) },
+  });
+  return { invited: false as const, userId: user.id, email: user.email, role };
+}
+
+/** Openstaande (en recent verlopen/ingetrokken) uitnodigingen van een org. */
+export async function listOrgInvites(orgId: string) {
+  const rows = await prisma.orgInvite.findMany({
+    where: { orgId, acceptedAt: null },
+    orderBy: { createdAt: 'desc' },
+    include: { invitedBy: { select: { email: true, name: true } } },
+  });
+  const now = Date.now();
+  return rows.map((i) => ({
+    id: i.id,
+    email: i.email,
+    role: i.role,
+    invitedBy: i.invitedBy?.name || i.invitedBy?.email || null,
+    createdAt: i.createdAt,
+    expiresAt: i.expiresAt,
+    status: i.revokedAt ? 'ingetrokken' : i.expiresAt.getTime() < now ? 'verlopen' : 'open',
+  }));
+}
+
+export async function revokeOrgInvite(orgId: string, inviteId: string, actor: MemberActor = SUPERADMIN) {
+  const invite = await prisma.orgInvite.findFirst({ where: { id: inviteId, orgId } });
+  if (!invite) throw new Error('Uitnodiging niet gevonden');
+  if (invite.acceptedAt) throw new Error('Uitnodiging is al geaccepteerd');
+  assertPolicy(actor, null, invite.role as OrgRole);
+  await prisma.orgInvite.update({ where: { id: invite.id }, data: { revokedAt: new Date() } });
+  await recordAudit({ orgId, actor: actor.user, action: 'org.invite.revoked', targetType: 'invite', targetId: invite.id, meta: { email: invite.email, role: invite.role } });
 }
 
 /** De laatste eigenaar mag niet weg of omlaag — anders is de org stuurloos. */
@@ -178,10 +235,12 @@ export async function updateOrgMemberRole(orgId: string, userId: string, role: s
   if (!current) throw new Error('Lidmaatschap niet gevonden');
   assertPolicy(actor, current.role as OrgRole, role);
   if (role !== 'eigenaar') await assertNotLastOwner(orgId, userId);
-  return prisma.orgMember.update({
+  const updated = await prisma.orgMember.update({
     where: { orgId_userId: { orgId, userId } },
     data: { role },
   });
+  await recordAudit({ orgId, actor: actor.user, action: 'org.member.role_changed', targetType: 'user', targetId: userId, meta: { from: current.role, role } });
+  return updated;
 }
 
 export async function removeOrgMember(orgId: string, userId: string, actor: MemberActor = SUPERADMIN) {
@@ -189,8 +248,9 @@ export async function removeOrgMember(orgId: string, userId: string, actor: Memb
   if (!current) throw new Error('Lidmaatschap niet gevonden');
   assertPolicy(actor, current.role as OrgRole, null);
   await assertNotLastOwner(orgId, userId);
-  // NB: is dit de thuisorg van de gebruiker (User.orgId), dan maakt een
-  // volgende sign-in het lidmaatschap idempotent opnieuw aan (provision.ts).
-  // Externe gebruikers echt buitensluiten doe je via Gebruikers → Deactivate.
+  // Definitief: provisioning maakt lidmaatschappen niet meer opnieuw aan bij
+  // een volgende sign-in. Wie zo zijn laatste org verliest, kan pas weer
+  // inloggen na een nieuwe uitnodiging (provision.ts / auth jwt-callback).
   await prisma.orgMember.delete({ where: { orgId_userId: { orgId, userId } } });
+  await recordAudit({ orgId, actor: actor.user, action: 'org.member.removed', targetType: 'user', targetId: userId, meta: { role: current.role } });
 }

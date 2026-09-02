@@ -1,11 +1,27 @@
 /**
  * Sign-in allowlist + user provisioning (Prisma — Node only).
  *
- * Allowed to sign in if: the email is on an allowed domain (auto-provisioned), OR
- * a User row already exists (an admin pre-added an external email). Everything is
- * provisioned into the single organization for now (multi-org-ready model).
+ * Who may sign in, and where a brand-new user lands:
+ *
+ *  1. A pending, unexpired invitation for the (Google-verified) e-mail address
+ *     → the user is created in the inviting organisation with the invited role;
+ *     every pending invite for that address is accepted in one go.
+ *  2. Otherwise, the e-mail domain is in ALLOWED_EMAIL_DOMAINS (auto-join) AND
+ *     an organisation carries exactly that domain → provisioned into THAT org
+ *     as lid. An allowed domain without a matching org is refused (never
+ *     silently filed under the primary org).
+ *  3. Otherwise an existing, active user who still holds at least one org
+ *     membership (or is a global admin) may sign in.
+ *  4. Everyone else is refused.
+ *
+ * Memberships are created only when a user is created or accepts an invite —
+ * never re-created on a routine sign-in. Removing someone from their last
+ * organisation therefore really removes their access. The bootstrap admin is
+ * the one exception: they are re-promoted, re-activated and kept a member of
+ * the primary org on every sign-in so the instance can never lock itself out.
  */
 import { prisma } from '@/lib/db/client';
+import { recordAudit } from '@/lib/services/audit';
 
 const DEFAULT_ORG_NAME = 'New Story';
 
@@ -20,13 +36,17 @@ function primaryDomain(): string {
   return allowedDomains()[0] || 'example.com';
 }
 
-function emailDomainAllowed(email: string): boolean {
-  const domain = email.split('@')[1]?.toLowerCase();
-  return !!domain && allowedDomains().includes(domain);
+function emailDomain(email: string): string {
+  return email.split('@')[1]?.toLowerCase() ?? '';
 }
 
-/** The single org (created on demand). Keyed by the primary allowed domain. */
-async function ensureOrg() {
+function isBootstrapAdmin(email: string): boolean {
+  const configured = process.env.BOOTSTRAP_ADMIN_EMAIL?.toLowerCase();
+  return !!configured && email.toLowerCase() === configured;
+}
+
+/** The primary org (created on first run). Keyed by the primary allowed domain. */
+export async function ensurePrimaryOrg() {
   const domain = primaryDomain();
   // upsert is race-safe for concurrent first sign-ins (vs findUnique-then-create).
   return prisma.organization.upsert({
@@ -36,16 +56,42 @@ async function ensureOrg() {
   });
 }
 
-/** Whether this email may sign in at all. */
+/** The org an e-mail domain auto-joins, if that domain is allowed AND owned by an org. */
+async function autoJoinOrg(email: string) {
+  const domain = emailDomain(email);
+  if (!domain || !allowedDomains().includes(domain)) return null;
+  if (domain === primaryDomain()) return ensurePrimaryOrg();
+  return prisma.organization.findUnique({ where: { domain } });
+}
+
+async function pendingInvites(email: string) {
+  return prisma.orgInvite.findMany({
+    where: { email: email.toLowerCase(), acceptedAt: null, revokedAt: null, expiresAt: { gt: new Date() } },
+    orderBy: { createdAt: 'asc' },
+  });
+}
+
+/** Whether this email may sign in at all (see the header for the rules). */
 export async function isSignInAllowed(email: string): Promise<boolean> {
-  if (emailDomainAllowed(email)) return true;
-  const existing = await prisma.user.findUnique({ where: { email: email.toLowerCase() } });
-  return !!existing;
+  const lower = email.toLowerCase();
+  if (isBootstrapAdmin(lower)) return true;
+  const existing = await prisma.user.findUnique({
+    where: { email: lower },
+    include: { _count: { select: { orgMemberships: true } } },
+  });
+  if (existing) {
+    if (!existing.isActive) return false;
+    if (existing.role === 'admin' || existing._count.orgMemberships > 0) return true;
+    // A member who was removed from their last org can come back via an invite.
+    return (await pendingInvites(lower)).length > 0;
+  }
+  if ((await pendingInvites(lower)).length > 0) return true;
+  return !!(await autoJoinOrg(lower));
 }
 
 /**
  * Create/update the user on sign-in. Returns the user (with role/isActive).
- * The configured BOOTSTRAP_ADMIN_EMAIL is promoted to admin (no lockout).
+ * Assumes isSignInAllowed() already passed.
  */
 export async function provisionUser(
   email: string,
@@ -53,43 +99,77 @@ export async function provisionUser(
   image?: string | null,
 ) {
   const lower = email.toLowerCase();
-  const bootstrap = !!process.env.BOOTSTRAP_ADMIN_EMAIL
-    && lower === process.env.BOOTSTRAP_ADMIN_EMAIL.toLowerCase();
-  const org = await ensureOrg();
+  const bootstrap = isBootstrapAdmin(lower);
+  const invites = await pendingInvites(lower);
 
-  // upsert avoids a TOCTOU race between concurrent first sign-ins. The bootstrap
-  // admin is always (re)promoted AND reactivated, so they can never be locked
-  // out by a deactivation/demotion — their next sign-in restores access.
-  const user = await prisma.user.upsert({
-    where: { email: lower },
-    update: {
-      name: name ?? undefined,
-      image: image ?? undefined,
-      lastLoginAt: new Date(),
-      ...(bootstrap ? { role: 'admin', isActive: true } : {}),
-    },
-    create: {
-      email: lower,
-      name: name ?? null,
-      image: image ?? null,
-      role: bootstrap ? 'admin' : 'user',
-      orgId: org.id,
-      isActive: true,
-      lastLoginAt: new Date(),
-    },
-  });
+  let user = await prisma.user.findUnique({ where: { email: lower } });
 
-  // Lidmaatschap van de org waarin de gebruiker geprovisioneerd is. Idempotent,
-  // en herstelt zichzelf voor bestaande gebruikers van vóór het OrgMember-model.
-  await prisma.orgMember.upsert({
-    where: { orgId_userId: { orgId: user.orgId, userId: user.id } },
-    update: {},
-    create: {
-      orgId: user.orgId,
-      userId: user.id,
-      role: user.role === 'admin' ? 'beheerder' : 'lid',
-    },
-  });
+  if (user) {
+    user = await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        name: name ?? undefined,
+        image: image ?? undefined,
+        lastLoginAt: new Date(),
+        // The bootstrap admin is always (re)promoted AND reactivated, so they can
+        // never be locked out by a deactivation/demotion.
+        ...(bootstrap ? { role: 'admin', isActive: true } : {}),
+      },
+    });
+  } else {
+    // New user: home org = the first inviting org, else the auto-join org.
+    const homeOrg = invites.length
+      ? await prisma.organization.findUnique({ where: { id: invites[0].orgId } })
+      : await autoJoinOrg(lower);
+    if (!homeOrg) throw new Error(`No organisation to provision ${lower} into`);
+    const autoRole = bootstrap ? 'beheerder' : 'lid';
+    user = await prisma.user.create({
+      data: {
+        email: lower,
+        name: name ?? null,
+        image: image ?? null,
+        role: bootstrap ? 'admin' : 'user',
+        orgId: homeOrg.id,
+        isActive: true,
+        lastLoginAt: new Date(),
+        // Auto-join membership only when there is no invite for this org —
+        // invites (below) carry their own role.
+        ...(invites.some((i) => i.orgId === homeOrg.id)
+          ? {}
+          : { orgMemberships: { create: { orgId: homeOrg.id, role: autoRole } } }),
+      },
+    });
+  }
+
+  // Accept every pending invite: membership with the invited role (an existing
+  // membership keeps the higher of the two only if the invite is higher — we
+  // simply apply the invite's role, which is what the inviter asked for).
+  for (const invite of invites) {
+    await prisma.orgMember.upsert({
+      where: { orgId_userId: { orgId: invite.orgId, userId: user.id } },
+      update: { role: invite.role },
+      create: { orgId: invite.orgId, userId: user.id, role: invite.role },
+    });
+    await prisma.orgInvite.update({ where: { id: invite.id }, data: { acceptedAt: new Date() } });
+    await recordAudit({
+      orgId: invite.orgId,
+      actor: { id: user.id, email: user.email },
+      action: 'org.invite.accepted',
+      targetType: 'user',
+      targetId: user.id,
+      meta: { email: user.email, role: invite.role, inviteId: invite.id },
+    });
+  }
+
+  // Bootstrap admin: guaranteed membership of the primary org (self-healing).
+  if (bootstrap) {
+    const primary = await ensurePrimaryOrg();
+    await prisma.orgMember.upsert({
+      where: { orgId_userId: { orgId: primary.id, userId: user.id } },
+      update: {},
+      create: { orgId: primary.id, userId: user.id, role: 'beheerder' },
+    });
+  }
 
   return user;
 }

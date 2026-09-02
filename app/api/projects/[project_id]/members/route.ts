@@ -10,6 +10,7 @@ import {
 } from '@/lib/services/project-access';
 import { prisma } from '@/lib/db/client';
 import { isOrgMember } from '@/lib/services/org-access';
+import { recordAudit } from '@/lib/services/audit';
 import { createSuccessResponse, createErrorResponse, handleApiError } from '@/lib/utils/api-response';
 
 export const runtime = 'nodejs';
@@ -39,6 +40,7 @@ export async function POST(req: NextRequest, { params }: Ctx) {
     }
 
     await addProjectMember(project_id, userId, role);
+    await recordAudit({ orgId: gate.project.orgId, actor: gate.user, action: 'project.member.added', targetType: 'project', targetId: project_id, meta: { userId, role } });
     return createSuccessResponse(await getProjectAccess(project_id), 201);
   } catch (error) {
     return handleApiError(error, 'API', 'Failed to add project member');

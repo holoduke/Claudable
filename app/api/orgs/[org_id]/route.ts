@@ -25,7 +25,7 @@ export async function PATCH(request: NextRequest, { params }: RouteContext) {
       name: typeof body.name === 'string' ? body.name : undefined,
       type: typeof body.type === 'string' ? body.type : undefined,
       domain: typeof body.domain === 'string' || body.domain === null ? body.domain : undefined,
-    });
+    }, admin);
     return createSuccessResponse(org);
   } catch (error) {
     if (error instanceof Error && (error as { code?: string }).code === 'P2002') {
@@ -44,7 +44,7 @@ export async function DELETE(_request: NextRequest, { params }: RouteContext) {
     if (!admin) return createErrorResponse('forbidden', 'Superadmin access required', 403);
 
     const { org_id } = await params;
-    await deleteOrg(org_id);
+    await deleteOrg(org_id, admin);
     return createSuccessResponse({ deleted: true });
   } catch (error) {
     if (error instanceof Error && /Kan niet verwijderen|niet gevonden/u.test(error.message)) {

@@ -97,7 +97,7 @@ export default async function LoginPage({
               </svg>
               <span>
                 {error === 'AccessDenied'
-                  ? "This Google account isn't authorized for Claudable. Ask an admin to add you."
+                  ? "This Google account isn't authorized for Claudable. Ask an owner or admin of your organisation to invite you (invitations expire after 14 days)."
                   : 'Sign-in failed. Please try again.'}
               </span>
             </div>
