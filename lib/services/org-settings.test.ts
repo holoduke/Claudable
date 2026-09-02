@@ -4,8 +4,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 // (resolution order + env var choice). Prisma and crypto are mocked.
 const orgs: Record<string, { canCreateProjects: boolean; claudeCredentialId: string | null }> = {};
 const projects: Record<string, { claudeCredentialId: string | null; orgId: string | null }> = {};
-const creds: Record<string, { id: string; ownerId: string; shareable: boolean; token: string }> = {};
-const ownCred: Record<string, string> = {}; // userId -> credId
+const creds: Record<string, { id: string; ownerId: string; shareable: boolean; token: string; orgBound?: boolean }> = {};
+const ownCred: Record<string, string> = {}; // userId -> credId (most recent personal or org-bound row)
 
 vi.mock('@/lib/db/client', () => ({
   prisma: {
@@ -13,7 +13,12 @@ vi.mock('@/lib/db/client', () => ({
     project: { findUnique: vi.fn(async ({ where }: any) => projects[where.id] ?? null) },
     claudeCredential: {
       findUnique: vi.fn(async ({ where }: any) => creds[where.id] ?? null),
-      findFirst: vi.fn(async ({ where }: any) => (ownCred[where.ownerId] ? creds[ownCred[where.ownerId]] : null)),
+      findFirst: vi.fn(async ({ where }: any) => {
+        const c = ownCred[where.ownerId] ? creds[ownCred[where.ownerId]] : null;
+        // Mirror Prisma's `organizations: { none: {} }` filter.
+        if (c && where.organizations?.none && c.orgBound) return null;
+        return c;
+      }),
       update: vi.fn(async () => ({})),
     },
     user: { findUnique: vi.fn(async () => null) },
@@ -74,5 +79,15 @@ describe('org credential in the resolution order', () => {
 
   it('never counts as the requester\'s own account (no connector passthrough)', async () => {
     expect(await runUsesRequestersOwnAccount('p-b', 'customer')).toBe(false);
+  });
+
+  it('is NOT treated as the personal credential of the admin who set it', async () => {
+    // root set Micros.nl's credential; root's most recent owned row is that org credential.
+    creds['c-org'].orgBound = true;
+    ownCred['root'] = 'c-org';
+    // In an org WITHOUT an org credential, root must fall through to the platform token,
+    // not silently run on Micros.nl's account.
+    expect(await resolveProjectClaudeToken('p-a', 'root')).toBeNull();
+    expect(await runUsesRequestersOwnAccount('p-a', 'root')).toBe(false);
   });
 });

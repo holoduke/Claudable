@@ -36,10 +36,19 @@ function view(c: WithOwner, meId: string): CredentialView {
   };
 }
 
+/**
+ * An ORG credential is stored as a ClaudeCredential row owned by whoever set it,
+ * but it belongs to the organisation: it must never surface as that person's
+ * personal credential — not in lists, not as a project pick, not as "their own"
+ * during resolution, and it can't be shared or deleted from the personal tab.
+ * `organizations: { none: {} }` = "not bound to any organisation".
+ */
+const PERSONAL_ONLY = { organizations: { none: {} } } as const;
+
 /** The current user's own credentials (token never returned). */
 export async function listMyCredentials(userId: string): Promise<CredentialView[]> {
   const creds = await prisma.claudeCredential.findMany({
-    where: { ownerId: userId },
+    where: { ownerId: userId, ...PERSONAL_ONLY },
     include: { owner: true },
     orderBy: { createdAt: 'desc' },
   });
@@ -50,7 +59,7 @@ export async function listMyCredentials(userId: string): Promise<CredentialView[
  *  still marks the caller's own. Ordered mine-first, then by owner. */
 export async function listOrgCredentials(orgId: string, meId: string): Promise<CredentialView[]> {
   const creds = await prisma.claudeCredential.findMany({
-    where: { owner: { orgId } },
+    where: { owner: { orgId }, ...PERSONAL_ONLY },
     include: { owner: true },
     orderBy: [{ createdAt: 'desc' }],
   });
@@ -78,7 +87,7 @@ export async function getCredentialView(
 /** Credentials a user may assign to a project: their own + shareable ones in the org. */
 export async function listSelectableCredentials(user: { id: string; orgId: string }): Promise<CredentialView[]> {
   const creds = await prisma.claudeCredential.findMany({
-    where: { owner: { orgId: user.orgId }, OR: [{ ownerId: user.id }, { shareable: true }] },
+    where: { owner: { orgId: user.orgId }, OR: [{ ownerId: user.id }, { shareable: true }], ...PERSONAL_ONLY },
     include: { owner: true },
     orderBy: [{ createdAt: 'desc' }],
   });
@@ -104,12 +113,12 @@ export async function saveCredential(
 }
 
 export async function setShareable(id: string, userId: string, shareable: boolean): Promise<boolean> {
-  const res = await prisma.claudeCredential.updateMany({ where: { id, ownerId: userId }, data: { shareable } });
+  const res = await prisma.claudeCredential.updateMany({ where: { id, ownerId: userId, ...PERSONAL_ONLY }, data: { shareable } });
   return res.count > 0;
 }
 
 export async function deleteCredential(id: string, userId: string): Promise<boolean> {
-  const res = await prisma.claudeCredential.deleteMany({ where: { id, ownerId: userId } });
+  const res = await prisma.claudeCredential.deleteMany({ where: { id, ownerId: userId, ...PERSONAL_ONLY } });
   return res.count > 0;
 }
 
@@ -162,7 +171,7 @@ export async function resolveProjectClaudeToken(
   //    runs default to their own subscription without any project setup.
   if (requesterUserId) {
     const own = await prisma.claudeCredential.findFirst({
-      where: { ownerId: requesterUserId },
+      where: { ownerId: requesterUserId, ...PERSONAL_ONLY },
       orderBy: { createdAt: 'desc' },
     });
     if (own) {
@@ -293,7 +302,7 @@ export async function runUsesRequestersOwnAccount(
 
   // Step 2: the requester's own credential is used → their own account.
   const own = await prisma.claudeCredential.findFirst({
-    where: { ownerId: requesterUserId },
+    where: { ownerId: requesterUserId, ...PERSONAL_ONLY },
     select: { id: true },
   });
   if (own) return true;
