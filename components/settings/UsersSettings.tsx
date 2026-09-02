@@ -1,5 +1,6 @@
 "use client";
 import { useCallback, useEffect, useState } from 'react';
+import { useI18n } from '@/contexts/I18nContext';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? '';
 
@@ -34,6 +35,7 @@ interface UsersSettingsProps {
 }
 
 export default function UsersSettings({ currentUserId, onToast }: UsersSettingsProps) {
+  const { t } = useI18n();
   const [users, setUsers] = useState<ManagedUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -92,10 +94,7 @@ export default function UsersSettings({ currentUserId, onToast }: UsersSettingsP
     <div className="space-y-6">
       <div>
         <h3 className="text-lg font-medium text-gray-900 dark:text-gray-50">Users</h3>
-        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-          Alle accounts op deze installatie: rol (superadmin of gebruiker), actief/gedeactiveerd en it-ops. Mensen toevoegen aan een
-          organisatie doe je onder <strong>Organisaties</strong>.
-        </p>
+        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{t('users.intro')}</p>
       </div>
 
       {/* User list */}

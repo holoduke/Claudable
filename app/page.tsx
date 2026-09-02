@@ -14,7 +14,7 @@ import UserMenu from '@/components/layout/UserMenu';
 import ConnectClaudePrompt from '@/components/auth/ConnectClaudePrompt';
 import PaletteToggle from '@/components/ui/PaletteToggle';
 import { useGlobalSettings } from '@/contexts/GlobalSettingsContext';
-import { useT } from '@/contexts/I18nContext';
+import { useT, useI18n } from '@/contexts/I18nContext';
 import { uploadFileChunked } from '@/lib/client/upload';
 import { getDefaultModelForCli, getModelDisplayName } from '@/lib/constants/cliModels';
 import Image from 'next/image';
@@ -41,10 +41,11 @@ const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? '';
 
 /** Tenant label next to a project name: purple for customer orgs, neutral for internal. */
 function OrgBadge({ org }: { org: { name: string; type: string } }) {
+  const { t } = useI18n();
   const customer = org.type === 'klant';
   return (
     <span
-      title={customer ? `Klantorganisatie: ${org.name}` : `Organisatie: ${org.name}`}
+      title={customer ? t('home.orgBadgeCustomer', { name: org.name }) : t('home.orgBadgeInternal', { name: org.name })}
       className={`ml-1.5 inline-flex items-center max-w-[10rem] truncate align-middle text-[10px] font-medium px-1.5 py-0.5 rounded-sm shrink-0 ${
         customer
           ? 'text-purple-700 dark:text-purple-300 bg-purple-100 dark:bg-purple-500/20'
@@ -1407,12 +1408,12 @@ export default function HomePage() {
                     <button
                       type="button"
                       onClick={() => setShowOrgMenu(v => !v)}
-                      title="Organisatie"
+                      title={t('home.orgPicker')}
                       className="justify-center whitespace-nowrap text-sm font-medium transition-colors duration-100 ease-in-out border border-gray-200 dark:border-white/9 bg-transparent shadow-xs hover:bg-gray-50 dark:hover:bg-white/5 hover:border-gray-300 dark:hover:border-white/18 px-3 py-2 flex h-8 items-center gap-1.5 rounded-full text-gray-700 dark:text-gray-200 hover:text-gray-900 dark:hover:text-gray-100"
                     >
                       <Building2 aria-hidden className="h-3.5 w-3.5 text-brand-500/80" />
                       <span className="hidden md:flex text-sm font-medium">
-                        {myOrgs.find(o => o.id === selectedOrgId)?.name ?? 'Organisatie'}
+                        {myOrgs.find(o => o.id === selectedOrgId)?.name ?? t('home.orgPicker')}
                       </span>
                     </button>
                     {showOrgMenu && (
@@ -1426,7 +1427,7 @@ export default function HomePage() {
                                 <span className="text-sm font-medium text-gray-900 dark:text-gray-50">{o.name}</span>
                                 {selectedOrgId === o.id && <span className="text-xs text-brand-500">✓</span>}
                               </div>
-                              <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{o.type === 'klant' ? 'Klantorganisatie' : 'Interne organisatie'}</p>
+                              <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{o.type === 'klant' ? t('orgType.klant') : t('orgType.intern')}</p>
                             </button>
                           ))}
                         </div>

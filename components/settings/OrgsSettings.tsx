@@ -1,10 +1,13 @@
 "use client";
 /**
- * Organisatiebeheer (superadmin-tab in Global Settings): organisaties
- * aanmaken/bewerken/verwijderen en per organisatie de leden en hun rollen
- * beheren. De tenant-laag voor het klantportaal.
+ * Organisation management (superadmin tab): create/edit/delete organisations,
+ * per-organisation settings (may members create projects, org Claude token),
+ * and each organisation's members, roles and open invitations. The tenant
+ * layer of the customer portal.
  */
 import { useCallback, useEffect, useState } from 'react';
+import { useI18n } from '@/contexts/I18nContext';
+import { DATE_LOCALE } from '@/lib/i18n/config';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? '';
 
@@ -41,30 +44,29 @@ interface OrgsSettingsProps {
   onToast: (message: string, type: 'success' | 'error') => void;
 }
 
+type RoleKey = 'role.eigenaar' | 'role.beheerder' | 'role.lid';
+
 const inputCls =
   'w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-white/8 bg-white dark:bg-white/6 text-sm text-gray-800 dark:text-gray-100 focus:outline-hidden focus:ring-2 focus:ring-gray-200';
 const pillSelectCls =
   'px-2.5 py-1.5 text-xs font-medium border border-gray-200 dark:border-white/8 rounded-full bg-white dark:bg-white/6 text-gray-700 dark:text-gray-200 focus:outline-hidden focus:ring-0 disabled:opacity-50 cursor-pointer';
 
-function TypeBadge({ type }: { type: Org['type'] }) {
-  return type === 'klant' ? (
-    <span className="text-[11px] font-medium text-purple-700 dark:text-purple-300 bg-purple-100 dark:bg-purple-500/20 px-1.5 py-0.5 rounded-sm">klant</span>
-  ) : (
-    <span className="text-[11px] font-medium text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-white/8 px-1.5 py-0.5 rounded-sm">intern</span>
-  );
-}
-
 export default function OrgsSettings({ onToast }: OrgsSettingsProps) {
+  const { t, locale } = useI18n();
+  const dateLocale = DATE_LOCALE[locale];
+  const roleLabel = (r: string) => t(`role.${r}` as RoleKey);
+  const count = (n: number, kind: 'members' | 'projects') => (n === 1 ? t(`common.${kind}.one`) : t(`common.${kind}.other`, { count: n }));
+
   const [orgs, setOrgs] = useState<Org[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
 
-  // Nieuwe organisatie
+  // New organisation
   const [newName, setNewName] = useState('');
   const [newType, setNewType] = useState<'intern' | 'klant'>('klant');
   const [newDomain, setNewDomain] = useState('');
 
-  // Uitgeklapte organisatie (bewerken + leden)
+  // Expanded organisation (edit + members)
   const [openId, setOpenId] = useState<string | null>(null);
   const [editName, setEditName] = useState('');
   const [editType, setEditType] = useState<'intern' | 'klant'>('klant');
@@ -83,14 +85,14 @@ export default function OrgsSettings({ onToast }: OrgsSettingsProps) {
     try {
       const res = await fetch(`${API_BASE}/api/orgs`);
       const json = await res.json();
-      if (!res.ok || !json.success) throw new Error(json.message || 'Organisaties laden mislukt');
+      if (!res.ok || !json.success) throw new Error(json.message || t('orgs.loadFailed'));
       setOrgs(json.data as Org[]);
     } catch (err) {
-      onToast(err instanceof Error ? err.message : 'Organisaties laden mislukt', 'error');
+      onToast(err instanceof Error ? err.message : t('orgs.loadFailed'), 'error');
     } finally {
       setLoading(false);
     }
-  }, [onToast]);
+  }, [onToast, t]);
 
   useEffect(() => { void load(); }, [load]);
 
@@ -102,16 +104,16 @@ export default function OrgsSettings({ onToast }: OrgsSettingsProps) {
         fetch(`${API_BASE}/api/orgs/${orgId}/invites`),
       ]);
       const json = await res.json();
-      if (!res.ok || !json.success) throw new Error(json.message || 'Leden laden mislukt');
+      if (!res.ok || !json.success) throw new Error(json.message || t('org.loadMembersFailed'));
       setMembers(json.data as OrgMemberRow[]);
       const iJson = await iRes.json().catch(() => null);
       setInvites(iRes.ok && iJson?.success ? (iJson.data as InviteRow[]) : []);
     } catch (err) {
-      onToast(err instanceof Error ? err.message : 'Leden laden mislukt', 'error');
+      onToast(err instanceof Error ? err.message : t('org.loadMembersFailed'), 'error');
     } finally {
       setMembersLoading(false);
     }
-  }, [onToast]);
+  }, [onToast, t]);
 
   const openOrg = (org: Org) => {
     if (openId === org.id) { setOpenId(null); return; }
@@ -122,10 +124,10 @@ export default function OrgsSettings({ onToast }: OrgsSettingsProps) {
     setMembers([]);
     setMemberEmail('');
     setMemberRole('lid');
-    loadMembers(org.id);
+    void loadMembers(org.id);
   };
 
-  /** Gedeeld request-patroon: fout → toast, succes → herladen. */
+  /** Shared request pattern: error → toast, success → silent refresh (no remount, no scroll jump). */
   const call = async (
     url: string,
     init: RequestInit,
@@ -139,13 +141,13 @@ export default function OrgsSettings({ onToast }: OrgsSettingsProps) {
         ...init,
       });
       const json = await res.json();
-      if (!res.ok || !json.success) throw new Error(json.message || 'Actie mislukt');
+      if (!res.ok || !json.success) throw new Error(json.message || t('common.actionFailed'));
       if (okMessage) onToast(okMessage, 'success');
       await after?.();
       await load({ silent: true });
       return true;
     } catch (err) {
-      onToast(err instanceof Error ? err.message : 'Actie mislukt', 'error');
+      onToast(err instanceof Error ? err.message : t('common.actionFailed'), 'error');
       return false;
     } finally {
       setBusy(false);
@@ -156,7 +158,7 @@ export default function OrgsSettings({ onToast }: OrgsSettingsProps) {
     const ok = await call('/api/orgs', {
       method: 'POST',
       body: JSON.stringify({ name: newName, type: newType, domain: newDomain || undefined }),
-    }, `Organisatie "${newName.trim()}" aangemaakt`);
+    }, t('orgs.created', { name: newName.trim() }));
     if (ok) { setNewName(''); setNewDomain(''); setNewType('klant'); }
   };
 
@@ -164,14 +166,14 @@ export default function OrgsSettings({ onToast }: OrgsSettingsProps) {
     call(`/api/orgs/${orgId}`, {
       method: 'PATCH',
       body: JSON.stringify({ name: editName, type: editType, domain: editDomain.trim() || null }),
-    }, 'Organisatie opgeslagen');
+    }, t('orgs.saved'));
 
   const toggleCreate = async (org: Org) => {
     const next = !org.canCreateProjects;
     // Optimistic: flip in place so the switch moves instantly and nothing re-mounts.
     setOrgs((prev) => prev.map((o) => (o.id === org.id ? { ...o, canCreateProjects: next } : o)));
     const ok = await call(`/api/orgs/${org.id}`, { method: 'PATCH', body: JSON.stringify({ canCreateProjects: next }) },
-      next ? `${org.name} mag nu nieuwe projecten aanmaken` : `${org.name} kan geen nieuwe projecten meer aanmaken`);
+      next ? t('orgs.createAllowed', { name: org.name }) : t('orgs.createDenied', { name: org.name }));
     if (!ok) setOrgs((prev) => prev.map((o) => (o.id === org.id ? { ...o, canCreateProjects: !next } : o)));
   };
 
@@ -179,18 +181,18 @@ export default function OrgsSettings({ onToast }: OrgsSettingsProps) {
     const ok = await call(`/api/orgs/${org.id}/claude-credential`, {
       method: 'PUT',
       body: JSON.stringify({ label: credLabel, token: credToken }),
-    }, `Claude-token voor ${org.name} opgeslagen`);
+    }, t('org.credential.saved', { org: org.name }));
     if (ok) { setCredLabel(''); setCredToken(''); }
   };
 
   const removeCredential = (org: Org) => {
-    if (!window.confirm(`Claude-token van ${org.name} verwijderen? Projecten vallen terug op het platform-token.`)) return;
-    return call(`/api/orgs/${org.id}/claude-credential`, { method: 'DELETE' }, `Claude-token van ${org.name} verwijderd`);
+    if (!window.confirm(t('orgs.credential.confirmRemove', { name: org.name }))) return;
+    return call(`/api/orgs/${org.id}/claude-credential`, { method: 'DELETE' }, t('org.credential.removed'));
   };
 
   const removeOrg = async (org: Org) => {
-    if (!window.confirm(`Organisatie "${org.name}" verwijderen?`)) return;
-    const ok = await call(`/api/orgs/${org.id}`, { method: 'DELETE' }, `"${org.name}" verwijderd`);
+    if (!window.confirm(t('orgs.confirmDelete', { name: org.name }))) return;
+    const ok = await call(`/api/orgs/${org.id}`, { method: 'DELETE' }, t('orgs.deleted', { name: org.name }));
     if (ok) setOpenId(null);
   };
 
@@ -202,17 +204,16 @@ export default function OrgsSettings({ onToast }: OrgsSettingsProps) {
         body: JSON.stringify({ email: memberEmail, role: memberRole }),
       });
       const json = await res.json();
-      if (!res.ok || !json.success) throw new Error(json.message || 'Actie mislukt');
+      if (!res.ok || !json.success) throw new Error(json.message || t('common.actionFailed'));
+      const addr = memberEmail.trim();
       onToast(json.data?.invited
-        ? (json.data?.emailSent
-            ? `Uitnodiging gemaild naar ${memberEmail.trim()} — 14 dagen geldig`
-            : `${memberEmail.trim()} uitgenodigd (14 dagen geldig) — geen e-mail verstuurd (mail niet geconfigureerd)`)
-        : `${memberEmail.trim()} toegevoegd`, 'success');
+        ? (json.data?.emailSent ? t('org.toast.invited', { email: addr }) : t('org.toast.invitedNoMail', { email: addr }))
+        : t('orgs.toast.added', { email: addr }), 'success');
       setMemberEmail(''); setMemberRole('lid');
       await loadMembers(orgId);
       await load({ silent: true });
     } catch (err) {
-      onToast(err instanceof Error ? err.message : 'Actie mislukt', 'error');
+      onToast(err instanceof Error ? err.message : t('common.actionFailed'), 'error');
     } finally {
       setBusy(false);
     }
@@ -226,55 +227,52 @@ export default function OrgsSettings({ onToast }: OrgsSettingsProps) {
 
   const revokeInvite = (orgId: string, i: InviteRow) =>
     call(`/api/orgs/${orgId}/invites/${i.id}`, { method: 'DELETE' },
-      `Uitnodiging voor ${i.email} ingetrokken`, () => loadMembers(orgId));
+      t('org.toast.inviteRevoked', { email: i.email }), () => loadMembers(orgId));
 
-  const removeMember = (orgId: string, m: OrgMemberRow) =>
+  const removeMember = (orgId: string, orgName: string, m: OrgMemberRow) =>
     call(`/api/orgs/${orgId}/members/${m.userId}`, { method: 'DELETE' },
-      `${m.email} uit de organisatie gehaald`, () => loadMembers(orgId));
+      t('org.toast.removed', { email: m.email, org: orgName }), () => loadMembers(orgId));
 
   return (
     <div className="space-y-6">
       <div>
-        <h3 className="text-lg font-medium text-gray-900 dark:text-gray-50">Organisaties</h3>
-        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-          Elke site hoort bij precies één organisatie. Klant-organisaties krijgen straks de
-          versimpelde klantweergave; leden beheer je hier per organisatie.
-        </p>
+        <h3 className="text-lg font-medium text-gray-900 dark:text-gray-50">{t('orgs.title')}</h3>
+        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{t('orgs.intro')}</p>
       </div>
 
-      {/* Nieuwe organisatie */}
+      {/* New organisation */}
       <div className="flex flex-col gap-3 p-4 bg-gray-50 dark:bg-white/3 rounded-xl border border-gray-200 dark:border-white/8 sm:flex-row sm:items-end">
         <div className="flex-1">
-          <label className="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">Naam</label>
+          <label className="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">{t('common.name')}</label>
           <input type="text" value={newName} onChange={(e) => setNewName(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter') createOrg(); }}
-            placeholder="Micros BV" className={inputCls} />
+            placeholder={t('orgs.namePlaceholder')} className={inputCls} />
         </div>
         <div className="w-32">
-          <label className="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">Type</label>
+          <label className="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">{t('common.type')}</label>
           <select value={newType} onChange={(e) => setNewType(e.target.value as 'intern' | 'klant')} className={inputCls}>
-            <option value="klant">Klant</option>
-            <option value="intern">Intern</option>
+            <option value="klant">{t('orgs.typeCustomer')}</option>
+            <option value="intern">{t('orgs.typeInternal')}</option>
           </select>
         </div>
         <div className="flex-1">
-          <label className="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">Domein (optioneel)</label>
+          <label className="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">{t('orgs.domainOptional')}</label>
           <input type="text" value={newDomain} onChange={(e) => setNewDomain(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter') createOrg(); }}
-            placeholder="klant.nl" className={inputCls} />
+            placeholder={t('orgs.domainPlaceholder')} className={inputCls} />
         </div>
         <button onClick={createOrg} disabled={busy || !newName.trim()}
           className="px-4 py-2 text-sm font-medium bg-brand-500 hover:bg-brand-600 text-white rounded-lg transition-colors disabled:opacity-50">
-          Aanmaken
+          {t('common.create')}
         </button>
       </div>
 
-      {/* Organisatielijst */}
+      {/* Organisation list */}
       <div className="rounded-xl border border-gray-200 dark:border-white/8 overflow-hidden">
         {loading ? (
-          <div className="p-6 text-center text-sm text-gray-500 dark:text-gray-400">Organisaties laden…</div>
+          <div className="p-6 text-center text-sm text-gray-500 dark:text-gray-400">{t('orgs.loading')}</div>
         ) : orgs.length === 0 ? (
-          <div className="p-6 text-center text-sm text-gray-500 dark:text-gray-400">Nog geen organisaties.</div>
+          <div className="p-6 text-center text-sm text-gray-500 dark:text-gray-400">{t('orgs.empty')}</div>
         ) : (
           <ul className="divide-y divide-gray-200 dark:divide-white/8">
             {orgs.map((org) => (
@@ -287,13 +285,17 @@ export default function OrgsSettings({ onToast }: OrgsSettingsProps) {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
                       <p className="text-sm font-medium text-gray-900 dark:text-gray-50 truncate">{org.name}</p>
-                      <TypeBadge type={org.type} />
+                      {org.type === 'klant' ? (
+                        <span className="text-[11px] font-medium text-purple-700 dark:text-purple-300 bg-purple-100 dark:bg-purple-500/20 px-1.5 py-0.5 rounded-sm">{t('orgType.klant.short')}</span>
+                      ) : (
+                        <span className="text-[11px] font-medium text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-white/8 px-1.5 py-0.5 rounded-sm">{t('orgType.intern.short')}</span>
+                      )}
                     </div>
                     <p className="text-xs text-gray-500 dark:text-gray-400">
-                      {org.memberCount} {org.memberCount === 1 ? 'lid' : 'leden'} · {org.projectCount} {org.projectCount === 1 ? 'project' : 'projecten'}
+                      {count(org.memberCount, 'members')} · {count(org.projectCount, 'projects')}
                       {org.domain ? ` · ${org.domain}` : ''}
-                      {!org.canCreateProjects ? ' · geen nieuwe projecten' : ''}
-                      {org.claudeCredential ? ' · eigen Claude-token' : ''}
+                      {!org.canCreateProjects ? ` · ${t('orgs.noNewProjects')}` : ''}
+                      {org.claudeCredential ? ` · ${t('orgs.ownToken')}` : ''}
                     </p>
                   </div>
                   <span className="text-gray-400 text-xs">{openId === org.id ? '▲' : '▼'}</span>
@@ -301,87 +303,84 @@ export default function OrgsSettings({ onToast }: OrgsSettingsProps) {
 
                 {openId === org.id && (
                   <div className="px-4 pb-4 space-y-4 bg-gray-50/50 dark:bg-white/2">
-                    {/* Bewerken */}
+                    {/* Edit */}
                     <div className="flex flex-col gap-3 sm:flex-row sm:items-end pt-3">
                       <div className="flex-1">
-                        <label className="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">Naam</label>
+                        <label className="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">{t('common.name')}</label>
                         <input type="text" value={editName} onChange={(e) => setEditName(e.target.value)} className={inputCls} />
                       </div>
                       <div className="w-32">
-                        <label className="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">Type</label>
+                        <label className="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">{t('common.type')}</label>
                         <select value={editType} onChange={(e) => setEditType(e.target.value as 'intern' | 'klant')} className={inputCls}>
-                          <option value="klant">Klant</option>
-                          <option value="intern">Intern</option>
+                          <option value="klant">{t('orgs.typeCustomer')}</option>
+                          <option value="intern">{t('orgs.typeInternal')}</option>
                         </select>
                       </div>
                       <div className="flex-1">
-                        <label className="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">Domein</label>
+                        <label className="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">{t('orgs.domain')}</label>
                         <input type="text" value={editDomain} onChange={(e) => setEditDomain(e.target.value)} placeholder="—" className={inputCls} />
                       </div>
                       <button onClick={() => saveOrg(org.id)} disabled={busy || !editName.trim()}
                         className="px-4 py-2 text-sm font-medium bg-brand-500 hover:bg-brand-600 text-white rounded-lg transition-colors disabled:opacity-50">
-                        Opslaan
+                        {t('common.save')}
                       </button>
                       <button onClick={() => removeOrg(org)} disabled={busy || org.projectCount > 0 || org.memberCount > 0}
-                        title={org.projectCount > 0 || org.memberCount > 0 ? 'Alleen een lege organisatie kan verwijderd worden' : 'Organisatie verwijderen'}
+                        title={org.projectCount > 0 || org.memberCount > 0 ? t('orgs.deleteOnlyEmpty') : t('orgs.delete')}
                         className="px-3 py-2 text-sm font-medium border border-red-200 rounded-lg bg-white dark:bg-white/3 text-red-600 hover:bg-red-50 transition-colors disabled:opacity-40">
-                        Verwijderen
+                        {t('common.remove')}
                       </button>
                     </div>
 
-                    {/* Organisatie-instellingen (superadmin) */}
+                    {/* Organisation settings (superadmin) */}
                     <div className="rounded-xl border border-gray-200 dark:border-white/8 divide-y divide-gray-200 dark:divide-white/8 bg-white dark:bg-white/3">
                       <div className="flex items-center justify-between gap-4 px-4 py-3">
                         <div className="min-w-0">
-                          <p className="text-sm font-medium text-gray-900 dark:text-gray-50">Nieuwe projecten aanmaken</p>
-                          <p className="text-xs text-gray-500 dark:text-gray-400">Mogen leden van {org.name} zelf nieuwe projecten starten? Superadmins kunnen dat altijd.</p>
+                          <p className="text-sm font-medium text-gray-900 dark:text-gray-50">{t('org.createProjects')}</p>
+                          <p className="text-xs text-gray-500 dark:text-gray-400">{t('orgs.createProjects.desc', { name: org.name })}</p>
                         </div>
                         <button type="button" role="switch" aria-checked={org.canCreateProjects} disabled={busy}
                           onClick={() => toggleCreate(org)}
                           className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors disabled:opacity-50 ${org.canCreateProjects ? 'bg-brand-500' : 'bg-gray-300 dark:bg-white/15'}`}
-                          title={org.canCreateProjects ? 'Aanmaken uitschakelen' : 'Aanmaken toestaan'}>
+                          title={org.canCreateProjects ? t('orgs.toggle.disable') : t('orgs.toggle.enable')}>
                           <span className={`inline-block h-5 w-5 transform rounded-full bg-white dark:bg-gray-900 transition-transform ${org.canCreateProjects ? 'translate-x-5' : 'translate-x-1'}`} />
                         </button>
                       </div>
                       <div className="px-4 py-3 space-y-2">
                         <div className="flex items-center justify-between gap-4">
                           <div className="min-w-0">
-                            <p className="text-sm font-medium text-gray-900 dark:text-gray-50">Claude-token van de organisatie</p>
-                            <p className="text-xs text-gray-500 dark:text-gray-400">
-                              Hierop draait de agent (<code>claude -p</code>) voor projecten van {org.name} als project of gebruiker geen eigen token heeft.
-                              Een OAuth-token uit <code>claude setup-token</code> of een API-sleutel (sk-ant-api…).
-                            </p>
+                            <p className="text-sm font-medium text-gray-900 dark:text-gray-50">{t('org.credential.title')}</p>
+                            <p className="text-xs text-gray-500 dark:text-gray-400">{t('orgs.credential.desc', { name: org.name })}</p>
                           </div>
                           {org.claudeCredential ? (
                             <div className="flex items-center gap-2 shrink-0">
                               <span className="text-[11px] font-medium text-green-700 dark:text-green-300 bg-green-100 dark:bg-green-500/20 px-2 py-0.5 rounded-full">
-                                {org.claudeCredential.label} · sinds {new Date(org.claudeCredential.since).toLocaleDateString('nl-NL')}
+                                {t('orgs.credential.since', { label: org.claudeCredential.label, date: new Date(org.claudeCredential.since).toLocaleDateString(dateLocale) })}
                               </span>
                               <button onClick={() => removeCredential(org)} disabled={busy}
                                 className="px-2.5 py-1.5 text-xs font-medium border border-red-200 rounded-full bg-white dark:bg-white/3 text-red-600 hover:bg-red-50 transition-colors disabled:opacity-40">
-                                Verwijderen
+                                {t('common.remove')}
                               </button>
                             </div>
                           ) : (
-                            <span className="shrink-0 text-[11px] font-medium text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-white/8 px-2 py-0.5 rounded-full">platform-token</span>
+                            <span className="shrink-0 text-[11px] font-medium text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-white/8 px-2 py-0.5 rounded-full">{t('orgs.credential.platform')}</span>
                           )}
                         </div>
                         <div className="flex gap-2">
-                          <input type="text" value={credLabel} onChange={(e) => setCredLabel(e.target.value)} placeholder={`Label (bijv. ${org.name} Claude)`} className={`${inputCls} w-48! shrink-0`} />
-                          <input type="password" value={credToken} onChange={(e) => setCredToken(e.target.value)} placeholder="sk-ant-oat… of sk-ant-api…" className={`${inputCls} flex-1 min-w-0 font-mono`} autoComplete="off" />
+                          <input type="text" value={credLabel} onChange={(e) => setCredLabel(e.target.value)} placeholder={t('orgs.credential.labelPlaceholder', { name: org.name })} className={`${inputCls} w-48! shrink-0`} />
+                          <input type="password" value={credToken} onChange={(e) => setCredToken(e.target.value)} placeholder={t('org.credential.tokenPlaceholder')} className={`${inputCls} flex-1 min-w-0 font-mono`} autoComplete="off" />
                           <button onClick={() => setCredential(org)} disabled={busy || !credToken.trim()}
                             className="px-4 py-2 text-sm font-medium bg-brand-500 hover:bg-brand-600 text-white rounded-lg transition-colors disabled:opacity-50">
-                            {org.claudeCredential ? 'Vervangen' : 'Instellen'}
+                            {org.claudeCredential ? t('common.replace') : t('common.set')}
                           </button>
                         </div>
                       </div>
                     </div>
 
-                    {/* Leden */}
+                    {/* Members */}
                     <div>
-                      <p className="text-xs font-medium text-gray-600 dark:text-gray-300 mb-2">Leden</p>
+                      <p className="text-xs font-medium text-gray-600 dark:text-gray-300 mb-2">{t('orgs.members')}</p>
                       {membersLoading ? (
-                        <p className="text-sm text-gray-500 dark:text-gray-400">Leden laden…</p>
+                        <p className="text-sm text-gray-500 dark:text-gray-400">{t('org.loadingMembers')}</p>
                       ) : (
                         <ul className="space-y-2">
                           {members.map((m) => (
@@ -397,33 +396,33 @@ export default function OrgsSettings({ onToast }: OrgsSettingsProps) {
                               <div className="flex-1 min-w-0">
                                 <p className="text-sm text-gray-800 dark:text-gray-100 truncate">
                                   {m.name || m.email}
-                                  {!m.isActive && <span className="ml-2 text-[11px] font-medium text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded-sm">gedeactiveerd</span>}
+                                  {!m.isActive && <span className="ml-2 text-[11px] font-medium text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded-sm">{t('common.deactivated')}</span>}
                                 </p>
                                 {m.name && <p className="text-[11px] text-gray-500 dark:text-gray-400 truncate">{m.email}</p>}
                               </div>
                               <select value={m.role} disabled={busy}
                                 onChange={(e) => changeMemberRole(org.id, m.userId, e.target.value)}
                                 className={pillSelectCls}>
-                                <option value="eigenaar">Eigenaar</option>
-                                <option value="beheerder">Beheerder</option>
-                                <option value="lid">Lid</option>
+                                <option value="eigenaar">{t('role.eigenaar')}</option>
+                                <option value="beheerder">{t('role.beheerder')}</option>
+                                <option value="lid">{t('role.lid')}</option>
                               </select>
-                              <button onClick={() => removeMember(org.id, m)} disabled={busy}
+                              <button onClick={() => removeMember(org.id, org.name, m)} disabled={busy}
                                 className="px-2.5 py-1.5 text-xs font-medium border border-red-200 rounded-full bg-white dark:bg-white/3 text-red-600 hover:bg-red-50 transition-colors disabled:opacity-40">
-                                Verwijderen
+                                {t('common.remove')}
                               </button>
                             </li>
                           ))}
                           {members.length === 0 && (
-                            <li className="text-sm text-gray-500 dark:text-gray-400">Nog geen leden.</li>
+                            <li className="text-sm text-gray-500 dark:text-gray-400">{t('org.noMembers')}</li>
                           )}
                         </ul>
                       )}
 
-                      {/* Openstaande uitnodigingen */}
+                      {/* Open invitations */}
                       {invites.filter((i) => i.status === 'open').length > 0 && (
                         <div className="mt-3">
-                          <p className="text-xs font-medium text-gray-600 dark:text-gray-300 mb-2">Openstaande uitnodigingen</p>
+                          <p className="text-xs font-medium text-gray-600 dark:text-gray-300 mb-2">{t('org.pendingInvites')}</p>
                           <ul className="space-y-2">
                             {invites.filter((i) => i.status === 'open').map((i) => (
                               <li key={i.id} className="flex items-center gap-3">
@@ -431,12 +430,13 @@ export default function OrgsSettings({ onToast }: OrgsSettingsProps) {
                                 <div className="flex-1 min-w-0">
                                   <p className="text-sm text-gray-800 dark:text-gray-100 truncate">{i.email}</p>
                                   <p className="text-[11px] text-gray-500 dark:text-gray-400">
-                                    {i.role} · verloopt {new Date(i.expiresAt).toLocaleDateString('nl-NL')}{i.invitedBy ? ` · door ${i.invitedBy}` : ''}
+                                    {t('org.inviteExpires', { role: roleLabel(i.role), date: new Date(i.expiresAt).toLocaleDateString(dateLocale) })}
+                                    {i.invitedBy ? ` · ${t('common.by', { name: i.invitedBy })}` : ''}
                                   </p>
                                 </div>
                                 <button onClick={() => revokeInvite(org.id, i)} disabled={busy}
                                   className="px-2.5 py-1.5 text-xs font-medium border border-gray-200 dark:border-white/8 rounded-full bg-white dark:bg-white/3 text-gray-600 dark:text-gray-300 hover:bg-gray-50 transition-colors disabled:opacity-40">
-                                  Intrekken
+                                  {t('common.revoke')}
                                 </button>
                               </li>
                             ))}
@@ -444,19 +444,19 @@ export default function OrgsSettings({ onToast }: OrgsSettingsProps) {
                         </div>
                       )}
 
-                      {/* Lid toevoegen */}
+                      {/* Add member */}
                       <div className="flex gap-2 mt-3">
                         <input type="email" value={memberEmail} onChange={(e) => setMemberEmail(e.target.value)}
                           onKeyDown={(e) => { if (e.key === 'Enter') addMember(org.id); }}
-                          placeholder="persoon@klant.nl" className={`${inputCls} flex-1 min-w-0`} />
-                        <select value={memberRole} onChange={(e) => setMemberRole(e.target.value as 'eigenaar' | 'beheerder' | 'lid')} className={`${inputCls} w-36! shrink-0`}>
-                          <option value="lid">Lid</option>
-                          <option value="beheerder">Beheerder</option>
-                          <option value="eigenaar">Eigenaar</option>
+                          placeholder={t('org.emailPlaceholder')} className={`${inputCls} flex-1 min-w-0`} />
+                        <select value={memberRole} onChange={(e) => setMemberRole(e.target.value as 'eigenaar' | 'beheerder' | 'lid')} className={`${inputCls} w-40! shrink-0`}>
+                          <option value="lid">{t('role.lid')}</option>
+                          <option value="beheerder">{t('role.beheerder')}</option>
+                          <option value="eigenaar">{t('role.eigenaar')}</option>
                         </select>
                         <button onClick={() => addMember(org.id)} disabled={busy || !memberEmail.trim()}
                           className="px-4 py-2 text-sm font-medium bg-brand-500 hover:bg-brand-600 text-white rounded-lg transition-colors disabled:opacity-50">
-                          Toevoegen
+                          {t('common.add')}
                         </button>
                       </div>
                     </div>
