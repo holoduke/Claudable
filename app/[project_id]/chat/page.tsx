@@ -137,6 +137,7 @@ export default function ChatPage() {
   } = useUserRequests({ projectId });
   
   const [projectName, setProjectName] = useState<string>('');
+  const [projectOrg, setProjectOrg] = useState<{ name: string; type: string } | null>(null);
   // Inline edit of the project name + description in the chat header.
   const [editingName, setEditingName] = useState(false);
   const [nameDraft, setNameDraft] = useState('');
@@ -2175,6 +2176,7 @@ const persistProjectPreferences = useCallback(
 
 
       setProjectName(project.name || `Project ${projectId.slice(0, 8)}`);
+      setProjectOrg(project.organization ?? null);
 
       const projectCli = sanitizeCli(rawPreferredCli || preferredCli);
       if (rawPreferredCli) {
@@ -3013,6 +3015,18 @@ const persistProjectPreferences = useCallback(
                         <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
                       </svg>
                     </button>
+                  )}
+                  {projectOrg && (
+                    <span
+                      title={projectOrg.type === 'klant' ? `Klantorganisatie: ${projectOrg.name}` : `Organisatie: ${projectOrg.name}`}
+                      className={`inline-flex items-center max-w-[12rem] truncate text-[11px] font-medium px-1.5 py-0.5 rounded-sm shrink-0 ${
+                        projectOrg.type === 'klant'
+                          ? 'text-purple-700 dark:text-purple-300 bg-purple-100 dark:bg-purple-500/20'
+                          : 'text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-white/8'
+                      }`}
+                    >
+                      {projectOrg.name}
+                    </span>
                   )}
                   {editingDesc ? (
                     <input
