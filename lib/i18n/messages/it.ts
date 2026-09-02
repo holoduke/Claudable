@@ -53,6 +53,7 @@ export const it: Record<keyof typeof en, string> = {
   'settings.tab.account': 'Account',
   'settings.tab.users': 'Utenti',
   'settings.tab.orgs': 'Organizzazioni',
+  'settings.tab.myOrg': 'Organizzazione',
   'settings.tab.sharedMcp': 'MCP condiviso',
   'settings.tab.plugins': 'Plug-in',
   'settings.tab.system': 'Sistema',

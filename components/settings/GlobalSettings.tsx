@@ -5,6 +5,7 @@ import { AnimatePresence } from 'framer-motion';
 import { MotionDiv } from '@/lib/motion';
 import UsersSettings from '@/components/settings/UsersSettings';
 import OrgsSettings from '@/components/settings/OrgsSettings';
+import MyOrgSettings, { type MyOrg } from './MyOrgSettings';
 import SystemOverviewSettings from '@/components/settings/SystemOverviewSettings';
 import SharedMcpSettings from '@/components/settings/SharedMcpSettings';
 import PluginSettings from '@/components/settings/PluginSettings';
@@ -20,7 +21,7 @@ import type { CLIStatus } from '@/types/cli';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? '';
 
-type SettingsTab = 'general' | 'ai-agents' | 'claude' | 'account' | 'users' | 'orgs' | 'shared-mcp' | 'plugins' | 'system' | 'about';
+type SettingsTab = 'general' | 'ai-agents' | 'claude' | 'account' | 'users' | 'orgs' | 'my-org' | 'shared-mcp' | 'plugins' | 'system' | 'about';
 
 interface GlobalSettingsProps {
   isOpen: boolean;
@@ -118,6 +119,8 @@ export default function GlobalSettings({ isOpen, onClose, initialTab = 'general'
   const [activeTab, setActiveTab] = useState<SettingsTab>(initialTab);
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
   const [authOff, setAuthOff] = useState(false);
+  // The caller's organisations + their role in each (drives the "Organisatie" tab).
+  const [myOrgs, setMyOrgs] = useState<MyOrg[]>([]);
   const [authConfigLoaded, setAuthConfigLoaded] = useState(false);
   const [userLoaded, setUserLoaded] = useState(false);
   const [cliStatus, setCLIStatus] = useState<CLIStatus>({});
@@ -188,6 +191,16 @@ export default function GlobalSettings({ isOpen, onClose, initialTab = 'general'
     }
   }, []);
 
+  const loadMyOrgs = useCallback(async () => {
+    try {
+      const res = await fetch(`${API_BASE}/api/orgs/mine`);
+      const json = res.ok ? await res.json() : null;
+      setMyOrgs(json?.success ? ((json.data?.orgs as MyOrg[]) ?? []) : []);
+    } catch {
+      setMyOrgs([]);
+    }
+  }, []);
+
   const loadAuthConfig = useCallback(async () => {
     try {
       const res = await fetch(`${API_BASE}/api/auth/config`);
@@ -207,8 +220,9 @@ export default function GlobalSettings({ isOpen, onClose, initialTab = 'general'
       checkCLIStatus();
       loadCurrentUser();
       loadAuthConfig();
+      loadMyOrgs();
     }
-  }, [isOpen, loadGlobalSettings, checkCLIStatus, loadCurrentUser, loadAuthConfig]);
+  }, [isOpen, loadGlobalSettings, checkCLIStatus, loadCurrentUser, loadAuthConfig, loadMyOrgs]);
 
   const isAdmin = currentUser?.role === 'admin';
   // Org-global infra (Shared MCP): manageable by an admin, OR by the local
@@ -216,6 +230,9 @@ export default function GlobalSettings({ isOpen, onClose, initialTab = 'general'
   // no-ops then too. Kept separate from `isAdmin` so the user-account tabs
   // (Users) still require a real signed-in admin.
   const canManageOrg = isAdmin || authOff;
+  // Non-staff users get the "Organisatie" tab for the orgs they belong to;
+  // superadmins already have the all-orgs tab.
+  const showMyOrg = !!currentUser && !isAdmin && myOrgs.length > 0;
 
   // If a non-admin somehow lands on the Users tab, fall back to General — but
   // only once we actually know who the user is, so an initialTab='users' isn't
@@ -387,6 +404,7 @@ export default function GlobalSettings({ isOpen, onClose, initialTab = 'general'
                 ...(currentUser ? [{ id: 'account' as const, label: t('settings.tab.account') }] : []),
                 ...(isAdmin ? [{ id: 'users' as const, label: t('settings.tab.users') }] : []),
                 ...(isAdmin ? [{ id: 'orgs' as const, label: t('settings.tab.orgs') }] : []),
+                ...(showMyOrg ? [{ id: 'my-org' as const, label: t('settings.tab.myOrg') }] : []),
                 ...(canManageOrg ? [{ id: 'shared-mcp' as const, label: t('settings.tab.sharedMcp') }] : []),
                 ...(canManageOrg ? [{ id: 'plugins' as const, label: t('settings.tab.plugins') }] : []),
                 ...(isAdmin ? [{ id: 'system' as const, label: t('settings.tab.system') }] : []),
@@ -668,6 +686,9 @@ export default function GlobalSettings({ isOpen, onClose, initialTab = 'general'
               <UsersSettings currentUserId={currentUser.id} onToast={showToast} />
             )}
             {activeTab === 'orgs' && isAdmin && <OrgsSettings onToast={showToast} />}
+            {activeTab === 'my-org' && showMyOrg && currentUser && (
+              <MyOrgSettings orgs={myOrgs} currentUserId={currentUser.id} onToast={showToast} />
+            )}
 
             {activeTab === 'about' && (
               <div className="space-y-6">
