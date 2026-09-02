@@ -150,7 +150,9 @@ function OrgPanel({ org, currentUserId, onToast }: { org: MyOrg; currentUserId: 
       const json = await res.json();
       if (!res.ok || !json.success) throw new Error(json.message || 'Actie mislukt');
       onToast(json.data?.invited
-        ? `${email.trim()} uitgenodigd voor ${org.name} — de uitnodiging is 14 dagen geldig`
+        ? (json.data?.emailSent
+            ? `Uitnodiging gemaild naar ${email.trim()} — 14 dagen geldig`
+            : `${email.trim()} uitgenodigd (14 dagen geldig) — er is geen e-mail verstuurd, laat de persoon zelf inloggen`)
         : `${email.trim()} toegevoegd aan ${org.name}`, 'success');
       setEmail(''); setRole('lid');
       await load();

@@ -9,6 +9,7 @@
 import { prisma } from '@/lib/db/client';
 import { canActorSetRole, type OrgActor, type OrgRole } from '@/lib/services/org-access';
 import { recordAudit, type AuditActor } from '@/lib/services/audit';
+import { addedToOrgEmail, inviteEmail, sendMail } from '@/lib/services/mail';
 
 /** Who performs a mutation; drives the role policy in org-access.ts and the audit trail. */
 export type MemberActor = Pick<OrgActor, 'superadmin' | 'role'> & { user?: AuditActor | null };
@@ -171,8 +172,10 @@ export async function addOrgMember(orgId: string, email: string, role: string, a
       update: { role, expiresAt, revokedAt: null, acceptedAt: null, invitedById: actor.user?.id ?? null },
       create: { orgId, email: lower, role, expiresAt, invitedById: actor.user?.id ?? null },
     });
-    await recordAudit({ orgId, actor: actor.user, action: 'org.invite.created', targetType: 'invite', targetId: invite.id, meta: { email: lower, role, expiresAt } });
-    return { invited: true as const, inviteId: invite.id, email: lower, role, expiresAt };
+    // Best-effort e-mail; the invitation stands either way (the UI shows whether it went out).
+    const mail = await sendMail(inviteEmail({ to: lower, orgName: org.name, role, invitedBy: actor.user?.email, expiresAt }));
+    await recordAudit({ orgId, actor: actor.user, action: 'org.invite.created', targetType: 'invite', targetId: invite.id, meta: { email: lower, role, expiresAt, emailSent: mail.sent, ...(mail.sent ? {} : { emailReason: mail.reason }) } });
+    return { invited: true as const, inviteId: invite.id, email: lower, role, expiresAt, emailSent: mail.sent };
   }
 
   await prisma.orgMember.upsert({
@@ -180,13 +183,15 @@ export async function addOrgMember(orgId: string, email: string, role: string, a
     update: { role },
     create: { orgId, userId: user.id, role },
   });
+  // Only a NEW membership gets a notification; a role change is silent.
+  const mail = existing ? null : await sendMail(addedToOrgEmail({ to: user.email, orgName: org.name, role, addedBy: actor.user?.email }));
   await recordAudit({
     orgId, actor: actor.user,
     action: existing ? 'org.member.role_changed' : 'org.member.added',
     targetType: 'user', targetId: user.id,
-    meta: { email: user.email, role, ...(existing ? { from: existing.role } : {}) },
+    meta: { email: user.email, role, ...(existing ? { from: existing.role } : { emailSent: mail?.sent ?? false }) },
   });
-  return { invited: false as const, userId: user.id, email: user.email, role };
+  return { invited: false as const, userId: user.id, email: user.email, role, emailSent: mail?.sent ?? false };
 }
 
 /** Openstaande (en recent verlopen/ingetrokken) uitnodigingen van een org. */
