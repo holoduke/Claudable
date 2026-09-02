@@ -22,7 +22,7 @@ export async function PATCH(request: NextRequest, { params }: RouteContext) {
     if (!gate.ok) return createErrorResponse(gate.code, gate.message, gate.status);
     const body = (await request.json().catch(() => null)) ?? {};
     const role = typeof body.role === 'string' ? body.role : '';
-    const member = await updateOrgMemberRole(org_id, user_id, role, gate.actor);
+    const member = await updateOrgMemberRole(org_id, user_id, role, { ...gate.actor, user: gate.actor.user });
     return createSuccessResponse(member);
   } catch (error) {
     if (isOrgPolicyError(error)) return createErrorResponse('forbidden', (error as Error).message, 403);
@@ -38,7 +38,7 @@ export async function DELETE(_request: NextRequest, { params }: RouteContext) {
     const { org_id, user_id } = await params;
     const gate = await requireOrgManager(org_id);
     if (!gate.ok) return createErrorResponse(gate.code, gate.message, gate.status);
-    await removeOrgMember(org_id, user_id, gate.actor);
+    await removeOrgMember(org_id, user_id, { ...gate.actor, user: gate.actor.user });
     return createSuccessResponse({ removed: true });
   } catch (error) {
     if (isOrgPolicyError(error)) return createErrorResponse('forbidden', (error as Error).message, 403);

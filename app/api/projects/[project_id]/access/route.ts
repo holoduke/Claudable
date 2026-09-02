@@ -4,6 +4,7 @@
  *   PUT /api/projects/:id/access  -> { visibility: 'org' | 'restricted' }
  */
 import { NextRequest } from 'next/server';
+import { recordAudit } from '@/lib/services/audit';
 import {
   requireProjectManager,
   getProjectAccess,
@@ -39,6 +40,7 @@ export async function PUT(req: NextRequest, { params }: Ctx) {
     }
 
     await setProjectVisibility(project_id, body.visibility);
+    await recordAudit({ orgId: gate.project.orgId, actor: gate.user, action: 'project.visibility_changed', targetType: 'project', targetId: project_id, meta: { visibility: body.visibility } });
     return createSuccessResponse(await getProjectAccess(project_id));
   } catch (error) {
     return handleApiError(error, 'API', 'Failed to update project access');

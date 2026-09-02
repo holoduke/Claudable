@@ -4,8 +4,8 @@
  * geen eigenaren aanmaken of aanraken (org-access.ts).
  *   GET  /api/orgs/:org_id/members  -> ledenlijst met rollen
  *   POST /api/orgs/:org_id/members  -> { email, role? } lid toevoegen
- *        (bestaande gebruiker krijgt een extra lidmaatschap; onbekende e-mail
- *        wordt als slapende externe gebruiker aangemaakt)
+ *        (bestaande gebruiker krijgt direct een lidmaatschap; een onbekend
+ *        e-mailadres krijgt een uitnodiging — antwoord heeft `invited: true`)
  */
 import { NextRequest } from 'next/server';
 import { requireOrgManager, requireOrgMember } from '@/lib/services/org-access';
@@ -37,7 +37,7 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
     const body = (await request.json().catch(() => null)) ?? {};
     const email = typeof body.email === 'string' ? body.email : '';
     const role = typeof body.role === 'string' && body.role ? body.role : 'lid';
-    const member = await addOrgMember(org_id, email, role, gate.actor);
+    const member = await addOrgMember(org_id, email, role, { ...gate.actor, user: gate.actor.user });
     return createSuccessResponse(member, 201);
   } catch (error) {
     if (isOrgPolicyError(error)) return createErrorResponse('forbidden', (error as Error).message, 403);

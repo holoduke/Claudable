@@ -139,8 +139,57 @@ model Organization {
   users    User[]
   projects Project[]
   members  OrgMember[]
+  invites  OrgInvite[]
+  auditEvents AuditEvent[]
 
   @@map("organizations")
+}
+
+/**
+ * Uitnodiging voor een organisatie. Vervangt het "slapende gebruiker"-model:
+ * een onbekend e-mailadres krijgt géén User-rij meer, maar een uitnodiging met
+ * rol en houdbaarheid. De eerste Google-login met dat (geverifieerde) adres
+ * binnen de termijn accepteert hem: dan pas ontstaat de gebruiker, met deze org
+ * als thuisorg en het bijbehorende lidmaatschap. Intrekken = revokedAt zetten.
+ */
+model OrgInvite {
+  id          String    @id @default(cuid())
+  orgId       String    @map("org_id")
+  email       String
+  role        String    @default("lid") // eigenaar | beheerder | lid
+  invitedById String?   @map("invited_by_id")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  expiresAt   DateTime  @map("expires_at")
+  acceptedAt  DateTime? @map("accepted_at")
+  revokedAt   DateTime? @map("revoked_at")
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  invitedBy    User?        @relation("SentInvites", fields: [invitedById], references: [id], onDelete: SetNull)
+
+  @@unique([orgId, email])
+  @@index([email])
+  @@map("org_invites")
+}
+
+/**
+ * Auditspoor van beheeracties (wie deed wat, in welke org, op welk doel).
+ * Best-effort geschreven vanuit de services; nooit blokkerend voor de actie.
+ */
+model AuditEvent {
+  id         String   @id @default(cuid())
+  orgId      String?  @map("org_id")
+  actorId    String?  @map("actor_id")
+  actorEmail String?  @map("actor_email")
+  action     String   // bijv. org.member.added, org.invite.created, project.visibility_changed
+  targetType String?  @map("target_type") // user | invite | org | project
+  targetId   String?  @map("target_id")
+  meta       String?  // JSON
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  organization Organization? @relation(fields: [orgId], references: [id], onDelete: SetNull)
+
+  @@index([orgId, createdAt])
+  @@map("audit_events")
 }
 
 /**
@@ -191,6 +240,7 @@ model User {
   orgMemberships OrgMember[]
   claudeCredentials ClaudeCredential[]
   comments      Comment[]
+  sentInvites   OrgInvite[]     @relation("SentInvites")
 
   @@index([orgId])
   @@map("users")

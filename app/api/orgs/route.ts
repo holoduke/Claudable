@@ -30,7 +30,7 @@ export async function POST(request: NextRequest) {
       name: typeof body.name === 'string' ? body.name : '',
       type: typeof body.type === 'string' ? body.type : undefined,
       domain: typeof body.domain === 'string' ? body.domain : undefined,
-    });
+    }, admin);
     return createSuccessResponse(org, 201);
   } catch (error) {
     if (error instanceof Error && (error as { code?: string }).code === 'P2002') {

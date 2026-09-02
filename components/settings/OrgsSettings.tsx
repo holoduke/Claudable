@@ -153,11 +153,25 @@ export default function OrgsSettings({ onToast }: OrgsSettingsProps) {
   };
 
   const addMember = async (orgId: string) => {
-    const ok = await call(`/api/orgs/${orgId}/members`, {
-      method: 'POST',
-      body: JSON.stringify({ email: memberEmail, role: memberRole }),
-    }, `${memberEmail.trim()} toegevoegd`, () => loadMembers(orgId));
-    if (ok) { setMemberEmail(''); setMemberRole('lid'); }
+    setBusy(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/orgs/${orgId}/members`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: memberEmail, role: memberRole }),
+      });
+      const json = await res.json();
+      if (!res.ok || !json.success) throw new Error(json.message || 'Actie mislukt');
+      onToast(json.data?.invited
+        ? `${memberEmail.trim()} uitgenodigd (14 dagen geldig) — wordt lid bij de eerste Google-login`
+        : `${memberEmail.trim()} toegevoegd`, 'success');
+      setMemberEmail(''); setMemberRole('lid');
+      await loadMembers(orgId);
+      await load();
+    } catch (err) {
+      onToast(err instanceof Error ? err.message : 'Actie mislukt', 'error');
+    } finally {
+      setBusy(false);
+    }
   };
 
   const changeMemberRole = (orgId: string, userId: string, role: string) =>

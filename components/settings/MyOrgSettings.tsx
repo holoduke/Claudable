@@ -32,6 +32,49 @@ interface OrgMemberRow {
   isActive: boolean;
 }
 
+interface InviteRow {
+  id: string;
+  email: string;
+  role: 'eigenaar' | 'beheerder' | 'lid';
+  invitedBy: string | null;
+  expiresAt: string;
+  status: 'open' | 'verlopen' | 'ingetrokken';
+}
+
+interface AuditRow {
+  id: string;
+  action: string;
+  actorEmail: string | null;
+  meta: Record<string, unknown> | null;
+  at: string;
+}
+
+const ACTION_LABEL: Record<string, string> = {
+  'org.member.added': 'lid toegevoegd',
+  'org.member.role_changed': 'rol gewijzigd',
+  'org.member.removed': 'lid verwijderd',
+  'org.invite.created': 'uitnodiging verstuurd',
+  'org.invite.revoked': 'uitnodiging ingetrokken',
+  'org.invite.accepted': 'uitnodiging geaccepteerd',
+  'org.created': 'organisatie aangemaakt',
+  'org.updated': 'organisatie gewijzigd',
+  'project.visibility_changed': 'projectzichtbaarheid gewijzigd',
+  'project.member.added': 'projectlid toegevoegd',
+  'project.member.role_changed': 'projectrol gewijzigd',
+  'project.member.removed': 'projectlid verwijderd',
+};
+
+function describeMeta(meta: Record<string, unknown> | null): string {
+  if (!meta) return '';
+  const parts: string[] = [];
+  if (typeof meta.email === 'string') parts.push(meta.email);
+  if (typeof meta.from === 'string' && typeof meta.role === 'string') parts.push(`${meta.from} → ${meta.role}`);
+  else if (typeof meta.role === 'string') parts.push(String(meta.role));
+  if (typeof meta.visibility === 'string') parts.push(String(meta.visibility));
+  if (typeof meta.name === 'string') parts.push(String(meta.name));
+  return parts.join(' · ');
+}
+
 interface Props {
   orgs: MyOrg[];
   currentUserId: string;
@@ -47,6 +90,9 @@ const ROLE_LABEL: Record<OrgMemberRow['role'], string> = { eigenaar: 'Eigenaar',
 
 function OrgPanel({ org, currentUserId, onToast }: { org: MyOrg; currentUserId: string; onToast: Props['onToast'] }) {
   const [members, setMembers] = useState<OrgMemberRow[]>([]);
+  const [invites, setInvites] = useState<InviteRow[]>([]);
+  const [audit, setAudit] = useState<AuditRow[] | null>(null);
+  const [showAudit, setShowAudit] = useState(false);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [email, setEmail] = useState('');
@@ -59,10 +105,15 @@ function OrgPanel({ org, currentUserId, onToast }: { org: MyOrg; currentUserId: 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/api/orgs/${org.id}/members`);
-      const json = await res.json();
-      if (!res.ok || !json.success) throw new Error(json.message || 'Leden laden mislukt');
-      setMembers(json.data as OrgMemberRow[]);
+      const [mRes, iRes] = await Promise.all([
+        fetch(`${API_BASE}/api/orgs/${org.id}/members`),
+        fetch(`${API_BASE}/api/orgs/${org.id}/invites`),
+      ]);
+      const mJson = await mRes.json();
+      if (!mRes.ok || !mJson.success) throw new Error(mJson.message || 'Leden laden mislukt');
+      setMembers(mJson.data as OrgMemberRow[]);
+      const iJson = await iRes.json().catch(() => null);
+      setInvites(iRes.ok && iJson?.success ? (iJson.data as InviteRow[]) : []);
     } catch (err) {
       onToast(err instanceof Error ? err.message : 'Leden laden mislukt', 'error');
     } finally {
@@ -90,11 +141,39 @@ function OrgPanel({ org, currentUserId, onToast }: { org: MyOrg; currentUserId: 
   };
 
   const addMember = async () => {
-    const ok = await call(`/api/orgs/${org.id}/members`, {
-      method: 'POST',
-      body: JSON.stringify({ email, role }),
-    }, `${email.trim()} toegevoegd aan ${org.name}`);
-    if (ok) { setEmail(''); setRole('lid'); }
+    setBusy(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/orgs/${org.id}/members`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, role }),
+      });
+      const json = await res.json();
+      if (!res.ok || !json.success) throw new Error(json.message || 'Actie mislukt');
+      onToast(json.data?.invited
+        ? `${email.trim()} uitgenodigd voor ${org.name} — de uitnodiging is 14 dagen geldig`
+        : `${email.trim()} toegevoegd aan ${org.name}`, 'success');
+      setEmail(''); setRole('lid');
+      await load();
+    } catch (err) {
+      onToast(err instanceof Error ? err.message : 'Actie mislukt', 'error');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const revokeInvite = (i: InviteRow) =>
+    call(`/api/orgs/${org.id}/invites/${i.id}`, { method: 'DELETE' }, `Uitnodiging voor ${i.email} ingetrokken`);
+
+  const loadAudit = async () => {
+    setShowAudit((v) => !v);
+    if (audit) return;
+    try {
+      const res = await fetch(`${API_BASE}/api/orgs/${org.id}/audit?limit=50`);
+      const json = await res.json();
+      setAudit(res.ok && json.success ? (json.data as AuditRow[]) : []);
+    } catch {
+      setAudit([]);
+    }
   };
 
   const changeRole = (m: OrgMemberRow, next: string) =>
@@ -184,6 +263,31 @@ function OrgPanel({ org, currentUserId, onToast }: { org: MyOrg; currentUserId: 
           </ul>
         )}
 
+        {invites.filter((i) => i.status === 'open').length > 0 && (
+          <div className="pt-2">
+            <p className="text-xs font-medium text-gray-600 dark:text-gray-300 mb-2">Openstaande uitnodigingen</p>
+            <ul className="space-y-2">
+              {invites.filter((i) => i.status === 'open').map((i) => (
+                <li key={i.id} className="flex items-center gap-3">
+                  <div className="w-7 h-7 rounded-full border border-dashed border-gray-300 dark:border-white/15 flex items-center justify-center text-xs text-gray-500">✉</div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm text-gray-800 dark:text-gray-100 truncate">{i.email}</p>
+                    <p className="text-[11px] text-gray-500 dark:text-gray-400">
+                      {ROLE_LABEL[i.role]} · verloopt {new Date(i.expiresAt).toLocaleDateString('nl-NL')}{i.invitedBy ? ` · door ${i.invitedBy}` : ''}
+                    </p>
+                  </div>
+                  {canManage && (
+                    <button onClick={() => revokeInvite(i)} disabled={busy || (!isOwner && i.role === 'eigenaar')}
+                      className="px-2.5 py-1.5 text-xs font-medium border border-gray-200 dark:border-white/8 rounded-full bg-white dark:bg-white/3 text-gray-600 dark:text-gray-300 hover:bg-gray-50 transition-colors disabled:opacity-40">
+                      Intrekken
+                    </button>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
         {canManage && (
           <div className="pt-2">
             <p className="text-xs font-medium text-gray-600 dark:text-gray-300 mb-2">Lid toevoegen</p>
@@ -201,9 +305,36 @@ function OrgPanel({ org, currentUserId, onToast }: { org: MyOrg; currentUserId: 
               </button>
             </div>
             <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-2">
-              Iedereen met dit e-mailadres kan daarna via Google inloggen en ziet alleen de projecten van {org.name}.
+              Een bestaande gebruiker wordt direct lid; een nieuw adres krijgt een uitnodiging (14 dagen geldig) en
+              kan dan via Google inloggen. Nieuwe leden zien alleen de projecten van {org.name}.
               {isOwner ? ' Een extra eigenaar wijs je aan via het rol-menu bij een bestaand lid.' : ''}
             </p>
+          </div>
+        )}
+
+        {canManage && (
+          <div className="pt-2">
+            <button onClick={loadAudit} className="text-xs font-medium text-gray-600 dark:text-gray-300 hover:underline">
+              {showAudit ? 'Logboek verbergen' : 'Logboek tonen'}
+            </button>
+            {showAudit && (
+              <ul className="mt-2 space-y-1 max-h-64 overflow-y-auto pr-1">
+                {audit === null ? (
+                  <li className="text-xs text-gray-500">Laden…</li>
+                ) : audit.length === 0 ? (
+                  <li className="text-xs text-gray-500">Nog geen gebeurtenissen.</li>
+                ) : audit.map((e) => (
+                  <li key={e.id} className="text-[11px] text-gray-600 dark:text-gray-300 flex gap-2">
+                    <span className="text-gray-400 shrink-0 tabular-nums">{new Date(e.at).toLocaleString('nl-NL', { dateStyle: 'short', timeStyle: 'short' })}</span>
+                    <span className="truncate">
+                      <span className="font-medium">{ACTION_LABEL[e.action] ?? e.action}</span>
+                      {describeMeta(e.meta) ? ` · ${describeMeta(e.meta)}` : ''}
+                      {e.actorEmail ? ` · door ${e.actorEmail}` : ''}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
         )}
       </div>
