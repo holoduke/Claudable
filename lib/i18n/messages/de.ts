@@ -309,4 +309,22 @@ export const de: Record<keyof typeof en, string> = {
   'home.orgBadgeCustomer': 'Kundenorganisation: {name}',
   'home.orgBadgeInternal': 'Organisation: {name}',
   'home.orgPicker': 'Organisation',
+
+  // Claude account: how to obtain a token with `claude setup-token`
+  'claudeHelp.title': 'Wie bekomme ich ein Token?',
+  'claudeHelp.intro': 'Claudable führt den Coding-Agenten mit einem Claude-Abonnement (Pro oder Max) aus. Du erstellst einmalig auf deinem eigenen Rechner ein langlebiges Token mit dem Kommandozeilenwerkzeug Claude Code und fügst es hier ein. Danach laufen deine Agent-Läufe über dein eigenes Abonnement statt über das gemeinsame Plattformkonto.',
+  'claudeHelp.step1': 'Installiere Claude Code auf deinem Rechner (benötigt Node.js 18 oder neuer). Öffne ein Terminal und führe aus:',
+  'claudeHelp.step1alt': 'Claude Code ist schon installiert? Dann überspringe diesen Schritt.',
+  'claudeHelp.step2': 'Erzeuge ein Token. Führe den folgenden Befehl aus; ein Browserfenster öffnet sich, in dem du dich mit dem Claude-Konto anmeldest, dessen Abonnement verwendet werden soll, und den Zugriff bestätigst.',
+  'claudeHelp.step3': 'Kopiere das Token, das im Terminal angezeigt wird (beginnt mit sk-ant-oat…), füge es oben in das Token-Feld ein, gib ihm eine Bezeichnung und klicke auf Connect.',
+  'claudeHelp.notesTitle': 'Gut zu wissen',
+  'claudeHelp.note.expiry': 'Ein Token ist etwa ein Jahr gültig. Wenn es abgelaufen ist, führe den Befehl erneut aus und ersetze das Token hier.',
+  'claudeHelp.note.secret': 'Behandle das Token wie ein Passwort: Wer es besitzt, kann dein Abonnement nutzen. Füge es nur in Claudable ein und teile es nie per Chat oder E-Mail.',
+  'claudeHelp.note.share': 'Mit „Let others in my org use this Claude“ können Kolleginnen und Kollegen in deiner Organisation ihre Agenten über dein Abonnement laufen lassen. Lass es aus, wenn du das nicht ausdrücklich möchtest.',
+  'claudeHelp.note.apiKey': 'Ein Console-API-Schlüssel (sk-ant-api…, Abrechnung nach Verbrauch) funktioniert ebenfalls anstelle eines Abonnement-Tokens.',
+  'claudeHelp.note.windows': 'Unter Windows führst du die Befehle in PowerShell oder im Windows Terminal aus.',
+  'claudeHelp.troubleTitle': 'Probleme?',
+  'claudeHelp.trouble.notFound': '„command not found: claude“: Die Installation wurde nicht abgeschlossen oder das Terminal nicht neu gestartet. Öffne ein neues Terminal und versuche es erneut.',
+  'claudeHelp.trouble.invalid': 'Connect schlägt fehl: Stelle sicher, dass du das vollständige Token ohne Leerzeichen oder Zeilenumbrüche kopiert hast und dass dein Claude-Konto ein aktives Pro- oder Max-Abonnement hat.',
+  'claudeHelp.docs': 'Claude-Code-Dokumentation',
 };

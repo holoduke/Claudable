@@ -309,4 +309,22 @@ export const fr: Record<keyof typeof en, string> = {
   'home.orgBadgeCustomer': 'Organisation cliente : {name}',
   'home.orgBadgeInternal': 'Organisation : {name}',
   'home.orgPicker': 'Organisation',
+
+  // Claude account: how to obtain a token with `claude setup-token`
+  'claudeHelp.title': 'Comment obtenir un jeton ?',
+  'claudeHelp.intro': 'Claudable exécute l’agent de codage avec un abonnement Claude (Pro ou Max). Vous créez une seule fois, sur votre propre ordinateur, un jeton de longue durée avec l’outil en ligne de commande Claude Code, puis vous le collez ici. Vos exécutions d’agent utilisent ensuite votre propre abonnement au lieu du compte partagé de la plateforme.',
+  'claudeHelp.step1': 'Installez Claude Code sur votre ordinateur (nécessite Node.js 18 ou plus récent). Ouvrez un terminal et exécutez :',
+  'claudeHelp.step1alt': 'Claude Code est déjà installé ? Passez cette étape.',
+  'claudeHelp.step2': 'Générez un jeton. Exécutez la commande ci-dessous ; une fenêtre de navigateur s’ouvre, dans laquelle vous vous connectez avec le compte Claude dont l’abonnement doit être utilisé et vous approuvez l’accès.',
+  'claudeHelp.step3': 'Copiez le jeton affiché dans le terminal (il commence par sk-ant-oat…), collez-le dans le champ jeton ci-dessus, donnez-lui un libellé et cliquez sur Connect.',
+  'claudeHelp.notesTitle': 'Bon à savoir',
+  'claudeHelp.note.expiry': 'Un jeton est valable environ un an. Lorsqu’il expire, relancez la commande et remplacez le jeton ici.',
+  'claudeHelp.note.secret': 'Traitez le jeton comme un mot de passe : quiconque le possède peut utiliser votre abonnement. Ne le collez que dans Claudable et ne le partagez jamais par chat ou par e-mail.',
+  'claudeHelp.note.share': '« Let others in my org use this Claude » permet à vos collègues de votre organisation de faire tourner leurs agents sur votre abonnement. Laissez-le désactivé sauf si c’est vraiment ce que vous voulez.',
+  'claudeHelp.note.apiKey': 'Une clé API Console (sk-ant-api…, facturation à l’usage) fonctionne aussi à la place d’un jeton d’abonnement.',
+  'claudeHelp.note.windows': 'Sous Windows, exécutez les commandes dans PowerShell ou Windows Terminal.',
+  'claudeHelp.troubleTitle': 'Des problèmes ?',
+  'claudeHelp.trouble.notFound': '« command not found: claude » : l’installation n’est pas terminée ou le terminal n’a pas été relancé. Ouvrez un nouveau terminal et réessayez.',
+  'claudeHelp.trouble.invalid': 'Connect échoue : vérifiez que vous avez copié le jeton en entier, sans espaces ni sauts de ligne, et que votre compte Claude dispose d’un abonnement Pro ou Max actif.',
+  'claudeHelp.docs': 'Documentation de Claude Code',
 };

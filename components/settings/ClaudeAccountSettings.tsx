@@ -1,5 +1,6 @@
 "use client";
 import { useCallback, useEffect, useState } from 'react';
+import { useI18n } from '@/contexts/I18nContext';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? '';
 
@@ -17,8 +18,21 @@ interface Props {
   onToast: (message: string, type: 'success' | 'error') => void;
 }
 
+const CLAUDE_CODE_DOCS = 'https://docs.claude.com/en/docs/claude-code/setup';
+
+function Cmd({ children }: { children: string }) {
+  return (
+    <code className="block w-full overflow-x-auto rounded-lg bg-gray-900 dark:bg-black/40 px-3 py-2 font-mono text-[13px] text-gray-100 select-all">
+      {children}
+    </code>
+  );
+}
+
 export default function ClaudeAccountSettings({ onToast }: Props) {
+  const { t } = useI18n();
   const [creds, setCreds] = useState<Credential[]>([]);
+  // null = not touched by the user: open by default while nothing is connected.
+  const [helpToggled, setHelpToggled] = useState<boolean | null>(null);
   const [loading, setLoading] = useState(true);
   const [denied, setDenied] = useState(false);
   const [label, setLabel] = useState('');
@@ -132,6 +146,77 @@ export default function ClaudeAccountSettings({ onToast }: Props) {
           </button>
         </div>
       </div>
+
+      {/* Help: how to obtain a token with `claude setup-token` */}
+      {(() => {
+        const helpOpen = helpToggled ?? (!loading && creds.length === 0);
+        return (
+          <div className="rounded-xl border border-gray-200 dark:border-white/8 overflow-hidden">
+            <button
+              type="button"
+              onClick={() => setHelpToggled(!helpOpen)}
+              aria-expanded={helpOpen}
+              className="w-full flex items-center justify-between gap-3 px-4 py-3 text-left bg-gray-50 dark:bg-white/3 hover:bg-gray-100 dark:hover:bg-white/6"
+            >
+              <span className="text-sm font-medium text-gray-900 dark:text-gray-50">{t('claudeHelp.title')}</span>
+              <svg
+                className={`w-4 h-4 shrink-0 text-gray-500 transition-transform ${helpOpen ? 'rotate-180' : ''}`}
+                viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"
+              >
+                <path d="M5 8l5 5 5-5" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </button>
+            {helpOpen && (
+              <div className="px-4 py-4 space-y-4 text-sm text-gray-600 dark:text-gray-300 border-t border-gray-200 dark:border-white/8">
+                <p>{t('claudeHelp.intro')}</p>
+
+                <ol className="space-y-3 list-decimal list-outside pl-5 marker:font-medium marker:text-gray-900 dark:marker:text-gray-50">
+                  <li className="space-y-2">
+                    <p>{t('claudeHelp.step1')}</p>
+                    <Cmd>npm install -g @anthropic-ai/claude-code</Cmd>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">{t('claudeHelp.step1alt')}</p>
+                  </li>
+                  <li className="space-y-2">
+                    <p>{t('claudeHelp.step2')}</p>
+                    <Cmd>claude setup-token</Cmd>
+                  </li>
+                  <li>
+                    <p>{t('claudeHelp.step3')}</p>
+                  </li>
+                </ol>
+
+                <div>
+                  <p className="font-medium text-gray-900 dark:text-gray-50 mb-1">{t('claudeHelp.notesTitle')}</p>
+                  <ul className="space-y-1 list-disc list-outside pl-5">
+                    <li>{t('claudeHelp.note.expiry')}</li>
+                    <li>{t('claudeHelp.note.secret')}</li>
+                    <li>{t('claudeHelp.note.share')}</li>
+                    <li>{t('claudeHelp.note.apiKey')}</li>
+                    <li>{t('claudeHelp.note.windows')}</li>
+                  </ul>
+                </div>
+
+                <div>
+                  <p className="font-medium text-gray-900 dark:text-gray-50 mb-1">{t('claudeHelp.troubleTitle')}</p>
+                  <ul className="space-y-1 list-disc list-outside pl-5">
+                    <li>{t('claudeHelp.trouble.notFound')}</li>
+                    <li>{t('claudeHelp.trouble.invalid')}</li>
+                  </ul>
+                </div>
+
+                <a
+                  href={CLAUDE_CODE_DOCS}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-1 text-brand-600 dark:text-brand-400 hover:underline"
+                >
+                  {t('claudeHelp.docs')} ↗
+                </a>
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       {/* List */}
       <div className="rounded-xl border border-gray-200 dark:border-white/8 overflow-hidden">

@@ -324,6 +324,24 @@ export const en = {
   'home.orgBadgeCustomer': 'Customer organisation: {name}',
   'home.orgBadgeInternal': 'Organisation: {name}',
   'home.orgPicker': 'Organisation',
+
+  // Claude account: how to obtain a token with `claude setup-token`
+  'claudeHelp.title': 'How do I get a token?',
+  'claudeHelp.intro': 'Claudable runs the coding agent on a Claude subscription (Pro or Max). You create a long-lived token once on your own computer with the Claude Code command-line tool and paste it here. From then on your agent runs use your own subscription instead of the shared platform account.',
+  'claudeHelp.step1': 'Install Claude Code on your computer (needs Node.js 18 or newer). Open a terminal and run:',
+  'claudeHelp.step1alt': 'Already have Claude Code installed? Skip this step.',
+  'claudeHelp.step2': 'Generate a token. Run the command below; a browser window opens where you sign in with the Claude account whose subscription should be used and approve the access.',
+  'claudeHelp.step3': 'Copy the token that is printed in the terminal (it starts with sk-ant-oat…), paste it into the token field above, give it a label and click Connect.',
+  'claudeHelp.notesTitle': 'Good to know',
+  'claudeHelp.note.expiry': 'A token is valid for about a year. When it expires, run the command again and replace the token here.',
+  'claudeHelp.note.secret': 'Treat the token like a password: anyone who has it can use your subscription. Only paste it into Claudable and never share it by chat or e-mail.',
+  'claudeHelp.note.share': '“Let others in my org use this Claude” lets colleagues in your organisation run their agents on your subscription. Leave it off unless that is what you want.',
+  'claudeHelp.note.apiKey': 'A Console API key (sk-ant-api…, pay per use) also works instead of a subscription token.',
+  'claudeHelp.note.windows': 'On Windows, run the commands in PowerShell or Windows Terminal.',
+  'claudeHelp.troubleTitle': 'Problems?',
+  'claudeHelp.trouble.notFound': '“command not found: claude”: the installation did not finish or the terminal was not restarted. Open a new terminal and try again.',
+  'claudeHelp.trouble.invalid': 'Connect fails: make sure you copied the whole token without spaces or line breaks, and that your Claude account has an active Pro or Max subscription.',
+  'claudeHelp.docs': 'Claude Code documentation',
 };
 
 export type MessageKey = keyof typeof en;
