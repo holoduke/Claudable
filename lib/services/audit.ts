@@ -17,6 +17,7 @@ export type AuditAction =
   | 'org.invite.created'
   | 'org.invite.revoked'
   | 'org.invite.accepted'
+  | 'user.welcomed'
   | 'org.claude_credential.set'
   | 'org.claude_credential.removed'
   | 'project.org_changed'

@@ -22,6 +22,7 @@
  */
 import { prisma } from '@/lib/db/client';
 import { recordAudit } from '@/lib/services/audit';
+import { sendMail, welcomeEmail } from '@/lib/services/mail';
 
 const DEFAULT_ORG_NAME = 'New Story';
 
@@ -123,6 +124,11 @@ export async function provisionUser(
   const lower = email.toLowerCase();
   const bootstrap = isBootstrapAdmin(lower);
   const invites = await pendingInvites(lower);
+  // A welcome e-mail goes out once, only when the account is actually created
+  // on this sign-in (invite acceptance or domain auto-join) — never on a
+  // returning user's login, and never for the bootstrap admin.
+  let justCreated = false;
+  let welcomeOrgName = '';
 
   let user = await prisma.user.findUnique({ where: { email: lower } });
 
@@ -145,6 +151,8 @@ export async function provisionUser(
       : await autoJoinOrg(lower);
     if (!homeOrg) throw new Error(`No organisation to provision ${lower} into`);
     const autoRole = bootstrap ? 'beheerder' : 'lid';
+    justCreated = true;
+    welcomeOrgName = homeOrg.name;
     try {
       user = await prisma.user.create({
         data: {
@@ -198,6 +206,17 @@ export async function provisionUser(
       update: {},
       create: { orgId: primary.id, userId: user.id, role: 'beheerder' },
     });
+  }
+
+  // Best-effort welcome — after memberships/invites are settled so the user is
+  // fully set up when the e-mail lands. Never blocks or fails the sign-in.
+  if (justCreated && !bootstrap) {
+    try {
+      const mail = await sendMail(welcomeEmail({ to: user.email, name: user.name, orgName: welcomeOrgName }));
+      await recordAudit({ orgId: user.orgId, actor: { id: user.id, email: user.email }, action: 'user.welcomed', targetType: 'user', targetId: user.id, meta: { emailSent: mail.sent } });
+    } catch (e) {
+      console.error('[provision] welcome e-mail failed for', user.email, e);
+    }
   }
 
   return user;
