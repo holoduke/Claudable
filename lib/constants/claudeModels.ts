@@ -1,4 +1,5 @@
 export type ClaudeModelId =
+  | 'claude-fable-5-1'
   | 'claude-fable-5'
   | 'claude-opus-5'
   | 'claude-sonnet-5'
@@ -21,18 +22,33 @@ export interface ClaudeModelDefinition {
 
 export const CLAUDE_MODEL_DEFINITIONS: ClaudeModelDefinition[] = [
   {
+    id: 'claude-fable-5-1',
+    name: 'Claude Fable 5.1',
+    description: 'Anthropic’s latest flagship model',
+    supportsImages: true,
+    aliases: [
+      'claude-fable-5-1',
+      'claude-fable-5.1',
+      'claude-fable5.1',
+      'fable-5-1',
+      'fable-5.1',
+      'fable5.1',
+      // Generic fable aliases resolve to the newest Fable
+      'claude-fable',
+      'fable',
+    ],
+  },
+  {
     id: 'claude-fable-5',
     name: 'Claude Fable 5',
-    description: 'Anthropic’s latest flagship model',
+    description: 'Previous Fable flagship',
     supportsImages: true,
     aliases: [
       'claude-fable-5',
       'claude-fable-5-latest',
       'claude-fable5',
-      'claude-fable',
       'fable-5',
       'fable5',
-      'fable',
     ],
   },
   {
