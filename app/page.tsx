@@ -138,9 +138,12 @@ export default function HomePage() {
   const [myOrgs, setMyOrgs] = useState<{ id: string; name: string; type: string; canCreateProjects?: boolean }[]>([]);
   const [selectedOrgId, setSelectedOrgId] = useState<string>('');
   const [isSuperadmin, setIsSuperadmin] = useState(false);
+  // True once /api/orgs/mine has answered (or failed): until then we don't know
+  // whether this user may create projects, so the composer must not flash in.
+  const [orgsLoaded, setOrgsLoaded] = useState(false);
   // Orgs the user may create projects in (superadmins: all of theirs).
   const creatableOrgs = isSuperadmin ? myOrgs : myOrgs.filter(o => o.canCreateProjects !== false);
-  const canCreateAnywhere = isSuperadmin || myOrgs.length === 0 /* auth off / not loaded */ || creatableOrgs.length > 0;
+  const canCreateAnywhere = orgsLoaded && (isSuperadmin || myOrgs.length === 0 /* auth off */ || creatableOrgs.length > 0);
   const [showOrgMenu, setShowOrgMenu] = useState(false);
   useEffect(() => {
     let cancelled = false;
@@ -157,6 +160,7 @@ export default function HomePage() {
         const allowed = j.data?.superadmin ? orgs : orgs.filter(o => o.canCreateProjects !== false);
         setSelectedOrgId(allowed.some(o => o.id === home) ? (home as string) : (allowed[0]?.id ?? ''));
       } catch { /* auth off or signed out: no picker */ }
+      finally { if (!cancelled) setOrgsLoaded(true); }
     })();
     return () => { cancelled = true; };
   }, []);
@@ -1161,7 +1165,9 @@ export default function HomePage() {
             )}
 
             {/* Main Input Form — gone entirely when none of the user's organisations may create projects */}
-            {!canCreateAnywhere ? null : (
+            {!orgsLoaded ? (
+              <div aria-hidden className="w-full max-w-3xl mx-auto h-[196px]" />
+            ) : !canCreateAnywhere ? null : (
             <form 
               onSubmit={(e) => { e.preventDefault(); handleSubmit(); }}
               onDragEnter={handleDragEnter}
