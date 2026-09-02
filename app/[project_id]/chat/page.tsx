@@ -1401,7 +1401,7 @@ const persistProjectPreferences = useCallback(
   // powers project-access assignment (signed-in users only; empty on failure).
   const searchMentionUsers = useCallback(async (q: string) => {
     try {
-      const r = await fetch(`${API_BASE}/api/users/search?q=${encodeURIComponent(q)}`);
+      const r = await fetch(`${API_BASE}/api/users/search?q=${encodeURIComponent(q)}&project=${encodeURIComponent(projectId)}`);
       const j = await r.json().catch(() => null);
       if (!j?.success || !Array.isArray(j.data)) return [];
       return j.data

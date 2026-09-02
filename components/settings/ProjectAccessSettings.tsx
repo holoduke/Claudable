@@ -61,7 +61,7 @@ export default function ProjectAccessSettings({ projectId }: Props) {
     setSearching(true);
     const t = setTimeout(async () => {
       try {
-        const res = await fetch(`${API_BASE}/api/users/search?q=${encodeURIComponent(q)}`);
+        const res = await fetch(`${API_BASE}/api/users/search?q=${encodeURIComponent(q)}&project=${encodeURIComponent(projectId)}`);
         const json = await res.json().catch(() => ({}));
         if (cancelled) return;
         const memberIds = new Set((access?.members ?? []).map((m) => m.id));

@@ -9,6 +9,7 @@ import {
   getProjectAccess,
 } from '@/lib/services/project-access';
 import { prisma } from '@/lib/db/client';
+import { isOrgMember } from '@/lib/services/org-access';
 import { createSuccessResponse, createErrorResponse, handleApiError } from '@/lib/utils/api-response';
 
 export const runtime = 'nodejs';
@@ -27,11 +28,13 @@ export async function POST(req: NextRequest, { params }: Ctx) {
     // Default to least-privilege viewer; only 'editor' grants write.
     const role = body.role === 'editor' ? 'editor' : 'viewer';
 
-    // Only assign users from the same org as the project (or the manager's org
-    // for legacy projects with no orgId) — never leak across orgs.
-    const target = await prisma.user.findUnique({ where: { id: userId } });
-    const allowedOrg = gate.project.orgId ?? gate.user.orgId;
-    if (!target || target.orgId !== allowedOrg) {
+    // Only assign members of the project's own organisation — never leak
+    // across orgs. A project without an org (data error) can't take members.
+    if (!gate.project.orgId) {
+      return createErrorResponse('invalid_project', 'Project has no organisation', 409);
+    }
+    const target = await prisma.user.findUnique({ where: { id: userId }, select: { id: true, isActive: true } });
+    if (!target || !target.isActive || !(await isOrgMember(userId, gate.project.orgId))) {
       return createErrorResponse('invalid_user', 'User is not in this organization', 400);
     }
 

@@ -12,6 +12,7 @@ import { getDefaultModelForCli, normalizeModelId } from '@/lib/constants/cliMode
 import { createSuccessResponse, createErrorResponse, handleApiError } from '@/lib/utils/api-response';
 import { getSessionUser, authEnabled } from '@/lib/auth/session';
 import { accessibleProjectIds } from '@/lib/services/project-access';
+import { orgIdsFor } from '@/lib/services/org-access';
 import { isValidStack } from '@/lib/config/stacks';
 import { isValidBackend } from '@/lib/config/backend-stacks';
 import { isValidDatabase } from '@/lib/config/databases';
@@ -59,6 +60,26 @@ export async function POST(request: NextRequest) {
     // not logged in (auth gate off) — such projects simply have no it-ops owner.
     const creator = await getSessionUser();
 
+    // Tenant: an org the creator is a MEMBER of. The client may pick one of
+    // their orgs (multi-org users, e.g. staff working for a customer); default
+    // is the home org when they belong to it, else their first membership.
+    let orgId: string | null = null;
+    if (creator) {
+      const memberships = await orgIdsFor(creator.id);
+      const requested = typeof body.orgId === 'string' ? body.orgId : (typeof body.org_id === 'string' ? body.org_id : '');
+      if (requested) {
+        if (!memberships.has(requested)) {
+          return createErrorResponse('forbidden', 'You are not a member of that organisation', 403);
+        }
+        orgId = requested;
+      } else {
+        orgId = memberships.has(creator.orgId) ? creator.orgId : ([...memberships][0] ?? null);
+      }
+      if (!orgId) {
+        return createErrorResponse('forbidden', 'You are not a member of any organisation', 403);
+      }
+    }
+
     const input: CreateProjectInput = {
       project_id: body.project_id,
       name: body.name,
@@ -68,9 +89,9 @@ export async function POST(request: NextRequest) {
       description: body.description,
       templateType: isValidStack(rawStack) ? rawStack : undefined,
       ownerId: creator?.id ?? null,
-      // The creator's organisation is the project's tenant. Never taken from the
-      // request body — a client must not be able to file a project under another org.
-      orgId: creator?.orgId ?? null,
+      // Validated above against the creator's memberships — never an org they
+      // don't belong to.
+      orgId,
     };
 
     // Validation
