@@ -309,4 +309,22 @@ export const nl: Record<keyof typeof en, string> = {
   'home.orgBadgeCustomer': 'Klantorganisatie: {name}',
   'home.orgBadgeInternal': 'Organisatie: {name}',
   'home.orgPicker': 'Organisatie',
+
+  // Claude account: how to obtain a token with `claude setup-token`
+  'claudeHelp.title': 'Hoe kom ik aan een token?',
+  'claudeHelp.intro': 'Claudable laat de code-agent draaien op een Claude-abonnement (Pro of Max). Je maakt eenmalig op je eigen computer een langlopend token aan met het commandoregelprogramma Claude Code en plakt dat hier. Daarna gebruiken je agent-runs je eigen abonnement in plaats van het gedeelde platformaccount.',
+  'claudeHelp.step1': 'Installeer Claude Code op je computer (vereist Node.js 18 of nieuwer). Open een terminal en voer uit:',
+  'claudeHelp.step1alt': 'Heb je Claude Code al geïnstalleerd? Sla deze stap dan over.',
+  'claudeHelp.step2': 'Maak een token aan. Voer het onderstaande commando uit; er opent een browservenster waarin je inlogt met het Claude-account waarvan het abonnement gebruikt moet worden en de toegang goedkeurt.',
+  'claudeHelp.step3': 'Kopieer het token dat in de terminal verschijnt (begint met sk-ant-oat…), plak het hierboven in het tokenveld, geef het een label en klik op Connect.',
+  'claudeHelp.notesTitle': 'Goed om te weten',
+  'claudeHelp.note.expiry': 'Een token is ongeveer een jaar geldig. Als het verlopen is, voer je het commando opnieuw uit en vervang je het token hier.',
+  'claudeHelp.note.secret': 'Behandel het token als een wachtwoord: iedereen die het heeft kan jouw abonnement gebruiken. Plak het alleen in Claudable en deel het nooit via chat of e-mail.',
+  'claudeHelp.note.share': 'Met “Let others in my org use this Claude” kunnen collega’s in je organisatie hun agents op jouw abonnement laten draaien. Laat dit uit tenzij je dat echt wilt.',
+  'claudeHelp.note.apiKey': 'Een Console-API-sleutel (sk-ant-api…, betalen per gebruik) werkt ook, in plaats van een abonnementstoken.',
+  'claudeHelp.note.windows': 'Op Windows voer je de commando’s uit in PowerShell of Windows Terminal.',
+  'claudeHelp.troubleTitle': 'Problemen?',
+  'claudeHelp.trouble.notFound': '“command not found: claude”: de installatie is niet afgerond of de terminal is niet opnieuw gestart. Open een nieuwe terminal en probeer het opnieuw.',
+  'claudeHelp.trouble.invalid': 'Connect mislukt: controleer of je het hele token zonder spaties of regeleinden hebt gekopieerd en of je Claude-account een actief Pro- of Max-abonnement heeft.',
+  'claudeHelp.docs': 'Documentatie van Claude Code',
 };
