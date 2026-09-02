@@ -26,6 +26,15 @@ interface OrgMemberRow {
   isActive: boolean;
 }
 
+interface InviteRow {
+  id: string;
+  email: string;
+  role: 'eigenaar' | 'beheerder' | 'lid';
+  invitedBy: string | null;
+  expiresAt: string;
+  status: 'open' | 'verlopen' | 'ingetrokken';
+}
+
 interface OrgsSettingsProps {
   onToast: (message: string, type: 'success' | 'error') => void;
 }
@@ -59,6 +68,7 @@ export default function OrgsSettings({ onToast }: OrgsSettingsProps) {
   const [editType, setEditType] = useState<'intern' | 'klant'>('klant');
   const [editDomain, setEditDomain] = useState('');
   const [members, setMembers] = useState<OrgMemberRow[]>([]);
+  const [invites, setInvites] = useState<InviteRow[]>([]);
   const [membersLoading, setMembersLoading] = useState(false);
   const [memberEmail, setMemberEmail] = useState('');
   const [memberRole, setMemberRole] = useState<'eigenaar' | 'beheerder' | 'lid'>('lid');
@@ -82,10 +92,15 @@ export default function OrgsSettings({ onToast }: OrgsSettingsProps) {
   const loadMembers = useCallback(async (orgId: string) => {
     setMembersLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/api/orgs/${orgId}/members`);
+      const [res, iRes] = await Promise.all([
+        fetch(`${API_BASE}/api/orgs/${orgId}/members`),
+        fetch(`${API_BASE}/api/orgs/${orgId}/invites`),
+      ]);
       const json = await res.json();
       if (!res.ok || !json.success) throw new Error(json.message || 'Leden laden mislukt');
       setMembers(json.data as OrgMemberRow[]);
+      const iJson = await iRes.json().catch(() => null);
+      setInvites(iRes.ok && iJson?.success ? (iJson.data as InviteRow[]) : []);
     } catch (err) {
       onToast(err instanceof Error ? err.message : 'Leden laden mislukt', 'error');
     } finally {
@@ -181,6 +196,10 @@ export default function OrgsSettings({ onToast }: OrgsSettingsProps) {
       method: 'PATCH',
       body: JSON.stringify({ role }),
     }, null, () => loadMembers(orgId));
+
+  const revokeInvite = (orgId: string, i: InviteRow) =>
+    call(`/api/orgs/${orgId}/invites/${i.id}`, { method: 'DELETE' },
+      `Uitnodiging voor ${i.email} ingetrokken`, () => loadMembers(orgId));
 
   const removeMember = (orgId: string, m: OrgMemberRow) =>
     call(`/api/orgs/${orgId}/members/${m.userId}`, { method: 'DELETE' },
@@ -324,12 +343,36 @@ export default function OrgsSettings({ onToast }: OrgsSettingsProps) {
                         </ul>
                       )}
 
+                      {/* Openstaande uitnodigingen */}
+                      {invites.filter((i) => i.status === 'open').length > 0 && (
+                        <div className="mt-3">
+                          <p className="text-xs font-medium text-gray-600 dark:text-gray-300 mb-2">Openstaande uitnodigingen</p>
+                          <ul className="space-y-2">
+                            {invites.filter((i) => i.status === 'open').map((i) => (
+                              <li key={i.id} className="flex items-center gap-3">
+                                <div className="w-7 h-7 rounded-full border border-dashed border-gray-300 dark:border-white/15 flex items-center justify-center text-xs text-gray-500">✉</div>
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-sm text-gray-800 dark:text-gray-100 truncate">{i.email}</p>
+                                  <p className="text-[11px] text-gray-500 dark:text-gray-400">
+                                    {i.role} · verloopt {new Date(i.expiresAt).toLocaleDateString('nl-NL')}{i.invitedBy ? ` · door ${i.invitedBy}` : ''}
+                                  </p>
+                                </div>
+                                <button onClick={() => revokeInvite(org.id, i)} disabled={busy}
+                                  className="px-2.5 py-1.5 text-xs font-medium border border-gray-200 dark:border-white/8 rounded-full bg-white dark:bg-white/3 text-gray-600 dark:text-gray-300 hover:bg-gray-50 transition-colors disabled:opacity-40">
+                                  Intrekken
+                                </button>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+
                       {/* Lid toevoegen */}
                       <div className="flex gap-2 mt-3">
                         <input type="email" value={memberEmail} onChange={(e) => setMemberEmail(e.target.value)}
                           onKeyDown={(e) => { if (e.key === 'Enter') addMember(org.id); }}
-                          placeholder="persoon@klant.nl" className={`${inputCls} flex-1`} />
-                        <select value={memberRole} onChange={(e) => setMemberRole(e.target.value as 'eigenaar' | 'beheerder' | 'lid')} className={inputCls + ' w-36'}>
+                          placeholder="persoon@klant.nl" className={`${inputCls} flex-1 min-w-0`} />
+                        <select value={memberRole} onChange={(e) => setMemberRole(e.target.value as 'eigenaar' | 'beheerder' | 'lid')} className={`${inputCls} w-36! shrink-0`}>
                           <option value="lid">Lid</option>
                           <option value="beheerder">Beheerder</option>
                           <option value="eigenaar">Eigenaar</option>
