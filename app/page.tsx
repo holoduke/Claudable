@@ -1620,7 +1620,8 @@ export default function HomePage() {
                   {t('home.noProjectsMatch', { query: projectSearch.trim() })}
                 </p>
               )}
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
+              {/* Fixed-width tracks + justify-center: a single tile sits in the middle instead of hugging the left edge. */}
+              <div className="grid gap-3 justify-center grid-cols-[repeat(auto-fill,minmax(0,230px))]">
                 {visibleProjects.map((project) => {
                   const projectCli = sanitizeAssistant(project.preferredCli);
                   const projectColor = assistantBrandColors[projectCli] || assistantBrandColors[DEFAULT_ASSISTANT];
