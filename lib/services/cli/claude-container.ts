@@ -15,6 +15,7 @@
  * in-process path (claude.ts) is the fallback for local dev without the infra.
  */
 import { spawn, type ChildProcess } from 'child_process';
+import { credentialEnvName } from '@/lib/services/claude-credentials';
 import path from 'path';
 import fs from 'fs';
 import os from 'os';
@@ -86,7 +87,7 @@ export function buildAgentContainerArgs(o: ContainerTurnOptions): string[] {
   if (o.envFilePath) {
     args.push('--env-file', o.envFilePath);
   } else {
-    args.push('-e', `CLAUDE_CODE_OAUTH_TOKEN=${o.oauthToken}`);
+    args.push('-e', `${credentialEnvName(o.oauthToken)}=${o.oauthToken}`);
   }
   // Persistent HOME (session transcripts under ~/.claude → --resume works across
   // turns). Ephemeral /tmp fallback = amnesiac turns, kept for safety.
@@ -171,7 +172,7 @@ export function runAgentTurnContainerized(
   // Env-file values are single-line by format; strip newlines defensively.
   const envFile = path.join(os.tmpdir(), `claudable-agent-env-${randomUUID().slice(0, 12)}`);
   const envLines = [
-    `CLAUDE_CODE_OAUTH_TOKEN=${String(o.oauthToken).replace(/\r?\n/g, '')}`,
+    `${credentialEnvName(o.oauthToken)}=${String(o.oauthToken).replace(/\r?\n/g, '')}`,
     ...Object.entries(o.env ?? {}).map(([k, v]) => `${k}=${String(v).replace(/\r?\n/g, ' ')}`),
   ];
   fs.writeFileSync(envFile, envLines.join('\n') + '\n', { mode: 0o600 });

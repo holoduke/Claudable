@@ -5,6 +5,7 @@
  */
 
 import { query } from '@anthropic-ai/claude-agent-sdk';
+import { credentialEnvName } from '@/lib/services/claude-credentials';
 import type { ClaudeSession, ClaudeResponse } from '@/types/backend';
 import { streamManager } from '../stream';
 import { serializeMessage, createRealtimeMessage } from '@/lib/serializers/chat';
@@ -862,7 +863,14 @@ export async function executeClaude(
     const agentEnv = buildAgentEnv();
     try {
       const projectToken = await resolveProjectClaudeToken(projectId, options.requesterUserId);
-      if (projectToken) agentEnv.CLAUDE_CODE_OAUTH_TOKEN = projectToken;
+      if (projectToken) {
+        // An API key travels as ANTHROPIC_API_KEY, an OAuth token as
+        // CLAUDE_CODE_OAUTH_TOKEN; never leave the other one set from the env.
+        const name = credentialEnvName(projectToken);
+        delete agentEnv.CLAUDE_CODE_OAUTH_TOKEN;
+        delete agentEnv.ANTHROPIC_API_KEY;
+        agentEnv[name] = projectToken;
+      }
     } catch (e) {
       console.error('[ClaudeService] Failed to resolve project Claude credential:', e);
     }

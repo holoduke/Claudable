@@ -1,6 +1,6 @@
 /**
  * Eén organisatie (superadmin).
- *   PATCH  /api/orgs/:org_id  -> { name?, type?, domain? }
+ *   PATCH  /api/orgs/:org_id  -> { name?, type?, domain?, canCreateProjects? }
  *   DELETE /api/orgs/:org_id  -> alleen als de org geen projecten/leden heeft
  */
 import { NextRequest } from 'next/server';
@@ -25,6 +25,7 @@ export async function PATCH(request: NextRequest, { params }: RouteContext) {
       name: typeof body.name === 'string' ? body.name : undefined,
       type: typeof body.type === 'string' ? body.type : undefined,
       domain: typeof body.domain === 'string' || body.domain === null ? body.domain : undefined,
+      canCreateProjects: typeof body.canCreateProjects === 'boolean' ? body.canCreateProjects : undefined,
     }, admin);
     return createSuccessResponse(org);
   } catch (error) {
