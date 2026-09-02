@@ -39,6 +39,23 @@ const fetchAPI = globalThis.fetch || fetch;
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? '';
 
+/** Tenant label next to a project name: purple for customer orgs, neutral for internal. */
+function OrgBadge({ org }: { org: { name: string; type: string } }) {
+  const customer = org.type === 'klant';
+  return (
+    <span
+      title={customer ? `Klantorganisatie: ${org.name}` : `Organisatie: ${org.name}`}
+      className={`ml-1.5 inline-flex items-center max-w-[10rem] truncate align-middle text-[10px] font-medium px-1.5 py-0.5 rounded-sm shrink-0 ${
+        customer
+          ? 'text-purple-700 dark:text-purple-300 bg-purple-100 dark:bg-purple-500/20'
+          : 'text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-white/8'
+      }`}
+    >
+      {org.name}
+    </span>
+  );
+}
+
 // Define assistant brand colors
 const ASSISTANT_OPTIONS = ACTIVE_CLI_OPTIONS.map(({ id, name, icon }) => ({
   id,
@@ -102,6 +119,7 @@ export default function HomePage() {
       fallbackEnabled: project.fallbackEnabled ?? project.fallback_enabled ?? false,
       createdBy: project.createdBy ?? project.created_by ?? null,
       lastEditedBy: project.lastEditedBy ?? project.last_edited_by ?? null,
+      organization: project.organization ?? null,
     };
   }, [sanitizeAssistant, normalizeModelForAssistant]);
   const [selectedAssistant, setSelectedAssistant] = useState<ActiveCliId>(DEFAULT_ASSISTANT);
@@ -415,7 +433,7 @@ export default function HomePage() {
     const q = projectSearch.trim().toLowerCase();
     if (!q) return projects;
     return projects.filter((p) =>
-      [p.name, p.description ?? '', p.createdBy ?? ''].some((v) => (v ?? '').toLowerCase().includes(q))
+      [p.name, p.description ?? '', p.createdBy ?? '', p.organization?.name ?? ''].some((v) => (v ?? '').toLowerCase().includes(q))
     );
   }, [projects, projectSearch]);
   
@@ -980,6 +998,7 @@ export default function HomePage() {
                                 : project.name
                               }
                             </span>
+                            {project.organization && <OrgBadge org={project.organization} />}
                           </h3>
                           <div className="flex items-center gap-2 mt-1">
                             <div className="text-gray-500 dark:text-gray-400 text-xs">
@@ -1609,6 +1628,7 @@ export default function HomePage() {
                         <div className="flex items-center gap-2 mb-1">
                           <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: projectColor }} />
                           <span className="text-sm font-medium text-gray-900 dark:text-gray-50 truncate">{project.name}</span>
+                          {project.organization && <OrgBadge org={project.organization} />}
                         </div>
                         {/* Primary metadata: last-edited time + who. Once a project has
                             been edited we show the editor and DROP the creator (the

@@ -42,6 +42,8 @@ export interface Project {
   createdBy?: string | null;
   /** Who last ran an agent turn on the project — homepage tiles. */
   lastEditedBy?: string | null;
+  /** Owning organisation (tenant) — shown next to the name on tiles and the project header. */
+  organization?: { id: string; name: string; type: string } | null;
 }
 
 export interface ProjectSettings {

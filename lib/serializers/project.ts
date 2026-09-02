@@ -10,7 +10,8 @@ function userLabel(u: UserRef): string | null {
 export function serializeProject(project: ProjectEntity): Project {
   // owner / lastEditedBy are present when the query includes those relations
   // (getAllProjects for the homepage tiles); absent elsewhere → null.
-  const withRel = project as ProjectEntity & { owner?: UserRef; lastEditedBy?: UserRef };
+  type OrgRef = { id: string; name: string; type: string } | null | undefined;
+  const withRel = project as ProjectEntity & { owner?: UserRef; lastEditedBy?: UserRef; organization?: OrgRef };
   return {
     id: project.id,
     name: project.name,
@@ -27,6 +28,9 @@ export function serializeProject(project: ProjectEntity): Project {
     fallbackEnabled: project.fallbackEnabled,
     createdBy: userLabel(withRel.owner),
     lastEditedBy: userLabel(withRel.lastEditedBy),
+    organization: withRel.organization
+      ? { id: withRel.organization.id, name: withRel.organization.name, type: withRel.organization.type }
+      : null,
   };
 }
 

@@ -33,6 +33,8 @@ export async function getAllProjects(): Promise<Project[]> {
     include: {
       owner: { select: { name: true, email: true } },
       lastEditedBy: { select: { name: true, email: true } },
+      // Tenant label for the tiles ("Micros.nl" next to the name).
+      organization: { select: { id: true, name: true, type: true } },
     },
   });
   return projects.map(project => ({
@@ -53,6 +55,7 @@ export async function getProjectById(id: string): Promise<Project | null> {
     include: {
       owner: { select: { name: true, email: true } },
       lastEditedBy: { select: { name: true, email: true } },
+      organization: { select: { id: true, name: true, type: true } },
     },
   });
   if (!project) return null;
