@@ -5,6 +5,12 @@
  * an explicit set of members (visibility "restricted"). The owner and global
  * admins can always manage and access it. Enforcement (hiding restricted
  * projects) is applied by the API routes only when the auth gate is enabled.
+ *
+ * Tenant rule: a project belongs to exactly one organisation (Project.orgId)
+ * and org-visible projects are visible to that org ONLY. A project with no org
+ * is a data error under auth (it can't happen via the API any more) and is
+ * therefore closed to everyone except its owner and global admins — never the
+ * old "legacy: visible to all" fallback, which would cross tenant boundaries.
  */
 import { prisma } from '@/lib/db/client';
 import { getSessionUser } from '@/lib/auth/session';
@@ -52,6 +58,11 @@ type AccessProject = {
   visibility: string;
 };
 
+/** Org-visible project: same tenant only. A null org is closed (see header). */
+function sameOrg(user: { orgId: string | null }, project: { orgId: string | null }): boolean {
+  return project.orgId != null && project.orgId === user.orgId;
+}
+
 /** Owner or global admin may toggle restriction and assign members. */
 export function canManageProject(user: User, project: { ownerId: string | null }): boolean {
   return user.role === 'admin' || project.ownerId === user.id;
@@ -69,7 +80,7 @@ export async function canWriteProject(user: User, project: AccessProject): Promi
   if (user.role === 'admin') return true;
   if (project.ownerId === user.id) return true;
   if (project.visibility !== 'restricted') {
-    return project.orgId == null || project.orgId === user.orgId;
+    return sameOrg(user, project);
   }
   const member = await prisma.projectMember.findUnique({
     where: { projectId_userId: { projectId: project.id, userId: user.id } },
@@ -82,8 +93,8 @@ export async function canAccessProject(user: User, project: AccessProject): Prom
   if (user.role === 'admin') return true;
   if (project.ownerId === user.id) return true;
   if (project.visibility !== 'restricted') {
-    // Open to the org. Legacy projects (orgId null) stay visible to everyone.
-    return project.orgId == null || project.orgId === user.orgId;
+    // Open to the org — and only to the org.
+    return sameOrg(user, project);
   }
   const member = await prisma.projectMember.findUnique({
     where: { projectId_userId: { projectId: project.id, userId: user.id } },
@@ -165,7 +176,7 @@ export async function accessibleProjectIds(
     projects
       .filter((p) => {
         if (p.ownerId === user.id) return true;
-        if (p.visibility !== 'restricted') return p.orgId == null || p.orgId === user.orgId;
+        if (p.visibility !== 'restricted') return sameOrg(user, p);
         return memberIds.has(p.id);
       })
       .map((p) => p.id),

@@ -68,6 +68,9 @@ export async function POST(request: NextRequest) {
       description: body.description,
       templateType: isValidStack(rawStack) ? rawStack : undefined,
       ownerId: creator?.id ?? null,
+      // The creator's organisation is the project's tenant. Never taken from the
+      // request body — a client must not be able to file a project under another org.
+      orgId: creator?.orgId ?? null,
     };
 
     // Validation
