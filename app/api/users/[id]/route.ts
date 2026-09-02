@@ -49,8 +49,8 @@ export async function PATCH(
       return createErrorResponse('self_change', 'You cannot deactivate your own account', 400);
     }
 
-    // Scope to the admin's org so a UUID from another org can't be modified.
-    const target = await prisma.user.findFirst({ where: { id, orgId: admin.orgId } });
+    // Superadmins administer every account on the installation.
+    const target = await prisma.user.findUnique({ where: { id } });
     if (!target) return createErrorResponse('not_found', 'User not found', 404);
 
     if (hasItops && body.itopsEnabled && !target.isActive) {
@@ -63,9 +63,7 @@ export async function PATCH(
       target.role === 'admin' &&
       ((hasRole && body.role !== 'admin') || (hasActive && body.isActive === false));
     if (demotingAdmin) {
-      const activeAdmins = await prisma.user.count({
-        where: { role: 'admin', isActive: true, orgId: target.orgId },
-      });
+      const activeAdmins = await prisma.user.count({ where: { role: 'admin', isActive: true } });
       if (activeAdmins <= 1) {
         return createErrorResponse('last_admin', 'Cannot remove the last active admin', 409);
       }
@@ -100,21 +98,19 @@ export async function DELETE(
       return createErrorResponse('self_change', 'You cannot delete your own account', 400);
     }
 
-    // Scope to the admin's org so a UUID from another org can't be deleted.
-    const target = await prisma.user.findFirst({ where: { id, orgId: admin.orgId } });
+    const target = await prisma.user.findUnique({ where: { id } });
     if (!target) return createErrorResponse('not_found', 'User not found', 404);
 
-    // Same last-admin guard as PATCH: never delete the org's only active admin.
+    // Same last-admin guard as PATCH: never delete the installation's only active admin.
     if (target.role === 'admin' && target.isActive) {
-      const activeAdmins = await prisma.user.count({
-        where: { role: 'admin', isActive: true, orgId: target.orgId },
-      });
+      const activeAdmins = await prisma.user.count({ where: { role: 'admin', isActive: true } });
       if (activeAdmins <= 1) {
         return createErrorResponse('last_admin', 'Cannot delete the last active admin', 409);
       }
     }
 
-    await deleteUser(id);
+    // Org credentials this person set are re-owned by the acting admin (see deleteUser).
+    await deleteUser(id, admin.id);
     return createSuccessResponse({ id });
   } catch (error) {
     return handleApiError(error, 'API', 'Failed to delete user');

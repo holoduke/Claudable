@@ -166,7 +166,11 @@ export async function addOrgMember(orgId: string, email: string, role: string, a
   const existing = user
     ? await prisma.orgMember.findUnique({ where: { orgId_userId: { orgId, userId: user.id } } })
     : null;
-  assertPolicy(actor, (existing?.role as OrgRole | undefined) ?? null, role);
+  // Already a member: never change the role through this path (it would skip
+  // the last-owner guard and demote silently). The role menu in the list is
+  // the one place for that.
+  if (existing) throw new OrgPolicyError(`${lower} is al lid van deze organisatie — wijzig de rol in de ledenlijst`);
+  assertPolicy(actor, null, role);
 
   if (!user) {
     const expiresAt = new Date(Date.now() + INVITE_TTL_DAYS * 24 * 60 * 60 * 1000);
@@ -186,15 +190,14 @@ export async function addOrgMember(orgId: string, email: string, role: string, a
     update: { role },
     create: { orgId, userId: user.id, role },
   });
-  // Only a NEW membership gets a notification; a role change is silent.
-  const mail = existing ? null : await sendMail(addedToOrgEmail({ to: user.email, orgName: org.name, role, addedBy: actor.user?.email }));
+  const mail = await sendMail(addedToOrgEmail({ to: user.email, orgName: org.name, role, addedBy: actor.user?.email }));
   await recordAudit({
     orgId, actor: actor.user,
-    action: existing ? 'org.member.role_changed' : 'org.member.added',
+    action: 'org.member.added',
     targetType: 'user', targetId: user.id,
-    meta: { email: user.email, role, ...(existing ? { from: existing.role } : { emailSent: mail?.sent ?? false }) },
+    meta: { email: user.email, role, emailSent: mail.sent },
   });
-  return { invited: false as const, userId: user.id, email: user.email, role, emailSent: mail?.sent ?? false };
+  return { invited: false as const, userId: user.id, email: user.email, role, emailSent: mail.sent };
 }
 
 /** Openstaande (en recent verlopen/ingetrokken) uitnodigingen van een org. */
@@ -259,6 +262,10 @@ export async function removeOrgMember(orgId: string, userId: string, actor: Memb
   // Definitief: provisioning maakt lidmaatschappen niet meer opnieuw aan bij
   // een volgende sign-in. Wie zo zijn laatste org verliest, kan pas weer
   // inloggen na een nieuwe uitnodiging (provision.ts / auth jwt-callback).
-  await prisma.orgMember.delete({ where: { orgId_userId: { orgId, userId } } });
+  await prisma.$transaction([
+    prisma.orgMember.delete({ where: { orgId_userId: { orgId, userId } } }),
+    // Per-project assignments inside this org go with the membership.
+    prisma.projectMember.deleteMany({ where: { userId, project: { orgId } } }),
+  ]);
   await recordAudit({ orgId, actor: actor.user, action: 'org.member.removed', targetType: 'user', targetId: userId, meta: { role: current.role } });
 }

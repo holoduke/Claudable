@@ -71,23 +71,40 @@ export async function listOrgCredentials(orgId: string, meId: string): Promise<C
     });
 }
 
-/** A single credential's view (no token), org-scoped. Null when missing/foreign-org. */
+/** A single credential's view (no token). Null when missing or its owner is not in `orgId`. */
 export async function getCredentialView(
   credentialId: string,
   me: { id: string; orgId: string },
+  orgId: string | null = me.orgId,
 ): Promise<CredentialView | null> {
   const cred = await prisma.claudeCredential.findUnique({
     where: { id: credentialId },
-    include: { owner: true },
+    include: { owner: { include: { orgMemberships: { select: { orgId: true } } } } },
   });
-  if (!cred || cred.owner?.orgId !== me.orgId) return null;
+  if (!cred) return null;
+  const ownerInOrg = cred.ownerId === me.id || (!!orgId && cred.owner.orgMemberships.some((m) => m.orgId === orgId));
+  if (!ownerInOrg) return null;
   return view(cred, me.id);
 }
 
-/** Credentials a user may assign to a project: their own + shareable ones in the org. */
-export async function listSelectableCredentials(user: { id: string; orgId: string }): Promise<CredentialView[]> {
+/**
+ * Credentials a user may assign to a project: their own, plus shareable ones
+ * whose owner is a MEMBER of the project's organisation (so org A's shared
+ * subscription can't be attached to org B's project). `projectOrgId` null =
+ * legacy project without an org: own credentials only.
+ */
+export async function listSelectableCredentials(
+  user: { id: string; orgId: string },
+  projectOrgId: string | null = user.orgId,
+): Promise<CredentialView[]> {
   const creds = await prisma.claudeCredential.findMany({
-    where: { owner: { orgId: user.orgId }, OR: [{ ownerId: user.id }, { shareable: true }], ...PERSONAL_ONLY },
+    where: {
+      ...PERSONAL_ONLY,
+      OR: [
+        { ownerId: user.id },
+        ...(projectOrgId ? [{ shareable: true, owner: { orgMemberships: { some: { orgId: projectOrgId } } } }] : []),
+      ],
+    },
     include: { owner: true },
     orderBy: [{ createdAt: 'desc' }],
   });
@@ -221,28 +238,33 @@ export async function setOrgCredential(
   if (!org) throw new Error('Organisation not found');
   const clean = token.trim();
   if (!clean) throw new Error('Token is required');
-  const cred = await prisma.claudeCredential.create({
-    data: {
-      ownerId: actorUserId,
-      label: (label.trim() || `Org: ${org.name}`).slice(0, 80),
-      token: encrypt(clean),
-      shareable: false,
-    },
+  const previous = org.claudeCredentialId;
+  const cred = await prisma.$transaction(async (tx) => {
+    const created = await tx.claudeCredential.create({
+      data: {
+        ownerId: actorUserId,
+        label: (label.trim() || `Org: ${org.name}`).slice(0, 80),
+        token: encrypt(clean),
+        shareable: false,
+      },
+    });
+    await tx.organization.update({ where: { id: orgId }, data: { claudeCredentialId: created.id } });
+    // Replace: the previous org credential row must not linger (it would become
+    // a visible personal credential of its setter once the org FK moves).
+    if (previous) await tx.claudeCredential.delete({ where: { id: previous } });
+    return created;
   });
-  await prisma.organization.update({ where: { id: orgId }, data: { claudeCredentialId: cred.id } });
-  // Replace: drop the previous org credential row (no project should point at it;
-  // if one does, SetNull on the relation handles it).
-  if (org.claudeCredentialId) {
-    await prisma.claudeCredential.delete({ where: { id: org.claudeCredentialId } }).catch(() => {});
-  }
   return { id: cred.id, label: cred.label };
 }
 
 export async function clearOrgCredential(orgId: string): Promise<boolean> {
   const org = await prisma.organization.findUnique({ where: { id: orgId }, select: { claudeCredentialId: true } });
   if (!org?.claudeCredentialId) return false;
-  await prisma.organization.update({ where: { id: orgId }, data: { claudeCredentialId: null } });
-  await prisma.claudeCredential.delete({ where: { id: org.claudeCredentialId } }).catch(() => {});
+  const credId = org.claudeCredentialId;
+  await prisma.$transaction([
+    prisma.organization.update({ where: { id: orgId }, data: { claudeCredentialId: null } }),
+    prisma.claudeCredential.delete({ where: { id: credId } }),
+  ]);
   return true;
 }
 

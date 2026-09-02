@@ -9,6 +9,7 @@ import { NextRequest } from 'next/server';
 import { getSessionUser } from '@/lib/auth/session';
 import { prisma } from '@/lib/db/client';
 import { canAccessProject, searchOrgUsers } from '@/lib/services/project-access';
+import { isOrgMember } from '@/lib/services/org-access';
 import { createSuccessResponse, createErrorResponse, handleApiError } from '@/lib/utils/api-response';
 
 export const runtime = 'nodejs';
@@ -28,6 +29,9 @@ export async function GET(request: NextRequest) {
       if (!project.orgId) return createSuccessResponse([]);
       return createSuccessResponse(await searchOrgUsers(project.orgId, q));
     }
+    // No project context: only the caller's home org, and only while they are
+    // actually a member of it (User.orgId alone is not an access scope).
+    if (!(await isOrgMember(me.id, me.orgId))) return createSuccessResponse([]);
     return createSuccessResponse(await searchOrgUsers(me.orgId, q));
   } catch (error) {
     return handleApiError(error, 'API', 'Failed to search users');

@@ -11,55 +11,11 @@ import type { User } from '@prisma/client';
 
 const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/u;
 
-/**
- * Members of one org, admins first then alphabetical. Scoped by orgId so that
- * when a second org is added an admin can never see/manage another org's users.
- */
-export async function listUsers(orgId: string): Promise<User[]> {
+/** Every account on this installation (superadmin view), admins first then alphabetical. */
+export async function listUsers(): Promise<User[]> {
   return prisma.user.findMany({
-    where: { orgId },
     orderBy: [{ role: 'asc' }, { email: 'asc' }],
   });
-}
-
-/**
- * Pre-authorize an external email (outside the allowed domain) by creating a
- * dormant User row. Their first Google sign-in then succeeds and fills in
- * name/image. Idempotent: returns the existing row (created: false) if already
- * present, tolerating a concurrent insert (P2002) without surfacing a 500.
- */
-export async function addExternalUser(
-  orgId: string,
-  email: string,
-  name?: string | null,
-): Promise<{ user: User; created: boolean }> {
-  const lower = email.trim().toLowerCase();
-  if (!EMAIL_RE.test(lower)) {
-    throw new Error('A valid email address is required');
-  }
-  const existing = await prisma.user.findUnique({ where: { email: lower } });
-  if (existing) return { user: existing, created: false };
-
-  try {
-    const user = await prisma.user.create({
-      data: {
-        email: lower,
-        name: name?.trim() || null,
-        role: 'user',
-        orgId,
-        isActive: true,
-        orgMemberships: { create: { orgId, role: 'lid' } },
-      },
-    });
-    return { user, created: true };
-  } catch (error) {
-    // Lost a race with a concurrent invite/sign-in for the same email.
-    if ((error as { code?: string })?.code === 'P2002') {
-      const raced = await prisma.user.findUnique({ where: { email: lower } });
-      if (raced) return { user: raced, created: false };
-    }
-    throw error;
-  }
 }
 
 export async function setUserItops(id: string, itopsEnabled: boolean): Promise<User> {
@@ -71,8 +27,21 @@ export async function setUserLocale(id: string, locale: string | null): Promise<
   return prisma.user.update({ where: { id }, data: { locale } });
 }
 
-export async function deleteUser(id: string): Promise<void> {
-  await prisma.user.delete({ where: { id } });
+/**
+ * Delete an account. Org-level Claude credentials this person happened to set
+ * are re-owned by the acting admin first — `ClaudeCredential.owner` cascades,
+ * and an organisation must not lose its credential because its setter left.
+ */
+export async function deleteUser(id: string, reassignOrgCredentialsTo?: string): Promise<void> {
+  await prisma.$transaction(async (tx) => {
+    if (reassignOrgCredentialsTo && reassignOrgCredentialsTo !== id) {
+      await tx.claudeCredential.updateMany({
+        where: { ownerId: id, organizations: { some: {} } },
+        data: { ownerId: reassignOrgCredentialsTo },
+      });
+    }
+    await tx.user.delete({ where: { id } });
+  });
 }
 
 /** Shape sent to the client — never leak anything beyond these fields. */

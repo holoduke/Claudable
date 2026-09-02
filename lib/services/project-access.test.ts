@@ -103,6 +103,21 @@ describe('tenant isolation: membership, not the home-org field, decides', () => 
     expect([...(await accessibleProjectIds(ghost, [projA]))]).toEqual([]);
   });
 
+  it('leaving an org ends access even for the project OWNER and assigned members', async () => {
+    const owned = project('p-owned', ORG_B, { ownerId: 'dave' });
+    const restricted = project('p-rb2', ORG_B, { ownerId: 'bob', visibility: 'restricted' });
+    projectMembers.push({ projectId: 'p-rb2', userId: 'dave', role: 'editor' });
+    expect(await canAccessProject(dave, owned)).toBe(true);
+    expect(await canWriteProject(dave, restricted)).toBe(true);
+    // dave is removed from ORG_B
+    const i = orgMembers.findIndex((m) => m.orgId === ORG_B && m.userId === 'dave');
+    orgMembers.splice(i, 1);
+    expect(await canAccessProject(dave, owned)).toBe(false);
+    expect(await canWriteProject(dave, owned)).toBe(false);
+    expect(await canAccessProject(dave, restricted)).toBe(false);
+    expect([...(await accessibleProjectIds(dave, [owned, restricted, projA]))]).toEqual(['p-a']);
+  });
+
   it('an org admin role grants no extra project access', async () => {
     // dave is beheerder of ORG_B, but a restricted project there is still closed to him.
     const restrictedB = project('p-rb', ORG_B, { ownerId: 'bob', visibility: 'restricted' });
