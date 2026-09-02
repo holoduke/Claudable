@@ -44,6 +44,9 @@ export interface CreateProjectInput {
   templateType?: string;
   /** The signed-in creator; owns the project (drives per-user it-ops). */
   ownerId?: string | null;
+  /** Tenant the project belongs to — the creator's organisation. Null only when
+   *  created without a session (auth gate off); under auth it must be set. */
+  orgId?: string | null;
 }
 
 export interface UpdateProjectInput {

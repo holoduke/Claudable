@@ -84,6 +84,10 @@ export async function createProject(input: CreateProjectInput): Promise<Project>
       // The signed-in creator owns the project (drives per-user it-ops). Undefined
       // when created without a session (auth gate off / not logged in).
       ownerId: input.ownerId ?? undefined,
+      // Tenant boundary. Stamped from the creator's org so the project is only
+      // ever visible inside that organisation (project-access.ts denies a null
+      // org under auth — see canAccessProject).
+      orgId: input.orgId ?? undefined,
       // Tech stack chosen on the new-project screen (drives preview scaffolding).
       templateType: input.templateType || 'nuxt',
       lastActiveAt: new Date(),
