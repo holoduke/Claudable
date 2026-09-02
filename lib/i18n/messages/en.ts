@@ -66,6 +66,9 @@ export const en = {
   'settings.tab.plugins': 'Plugins',
   'settings.tab.system': 'System',
   'settings.tab.about': 'About',
+  'settings.group.personal': 'You',
+  'settings.group.org': 'Organisation',
+  'settings.group.admin': 'Administration',
 
   // Home / dashboard
   'home.openSidebar': 'Open sidebar',

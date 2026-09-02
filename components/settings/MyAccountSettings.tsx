@@ -1,24 +1,39 @@
 "use client";
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { signOutAction } from '@/app/actions/auth';
+import { useI18n } from '@/contexts/I18nContext';
+import type { MyOrg } from './MyOrgSettings';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? '';
 
 interface MyAccountSettingsProps {
-  user: { id: string; email: string; role: 'admin' | 'user'; itopsEnabled?: boolean };
+  user: { id: string; email: string; name?: string | null; image?: string | null; role: 'admin' | 'user'; itopsEnabled?: boolean };
   onToast?: (message: string, type: 'success' | 'error') => void;
   onChanged?: () => void; // reload the current user after a change
 }
 
+const ROLE_LABEL: Record<string, string> = { eigenaar: 'Eigenaar', beheerder: 'Beheerder', lid: 'Lid' };
+
 /**
- * "My Account" — per-user settings. Admins can enable their own it-ops tools here
- * (the broker then attaches for every project they own). Non-admins see the state
- * read-only; an admin grants it via User Management.
+ * "Account" — everything that is about YOU: who you are signed in as, which
+ * organisations you belong to (and as what), your interface language, the
+ * it-ops toggle (admins), and sign out.
  */
 export default function MyAccountSettings({ user, onToast, onChanged }: MyAccountSettingsProps) {
+  const { locale, setLocale, locales, t } = useI18n();
   const [itops, setItops] = useState(!!user.itopsEnabled);
   const [busy, setBusy] = useState(false);
+  const [orgs, setOrgs] = useState<MyOrg[] | null>(null);
   const isAdmin = user.role === 'admin';
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`${API_BASE}/api/orgs/mine`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => { if (!cancelled) setOrgs(j?.success ? ((j.data?.orgs as MyOrg[]) ?? []) : []); })
+      .catch(() => { if (!cancelled) setOrgs([]); });
+    return () => { cancelled = true; };
+  }, []);
 
   const toggleItops = async () => {
     if (!isAdmin || busy) return;
@@ -44,15 +59,28 @@ export default function MyAccountSettings({ user, onToast, onChanged }: MyAccoun
     }
   };
 
+  const initial = (user.name || user.email).trim().charAt(0).toUpperCase();
+
   return (
     <div className="space-y-6">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-50">My Account</h3>
-          <div className="mt-2 text-sm text-gray-600 dark:text-gray-300">
-            <div><span className="text-gray-400 dark:text-gray-500">Email:</span> {user.email}</div>
-            <div><span className="text-gray-400 dark:text-gray-500">Role:</span> {user.role}</div>
+      {/* Identity */}
+      <div className="flex items-center gap-4">
+        {user.image ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={user.image} alt="" className="w-14 h-14 rounded-full ring-1 ring-gray-200 dark:ring-white/10" />
+        ) : (
+          <div className="w-14 h-14 rounded-full bg-gray-200 dark:bg-white/8 flex items-center justify-center text-xl font-semibold text-gray-600 dark:text-gray-300">
+            {initial}
           </div>
+        )}
+        <div className="min-w-0 flex-1">
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-50 truncate">{user.name || user.email}</h3>
+          <p className="text-sm text-gray-500 dark:text-gray-400 truncate">{user.email}</p>
+          <p className="mt-1">
+            <span className={`text-[11px] font-medium px-1.5 py-0.5 rounded-sm ${isAdmin ? 'text-amber-800 bg-amber-100 dark:text-amber-200 dark:bg-amber-500/20' : 'text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-white/8'}`}>
+              {isAdmin ? 'Superadmin' : 'Gebruiker'}
+            </span>
+          </p>
         </div>
         <form action={signOutAction}>
           <button
@@ -66,30 +94,82 @@ export default function MyAccountSettings({ user, onToast, onChanged }: MyAccoun
         </form>
       </div>
 
-      <div className="rounded-xl border border-gray-200 dark:border-white/8 p-4">
-        <div className="flex items-start justify-between gap-4">
-          <div className="font-medium text-gray-900 dark:text-gray-50">it-ops tools</div>
-          {isAdmin ? (
-            <button
-              type="button"
-              onClick={toggleItops}
-              disabled={busy}
-              role="switch"
-              aria-checked={itops}
-              className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors disabled:opacity-50 ${
-                itops ? 'bg-brand-500' : 'bg-gray-300'
-              }`}
-              title={itops ? 'Disable it-ops tools' : 'Enable it-ops tools'}
-            >
-              <span className={`inline-block h-5 w-5 transform rounded-full bg-white dark:bg-gray-900 transition-transform ${itops ? 'translate-x-5' : 'translate-x-1'}`} />
-            </button>
-          ) : (
-            <span className={`shrink-0 rounded-full px-3 py-1 text-xs font-medium ${itops ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 dark:bg-white/6 text-gray-500 dark:text-gray-400'}`}>
-              {itops ? 'Enabled by admin' : 'Disabled'}
-            </span>
-          )}
+      {/* Organisations */}
+      <section className="rounded-xl border border-gray-200 dark:border-white/8 overflow-hidden">
+        <div className="px-4 py-3 bg-gray-50 dark:bg-white/3 border-b border-gray-200 dark:border-white/8">
+          <p className="text-sm font-medium text-gray-900 dark:text-gray-50">Organisaties</p>
+          <p className="text-xs text-gray-500 dark:text-gray-400">Je ziet de projecten en leden van deze organisaties.{isAdmin ? ' Als superadmin zie je daarnaast alle organisaties.' : ''}</p>
         </div>
-      </div>
+        {orgs === null ? (
+          <p className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">Laden…</p>
+        ) : orgs.length === 0 ? (
+          <p className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">Je bent nog geen lid van een organisatie.</p>
+        ) : (
+          <ul className="divide-y divide-gray-200 dark:divide-white/8">
+            {orgs.map((o) => (
+              <li key={o.id} className="flex items-center gap-3 px-4 py-3">
+                <div className="w-8 h-8 rounded-lg bg-gray-200 dark:bg-white/6 flex items-center justify-center text-sm font-semibold text-gray-600 dark:text-gray-300 shrink-0">
+                  {o.name.charAt(0).toUpperCase()}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-gray-900 dark:text-gray-50 truncate">{o.name}</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">
+                    {o.type === 'klant' ? 'Klantorganisatie' : 'Interne organisatie'} · {o.memberCount} {o.memberCount === 1 ? 'lid' : 'leden'} · {o.projectCount} {o.projectCount === 1 ? 'project' : 'projecten'}
+                  </p>
+                </div>
+                <span className="text-[11px] font-medium text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-white/8 px-2 py-0.5 rounded-full">{ROLE_LABEL[o.role] ?? o.role}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      {/* Preferences */}
+      <section className="rounded-xl border border-gray-200 dark:border-white/8 divide-y divide-gray-200 dark:divide-white/8">
+        <div className="flex items-center justify-between gap-4 px-4 py-3">
+          <div className="min-w-0">
+            <p className="text-sm font-medium text-gray-900 dark:text-gray-50">{t('settings.general.language')}</p>
+            <p className="text-xs text-gray-500 dark:text-gray-400">{t('settings.general.languageDesc')}</p>
+          </div>
+          <select
+            value={locale}
+            onChange={(e) => setLocale(e.target.value as typeof locale)}
+            className="shrink-0 pl-3 pr-8 py-2 text-sm border border-gray-200 dark:border-white/8 rounded-lg bg-white dark:bg-white/6 hover:border-gray-300 dark:hover:border-white/18 text-gray-700 dark:text-gray-200 focus:outline-hidden focus:ring-0 transition-colors cursor-pointer"
+          >
+            {locales.map((l) => (
+              <option key={l.code} value={l.code}>{l.flag} {l.label}</option>
+            ))}
+          </select>
+        </div>
+
+        {(isAdmin || itops) && (
+          <div className="flex items-center justify-between gap-4 px-4 py-3">
+            <div className="min-w-0">
+              <p className="text-sm font-medium text-gray-900 dark:text-gray-50">it-ops tools</p>
+              <p className="text-xs text-gray-500 dark:text-gray-400">
+                {isAdmin
+                  ? 'Koppelt de New Story it-ops MCP-tools aan de agent van elk project dat jij bezit.'
+                  : 'Door een superadmin voor jouw account ingeschakeld.'}
+              </p>
+            </div>
+            {isAdmin ? (
+              <button
+                type="button"
+                onClick={toggleItops}
+                disabled={busy}
+                role="switch"
+                aria-checked={itops}
+                className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors disabled:opacity-50 ${itops ? 'bg-brand-500' : 'bg-gray-300'}`}
+                title={itops ? 'Disable it-ops tools' : 'Enable it-ops tools'}
+              >
+                <span className={`inline-block h-5 w-5 transform rounded-full bg-white dark:bg-gray-900 transition-transform ${itops ? 'translate-x-5' : 'translate-x-1'}`} />
+              </button>
+            ) : (
+              <span className="shrink-0 rounded-full px-3 py-1 text-xs font-medium bg-amber-100 text-amber-700">Ingeschakeld</span>
+            )}
+          </div>
+        )}
+      </section>
     </div>
   );
 }

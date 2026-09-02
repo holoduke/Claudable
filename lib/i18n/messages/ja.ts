@@ -58,6 +58,9 @@ export const ja: Record<keyof typeof en, string> = {
   'settings.tab.plugins': 'プラグイン',
   'settings.tab.system': 'システム',
   'settings.tab.about': '情報',
+  'settings.group.personal': 'あなた',
+  'settings.group.org': '組織',
+  'settings.group.admin': '管理',
 
   'home.openSidebar': 'サイドバーを開く',
   'home.closeSidebar': 'サイドバーを閉じる',

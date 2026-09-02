@@ -58,6 +58,9 @@ export const fr: Record<keyof typeof en, string> = {
   'settings.tab.plugins': 'Plug-ins',
   'settings.tab.system': 'Système',
   'settings.tab.about': 'À propos',
+  'settings.group.personal': 'Vous',
+  'settings.group.org': 'Organisation',
+  'settings.group.admin': 'Administration',
 
   'home.openSidebar': 'Ouvrir la barre latérale',
   'home.closeSidebar': 'Fermer la barre latérale',
