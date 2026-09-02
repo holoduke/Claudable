@@ -72,7 +72,7 @@ RUN curl -fsSL https://download.docker.com/linux/static/stable/x86_64/docker-27.
 # audited CLI for the security controls that depend on its flags (notably
 # `--strict-mcp-config` and `--allowedTools`, which gate design-generation
 # isolation). Bump deliberately after verifying those flags still behave.
-ARG CLAUDE_CODE_VERSION=2.1.210
+ARG CLAUDE_CODE_VERSION=2.1.258
 RUN npm install -g @anthropic-ai/claude-code@${CLAUDE_CODE_VERSION} \
   && claude --version
 
