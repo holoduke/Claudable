@@ -65,22 +65,34 @@ export async function POST(request: NextRequest) {
     // is the home org when they belong to it, else their first membership.
     let orgId: string | null = null;
     if (creator) {
+      const isStaff = creator.role === 'admin';
       const memberships = await orgIdsFor(creator.id);
       const requested = typeof body.orgId === 'string' ? body.orgId : (typeof body.org_id === 'string' ? body.org_id : '');
       if (requested) {
-        if (!memberships.has(requested)) {
+        // Staff may file a project under any org; everyone else only under their own.
+        if (!isStaff && !memberships.has(requested)) {
           return createErrorResponse('forbidden', 'You are not a member of that organisation', 403);
         }
         orgId = requested;
       } else {
-        orgId = memberships.has(creator.orgId) ? creator.orgId : ([...memberships][0] ?? null);
+        // Default: the home org when the user belongs to it and it allows creation,
+        // else the first membership that does. Staff default to their home org.
+        const candidates = memberships.has(creator.orgId) ? [creator.orgId, ...memberships] : [...memberships];
+        if (isStaff) {
+          orgId = candidates[0] ?? creator.orgId;
+        } else {
+          for (const id of candidates) { if (await orgAllowsProjectCreation(id)) { orgId = id; break; } }
+          if (!orgId && candidates.length) {
+            return createErrorResponse('org_cannot_create', 'Your organisation is not allowed to create new projects. Ask New Story.', 403);
+          }
+        }
       }
       if (!orgId) {
         return createErrorResponse('forbidden', 'You are not a member of any organisation', 403);
       }
-      // Superadmin-controlled per-org switch. Staff (global admins) are exempt so
-      // they can still set up projects for an org that customers may not extend.
-      if (creator.role !== 'admin' && !(await orgAllowsProjectCreation(orgId))) {
+      // Superadmin-controlled per-org switch (staff exempt so they can set up
+      // projects for an org that customers may not extend).
+      if (!isStaff && !(await orgAllowsProjectCreation(orgId))) {
         return createErrorResponse('org_cannot_create', 'Your organisation is not allowed to create new projects. Ask New Story.', 403);
       }
     }

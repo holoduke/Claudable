@@ -40,6 +40,7 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
     const member = await addOrgMember(org_id, email, role, { ...gate.actor, user: gate.actor.user });
     return createSuccessResponse(member, 201);
   } catch (error) {
+    if (error instanceof Error && /is al lid/u.test(error.message)) return createErrorResponse('already_member', error.message, 409);
     if (isOrgPolicyError(error)) return createErrorResponse('forbidden', (error as Error).message, 403);
     if (error instanceof Error && /e-mailadres|Rol moet|niet gevonden/u.test(error.message)) {
       return createErrorResponse('invalid_input', error.message, 400);

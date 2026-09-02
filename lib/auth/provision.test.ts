@@ -8,6 +8,7 @@ const orgs: { id: string; name: string; domain: string | null }[] = [];
 const memberships: { orgId: string; userId: string; role: string }[] = [];
 const invites: { id: string; orgId: string; email: string; role: string; expiresAt: Date; acceptedAt: Date | null; revokedAt: Date | null }[] = [];
 const audit: string[] = [];
+const removals: { userId: string; orgId: string }[] = [];
 let seq = 0;
 
 vi.mock('@/lib/db/client', () => ({
@@ -54,7 +55,11 @@ vi.mock('@/lib/db/client', () => ({
       }),
       update: vi.fn(async ({ where, data }: any) => { Object.assign(invites.find((i) => i.id === where.id)!, data); }),
     },
-    auditEvent: { create: vi.fn(async ({ data }: any) => { audit.push(data.action); }) },
+    auditEvent: {
+      create: vi.fn(async ({ data }: any) => { audit.push(data.action); }),
+      findFirst: vi.fn(async ({ where }: any) =>
+        removals.some((r) => r.userId === where.targetId && r.orgId === where.orgId) ? { id: 'rm' } : null),
+    },
   },
 }));
 
@@ -63,7 +68,7 @@ import { isSignInAllowed, provisionUser } from './provision';
 const DAY = 24 * 60 * 60 * 1000;
 
 beforeEach(() => {
-  users.length = 0; orgs.length = 0; memberships.length = 0; invites.length = 0; audit.length = 0; seq = 0;
+  users.length = 0; orgs.length = 0; memberships.length = 0; invites.length = 0; audit.length = 0; removals.length = 0; seq = 0;
   process.env.ALLOWED_EMAIL_DOMAINS = 'newstory.nl';
   process.env.BOOTSTRAP_ADMIN_EMAIL = 'boot@newstory.nl';
   orgs.push({ id: 'org-ns', name: 'New Story', domain: 'newstory.nl' });
@@ -94,13 +99,21 @@ describe('who may sign in', () => {
     expect(await isSignInAllowed('c@gmail.com')).toBe(false);
   });
 
-  it('an existing user needs an active account and at least one membership', async () => {
+  it('a user REMOVED from their last org (audited) is refused until re-invited', async () => {
     users.push({ id: 'u1', email: 'old@example.com', role: 'user', isActive: true, orgId: 'org-micros' });
-    expect(await isSignInAllowed('old@example.com')).toBe(false); // removed from last org
+    removals.push({ userId: 'u1', orgId: 'org-micros' });
+    expect(await isSignInAllowed('old@example.com')).toBe(false);
+    expect(memberships).toEqual([]); // no resurrection
     memberships.push({ orgId: 'org-micros', userId: 'u1', role: 'lid' });
     expect(await isSignInAllowed('old@example.com')).toBe(true);
     users[0].isActive = false;
     expect(await isSignInAllowed('old@example.com')).toBe(false);
+  });
+
+  it('a LEGACY account (home org set, never had a membership, never removed) is healed once', async () => {
+    users.push({ id: 'u2', email: 'legacy@newstory.nl', role: 'user', isActive: true, orgId: 'org-ns' });
+    expect(await isSignInAllowed('legacy@newstory.nl')).toBe(true);
+    expect(memberships).toEqual([{ orgId: 'org-ns', userId: 'u2', role: 'lid' }]);
   });
 });
 

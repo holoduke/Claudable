@@ -140,7 +140,7 @@ export default function HomePage() {
   const [isSuperadmin, setIsSuperadmin] = useState(false);
   // Orgs the user may create projects in (superadmins: all of theirs).
   const creatableOrgs = isSuperadmin ? myOrgs : myOrgs.filter(o => o.canCreateProjects !== false);
-  const canCreateAnywhere = myOrgs.length === 0 /* auth off / not loaded */ || creatableOrgs.length > 0;
+  const canCreateAnywhere = isSuperadmin || myOrgs.length === 0 /* auth off / not loaded */ || creatableOrgs.length > 0;
   const [showOrgMenu, setShowOrgMenu] = useState(false);
   useEffect(() => {
     let cancelled = false;
@@ -627,7 +627,7 @@ export default function HomePage() {
           backendId: selectedBackend || undefined,
           databaseId: selectedDatabase || undefined,
           imageProvider: selectedImageGen || undefined,
-          orgId: creatableOrgs.length > 1 && selectedOrgId ? selectedOrgId : undefined,
+          orgId: selectedOrgId || undefined,
         })
       });
       

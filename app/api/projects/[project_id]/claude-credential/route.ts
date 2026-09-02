@@ -18,7 +18,7 @@ export async function GET(_req: NextRequest, { params }: Ctx) {
     const gate = await requireProjectWriter(project_id);
     if (!gate.ok) return createErrorResponse(gate.code, gate.message, gate.status);
 
-    const options = await listSelectableCredentials({ id: gate.user.id, orgId: gate.user.orgId });
+    const options = await listSelectableCredentials({ id: gate.user.id, orgId: gate.user.orgId }, gate.project.orgId);
     // The CURRENT assignment must always be visible, even when it's another
     // user's PRIVATE credential (not selectable): without it the picker
     // silently displays the wrong account and the manager can't tell whose
@@ -26,7 +26,7 @@ export async function GET(_req: NextRequest, { params }: Ctx) {
     const credentialId = gate.project.claudeCredentialId ?? null;
     const current =
       credentialId && !options.some((c) => c.id === credentialId)
-        ? await getCredentialView(credentialId, { id: gate.user.id, orgId: gate.user.orgId })
+        ? await getCredentialView(credentialId, { id: gate.user.id, orgId: gate.user.orgId }, gate.project.orgId)
         : null;
     return createSuccessResponse({ credentialId, options, current });
   } catch (error) {
@@ -49,7 +49,7 @@ export async function PUT(req: NextRequest, { params }: Ctx) {
     // If a specific credential is chosen, it must be one the manager can select
     // (their own, or a shareable one in the org) — never an arbitrary id.
     if (credentialId) {
-      const options = await listSelectableCredentials({ id: gate.user.id, orgId: gate.user.orgId });
+      const options = await listSelectableCredentials({ id: gate.user.id, orgId: gate.user.orgId }, gate.project.orgId);
       if (!options.some((c) => c.id === credentialId)) {
         return createErrorResponse('forbidden', 'That credential is not available to this project', 403);
       }

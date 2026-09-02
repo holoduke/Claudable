@@ -75,6 +75,10 @@ export function canManageProject(user: User, project: { ownerId: string | null }
  */
 export async function canWriteProject(user: User, project: AccessProject): Promise<boolean> {
   if (user.role === 'admin') return true;
+  // Leaving an org ends ALL access to its projects — owner and assignment
+  // included. (A null-org project has no org to be a member of; the owner rule
+  // below still applies there.)
+  if (project.orgId && !(await isOrgMember(user.id, project.orgId))) return false;
   if (project.ownerId === user.id) return true;
   if (project.visibility !== 'restricted') {
     // Open to the org — i.e. to its members, and only to them.
@@ -89,6 +93,7 @@ export async function canWriteProject(user: User, project: AccessProject): Promi
 /** Whether a user may see/open a project at all. */
 export async function canAccessProject(user: User, project: AccessProject): Promise<boolean> {
   if (user.role === 'admin') return true;
+  if (project.orgId && !(await isOrgMember(user.id, project.orgId))) return false;
   if (project.ownerId === user.id) return true;
   if (project.visibility !== 'restricted') {
     // Open to the org — i.e. to its members, and only to them.
@@ -176,8 +181,9 @@ export async function accessibleProjectIds(
   return new Set(
     projects
       .filter((p) => {
+        if (p.orgId && !myOrgs.has(p.orgId)) return false; // not (or no longer) in that org
         if (p.ownerId === user.id) return true;
-        if (p.visibility !== 'restricted') return p.orgId != null && myOrgs.has(p.orgId);
+        if (p.visibility !== 'restricted') return p.orgId != null;
         return memberIds.has(p.id);
       })
       .map((p) => p.id),

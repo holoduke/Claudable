@@ -71,6 +71,28 @@ async function pendingInvites(email: string) {
   });
 }
 
+/**
+ * Legacy accounts (created before memberships existed) have User.orgId but no
+ * OrgMember row. Distinguish them from people who were deliberately REMOVED:
+ * removals are audited (org.member.removed). Only the former get their home
+ * membership created here — once — so the "no resurrection" rule still holds.
+ */
+async function healLegacyMembership(user: { id: string; orgId: string; role: string }): Promise<boolean> {
+  const removed = await prisma.auditEvent.findFirst({
+    where: { action: 'org.member.removed', targetType: 'user', targetId: user.id, orgId: user.orgId },
+    select: { id: true },
+  });
+  if (removed) return false;
+  const org = await prisma.organization.findUnique({ where: { id: user.orgId }, select: { id: true } });
+  if (!org) return false;
+  await prisma.orgMember.upsert({
+    where: { orgId_userId: { orgId: user.orgId, userId: user.id } },
+    update: {},
+    create: { orgId: user.orgId, userId: user.id, role: user.role === 'admin' ? 'beheerder' : 'lid' },
+  });
+  return true;
+}
+
 /** Whether this email may sign in at all (see the header for the rules). */
 export async function isSignInAllowed(email: string): Promise<boolean> {
   const lower = email.toLowerCase();
@@ -82,8 +104,8 @@ export async function isSignInAllowed(email: string): Promise<boolean> {
   if (existing) {
     if (!existing.isActive) return false;
     if (existing.role === 'admin' || existing._count.orgMemberships > 0) return true;
-    // A member who was removed from their last org can come back via an invite.
-    return (await pendingInvites(lower)).length > 0;
+    if ((await pendingInvites(lower)).length > 0) return true; // removed → re-invited
+    return healLegacyMembership(existing); // pre-membership account → heal once
   }
   if ((await pendingInvites(lower)).length > 0) return true;
   return !!(await autoJoinOrg(lower));
@@ -123,22 +145,29 @@ export async function provisionUser(
       : await autoJoinOrg(lower);
     if (!homeOrg) throw new Error(`No organisation to provision ${lower} into`);
     const autoRole = bootstrap ? 'beheerder' : 'lid';
-    user = await prisma.user.create({
-      data: {
-        email: lower,
-        name: name ?? null,
-        image: image ?? null,
-        role: bootstrap ? 'admin' : 'user',
-        orgId: homeOrg.id,
-        isActive: true,
-        lastLoginAt: new Date(),
-        // Auto-join membership only when there is no invite for this org —
-        // invites (below) carry their own role.
-        ...(invites.some((i) => i.orgId === homeOrg.id)
-          ? {}
-          : { orgMemberships: { create: { orgId: homeOrg.id, role: autoRole } } }),
-      },
-    });
+    try {
+      user = await prisma.user.create({
+        data: {
+          email: lower,
+          name: name ?? null,
+          image: image ?? null,
+          role: bootstrap ? 'admin' : 'user',
+          orgId: homeOrg.id,
+          isActive: true,
+          lastLoginAt: new Date(),
+          // Auto-join membership only when there is no invite for this org —
+          // invites (below) carry their own role.
+          ...(invites.some((i) => i.orgId === homeOrg.id)
+            ? {}
+            : { orgMemberships: { create: { orgId: homeOrg.id, role: autoRole } } }),
+        },
+      });
+    } catch (error) {
+      // Two concurrent first sign-ins (double click, two tabs): the other one
+      // won the insert — continue with that row instead of failing this login.
+      if ((error as { code?: string })?.code !== 'P2002') throw error;
+      user = await prisma.user.findUniqueOrThrow({ where: { email: lower } });
+    }
   }
 
   // Accept every pending invite: membership with the invited role (an existing
