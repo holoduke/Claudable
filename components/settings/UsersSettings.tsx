@@ -36,9 +36,6 @@ interface UsersSettingsProps {
 export default function UsersSettings({ currentUserId, onToast }: UsersSettingsProps) {
   const [users, setUsers] = useState<ManagedUser[]>([]);
   const [loading, setLoading] = useState(true);
-  const [newEmail, setNewEmail] = useState('');
-  const [newName, setNewName] = useState('');
-  const [adding, setAdding] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -57,28 +54,6 @@ export default function UsersSettings({ currentUserId, onToast }: UsersSettingsP
 
   useEffect(() => { load(); }, [load]);
 
-  const addUser = async () => {
-    const email = newEmail.trim();
-    if (!email) return;
-    setAdding(true);
-    try {
-      const res = await fetch(`${API_BASE}/api/users`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, name: newName.trim() || undefined }),
-      });
-      const json = await res.json();
-      if (!res.ok || !json.success) throw new Error(json.message || 'Failed to add user');
-      setNewEmail('');
-      setNewName('');
-      onToast(json.data?.invited ? `Invited ${email} (valid for 14 days)` : `${email} added to your organisation`, 'success');
-      await load();
-    } catch (err) {
-      onToast(err instanceof Error ? err.message : 'Failed to add user', 'error');
-    } finally {
-      setAdding(false);
-    }
-  };
 
   const patchUser = async (id: string, payload: Record<string, unknown>) => {
     setBusyId(id);
@@ -115,39 +90,12 @@ export default function UsersSettings({ currentUserId, onToast }: UsersSettingsP
 
   return (
     <div className="space-y-6">
-      <h3 className="text-lg font-medium text-gray-900 dark:text-gray-50">Users</h3>
-
-      {/* Invite external user */}
-      <div className="flex flex-col gap-3 p-4 bg-gray-50 dark:bg-white/3 rounded-xl border border-gray-200 dark:border-white/8 sm:flex-row sm:items-end">
-        <div className="flex-1">
-          <label className="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">Email</label>
-          <input
-            type="email"
-            value={newEmail}
-            onChange={(e) => setNewEmail(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter') addUser(); }}
-            placeholder="person@partner.com"
-            className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-white/8 bg-white dark:bg-white/6 text-sm text-gray-800 dark:text-gray-100 focus:outline-hidden focus:ring-2 focus:ring-gray-200"
-          />
-        </div>
-        <div className="flex-1">
-          <label className="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">Name (optional)</label>
-          <input
-            type="text"
-            value={newName}
-            onChange={(e) => setNewName(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter') addUser(); }}
-            placeholder="Jane Doe"
-            className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-white/8 bg-white dark:bg-white/6 text-sm text-gray-800 dark:text-gray-100 focus:outline-hidden focus:ring-2 focus:ring-gray-200"
-          />
-        </div>
-        <button
-          onClick={addUser}
-          disabled={adding || !newEmail.trim()}
-          className="px-4 py-2 text-sm font-medium bg-brand-500 hover:bg-brand-600 text-white rounded-lg transition-colors disabled:opacity-50"
-        >
-          {adding ? 'Inviting…' : 'Invite'}
-        </button>
+      <div>
+        <h3 className="text-lg font-medium text-gray-900 dark:text-gray-50">Users</h3>
+        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+          Alle accounts op deze installatie: rol (superadmin of gebruiker), actief/gedeactiveerd en it-ops. Mensen toevoegen aan een
+          organisatie doe je onder <strong>Organisaties</strong>.
+        </p>
       </div>
 
       {/* User list */}

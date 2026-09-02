@@ -58,6 +58,9 @@ export const it: Record<keyof typeof en, string> = {
   'settings.tab.plugins': 'Plug-in',
   'settings.tab.system': 'Sistema',
   'settings.tab.about': 'Informazioni',
+  'settings.group.personal': 'Tu',
+  'settings.group.org': 'Organizzazione',
+  'settings.group.admin': 'Amministrazione',
 
   'home.openSidebar': 'Apri barra laterale',
   'home.closeSidebar': 'Chiudi barra laterale',

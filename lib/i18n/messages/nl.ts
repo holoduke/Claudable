@@ -58,6 +58,9 @@ export const nl: Record<keyof typeof en, string> = {
   'settings.tab.plugins': 'Plug-ins',
   'settings.tab.system': 'Systeem',
   'settings.tab.about': 'Over',
+  'settings.group.personal': 'Jij',
+  'settings.group.org': 'Organisatie',
+  'settings.group.admin': 'Beheer',
 
   'home.openSidebar': 'Zijbalk openen',
   'home.closeSidebar': 'Zijbalk sluiten',

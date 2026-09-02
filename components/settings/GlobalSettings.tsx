@@ -12,7 +12,6 @@ import PluginSettings from '@/components/settings/PluginSettings';
 import ClaudeAccountSettings from '@/components/settings/ClaudeAccountSettings';
 import MyAccountSettings from '@/components/settings/MyAccountSettings';
 import BrandWordmark from '@/components/ui/BrandWordmark';
-import { FaCog } from 'react-icons/fa';
 import { useGlobalSettings } from '@/contexts/GlobalSettingsContext';
 import { useI18n } from '@/contexts/I18nContext';
 import { getModelDefinitionsForCli, normalizeModelId } from '@/lib/constants/cliModels';
@@ -21,7 +20,7 @@ import type { CLIStatus } from '@/types/cli';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? '';
 
-type SettingsTab = 'general' | 'ai-agents' | 'claude' | 'account' | 'users' | 'orgs' | 'my-org' | 'shared-mcp' | 'plugins' | 'system' | 'about';
+type SettingsTab = 'ai-agents' | 'claude' | 'account' | 'users' | 'orgs' | 'my-org' | 'shared-mcp' | 'plugins' | 'system' | 'about';
 
 interface GlobalSettingsProps {
   isOpen: boolean;
@@ -32,6 +31,8 @@ interface GlobalSettingsProps {
 interface CurrentUser {
   id: string;
   email: string;
+  name?: string | null;
+  image?: string | null;
   role: 'admin' | 'user';
   itopsEnabled?: boolean;
 }
@@ -114,8 +115,8 @@ const CLI_OPTIONS: CLIOption[] = [
 
 // Global settings are provided by context
 
-export default function GlobalSettings({ isOpen, onClose, initialTab = 'general' }: GlobalSettingsProps) {
-  const { locale, setLocale, locales, t } = useI18n();
+export default function GlobalSettings({ isOpen, onClose, initialTab = 'account' }: GlobalSettingsProps) {
+  const { t } = useI18n();
   const [activeTab, setActiveTab] = useState<SettingsTab>(initialTab);
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
   const [authOff, setAuthOff] = useState(false);
@@ -244,9 +245,10 @@ export default function GlobalSettings({ isOpen, onClose, initialTab = 'general'
     // to General if /api/users/me resolves before /api/auth/config.
     if (
       (userLoaded && !isAdmin && (activeTab === 'users' || activeTab === 'orgs' || activeTab === 'system')) ||
-      (userLoaded && authConfigLoaded && !canManageOrg && (activeTab === 'shared-mcp' || activeTab === 'plugins'))
+      (userLoaded && authConfigLoaded && !canManageOrg && (activeTab === 'shared-mcp' || activeTab === 'plugins' || activeTab === 'ai-agents')) ||
+      (userLoaded && !currentUser && !authOff && (activeTab === 'account' || activeTab === 'claude' || activeTab === 'my-org'))
     ) {
-      setActiveTab('general');
+      setActiveTab(currentUser ? 'account' : 'about');
     }
   }, [userLoaded, authConfigLoaded, activeTab, isAdmin, canManageOrg]);
 
@@ -378,10 +380,7 @@ export default function GlobalSettings({ isOpen, onClose, initialTab = 'general'
           <div className="p-5 border-b border-gray-200 dark:border-white/8">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <span className="text-gray-600 dark:text-gray-300 ">
-                  <FaCog size={18} />
-                </span>
-                <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-50 ">Global Settings</h2>
+                <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-50 ">{t('settings.title')}</h2>
               </div>
               <button
                 onClick={onClose}
@@ -394,75 +393,61 @@ export default function GlobalSettings({ isOpen, onClose, initialTab = 'general'
             </div>
           </div>
 
-          {/* Tab Navigation */}
-          <div className="border-b border-gray-200 dark:border-white/8">
-            <nav className="flex px-5">
-              {([
-                { id: 'general' as const, label: t('settings.tab.general') },
-                { id: 'ai-agents' as const, label: t('settings.tab.aiAgents') },
-                ...(currentUser ? [{ id: 'claude' as const, label: t('settings.tab.claude') }] : []),
-                ...(currentUser ? [{ id: 'account' as const, label: t('settings.tab.account') }] : []),
-                ...(isAdmin ? [{ id: 'users' as const, label: t('settings.tab.users') }] : []),
-                ...(isAdmin ? [{ id: 'orgs' as const, label: t('settings.tab.orgs') }] : []),
-                ...(showMyOrg ? [{ id: 'my-org' as const, label: t('settings.tab.myOrg') }] : []),
-                ...(canManageOrg ? [{ id: 'shared-mcp' as const, label: t('settings.tab.sharedMcp') }] : []),
-                ...(canManageOrg ? [{ id: 'plugins' as const, label: t('settings.tab.plugins') }] : []),
-                ...(isAdmin ? [{ id: 'system' as const, label: t('settings.tab.system') }] : []),
-                { id: 'about' as const, label: t('settings.tab.about') }
-              ] as { id: SettingsTab; label: string }[]).map(tab => (
-                <button
-                  key={tab.id}
-                  onClick={() => setActiveTab(tab.id)}
-                  className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-all ${
-                    activeTab === tab.id
-                      ? 'border-brand-500 text-gray-900 dark:text-gray-50 '
-                      : 'border-transparent text-gray-600 dark:text-gray-300 hover:text-gray-700 dark:hover:text-gray-200 hover:border-gray-300 dark:hover:border-white/18 '
-                  }`}
-                >
-                  {tab.label}
-                </button>
+          {/* Body: grouped navigation on the left, content on the right */}
+          <div className="flex-1 flex min-h-0">
+          <nav className="w-52 shrink-0 border-r border-gray-200 dark:border-white/8 p-3 overflow-y-auto">
+            {([
+              {
+                label: t('settings.group.personal'),
+                items: [
+                  ...(currentUser ? [{ id: 'account' as const, label: t('settings.tab.account') }] : []),
+                  ...(currentUser ? [{ id: 'claude' as const, label: t('settings.tab.claude') }] : []),
+                ],
+              },
+              {
+                label: t('settings.group.org'),
+                items: [
+                  ...(showMyOrg ? [{ id: 'my-org' as const, label: t('settings.tab.myOrg') }] : []),
+                  ...(isAdmin ? [{ id: 'orgs' as const, label: t('settings.tab.orgs') }] : []),
+                  ...(isAdmin ? [{ id: 'users' as const, label: t('settings.tab.users') }] : []),
+                ],
+              },
+              {
+                label: t('settings.group.admin'),
+                items: [
+                  ...(canManageOrg ? [{ id: 'ai-agents' as const, label: t('settings.tab.aiAgents') }] : []),
+                  ...(canManageOrg ? [{ id: 'shared-mcp' as const, label: t('settings.tab.sharedMcp') }] : []),
+                  ...(canManageOrg ? [{ id: 'plugins' as const, label: t('settings.tab.plugins') }] : []),
+                  ...(isAdmin ? [{ id: 'system' as const, label: t('settings.tab.system') }] : []),
+                ],
+              },
+              { label: '', items: [{ id: 'about' as const, label: t('settings.tab.about') }] },
+            ] as { label: string; items: { id: SettingsTab; label: string }[] }[])
+              .filter((g) => g.items.length > 0)
+              .map((group, gi) => (
+                <div key={group.label || 'misc'} className={gi > 0 ? 'mt-4' : ''}>
+                  {group.label && (
+                    <p className="px-3 mb-1 text-[11px] font-medium uppercase tracking-wider text-gray-400 dark:text-gray-500">{group.label}</p>
+                  )}
+                  {group.items.map((tab) => (
+                    <button
+                      key={tab.id}
+                      onClick={() => setActiveTab(tab.id)}
+                      className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors ${
+                        activeTab === tab.id
+                          ? 'bg-gray-100 dark:bg-white/8 text-gray-900 dark:text-gray-50 font-medium'
+                          : 'text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-white/5 hover:text-gray-900 dark:hover:text-gray-100'
+                      }`}
+                    >
+                      {tab.label}
+                    </button>
+                  ))}
+                </div>
               ))}
-            </nav>
-          </div>
+          </nav>
 
           {/* Tab Content */}
           <div className="flex-1 p-6 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-transparent">
-            {activeTab === 'general' && (
-              <div className="space-y-6">
-                <div>
-                  <h3 className="text-lg font-medium text-gray-900 dark:text-gray-50 mb-4">{t('settings.general.language')}</h3>
-                  <div className="p-4 bg-gray-50 dark:bg-white/3 rounded-xl border border-gray-200 dark:border-white/8">
-                    <div className="flex items-center justify-between gap-4">
-                      <div className="min-w-0">
-                        <p className="font-medium text-gray-900 dark:text-gray-50">{t('settings.general.language')}</p>
-                        <p className="mt-0.5 text-sm text-gray-500 dark:text-gray-400">{t('settings.general.languageDesc')}</p>
-                      </div>
-                      <select
-                        value={locale}
-                        onChange={(e) => setLocale(e.target.value as typeof locale)}
-                        className="shrink-0 pl-3 pr-8 py-2 text-sm border border-gray-200 dark:border-white/8 rounded-lg bg-white dark:bg-white/6 hover:border-gray-300 dark:hover:border-white/18 text-gray-700 dark:text-gray-200 focus:outline-hidden focus:ring-0 transition-colors cursor-pointer"
-                      >
-                        {locales.map((l) => (
-                          <option key={l.code} value={l.code}>{l.flag} {l.label}</option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
-                </div>
-                <div>
-                  <h3 className="text-lg font-medium text-gray-900 dark:text-gray-50 mb-4">Defaults</h3>
-                  <div className="p-4 bg-gray-50 dark:bg-white/3 rounded-xl border border-gray-200 dark:border-white/8">
-                    <div className="flex items-center justify-between">
-                      <p className="font-medium text-gray-900 dark:text-gray-50">Default assistant</p>
-                      <span className="text-sm font-mono px-2 py-1 rounded-sm bg-white dark:bg-white/6 border border-gray-200 dark:border-white/8 text-gray-700 dark:text-gray-200">
-                        {globalSettings?.default_cli || '—'}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-
             {activeTab === 'ai-agents' && (
               <div className="space-y-6">
                 <div className="flex items-center justify-between">
@@ -707,28 +692,17 @@ export default function GlobalSettings({ isOpen, onClose, initialTab = 'general'
                   <p className="text-sm text-gray-500 dark:text-gray-400 mt-3">Version 1.0.0 · Self-hosted</p>
                 </div>
 
-                <div className="text-center">
+                <div className="text-center space-y-2">
+                  <p className="text-sm text-gray-500 dark:text-gray-400">Het bouwportaal van New Story. Gebaseerd op het open-source project Claudable.</p>
                   <div className="flex justify-center gap-6">
-                    <a 
-                      href="https://github.com/opactorai/Claudable" 
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-sm text-brand-500 hover:text-[#c95940] transition-colors"
-                    >
-                      GitHub
-                    </a>
-                    <a 
-                      href="https://discord.gg/NJNbafHNQC" 
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-sm text-brand-500 hover:text-[#c95940] transition-colors"
-                    >
-                      Discord
-                    </a>
+                    <a href="/privacy" target="_blank" rel="noopener noreferrer" className="text-sm text-brand-500 hover:underline">Privacyverklaring</a>
+                    <a href="https://github.com/holoduke/Claudable" target="_blank" rel="noopener noreferrer" className="text-sm text-brand-500 hover:underline">Broncode</a>
+                    <a href="mailto:support@newstory.tf" className="text-sm text-brand-500 hover:underline">support@newstory.tf</a>
                   </div>
                 </div>
               </div>
             )}
+          </div>
           </div>
         </MotionDiv>
       </div>

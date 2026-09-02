@@ -1,17 +1,20 @@
 "use client";
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import GlobalSettings from '@/components/settings/GlobalSettings';
+import { signOutAction } from '@/app/actions/auth';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? '';
 
 /**
- * Top-right "my user" icon. Opens My User Settings (the global settings modal at
- * the "My Account" tab), where admins can enable their own it-ops tools and reach
- * User Management. Always rendered; shows the user's initial/avatar when signed in.
+ * Top-right "my user" avatar. Opens a small menu: who you are, a shortcut to
+ * the Account tab of the settings modal, and Sign out. (Sign out used to live
+ * only at the bottom of the Account tab, which nobody found.)
  */
 export default function UserMenu() {
-  const [open, setOpen] = useState(false);
-  const [me, setMe] = useState<{ email?: string; name?: string | null; image?: string | null } | null>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [me, setMe] = useState<{ email?: string; name?: string | null; image?: string | null; role?: string } | null>(null);
+  const wrapRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -20,16 +23,28 @@ export default function UserMenu() {
       .then((j) => { if (!cancelled) setMe((j?.data as any) ?? null); })
       .catch(() => {});
     return () => { cancelled = true; };
-  }, [open]);
+  }, [settingsOpen]);
+
+  // Close the menu on outside click / Escape.
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onDown = (e: MouseEvent) => { if (!wrapRef.current?.contains(e.target as Node)) setMenuOpen(false); };
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setMenuOpen(false); };
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onKey);
+    return () => { document.removeEventListener('mousedown', onDown); document.removeEventListener('keydown', onKey); };
+  }, [menuOpen]);
 
   const initial = (me?.name || me?.email || '?').trim().charAt(0).toUpperCase();
 
   return (
-    <>
+    <div ref={wrapRef} className="relative">
       <button
-        onClick={() => setOpen(true)}
+        onClick={() => setMenuOpen((v) => !v)}
         title="My account"
         aria-label="My account"
+        aria-haspopup="menu"
+        aria-expanded={menuOpen}
         className="flex items-center justify-center w-9 h-9 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors overflow-hidden ring-1 ring-gray-200 dark:ring-gray-700"
       >
         {me?.image ? (
@@ -39,7 +54,35 @@ export default function UserMenu() {
           <span className="text-sm font-semibold">{initial}</span>
         )}
       </button>
-      <GlobalSettings isOpen={open} onClose={() => setOpen(false)} initialTab="account" />
-    </>
+
+      {menuOpen && (
+        <div role="menu" className="absolute right-0 mt-2 w-64 rounded-xl border border-gray-200 dark:border-white/10 bg-white dark:bg-[#181310] shadow-xl p-1 z-50">
+          <div className="px-3 py-2">
+            <p className="text-sm font-medium text-gray-900 dark:text-gray-50 truncate">{me?.name || me?.email || 'Signed in'}</p>
+            {me?.name && <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{me.email}</p>}
+            {me?.role === 'admin' && <p className="text-[10px] uppercase tracking-wide text-gray-400 mt-0.5">superadmin</p>}
+          </div>
+          <div className="border-t border-gray-100 dark:border-white/8 my-1" />
+          <button
+            role="menuitem"
+            onClick={() => { setMenuOpen(false); setSettingsOpen(true); }}
+            className="w-full text-left px-3 py-2 text-sm rounded-lg text-gray-800 dark:text-gray-100 hover:bg-gray-50 dark:hover:bg-white/5"
+          >
+            Account settings
+          </button>
+          <form action={signOutAction}>
+            <button
+              type="submit"
+              role="menuitem"
+              className="w-full text-left px-3 py-2 text-sm rounded-lg text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10"
+            >
+              Sign out
+            </button>
+          </form>
+        </div>
+      )}
+
+      <GlobalSettings isOpen={settingsOpen} onClose={() => setSettingsOpen(false)} initialTab="account" />
+    </div>
   );
 }
