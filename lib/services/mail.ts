@@ -136,6 +136,29 @@ export function inviteEmail(input: {
   return { to: input.to, subject: `Uitnodiging voor ${input.orgName} in Claudable`, text, html, tags: ['invite'] };
 }
 
+/** Welcome e-mail on the first sign-in (account just created). */
+export function welcomeEmail(input: { to: string; name?: string | null; orgName: string }): MailMessage {
+  const url = appUrl();
+  const hi = input.name?.trim() ? `Hoi ${input.name.trim()}` : 'Hoi';
+  const text = [
+    `${hi}, welkom bij Claudable — het bouwportaal van New Story.`,
+    '',
+    `Je account is aangemaakt en je bent lid van ${input.orgName}. Je ziet alleen de projecten en leden van je eigen organisatie.`,
+    '',
+    `Aan de slag: ${url}`,
+    '',
+    'Vragen? Mail support@newstory.tf.',
+  ].join('\n');
+  const html = layout(
+    `Welkom bij Claudable`,
+    `<p style="margin:0 0 12px">${esc(hi)}, welkom bij Claudable — het bouwportaal van New Story.</p>
+     <p style="margin:0 0 12px">Je account is aangemaakt en je bent lid van <strong>${esc(input.orgName)}</strong>. Je ziet alleen de projecten en leden van je eigen organisatie.</p>
+     <p style="margin:0;color:#5a6772">Vragen? Mail <a href="mailto:support@newstory.tf">support@newstory.tf</a>.</p>`,
+    { label: 'Aan de slag', url },
+  );
+  return { to: input.to, subject: 'Welkom bij Claudable', text, html, tags: ['welcome'] };
+}
+
 /** An existing user was added to (another) organisation. */
 export function addedToOrgEmail(input: { to: string; orgName: string; role: string; addedBy?: string | null }): MailMessage {
   const url = appUrl();

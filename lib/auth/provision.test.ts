@@ -11,6 +11,11 @@ const audit: string[] = [];
 const removals: { userId: string; orgId: string }[] = [];
 let seq = 0;
 
+const mails: string[] = [];
+vi.mock('@/lib/services/mail', () => ({
+  sendMail: vi.fn(async () => ({ sent: true, id: '<x>' })),
+  welcomeEmail: vi.fn((i: any) => { mails.push(i.to); return { to: i.to, subject: 'Welkom bij Claudable', text: '', tags: ['welcome'] }; }),
+}));
 vi.mock('@/lib/db/client', () => ({
   prisma: {
     organization: {
@@ -68,7 +73,7 @@ import { isSignInAllowed, provisionUser } from './provision';
 const DAY = 24 * 60 * 60 * 1000;
 
 beforeEach(() => {
-  users.length = 0; orgs.length = 0; memberships.length = 0; invites.length = 0; audit.length = 0; removals.length = 0; seq = 0;
+  users.length = 0; orgs.length = 0; memberships.length = 0; invites.length = 0; audit.length = 0; removals.length = 0; mails.length = 0; seq = 0;
   process.env.ALLOWED_EMAIL_DOMAINS = 'newstory.nl';
   process.env.BOOTSTRAP_ADMIN_EMAIL = 'boot@newstory.nl';
   orgs.push({ id: 'org-ns', name: 'New Story', domain: 'newstory.nl' });
@@ -138,6 +143,19 @@ describe('where a new user lands', () => {
     memberships.push({ orgId: 'org-micros', userId: 'u1', role: 'lid' }); // still member elsewhere
     await provisionUser('old@newstory.nl', 'Old', null);
     expect(memberships.some((m) => m.orgId === 'org-ns')).toBe(false);
+  });
+
+  it('a brand-new user gets exactly one welcome e-mail, naming their org', async () => {
+    invites.push({ id: 'i1', orgId: 'org-micros', email: 'nieuw@gmail.com', role: 'lid', expiresAt: new Date(Date.now() + DAY), acceptedAt: null, revokedAt: null });
+    await provisionUser('nieuw@gmail.com', 'Nieuw', null);
+    expect(mails).toEqual(['nieuw@gmail.com']);
+  });
+
+  it('a returning user is NOT welcomed again', async () => {
+    users.push({ id: 'u1', email: 'terug@newstory.nl', role: 'user', isActive: true, orgId: 'org-ns' });
+    memberships.push({ orgId: 'org-ns', userId: 'u1', role: 'lid' });
+    await provisionUser('terug@newstory.nl', 'Terug', null);
+    expect(mails).toEqual([]);
   });
 
   it('the bootstrap admin is always re-promoted and kept in the primary org', async () => {
