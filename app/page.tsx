@@ -1104,7 +1104,7 @@ export default function HomePage() {
                 </div>
               </div>
               <p className="text-xl text-gray-700 dark:text-gray-200 font-light tracking-tight">
-                A New Story portal to build and ship
+                Newstory Portal
               </p>
               {/* Which organisation you are working in — customers see their own org; staff see all. */}
               {!isSuperadmin && myOrgs.length > 0 && (
@@ -1161,9 +1161,7 @@ export default function HomePage() {
             )}
 
             {/* Main Input Form — gone entirely when none of the user's organisations may create projects */}
-            {!canCreateAnywhere ? (
-              <p className="text-sm text-gray-500 dark:text-gray-400 text-center max-w-md mx-auto">{t('home.noCreateBody')}</p>
-            ) : (
+            {!canCreateAnywhere ? null : (
             <form 
               onSubmit={(e) => { e.preventDefault(); handleSubmit(); }}
               onDragEnter={handleDragEnter}
@@ -1621,7 +1619,7 @@ export default function HomePage() {
                 </p>
               )}
               {/* Fixed-width tracks + justify-center: a single tile sits in the middle instead of hugging the left edge. */}
-              <div className="grid gap-3 justify-center grid-cols-[repeat(auto-fill,minmax(0,230px))]">
+              <div className="grid gap-3 justify-center grid-cols-[repeat(auto-fit,230px)]">
                 {visibleProjects.map((project) => {
                   const projectCli = sanitizeAssistant(project.preferredCli);
                   const projectColor = assistantBrandColors[projectCli] || assistantBrandColors[DEFAULT_ASSISTANT];
