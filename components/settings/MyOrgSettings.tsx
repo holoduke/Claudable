@@ -296,8 +296,8 @@ function OrgPanel({ org, currentUserId, onToast }: { org: MyOrg; currentUserId: 
             <div className="flex gap-2">
               <input type="email" value={email} onChange={(e) => setEmail(e.target.value)}
                 onKeyDown={(e) => { if (e.key === 'Enter') addMember(); }}
-                placeholder="persoon@bedrijf.nl" className={`${inputCls} flex-1`} />
-              <select value={role} onChange={(e) => setRole(e.target.value as 'beheerder' | 'lid')} className={inputCls + ' w-36'}>
+                placeholder="persoon@bedrijf.nl" className={`${inputCls} flex-1 min-w-0`} />
+              <select value={role} onChange={(e) => setRole(e.target.value as 'beheerder' | 'lid')} className={`${inputCls} w-36! shrink-0`}>
                 <option value="lid">Lid</option>
                 <option value="beheerder">Beheerder</option>
               </select>
