@@ -162,7 +162,9 @@ export default function OrgsSettings({ onToast }: OrgsSettingsProps) {
       const json = await res.json();
       if (!res.ok || !json.success) throw new Error(json.message || 'Actie mislukt');
       onToast(json.data?.invited
-        ? `${memberEmail.trim()} uitgenodigd (14 dagen geldig) — wordt lid bij de eerste Google-login`
+        ? (json.data?.emailSent
+            ? `Uitnodiging gemaild naar ${memberEmail.trim()} — 14 dagen geldig`
+            : `${memberEmail.trim()} uitgenodigd (14 dagen geldig) — geen e-mail verstuurd (mail niet geconfigureerd)`)
         : `${memberEmail.trim()} toegevoegd`, 'success');
       setMemberEmail(''); setMemberRole('lid');
       await loadMembers(orgId);
