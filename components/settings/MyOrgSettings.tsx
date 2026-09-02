@@ -110,8 +110,8 @@ function OrgPanel({ org, currentUserId, onToast }: { org: MyOrg; currentUserId: 
   const isOwner = org.role === 'eigenaar';
   const ownerCount = members.filter((m) => m.role === 'eigenaar').length;
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  const load = useCallback(async (opts?: { silent?: boolean }) => {
+    if (!opts?.silent) setLoading(true);
     try {
       const [mRes, iRes] = await Promise.all([
         fetch(`${API_BASE}/api/orgs/${org.id}/members`),
@@ -129,7 +129,7 @@ function OrgPanel({ org, currentUserId, onToast }: { org: MyOrg; currentUserId: 
     }
   }, [org.id, onToast]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { void load(); }, [load]);
 
   const loadCred = useCallback(async () => {
     try {
@@ -178,7 +178,7 @@ function OrgPanel({ org, currentUserId, onToast }: { org: MyOrg; currentUserId: 
       const json = await res.json();
       if (!res.ok || !json.success) throw new Error(json.message || 'Actie mislukt');
       if (okMessage) onToast(okMessage, 'success');
-      await load();
+      await load({ silent: true });
       return true;
     } catch (err) {
       onToast(err instanceof Error ? err.message : 'Actie mislukt', 'error');
@@ -203,7 +203,7 @@ function OrgPanel({ org, currentUserId, onToast }: { org: MyOrg; currentUserId: 
             : `${email.trim()} uitgenodigd (14 dagen geldig) — er is geen e-mail verstuurd, laat de persoon zelf inloggen`)
         : `${email.trim()} toegevoegd aan ${org.name}`, 'success');
       setEmail(''); setRole('lid');
-      await load();
+      await load({ silent: true });
     } catch (err) {
       onToast(err instanceof Error ? err.message : 'Actie mislukt', 'error');
     } finally {

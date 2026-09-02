@@ -78,8 +78,8 @@ export default function OrgsSettings({ onToast }: OrgsSettingsProps) {
   const [credLabel, setCredLabel] = useState('');
   const [credToken, setCredToken] = useState('');
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  const load = useCallback(async (opts?: { silent?: boolean }) => {
+    if (!opts?.silent) setLoading(true);
     try {
       const res = await fetch(`${API_BASE}/api/orgs`);
       const json = await res.json();
@@ -92,7 +92,7 @@ export default function OrgsSettings({ onToast }: OrgsSettingsProps) {
     }
   }, [onToast]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { void load(); }, [load]);
 
   const loadMembers = useCallback(async (orgId: string) => {
     setMembersLoading(true);
@@ -142,7 +142,7 @@ export default function OrgsSettings({ onToast }: OrgsSettingsProps) {
       if (!res.ok || !json.success) throw new Error(json.message || 'Actie mislukt');
       if (okMessage) onToast(okMessage, 'success');
       await after?.();
-      await load();
+      await load({ silent: true });
       return true;
     } catch (err) {
       onToast(err instanceof Error ? err.message : 'Actie mislukt', 'error');
@@ -166,9 +166,14 @@ export default function OrgsSettings({ onToast }: OrgsSettingsProps) {
       body: JSON.stringify({ name: editName, type: editType, domain: editDomain.trim() || null }),
     }, 'Organisatie opgeslagen');
 
-  const toggleCreate = (org: Org) =>
-    call(`/api/orgs/${org.id}`, { method: 'PATCH', body: JSON.stringify({ canCreateProjects: !org.canCreateProjects }) },
-      !org.canCreateProjects ? `${org.name} mag nu nieuwe projecten aanmaken` : `${org.name} kan geen nieuwe projecten meer aanmaken`);
+  const toggleCreate = async (org: Org) => {
+    const next = !org.canCreateProjects;
+    // Optimistic: flip in place so the switch moves instantly and nothing re-mounts.
+    setOrgs((prev) => prev.map((o) => (o.id === org.id ? { ...o, canCreateProjects: next } : o)));
+    const ok = await call(`/api/orgs/${org.id}`, { method: 'PATCH', body: JSON.stringify({ canCreateProjects: next }) },
+      next ? `${org.name} mag nu nieuwe projecten aanmaken` : `${org.name} kan geen nieuwe projecten meer aanmaken`);
+    if (!ok) setOrgs((prev) => prev.map((o) => (o.id === org.id ? { ...o, canCreateProjects: !next } : o)));
+  };
 
   const setCredential = async (org: Org) => {
     const ok = await call(`/api/orgs/${org.id}/claude-credential`, {
@@ -205,7 +210,7 @@ export default function OrgsSettings({ onToast }: OrgsSettingsProps) {
         : `${memberEmail.trim()} toegevoegd`, 'success');
       setMemberEmail(''); setMemberRole('lid');
       await loadMembers(orgId);
-      await load();
+      await load({ silent: true });
     } catch (err) {
       onToast(err instanceof Error ? err.message : 'Actie mislukt', 'error');
     } finally {
