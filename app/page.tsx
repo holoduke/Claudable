@@ -136,6 +136,7 @@ export default function HomePage() {
   // Organisations the signed-in user belongs to; the picker only shows for
   // multi-org users (e.g. staff creating a site for a customer org).
   const [myOrgs, setMyOrgs] = useState<{ id: string; name: string; type: string }[]>([]);
+  const [isSuperadmin, setIsSuperadmin] = useState(false);
   const [selectedOrgId, setSelectedOrgId] = useState<string>('');
   const [showOrgMenu, setShowOrgMenu] = useState(false);
   useEffect(() => {
@@ -147,6 +148,7 @@ export default function HomePage() {
         if (cancelled || !j?.success) return;
         const orgs = (j.data?.orgs ?? []) as { id: string; name: string; type: string }[];
         setMyOrgs(orgs);
+        setIsSuperadmin(!!j.data?.superadmin);
         const home = j.data?.homeOrgId as string | undefined;
         setSelectedOrgId(orgs.some(o => o.id === home) ? (home as string) : (orgs[0]?.id ?? ''));
       } catch { /* auth off or signed out: no picker */ }
@@ -1099,6 +1101,21 @@ export default function HomePage() {
               <p className="text-xl text-gray-700 dark:text-gray-200 font-light tracking-tight">
                 A New Story portal to build and ship
               </p>
+              {/* Which organisation you are working in — customers see their own org; staff see all. */}
+              {!isSuperadmin && myOrgs.length > 0 && (
+                <p className="mt-3 flex items-center justify-center gap-2 flex-wrap">
+                  {myOrgs.map((o) => (
+                    <span key={o.id} className={`inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full ${
+                      o.type === 'klant'
+                        ? 'text-purple-700 dark:text-purple-300 bg-purple-100 dark:bg-purple-500/20'
+                        : 'text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-white/8'
+                    }`}>
+                      <Building2 aria-hidden className="h-3 w-3" />
+                      {t('home.inOrg', { name: o.name })}
+                    </span>
+                  ))}
+                </p>
+              )}
             </div>
             
             {/* Image thumbnails */}
@@ -1562,9 +1579,11 @@ export default function HomePage() {
                       <path d="M5 12h14" />
                     </svg>
                   </div>
-                  <h3 className="text-base font-semibold text-gray-900 dark:text-gray-50">{t('home.emptyTitle')}</h3>
+                  <h3 className="text-base font-semibold text-gray-900 dark:text-gray-50">
+                    {!isSuperadmin && myOrgs.length === 1 ? t('home.emptyInOrgTitle', { name: myOrgs[0].name }) : t('home.emptyTitle')}
+                  </h3>
                   <p className="mt-2 text-sm text-gray-500 dark:text-gray-400 max-w-md">
-                    {t('home.emptyBody')}
+                    {!isSuperadmin && myOrgs.length === 1 ? t('home.emptyInOrgBody', { name: myOrgs[0].name }) : t('home.emptyBody')}
                   </p>
                 </div>
               </div>
