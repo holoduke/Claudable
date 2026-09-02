@@ -11,6 +11,7 @@ import { EnvironmentSettings } from './EnvironmentSettings';
 import { ServiceSettings } from './ServiceSettings';
 import { SkillsSettings } from './SkillsSettings';
 import ProjectAccessSettings from './ProjectAccessSettings';
+import ProjectOrganisationSettings from './ProjectOrganisationSettings';
 import DesignSettings from './DesignSettings';
 import ProjectClaudeSettings from './ProjectClaudeSettings';
 import ContainersSettings from './ContainersSettings';
@@ -222,7 +223,10 @@ export function ProjectSettings({
           )}
 
           {activeTab === 'access' && isProjectScoped && (
-            <ProjectAccessSettings projectId={projectId} />
+            <div className="space-y-6">
+              <ProjectOrganisationSettings projectId={projectId} />
+              <ProjectAccessSettings projectId={projectId} />
+            </div>
           )}
         </div>
       </div>
