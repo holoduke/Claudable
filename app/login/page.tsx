@@ -77,7 +77,7 @@ export default async function LoginPage({
           className="mt-4 text-[15px] text-white/45 tracking-wide"
           style={{ animation: 'loginFadeUp .8s ease-out both', animationDelay: '.16s' }}
         >
-          Describe it. Watch it build. Ship it.
+          . newstory
         </p>
 
         {/* Sign-in card */}
