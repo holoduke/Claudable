@@ -138,7 +138,7 @@ export async function resolveProjectClaudeToken(
 ): Promise<string | null> {
   const project = await prisma.project.findUnique({
     where: { id: projectId },
-    select: { claudeCredentialId: true },
+    select: { claudeCredentialId: true, orgId: true },
   });
 
   // 1) The project's assigned credential — when the requester may use it
@@ -171,8 +171,83 @@ export async function resolveProjectClaudeToken(
     }
   }
 
-  // 3) Neither → the platform env token (caller falls back).
+  // 3) The ORGANISATION's credential — set by a superadmin or the org's
+  //    eigenaar so a customer org runs on its own Claude account/key rather
+  //    than New Story's platform token. Shared by definition within the org.
+  if (project?.orgId) {
+    const org = await prisma.organization.findUnique({
+      where: { id: project.orgId },
+      select: { claudeCredentialId: true },
+    });
+    if (org?.claudeCredentialId) {
+      const cred = await prisma.claudeCredential.findUnique({ where: { id: org.claudeCredentialId } });
+      if (cred) {
+        const token = decryptAndStamp(cred);
+        if (token) return token;
+      }
+    }
+  }
+
+  // 4) Nothing → the platform env token (caller falls back).
   return null;
+}
+
+/**
+ * Which env var a Claude credential must travel in. `claude setup-token` yields
+ * OAuth tokens (CLAUDE_CODE_OAUTH_TOKEN); a Console API key (sk-ant-api…) must
+ * go in ANTHROPIC_API_KEY — the CLI (`claude -p`) accepts either.
+ */
+export function credentialEnvName(token: string): 'ANTHROPIC_API_KEY' | 'CLAUDE_CODE_OAUTH_TOKEN' {
+  return token.trim().startsWith('sk-ant-api') ? 'ANTHROPIC_API_KEY' : 'CLAUDE_CODE_OAUTH_TOKEN';
+}
+
+/** Org-level credential management (superadmin or the org's eigenaar). */
+export async function setOrgCredential(
+  orgId: string,
+  actorUserId: string,
+  label: string,
+  token: string,
+): Promise<{ id: string; label: string }> {
+  const org = await prisma.organization.findUnique({ where: { id: orgId }, select: { id: true, name: true, claudeCredentialId: true } });
+  if (!org) throw new Error('Organisation not found');
+  const clean = token.trim();
+  if (!clean) throw new Error('Token is required');
+  const cred = await prisma.claudeCredential.create({
+    data: {
+      ownerId: actorUserId,
+      label: (label.trim() || `Org: ${org.name}`).slice(0, 80),
+      token: encrypt(clean),
+      shareable: false,
+    },
+  });
+  await prisma.organization.update({ where: { id: orgId }, data: { claudeCredentialId: cred.id } });
+  // Replace: drop the previous org credential row (no project should point at it;
+  // if one does, SetNull on the relation handles it).
+  if (org.claudeCredentialId) {
+    await prisma.claudeCredential.delete({ where: { id: org.claudeCredentialId } }).catch(() => {});
+  }
+  return { id: cred.id, label: cred.label };
+}
+
+export async function clearOrgCredential(orgId: string): Promise<boolean> {
+  const org = await prisma.organization.findUnique({ where: { id: orgId }, select: { claudeCredentialId: true } });
+  if (!org?.claudeCredentialId) return false;
+  await prisma.organization.update({ where: { id: orgId }, data: { claudeCredentialId: null } });
+  await prisma.claudeCredential.delete({ where: { id: org.claudeCredentialId } }).catch(() => {});
+  return true;
+}
+
+/** Non-secret view of an org's credential for the settings UI. */
+export async function getOrgCredentialView(orgId: string): Promise<{ label: string; kind: 'api-key' | 'oauth'; since: Date; lastUsedAt: Date | null } | null> {
+  const org = await prisma.organization.findUnique({
+    where: { id: orgId },
+    select: { claudeCredential: { select: { label: true, token: true, createdAt: true, lastUsedAt: true } } },
+  });
+  const c = org?.claudeCredential;
+  if (!c) return null;
+  let kind: 'api-key' | 'oauth' = 'oauth';
+  try { kind = credentialEnvName(decrypt(c.token)) === 'ANTHROPIC_API_KEY' ? 'api-key' : 'oauth'; } catch { /* keep oauth */ }
+  return { label: c.label, kind, since: c.createdAt, lastUsedAt: c.lastUsedAt };
 }
 
 /**
@@ -197,7 +272,7 @@ export async function runUsesRequestersOwnAccount(
 
   const project = await prisma.project.findUnique({
     where: { id: projectId },
-    select: { claudeCredentialId: true },
+    select: { claudeCredentialId: true, orgId: true },
   });
 
   if (project?.claudeCredentialId) {
@@ -222,6 +297,12 @@ export async function runUsesRequestersOwnAccount(
     select: { id: true },
   });
   if (own) return true;
+
+  // Step 3: an ORG credential is used → shared by the org, never "own".
+  if (project?.orgId) {
+    const org = await prisma.organization.findUnique({ where: { id: project.orgId }, select: { claudeCredentialId: true } });
+    if (org?.claudeCredentialId) return false;
+  }
 
   // Step 3: the global env token. Owned by no user unless declared. Only "own"
   // when CLAUDE_GLOBAL_TOKEN_OWNER names this requester (by id or email).

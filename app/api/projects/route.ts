@@ -12,7 +12,7 @@ import { getDefaultModelForCli, normalizeModelId } from '@/lib/constants/cliMode
 import { createSuccessResponse, createErrorResponse, handleApiError } from '@/lib/utils/api-response';
 import { getSessionUser, authEnabled } from '@/lib/auth/session';
 import { accessibleProjectIds } from '@/lib/services/project-access';
-import { orgIdsFor } from '@/lib/services/org-access';
+import { orgIdsFor, orgAllowsProjectCreation } from '@/lib/services/org-access';
 import { isValidStack } from '@/lib/config/stacks';
 import { isValidBackend } from '@/lib/config/backend-stacks';
 import { isValidDatabase } from '@/lib/config/databases';
@@ -77,6 +77,11 @@ export async function POST(request: NextRequest) {
       }
       if (!orgId) {
         return createErrorResponse('forbidden', 'You are not a member of any organisation', 403);
+      }
+      // Superadmin-controlled per-org switch. Staff (global admins) are exempt so
+      // they can still set up projects for an org that customers may not extend.
+      if (creator.role !== 'admin' && !(await orgAllowsProjectCreation(orgId))) {
+        return createErrorResponse('org_cannot_create', 'Your organisation is not allowed to create new projects. Ask New Story.', 403);
       }
     }
 

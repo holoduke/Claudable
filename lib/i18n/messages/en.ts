@@ -92,6 +92,8 @@ export const en = {
   'home.searchProjects': 'Search projects…',
   'home.noProjectsMatch': 'No projects match “{query}”',
   'home.inOrg': 'Organisation: {name}',
+  'home.noCreateTitle': 'Your organisation cannot create new projects',
+  'home.noCreateBody': 'New Story has not enabled creating projects for your organisation. You can still work in the existing projects below.',
   'home.emptyInOrgTitle': 'No projects in {name} yet',
   'home.emptyInOrgBody': 'Describe above what you want to build; your first project for {name} appears here. Only members of {name} can see it.',
   'home.dropImages': 'Drop images here',

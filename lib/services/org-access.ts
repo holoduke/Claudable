@@ -96,6 +96,12 @@ export async function requireOrgManager(orgId: string): Promise<OrgGate> {
   return { ok: false, status: 403, code: 'forbidden', message: 'Only an eigenaar or beheerder can manage members' };
 }
 
+/** Whether members of this org may create new projects (superadmin-controlled flag). */
+export async function orgAllowsProjectCreation(orgId: string): Promise<boolean> {
+  const org = await prisma.organization.findUnique({ where: { id: orgId }, select: { canCreateProjects: true } });
+  return !!org?.canCreateProjects;
+}
+
 /**
  * Role policy for member mutations. `targetRole` is the role the affected
  * member currently holds (null when adding someone new); `newRole` is the role

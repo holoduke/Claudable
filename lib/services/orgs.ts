@@ -61,13 +61,15 @@ function normalizeDomain(domain?: string | null): string | null {
 export async function listOrgs() {
   const orgs = await prisma.organization.findMany({
     orderBy: { createdAt: 'asc' },
-    include: { _count: { select: { members: true, projects: true } } },
+    include: { _count: { select: { members: true, projects: true } }, claudeCredential: { select: { label: true, createdAt: true } } },
   });
   return orgs.map((o) => ({
     id: o.id,
     name: o.name,
     type: o.type,
     domain: o.domain,
+    canCreateProjects: o.canCreateProjects,
+    claudeCredential: o.claudeCredential ? { label: o.claudeCredential.label, since: o.claudeCredential.createdAt } : null,
     createdAt: o.createdAt,
     memberCount: o._count.members,
     projectCount: o._count.projects,
@@ -91,10 +93,11 @@ export async function createOrg(
 
 export async function updateOrg(
   id: string,
-  input: { name?: string; type?: string; domain?: string | null },
+  input: { name?: string; type?: string; domain?: string | null; canCreateProjects?: boolean },
   actor?: AuditActor | null,
 ) {
-  const data: { name?: string; type?: string; domain?: string | null } = {};
+  const data: { name?: string; type?: string; domain?: string | null; canCreateProjects?: boolean } = {};
+  if (typeof input.canCreateProjects === 'boolean') data.canCreateProjects = input.canCreateProjects;
   if (input.name !== undefined) {
     const name = input.name.trim();
     if (!name) throw new Error('Naam mag niet leeg zijn');

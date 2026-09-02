@@ -19,6 +19,8 @@ export interface MyOrg {
   type: 'intern' | 'klant';
   domain: string | null;
   role: 'eigenaar' | 'beheerder' | 'lid';
+  canCreateProjects?: boolean;
+  hasClaudeCredential?: boolean;
   memberCount: number;
   projectCount: number;
 }
@@ -56,6 +58,9 @@ const ACTION_LABEL: Record<string, string> = {
   'org.invite.created': 'uitnodiging verstuurd',
   'org.invite.revoked': 'uitnodiging ingetrokken',
   'org.invite.accepted': 'uitnodiging geaccepteerd',
+  'org.claude_credential.set': 'Claude-token ingesteld',
+  'org.claude_credential.removed': 'Claude-token verwijderd',
+  'project.org_changed': 'project verplaatst naar organisatie',
   'org.created': 'organisatie aangemaakt',
   'org.updated': 'organisatie gewijzigd',
   'project.visibility_changed': 'projectzichtbaarheid gewijzigd',
@@ -97,6 +102,9 @@ function OrgPanel({ org, currentUserId, onToast }: { org: MyOrg; currentUserId: 
   const [busy, setBusy] = useState(false);
   const [email, setEmail] = useState('');
   const [role, setRole] = useState<'beheerder' | 'lid'>('lid');
+  const [cred, setCred] = useState<{ label: string; kind: string; since: string } | null | undefined>(undefined);
+  const [credLabel, setCredLabel] = useState('');
+  const [credToken, setCredToken] = useState('');
 
   const canManage = org.role === 'eigenaar' || org.role === 'beheerder';
   const isOwner = org.role === 'eigenaar';
@@ -122,6 +130,46 @@ function OrgPanel({ org, currentUserId, onToast }: { org: MyOrg; currentUserId: 
   }, [org.id, onToast]);
 
   useEffect(() => { load(); }, [load]);
+
+  const loadCred = useCallback(async () => {
+    try {
+      const res = await fetch(`${API_BASE}/api/orgs/${org.id}/claude-credential`);
+      const json = await res.json().catch(() => null);
+      setCred(res.ok && json?.success ? json.data : null);
+    } catch { setCred(null); }
+  }, [org.id]);
+  useEffect(() => { loadCred(); }, [loadCred]);
+
+  const saveCred = async () => {
+    setBusy(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/orgs/${org.id}/claude-credential`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ label: credLabel, token: credToken }),
+      });
+      const json = await res.json();
+      if (!res.ok || !json.success) throw new Error(json.message || 'Opslaan mislukt');
+      onToast(`Claude-token voor ${org.name} opgeslagen`, 'success');
+      setCredLabel(''); setCredToken('');
+      await loadCred();
+    } catch (err) {
+      onToast(err instanceof Error ? err.message : 'Opslaan mislukt', 'error');
+    } finally { setBusy(false); }
+  };
+
+  const removeCred = async () => {
+    if (!window.confirm(`Claude-token van ${org.name} verwijderen?`)) return;
+    setBusy(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/orgs/${org.id}/claude-credential`, { method: 'DELETE' });
+      const json = await res.json();
+      if (!res.ok || !json.success) throw new Error(json.message || 'Verwijderen mislukt');
+      onToast('Claude-token verwijderd', 'success');
+      await loadCred();
+    } catch (err) {
+      onToast(err instanceof Error ? err.message : 'Verwijderen mislukt', 'error');
+    } finally { setBusy(false); }
+  };
 
   const call = async (url: string, init: RequestInit, okMessage: string | null) => {
     setBusy(true);
@@ -287,6 +335,53 @@ function OrgPanel({ org, currentUserId, onToast }: { org: MyOrg; currentUserId: 
                 </li>
               ))}
             </ul>
+          </div>
+        )}
+
+        {canManage && (
+          <div className="rounded-xl border border-gray-200 dark:border-white/8 divide-y divide-gray-200 dark:divide-white/8">
+            <div className="flex items-center justify-between gap-4 px-4 py-3">
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-gray-900 dark:text-gray-50">Nieuwe projecten aanmaken</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400">Deze instelling beheert New Story per organisatie.</p>
+              </div>
+              <span className={`shrink-0 text-[11px] font-medium px-2 py-0.5 rounded-full ${org.canCreateProjects === false ? 'text-amber-800 bg-amber-100 dark:text-amber-200 dark:bg-amber-500/20' : 'text-green-700 bg-green-100 dark:text-green-300 dark:bg-green-500/20'}`}>
+                {org.canCreateProjects === false ? 'Niet toegestaan' : 'Toegestaan'}
+              </span>
+            </div>
+            {isOwner && (
+              <div className="px-4 py-3 space-y-2">
+                <div className="flex items-center justify-between gap-4">
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-gray-900 dark:text-gray-50">Claude-token van de organisatie</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">
+                      Hierop draait de AI-assistent voor de projecten van {org.name}. Plak een OAuth-token uit <code>claude setup-token</code> of een API-sleutel (sk-ant-api…).
+                    </p>
+                  </div>
+                  {cred === undefined ? null : cred ? (
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className="text-[11px] font-medium text-green-700 dark:text-green-300 bg-green-100 dark:bg-green-500/20 px-2 py-0.5 rounded-full">
+                        {cred.label} · {cred.kind === 'api-key' ? 'API-sleutel' : 'OAuth-token'}
+                      </span>
+                      <button onClick={removeCred} disabled={busy}
+                        className="px-2.5 py-1.5 text-xs font-medium border border-red-200 rounded-full bg-white dark:bg-white/3 text-red-600 hover:bg-red-50 transition-colors disabled:opacity-40">
+                        Verwijderen
+                      </button>
+                    </div>
+                  ) : (
+                    <span className="shrink-0 text-[11px] font-medium text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-white/8 px-2 py-0.5 rounded-full">nog niet ingesteld</span>
+                  )}
+                </div>
+                <div className="flex gap-2">
+                  <input type="text" value={credLabel} onChange={(e) => setCredLabel(e.target.value)} placeholder="Label" className={`${inputCls} w-40! shrink-0`} />
+                  <input type="password" value={credToken} onChange={(e) => setCredToken(e.target.value)} placeholder="sk-ant-oat… of sk-ant-api…" className={`${inputCls} flex-1 min-w-0 font-mono`} autoComplete="off" />
+                  <button onClick={saveCred} disabled={busy || !credToken.trim()}
+                    className="px-4 py-2 text-sm font-medium bg-brand-500 hover:bg-brand-600 text-white rounded-lg transition-colors disabled:opacity-50">
+                    {cred ? 'Vervangen' : 'Instellen'}
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         )}
 

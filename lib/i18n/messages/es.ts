@@ -83,6 +83,8 @@ export const es: Record<keyof typeof en, string> = {
   'home.searchProjects': 'Buscar proyectos…',
   'home.noProjectsMatch': 'Ningún proyecto coincide con «{query}»',
   'home.inOrg': 'Organización: {name}',
+  'home.noCreateTitle': 'Tu organización no puede crear proyectos nuevos',
+  'home.noCreateBody': 'New Story no ha habilitado la creación de proyectos para tu organización. Puedes seguir trabajando en los proyectos existentes de abajo.',
   'home.emptyInOrgTitle': 'Aún no hay proyectos en {name}',
   'home.emptyInOrgBody': 'Describe arriba lo que quieres construir; tu primer proyecto para {name} aparecerá aquí. Solo los miembros de {name} pueden verlo.',
   'home.dropImages': 'Suelta las imágenes aquí',

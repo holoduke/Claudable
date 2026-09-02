@@ -83,6 +83,8 @@ export const de: Record<keyof typeof en, string> = {
   'home.searchProjects': 'Projekte suchen…',
   'home.noProjectsMatch': 'Keine Projekte passen zu „{query}“',
   'home.inOrg': 'Organisation: {name}',
+  'home.noCreateTitle': 'Deine Organisation kann keine neuen Projekte anlegen',
+  'home.noCreateBody': 'New Story hat das Anlegen von Projekten für deine Organisation nicht freigeschaltet. In den bestehenden Projekten unten kannst du weiterarbeiten.',
   'home.emptyInOrgTitle': 'Noch keine Projekte in {name}',
   'home.emptyInOrgBody': 'Beschreibe oben, was du bauen möchtest; dein erstes Projekt für {name} erscheint hier. Nur Mitglieder von {name} können es sehen.',
   'home.dropImages': 'Bilder hierher ziehen',

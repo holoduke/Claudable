@@ -135,9 +135,12 @@ export default function HomePage() {
   const [showDatabaseMenu, setShowDatabaseMenu] = useState(false);
   // Organisations the signed-in user belongs to; the picker only shows for
   // multi-org users (e.g. staff creating a site for a customer org).
-  const [myOrgs, setMyOrgs] = useState<{ id: string; name: string; type: string }[]>([]);
-  const [isSuperadmin, setIsSuperadmin] = useState(false);
+  const [myOrgs, setMyOrgs] = useState<{ id: string; name: string; type: string; canCreateProjects?: boolean }[]>([]);
   const [selectedOrgId, setSelectedOrgId] = useState<string>('');
+  const [isSuperadmin, setIsSuperadmin] = useState(false);
+  // Orgs the user may create projects in (superadmins: all of theirs).
+  const creatableOrgs = isSuperadmin ? myOrgs : myOrgs.filter(o => o.canCreateProjects !== false);
+  const canCreateAnywhere = myOrgs.length === 0 /* auth off / not loaded */ || creatableOrgs.length > 0;
   const [showOrgMenu, setShowOrgMenu] = useState(false);
   useEffect(() => {
     let cancelled = false;
@@ -146,11 +149,13 @@ export default function HomePage() {
         const r = await fetch(`${API_BASE}/api/orgs/mine`);
         const j = r.ok ? await r.json() : null;
         if (cancelled || !j?.success) return;
-        const orgs = (j.data?.orgs ?? []) as { id: string; name: string; type: string }[];
+        const orgs = (j.data?.orgs ?? []) as { id: string; name: string; type: string; canCreateProjects?: boolean }[];
         setMyOrgs(orgs);
         setIsSuperadmin(!!j.data?.superadmin);
         const home = j.data?.homeOrgId as string | undefined;
-        setSelectedOrgId(orgs.some(o => o.id === home) ? (home as string) : (orgs[0]?.id ?? ''));
+        // Default to the home org when it allows creation, else the first org that does.
+        const allowed = j.data?.superadmin ? orgs : orgs.filter(o => o.canCreateProjects !== false);
+        setSelectedOrgId(allowed.some(o => o.id === home) ? (home as string) : (allowed[0]?.id ?? ''));
       } catch { /* auth off or signed out: no picker */ }
     })();
     return () => { cancelled = true; };
@@ -622,7 +627,7 @@ export default function HomePage() {
           backendId: selectedBackend || undefined,
           databaseId: selectedDatabase || undefined,
           imageProvider: selectedImageGen || undefined,
-          orgId: myOrgs.length > 1 && selectedOrgId ? selectedOrgId : undefined,
+          orgId: creatableOrgs.length > 1 && selectedOrgId ? selectedOrgId : undefined,
         })
       });
       
@@ -1155,7 +1160,13 @@ export default function HomePage() {
               </div>
             )}
 
-            {/* Main Input Form */}
+            {/* Main Input Form — hidden when none of the user's organisations may create projects */}
+            {!canCreateAnywhere ? (
+              <div className="w-full max-w-3xl mx-auto rounded-2xl border border-amber-200 dark:border-amber-500/30 bg-amber-50 dark:bg-amber-500/10 px-6 py-6 text-center">
+                <h3 className="text-base font-semibold text-amber-900 dark:text-amber-200">{t('home.noCreateTitle')}</h3>
+                <p className="mt-1 text-sm text-amber-800/80 dark:text-amber-200/80 max-w-md mx-auto">{t('home.noCreateBody')}</p>
+              </div>
+            ) : (
             <form 
               onSubmit={(e) => { e.preventDefault(); handleSubmit(); }}
               onDragEnter={handleDragEnter}
@@ -1390,7 +1401,7 @@ export default function HomePage() {
                   )}
                 </div>
                 {/* Organisation picker — only for users who belong to more than one org */}
-                {myOrgs.length > 1 && (
+                {creatableOrgs.length > 1 && (
                   <div className="relative">
                     <button
                       type="button"
@@ -1407,7 +1418,7 @@ export default function HomePage() {
                       <>
                         <div className="fixed inset-0 z-290" onClick={() => setShowOrgMenu(false)} />
                         <div className="absolute bottom-full mb-2 left-0 z-300 w-72 rounded-xl border border-gray-200 dark:border-white/10 bg-white dark:bg-[#181310] shadow-xl p-1">
-                          {myOrgs.map(o => (
+                          {creatableOrgs.map(o => (
                             <button key={o.id} type="button" onClick={() => { setSelectedOrgId(o.id); setShowOrgMenu(false); }}
                               className={`w-full text-left px-3 py-2 rounded-lg transition-colors ${selectedOrgId === o.id ? 'bg-gray-100 dark:bg-white/[0.07]' : 'hover:bg-gray-50 dark:hover:bg-white/5'}`}>
                               <div className="flex items-center justify-between">
@@ -1569,6 +1580,7 @@ export default function HomePage() {
                 </div>
               </div>
             </form>
+            )}
             
             {projects.length === 0 && projectsLoaded && (
               <div className="mt-12 w-full max-w-3xl mx-auto">

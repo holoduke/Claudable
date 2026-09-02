@@ -134,8 +134,14 @@ model Organization {
   // intern (New Story zelf) | klant — bepaalt o.a. de versimpelde
   // klantweergave en waar quota/facturatie aan hangen.
   type      String   @default("intern")
+  // Superadmin-controlled: may members of this org create new projects?
+  canCreateProjects Boolean @default(true) @map("can_create_projects")
+  // Org-level Claude credential (OAuth token or API key) the agent runs with for
+  // this org's projects when neither the project nor the requester brings one.
+  claudeCredentialId String? @map("claude_credential_id")
   createdAt DateTime @default(now()) @map("created_at")
 
+  claudeCredential ClaudeCredential? @relation("OrgClaudeCredential", fields: [claudeCredentialId], references: [id], onDelete: SetNull)
   users    User[]
   projects Project[]
   members  OrgMember[]
@@ -263,6 +269,7 @@ model ClaudeCredential {
 
   owner    User      @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   projects Project[] @relation("ProjectClaudeCredential")
+  organizations Organization[] @relation("OrgClaudeCredential")
 
   @@index([ownerId])
   @@map("claude_credentials")

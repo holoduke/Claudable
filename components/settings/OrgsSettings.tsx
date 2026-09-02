@@ -13,6 +13,8 @@ interface Org {
   name: string;
   type: 'intern' | 'klant';
   domain: string | null;
+  canCreateProjects: boolean;
+  claudeCredential: { label: string; since: string } | null;
   memberCount: number;
   projectCount: number;
 }
@@ -72,6 +74,9 @@ export default function OrgsSettings({ onToast }: OrgsSettingsProps) {
   const [membersLoading, setMembersLoading] = useState(false);
   const [memberEmail, setMemberEmail] = useState('');
   const [memberRole, setMemberRole] = useState<'eigenaar' | 'beheerder' | 'lid'>('lid');
+  // Org-level Claude credential form
+  const [credLabel, setCredLabel] = useState('');
+  const [credToken, setCredToken] = useState('');
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -160,6 +165,23 @@ export default function OrgsSettings({ onToast }: OrgsSettingsProps) {
       method: 'PATCH',
       body: JSON.stringify({ name: editName, type: editType, domain: editDomain.trim() || null }),
     }, 'Organisatie opgeslagen');
+
+  const toggleCreate = (org: Org) =>
+    call(`/api/orgs/${org.id}`, { method: 'PATCH', body: JSON.stringify({ canCreateProjects: !org.canCreateProjects }) },
+      !org.canCreateProjects ? `${org.name} mag nu nieuwe projecten aanmaken` : `${org.name} kan geen nieuwe projecten meer aanmaken`);
+
+  const setCredential = async (org: Org) => {
+    const ok = await call(`/api/orgs/${org.id}/claude-credential`, {
+      method: 'PUT',
+      body: JSON.stringify({ label: credLabel, token: credToken }),
+    }, `Claude-token voor ${org.name} opgeslagen`);
+    if (ok) { setCredLabel(''); setCredToken(''); }
+  };
+
+  const removeCredential = (org: Org) => {
+    if (!window.confirm(`Claude-token van ${org.name} verwijderen? Projecten vallen terug op het platform-token.`)) return;
+    return call(`/api/orgs/${org.id}/claude-credential`, { method: 'DELETE' }, `Claude-token van ${org.name} verwijderd`);
+  };
 
   const removeOrg = async (org: Org) => {
     if (!window.confirm(`Organisatie "${org.name}" verwijderen?`)) return;
@@ -265,6 +287,8 @@ export default function OrgsSettings({ onToast }: OrgsSettingsProps) {
                     <p className="text-xs text-gray-500 dark:text-gray-400">
                       {org.memberCount} {org.memberCount === 1 ? 'lid' : 'leden'} · {org.projectCount} {org.projectCount === 1 ? 'project' : 'projecten'}
                       {org.domain ? ` · ${org.domain}` : ''}
+                      {!org.canCreateProjects ? ' · geen nieuwe projecten' : ''}
+                      {org.claudeCredential ? ' · eigen Claude-token' : ''}
                     </p>
                   </div>
                   <span className="text-gray-400 text-xs">{openId === org.id ? '▲' : '▼'}</span>
@@ -298,6 +322,54 @@ export default function OrgsSettings({ onToast }: OrgsSettingsProps) {
                         className="px-3 py-2 text-sm font-medium border border-red-200 rounded-lg bg-white dark:bg-white/3 text-red-600 hover:bg-red-50 transition-colors disabled:opacity-40">
                         Verwijderen
                       </button>
+                    </div>
+
+                    {/* Organisatie-instellingen (superadmin) */}
+                    <div className="rounded-xl border border-gray-200 dark:border-white/8 divide-y divide-gray-200 dark:divide-white/8 bg-white dark:bg-white/3">
+                      <div className="flex items-center justify-between gap-4 px-4 py-3">
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium text-gray-900 dark:text-gray-50">Nieuwe projecten aanmaken</p>
+                          <p className="text-xs text-gray-500 dark:text-gray-400">Mogen leden van {org.name} zelf nieuwe projecten starten? Superadmins kunnen dat altijd.</p>
+                        </div>
+                        <button type="button" role="switch" aria-checked={org.canCreateProjects} disabled={busy}
+                          onClick={() => toggleCreate(org)}
+                          className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors disabled:opacity-50 ${org.canCreateProjects ? 'bg-brand-500' : 'bg-gray-300 dark:bg-white/15'}`}
+                          title={org.canCreateProjects ? 'Aanmaken uitschakelen' : 'Aanmaken toestaan'}>
+                          <span className={`inline-block h-5 w-5 transform rounded-full bg-white dark:bg-gray-900 transition-transform ${org.canCreateProjects ? 'translate-x-5' : 'translate-x-1'}`} />
+                        </button>
+                      </div>
+                      <div className="px-4 py-3 space-y-2">
+                        <div className="flex items-center justify-between gap-4">
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium text-gray-900 dark:text-gray-50">Claude-token van de organisatie</p>
+                            <p className="text-xs text-gray-500 dark:text-gray-400">
+                              Hierop draait de agent (<code>claude -p</code>) voor projecten van {org.name} als project of gebruiker geen eigen token heeft.
+                              Een OAuth-token uit <code>claude setup-token</code> of een API-sleutel (sk-ant-api…).
+                            </p>
+                          </div>
+                          {org.claudeCredential ? (
+                            <div className="flex items-center gap-2 shrink-0">
+                              <span className="text-[11px] font-medium text-green-700 dark:text-green-300 bg-green-100 dark:bg-green-500/20 px-2 py-0.5 rounded-full">
+                                {org.claudeCredential.label} · sinds {new Date(org.claudeCredential.since).toLocaleDateString('nl-NL')}
+                              </span>
+                              <button onClick={() => removeCredential(org)} disabled={busy}
+                                className="px-2.5 py-1.5 text-xs font-medium border border-red-200 rounded-full bg-white dark:bg-white/3 text-red-600 hover:bg-red-50 transition-colors disabled:opacity-40">
+                                Verwijderen
+                              </button>
+                            </div>
+                          ) : (
+                            <span className="shrink-0 text-[11px] font-medium text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-white/8 px-2 py-0.5 rounded-full">platform-token</span>
+                          )}
+                        </div>
+                        <div className="flex gap-2">
+                          <input type="text" value={credLabel} onChange={(e) => setCredLabel(e.target.value)} placeholder={`Label (bijv. ${org.name} Claude)`} className={`${inputCls} w-48! shrink-0`} />
+                          <input type="password" value={credToken} onChange={(e) => setCredToken(e.target.value)} placeholder="sk-ant-oat… of sk-ant-api…" className={`${inputCls} flex-1 min-w-0 font-mono`} autoComplete="off" />
+                          <button onClick={() => setCredential(org)} disabled={busy || !credToken.trim()}
+                            className="px-4 py-2 text-sm font-medium bg-brand-500 hover:bg-brand-600 text-white rounded-lg transition-colors disabled:opacity-50">
+                            {org.claudeCredential ? 'Vervangen' : 'Instellen'}
+                          </button>
+                        </div>
+                      </div>
                     </div>
 
                     {/* Leden */}

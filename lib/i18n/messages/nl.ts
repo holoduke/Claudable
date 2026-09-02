@@ -83,6 +83,8 @@ export const nl: Record<keyof typeof en, string> = {
   'home.searchProjects': 'Projecten zoeken…',
   'home.noProjectsMatch': 'Geen projecten komen overeen met “{query}”',
   'home.inOrg': 'Organisatie: {name}',
+  'home.noCreateTitle': 'Jouw organisatie kan geen nieuwe projecten aanmaken',
+  'home.noCreateBody': 'New Story heeft het aanmaken van projecten voor jouw organisatie niet ingeschakeld. In de bestaande projecten hieronder kun je gewoon werken.',
   'home.emptyInOrgTitle': 'Nog geen projecten in {name}',
   'home.emptyInOrgBody': 'Beschrijf hierboven wat je wilt bouwen; je eerste project voor {name} verschijnt hier. Alleen leden van {name} kunnen het zien.',
   'home.dropImages': 'Sleep afbeeldingen hierheen',

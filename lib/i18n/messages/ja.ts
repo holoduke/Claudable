@@ -83,6 +83,8 @@ export const ja: Record<keyof typeof en, string> = {
   'home.searchProjects': 'プロジェクトを検索…',
   'home.noProjectsMatch': '「{query}」に一致するプロジェクトはありません',
   'home.inOrg': '組織: {name}',
+  'home.noCreateTitle': 'あなたの組織では新しいプロジェクトを作成できません',
+  'home.noCreateBody': 'New Story はあなたの組織でのプロジェクト作成を有効にしていません。以下の既存プロジェクトでは引き続き作業できます。',
   'home.emptyInOrgTitle': '{name} にはまだプロジェクトがありません',
   'home.emptyInOrgBody': '上で作りたいものを説明してください。{name} の最初のプロジェクトがここに表示されます。{name} のメンバーだけが閲覧できます。',
   'home.dropImages': 'ここに画像をドロップ',

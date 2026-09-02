@@ -28,6 +28,8 @@ export async function GET() {
         type: r.organization.type,
         domain: r.organization.domain,
         role: r.role,
+        canCreateProjects: r.organization.canCreateProjects,
+        hasClaudeCredential: !!r.organization.claudeCredentialId,
         memberCount: r.organization._count.members,
         projectCount: r.organization._count.projects,
       })),
