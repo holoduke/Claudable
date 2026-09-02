@@ -21,6 +21,8 @@ export default auth((req) => {
   const isPublic =
     pathname === '/login' ||
     pathname.startsWith('/login/') ||
+    // Public privacy statement (linked from Google's OAuth consent screen).
+    pathname === '/privacy' ||
     pathname.startsWith('/api/auth') ||
     pathname === '/api/health' ||
     // Public stakeholder-review surface (the token is the credential).
