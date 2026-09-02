@@ -127,7 +127,7 @@ export default async function LoginPage({
           className="mt-8 text-[11px] uppercase tracking-[0.28em] text-white/20"
           style={{ animation: 'loginFadeUp 1s ease-out both', animationDelay: '.4s' }}
         >
-          Self-hosted · Powered by Claude
+          Self-hosted · Powered by Claude · <a href="/privacy" className="underline decoration-white/20 hover:text-white/50 normal-case tracking-normal">Privacy</a>
         </p>
       </main>
     </div>
