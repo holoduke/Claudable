@@ -1160,12 +1160,9 @@ export default function HomePage() {
               </div>
             )}
 
-            {/* Main Input Form — hidden when none of the user's organisations may create projects */}
+            {/* Main Input Form — gone entirely when none of the user's organisations may create projects */}
             {!canCreateAnywhere ? (
-              <div className="w-full max-w-3xl mx-auto rounded-2xl border border-amber-200 dark:border-amber-500/30 bg-amber-50 dark:bg-amber-500/10 px-6 py-6 text-center">
-                <h3 className="text-base font-semibold text-amber-900 dark:text-amber-200">{t('home.noCreateTitle')}</h3>
-                <p className="mt-1 text-sm text-amber-800/80 dark:text-amber-200/80 max-w-md mx-auto">{t('home.noCreateBody')}</p>
-              </div>
+              <p className="text-sm text-gray-500 dark:text-gray-400 text-center max-w-md mx-auto">{t('home.noCreateBody')}</p>
             ) : (
             <form 
               onSubmit={(e) => { e.preventDefault(); handleSubmit(); }}
