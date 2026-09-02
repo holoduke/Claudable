@@ -12,8 +12,6 @@ interface MyAccountSettingsProps {
   onChanged?: () => void; // reload the current user after a change
 }
 
-const ROLE_LABEL: Record<string, string> = { eigenaar: 'Eigenaar', beheerder: 'Beheerder', lid: 'Lid' };
-
 /**
  * "Account" — everything that is about YOU: who you are signed in as, which
  * organisations you belong to (and as what), your interface language, the
@@ -25,6 +23,7 @@ export default function MyAccountSettings({ user, onToast, onChanged }: MyAccoun
   const [busy, setBusy] = useState(false);
   const [orgs, setOrgs] = useState<MyOrg[] | null>(null);
   const isAdmin = user.role === 'admin';
+  const count = (n: number, kind: 'members' | 'projects') => (n === 1 ? t(`common.${kind}.one`) : t(`common.${kind}.other`, { count: n }));
 
   useEffect(() => {
     let cancelled = false;
@@ -51,9 +50,9 @@ export default function MyAccountSettings({ user, onToast, onChanged }: MyAccoun
       }
       setItops(next);
       onChanged?.();
-      onToast?.(`it-ops tools ${next ? 'enabled' : 'disabled'} for your account`, 'success');
+      onToast?.(next ? t('account.itops.toastOn') : t('account.itops.toastOff'), 'success');
     } catch (e) {
-      onToast?.(`Failed to update it-ops: ${e instanceof Error ? e.message : 'error'}`, 'error');
+      onToast?.(t('account.itops.failed', { error: e instanceof Error ? e.message : 'error' }), 'error');
     } finally {
       setBusy(false);
     }
@@ -78,7 +77,7 @@ export default function MyAccountSettings({ user, onToast, onChanged }: MyAccoun
           <p className="text-sm text-gray-500 dark:text-gray-400 truncate">{user.email}</p>
           <p className="mt-1">
             <span className={`text-[11px] font-medium px-1.5 py-0.5 rounded-sm ${isAdmin ? 'text-amber-800 bg-amber-100 dark:text-amber-200 dark:bg-amber-500/20' : 'text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-white/8'}`}>
-              {isAdmin ? 'Superadmin' : 'Gebruiker'}
+              {isAdmin ? t('role.superadmin') : t('role.user')}
             </span>
           </p>
         </div>
@@ -86,10 +85,10 @@ export default function MyAccountSettings({ user, onToast, onChanged }: MyAccoun
           <button
             type="submit"
             className="h-9 flex items-center gap-2 px-3 rounded-lg text-sm font-medium border border-gray-200 dark:border-white/8 bg-white dark:bg-white/3 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-white/6 hover:text-red-600 hover:border-red-200 transition-colors"
-            title="Sign out of Claudable"
+            title={t('account.signOutTitle')}
           >
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><polyline points="16 17 21 12 16 7" /><line x1="21" y1="12" x2="9" y2="12" /></svg>
-            Sign out
+            {t('account.signOut')}
           </button>
         </form>
       </div>
@@ -97,13 +96,13 @@ export default function MyAccountSettings({ user, onToast, onChanged }: MyAccoun
       {/* Organisations */}
       <section className="rounded-xl border border-gray-200 dark:border-white/8 overflow-hidden">
         <div className="px-4 py-3 bg-gray-50 dark:bg-white/3 border-b border-gray-200 dark:border-white/8">
-          <p className="text-sm font-medium text-gray-900 dark:text-gray-50">Organisaties</p>
-          <p className="text-xs text-gray-500 dark:text-gray-400">Je ziet de projecten en leden van deze organisaties.{isAdmin ? ' Als superadmin zie je daarnaast alle organisaties.' : ''}</p>
+          <p className="text-sm font-medium text-gray-900 dark:text-gray-50">{t('account.orgs.title')}</p>
+          <p className="text-xs text-gray-500 dark:text-gray-400">{t('account.orgs.desc')}{isAdmin ? ` ${t('account.orgs.superadminNote')}` : ''}</p>
         </div>
         {orgs === null ? (
-          <p className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">Laden…</p>
+          <p className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">{t('common.loading')}</p>
         ) : orgs.length === 0 ? (
-          <p className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">Je bent nog geen lid van een organisatie.</p>
+          <p className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">{t('org.noneYet')}</p>
         ) : (
           <ul className="divide-y divide-gray-200 dark:divide-white/8">
             {orgs.map((o) => (
@@ -114,10 +113,10 @@ export default function MyAccountSettings({ user, onToast, onChanged }: MyAccoun
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-gray-900 dark:text-gray-50 truncate">{o.name}</p>
                   <p className="text-xs text-gray-500 dark:text-gray-400">
-                    {o.type === 'klant' ? 'Klantorganisatie' : 'Interne organisatie'} · {o.memberCount} {o.memberCount === 1 ? 'lid' : 'leden'} · {o.projectCount} {o.projectCount === 1 ? 'project' : 'projecten'}
+                    {o.type === 'klant' ? t('orgType.klant') : t('orgType.intern')} · {count(o.memberCount, 'members')} · {count(o.projectCount, 'projects')}
                   </p>
                 </div>
-                <span className="text-[11px] font-medium text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-white/8 px-2 py-0.5 rounded-full">{ROLE_LABEL[o.role] ?? o.role}</span>
+                <span className="text-[11px] font-medium text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-white/8 px-2 py-0.5 rounded-full">{t(`role.${o.role}` as 'role.lid')}</span>
               </li>
             ))}
           </ul>
@@ -145,12 +144,8 @@ export default function MyAccountSettings({ user, onToast, onChanged }: MyAccoun
         {(isAdmin || itops) && (
           <div className="flex items-center justify-between gap-4 px-4 py-3">
             <div className="min-w-0">
-              <p className="text-sm font-medium text-gray-900 dark:text-gray-50">it-ops tools</p>
-              <p className="text-xs text-gray-500 dark:text-gray-400">
-                {isAdmin
-                  ? 'Koppelt de New Story it-ops MCP-tools aan de agent van elk project dat jij bezit.'
-                  : 'Door een superadmin voor jouw account ingeschakeld.'}
-              </p>
+              <p className="text-sm font-medium text-gray-900 dark:text-gray-50">{t('account.itops.title')}</p>
+              <p className="text-xs text-gray-500 dark:text-gray-400">{isAdmin ? t('account.itops.descAdmin') : t('account.itops.descUser')}</p>
             </div>
             {isAdmin ? (
               <button
@@ -160,12 +155,12 @@ export default function MyAccountSettings({ user, onToast, onChanged }: MyAccoun
                 role="switch"
                 aria-checked={itops}
                 className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors disabled:opacity-50 ${itops ? 'bg-brand-500' : 'bg-gray-300'}`}
-                title={itops ? 'Disable it-ops tools' : 'Enable it-ops tools'}
+                title={itops ? t('account.itops.turnOff') : t('account.itops.turnOn')}
               >
                 <span className={`inline-block h-5 w-5 transform rounded-full bg-white dark:bg-gray-900 transition-transform ${itops ? 'translate-x-5' : 'translate-x-1'}`} />
               </button>
             ) : (
-              <span className="shrink-0 rounded-full px-3 py-1 text-xs font-medium bg-amber-100 text-amber-700">Ingeschakeld</span>
+              <span className="shrink-0 rounded-full px-3 py-1 text-xs font-medium bg-amber-100 text-amber-700">{t('account.itops.enabled')}</span>
             )}
           </div>
         )}

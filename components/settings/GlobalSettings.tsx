@@ -693,10 +693,10 @@ export default function GlobalSettings({ isOpen, onClose, initialTab = 'account'
                 </div>
 
                 <div className="text-center space-y-2">
-                  <p className="text-sm text-gray-500 dark:text-gray-400">Het bouwportaal van New Story. Gebaseerd op het open-source project Claudable.</p>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">{t('about.blurb')}</p>
                   <div className="flex justify-center gap-6">
-                    <a href="/privacy" target="_blank" rel="noopener noreferrer" className="text-sm text-brand-500 hover:underline">Privacyverklaring</a>
-                    <a href="https://github.com/holoduke/Claudable" target="_blank" rel="noopener noreferrer" className="text-sm text-brand-500 hover:underline">Broncode</a>
+                    <a href="/privacy" target="_blank" rel="noopener noreferrer" className="text-sm text-brand-500 hover:underline">{t('about.privacy')}</a>
+                    <a href="https://github.com/holoduke/Claudable" target="_blank" rel="noopener noreferrer" className="text-sm text-brand-500 hover:underline">{t('about.source')}</a>
                     <a href="mailto:support@newstory.tf" className="text-sm text-brand-500 hover:underline">support@newstory.tf</a>
                   </div>
                 </div>

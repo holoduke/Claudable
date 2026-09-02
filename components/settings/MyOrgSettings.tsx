@@ -1,15 +1,16 @@
 "use client";
 /**
- * "Organisatie"-tab voor eigenaren en beheerders van een organisatie: de leden
- * van de EIGEN organisatie(s) bekijken, toevoegen (op e-mailadres, elk domein),
- * van rol veranderen en verwijderen. Geen organisaties aanmaken/verwijderen —
- * dat blijft superadmin-werk (OrgsSettings).
+ * "Organisation" tab for owners, admins and members of an organisation: see the
+ * members of YOUR organisation(s); owners and admins add people (by e-mail, any
+ * domain), change roles and remove them; owners manage the org's Claude token.
+ * Creating/deleting organisations stays superadmin work (OrgsSettings).
  *
- * Rolregels (server-side afgedwongen in org-access.ts, hier alleen gespiegeld
- * in de UI): een beheerder kan geen eigenaren aanmaken of aanraken; de laatste
- * eigenaar kan nooit weg.
+ * Role rules are enforced server-side (org-access.ts) and only mirrored here:
+ * an admin never creates or touches an owner; the last owner can never leave.
  */
 import { useCallback, useEffect, useState } from 'react';
+import { useI18n } from '@/contexts/I18nContext';
+import { DATE_LOCALE } from '@/lib/i18n/config';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? '';
 
@@ -51,23 +52,19 @@ interface AuditRow {
   at: string;
 }
 
-const ACTION_LABEL: Record<string, string> = {
-  'org.member.added': 'lid toegevoegd',
-  'org.member.role_changed': 'rol gewijzigd',
-  'org.member.removed': 'lid verwijderd',
-  'org.invite.created': 'uitnodiging verstuurd',
-  'org.invite.revoked': 'uitnodiging ingetrokken',
-  'org.invite.accepted': 'uitnodiging geaccepteerd',
-  'org.claude_credential.set': 'Claude-token ingesteld',
-  'org.claude_credential.removed': 'Claude-token verwijderd',
-  'project.org_changed': 'project verplaatst naar organisatie',
-  'org.created': 'organisatie aangemaakt',
-  'org.updated': 'organisatie gewijzigd',
-  'project.visibility_changed': 'projectzichtbaarheid gewijzigd',
-  'project.member.added': 'projectlid toegevoegd',
-  'project.member.role_changed': 'projectrol gewijzigd',
-  'project.member.removed': 'projectlid verwijderd',
-};
+interface Props {
+  orgs: MyOrg[];
+  currentUserId: string;
+  onToast: (message: string, type: 'success' | 'error') => void;
+}
+
+type RoleKey = 'role.eigenaar' | 'role.beheerder' | 'role.lid';
+type AuditKey = `audit.${string}`;
+
+const inputCls =
+  'w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-white/8 bg-white dark:bg-white/6 text-sm text-gray-800 dark:text-gray-100 focus:outline-hidden focus:ring-2 focus:ring-gray-200';
+const pillSelectCls =
+  'px-2.5 py-1.5 text-xs font-medium border border-gray-200 dark:border-white/8 rounded-full bg-white dark:bg-white/6 text-gray-700 dark:text-gray-200 focus:outline-hidden focus:ring-0 disabled:opacity-50 cursor-pointer';
 
 function describeMeta(meta: Record<string, unknown> | null): string {
   if (!meta) return '';
@@ -80,20 +77,17 @@ function describeMeta(meta: Record<string, unknown> | null): string {
   return parts.join(' · ');
 }
 
-interface Props {
-  orgs: MyOrg[];
-  currentUserId: string;
-  onToast: (message: string, type: 'success' | 'error') => void;
-}
-
-const inputCls =
-  'w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-white/8 bg-white dark:bg-white/6 text-sm text-gray-800 dark:text-gray-100 focus:outline-hidden focus:ring-2 focus:ring-gray-200';
-const pillSelectCls =
-  'px-2.5 py-1.5 text-xs font-medium border border-gray-200 dark:border-white/8 rounded-full bg-white dark:bg-white/6 text-gray-700 dark:text-gray-200 focus:outline-hidden focus:ring-0 disabled:opacity-50 cursor-pointer';
-
-const ROLE_LABEL: Record<OrgMemberRow['role'], string> = { eigenaar: 'Eigenaar', beheerder: 'Beheerder', lid: 'Lid' };
-
 function OrgPanel({ org, currentUserId, onToast }: { org: MyOrg; currentUserId: string; onToast: Props['onToast'] }) {
+  const { t, locale } = useI18n();
+  const dateLocale = DATE_LOCALE[locale];
+  const roleLabel = (r: string) => t(`role.${r}` as RoleKey);
+  const count = (n: number, kind: 'members' | 'projects') => (n === 1 ? t(`common.${kind}.one`) : t(`common.${kind}.other`, { count: n }));
+  const auditLabel = (action: string) => {
+    const key = `audit.${action}` as AuditKey;
+    const label = t(key as 'audit.org.member.added');
+    return label === key ? action : label;
+  };
+
   const [members, setMembers] = useState<OrgMemberRow[]>([]);
   const [invites, setInvites] = useState<InviteRow[]>([]);
   const [audit, setAudit] = useState<AuditRow[] | null>(null);
@@ -118,16 +112,16 @@ function OrgPanel({ org, currentUserId, onToast }: { org: MyOrg; currentUserId: 
         fetch(`${API_BASE}/api/orgs/${org.id}/invites`),
       ]);
       const mJson = await mRes.json();
-      if (!mRes.ok || !mJson.success) throw new Error(mJson.message || 'Leden laden mislukt');
+      if (!mRes.ok || !mJson.success) throw new Error(mJson.message || t('org.loadMembersFailed'));
       setMembers(mJson.data as OrgMemberRow[]);
       const iJson = await iRes.json().catch(() => null);
       setInvites(iRes.ok && iJson?.success ? (iJson.data as InviteRow[]) : []);
     } catch (err) {
-      onToast(err instanceof Error ? err.message : 'Leden laden mislukt', 'error');
+      onToast(err instanceof Error ? err.message : t('org.loadMembersFailed'), 'error');
     } finally {
       setLoading(false);
     }
-  }, [org.id, onToast]);
+  }, [org.id, onToast, t]);
 
   useEffect(() => { void load(); }, [load]);
 
@@ -138,7 +132,25 @@ function OrgPanel({ org, currentUserId, onToast }: { org: MyOrg; currentUserId: 
       setCred(res.ok && json?.success ? json.data : null);
     } catch { setCred(null); }
   }, [org.id]);
-  useEffect(() => { loadCred(); }, [loadCred]);
+  useEffect(() => { void loadCred(); }, [loadCred]);
+
+  /** Shared request pattern: error → toast, success → silent refresh (no remount, no scroll jump). */
+  const call = async (url: string, init: RequestInit, okMessage: string | null) => {
+    setBusy(true);
+    try {
+      const res = await fetch(`${API_BASE}${url}`, { headers: { 'Content-Type': 'application/json' }, ...init });
+      const json = await res.json();
+      if (!res.ok || !json.success) throw new Error(json.message || t('common.actionFailed'));
+      if (okMessage) onToast(okMessage, 'success');
+      await load({ silent: true });
+      return true;
+    } catch (err) {
+      onToast(err instanceof Error ? err.message : t('common.actionFailed'), 'error');
+      return false;
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const saveCred = async () => {
     setBusy(true);
@@ -148,44 +160,27 @@ function OrgPanel({ org, currentUserId, onToast }: { org: MyOrg; currentUserId: 
         body: JSON.stringify({ label: credLabel, token: credToken }),
       });
       const json = await res.json();
-      if (!res.ok || !json.success) throw new Error(json.message || 'Opslaan mislukt');
-      onToast(`Claude-token voor ${org.name} opgeslagen`, 'success');
+      if (!res.ok || !json.success) throw new Error(json.message || t('common.actionFailed'));
+      onToast(t('org.credential.saved', { org: org.name }), 'success');
       setCredLabel(''); setCredToken('');
       await loadCred();
     } catch (err) {
-      onToast(err instanceof Error ? err.message : 'Opslaan mislukt', 'error');
+      onToast(err instanceof Error ? err.message : t('common.actionFailed'), 'error');
     } finally { setBusy(false); }
   };
 
   const removeCred = async () => {
-    if (!window.confirm(`Claude-token van ${org.name} verwijderen?`)) return;
+    if (!window.confirm(t('org.credential.confirmRemove', { org: org.name }))) return;
     setBusy(true);
     try {
       const res = await fetch(`${API_BASE}/api/orgs/${org.id}/claude-credential`, { method: 'DELETE' });
       const json = await res.json();
-      if (!res.ok || !json.success) throw new Error(json.message || 'Verwijderen mislukt');
-      onToast('Claude-token verwijderd', 'success');
+      if (!res.ok || !json.success) throw new Error(json.message || t('common.actionFailed'));
+      onToast(t('org.credential.removed'), 'success');
       await loadCred();
     } catch (err) {
-      onToast(err instanceof Error ? err.message : 'Verwijderen mislukt', 'error');
+      onToast(err instanceof Error ? err.message : t('common.actionFailed'), 'error');
     } finally { setBusy(false); }
-  };
-
-  const call = async (url: string, init: RequestInit, okMessage: string | null) => {
-    setBusy(true);
-    try {
-      const res = await fetch(`${API_BASE}${url}`, { headers: { 'Content-Type': 'application/json' }, ...init });
-      const json = await res.json();
-      if (!res.ok || !json.success) throw new Error(json.message || 'Actie mislukt');
-      if (okMessage) onToast(okMessage, 'success');
-      await load({ silent: true });
-      return true;
-    } catch (err) {
-      onToast(err instanceof Error ? err.message : 'Actie mislukt', 'error');
-      return false;
-    } finally {
-      setBusy(false);
-    }
   };
 
   const addMember = async () => {
@@ -196,23 +191,22 @@ function OrgPanel({ org, currentUserId, onToast }: { org: MyOrg; currentUserId: 
         body: JSON.stringify({ email, role }),
       });
       const json = await res.json();
-      if (!res.ok || !json.success) throw new Error(json.message || 'Actie mislukt');
+      if (!res.ok || !json.success) throw new Error(json.message || t('common.actionFailed'));
+      const addr = email.trim();
       onToast(json.data?.invited
-        ? (json.data?.emailSent
-            ? `Uitnodiging gemaild naar ${email.trim()} — 14 dagen geldig`
-            : `${email.trim()} uitgenodigd (14 dagen geldig) — er is geen e-mail verstuurd, laat de persoon zelf inloggen`)
-        : `${email.trim()} toegevoegd aan ${org.name}`, 'success');
+        ? (json.data?.emailSent ? t('org.toast.invited', { email: addr }) : t('org.toast.invitedNoMail', { email: addr }))
+        : t('org.toast.added', { email: addr, org: org.name }), 'success');
       setEmail(''); setRole('lid');
       await load({ silent: true });
     } catch (err) {
-      onToast(err instanceof Error ? err.message : 'Actie mislukt', 'error');
+      onToast(err instanceof Error ? err.message : t('common.actionFailed'), 'error');
     } finally {
       setBusy(false);
     }
   };
 
   const revokeInvite = (i: InviteRow) =>
-    call(`/api/orgs/${org.id}/invites/${i.id}`, { method: 'DELETE' }, `Uitnodiging voor ${i.email} ingetrokken`);
+    call(`/api/orgs/${org.id}/invites/${i.id}`, { method: 'DELETE' }, t('org.toast.inviteRevoked', { email: i.email }));
 
   const loadAudit = async () => {
     setShowAudit((v) => !v);
@@ -232,16 +226,16 @@ function OrgPanel({ org, currentUserId, onToast }: { org: MyOrg; currentUserId: 
   const remove = (m: OrgMemberRow) => {
     const self = m.userId === currentUserId;
     if (!window.confirm(self
-      ? `Jezelf uit ${org.name} verwijderen? Je verliest de toegang tot de projecten van deze organisatie.`
-      : `${m.name || m.email} uit ${org.name} verwijderen?`)) return;
-    return call(`/api/orgs/${org.id}/members/${m.userId}`, { method: 'DELETE' }, `${m.email} uit ${org.name} gehaald`);
+      ? t('org.confirm.removeSelf', { org: org.name })
+      : t('org.confirm.removeMember', { name: m.name || m.email, org: org.name }))) return;
+    return call(`/api/orgs/${org.id}/members/${m.userId}`, { method: 'DELETE' }, t('org.toast.removed', { email: m.email, org: org.name }));
   };
 
-  /** Mag de ingelogde gebruiker deze rij aanpassen? Spiegelt canActorSetRole. */
+  /** May the signed-in user change this row? Mirrors canActorSetRole. */
   const rowLocked = (m: OrgMemberRow) => {
     if (!canManage) return true;
-    if (!isOwner && m.role === 'eigenaar') return true; // beheerder raakt geen eigenaar aan
-    if (m.role === 'eigenaar' && ownerCount <= 1) return true; // laatste eigenaar
+    if (!isOwner && m.role === 'eigenaar') return true; // an admin never touches an owner
+    if (m.role === 'eigenaar' && ownerCount <= 1) return true; // last owner
     return false;
   };
 
@@ -254,18 +248,18 @@ function OrgPanel({ org, currentUserId, onToast }: { org: MyOrg; currentUserId: 
         <div className="flex-1 min-w-0">
           <p className="text-sm font-medium text-gray-900 dark:text-gray-50 truncate">{org.name}</p>
           <p className="text-xs text-gray-500 dark:text-gray-400">
-            {org.memberCount} {org.memberCount === 1 ? 'lid' : 'leden'} · {org.projectCount} {org.projectCount === 1 ? 'project' : 'projecten'}
+            {count(org.memberCount, 'members')} · {count(org.projectCount, 'projects')}
             {org.domain ? ` · ${org.domain}` : ''}
           </p>
         </div>
         <span className="text-[11px] font-medium text-gray-600 dark:text-gray-300 bg-gray-200 dark:bg-white/8 px-2 py-0.5 rounded-full">
-          jij: {ROLE_LABEL[org.role]}
+          {t('org.yourRole', { role: roleLabel(org.role) })}
         </span>
       </div>
 
       <div className="p-4 space-y-3">
         {loading ? (
-          <p className="text-sm text-gray-500 dark:text-gray-400">Leden laden…</p>
+          <p className="text-sm text-gray-500 dark:text-gray-400">{t('org.loadingMembers')}</p>
         ) : (
           <ul className="space-y-2">
             {members.map((m) => {
@@ -283,39 +277,38 @@ function OrgPanel({ org, currentUserId, onToast }: { org: MyOrg; currentUserId: 
                   <div className="flex-1 min-w-0">
                     <p className="text-sm text-gray-800 dark:text-gray-100 truncate">
                       {m.name || m.email}
-                      {m.userId === currentUserId && <span className="ml-2 text-[11px] text-gray-500 dark:text-gray-400">(jij)</span>}
-                      {!m.isActive && <span className="ml-2 text-[11px] font-medium text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded-sm">gedeactiveerd</span>}
+                      {m.userId === currentUserId && <span className="ml-2 text-[11px] text-gray-500 dark:text-gray-400">{t('common.you')}</span>}
+                      {!m.isActive && <span className="ml-2 text-[11px] font-medium text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded-sm">{t('common.deactivated')}</span>}
                     </p>
                     {m.name && <p className="text-[11px] text-gray-500 dark:text-gray-400 truncate">{m.email}</p>}
                   </div>
                   {canManage ? (
                     <>
                       <select value={m.role} disabled={busy || locked}
-                        title={locked ? (m.role === 'eigenaar' && ownerCount <= 1 ? 'Laatste eigenaar — wijs eerst een andere eigenaar aan' : 'Alleen een eigenaar kan eigenaren wijzigen') : undefined}
+                        title={locked ? (m.role === 'eigenaar' && ownerCount <= 1 ? t('org.lastOwnerHint') : t('org.onlyOwnerChangesOwners')) : undefined}
                         onChange={(e) => changeRole(m, e.target.value)} className={pillSelectCls}>
-                        {isOwner && <option value="eigenaar">Eigenaar</option>}
-                        {!isOwner && m.role === 'eigenaar' && <option value="eigenaar">Eigenaar</option>}
-                        <option value="beheerder">Beheerder</option>
-                        <option value="lid">Lid</option>
+                        {(isOwner || m.role === 'eigenaar') && <option value="eigenaar">{t('role.eigenaar')}</option>}
+                        <option value="beheerder">{t('role.beheerder')}</option>
+                        <option value="lid">{t('role.lid')}</option>
                       </select>
                       <button onClick={() => remove(m)} disabled={busy || locked}
                         className="px-2.5 py-1.5 text-xs font-medium border border-red-200 rounded-full bg-white dark:bg-white/3 text-red-600 hover:bg-red-50 transition-colors disabled:opacity-40">
-                        Verwijderen
+                        {t('common.remove')}
                       </button>
                     </>
                   ) : (
-                    <span className="text-xs text-gray-500 dark:text-gray-400">{ROLE_LABEL[m.role]}</span>
+                    <span className="text-xs text-gray-500 dark:text-gray-400">{roleLabel(m.role)}</span>
                   )}
                 </li>
               );
             })}
-            {members.length === 0 && <li className="text-sm text-gray-500 dark:text-gray-400">Nog geen leden.</li>}
+            {members.length === 0 && <li className="text-sm text-gray-500 dark:text-gray-400">{t('org.noMembers')}</li>}
           </ul>
         )}
 
         {invites.filter((i) => i.status === 'open').length > 0 && (
           <div className="pt-2">
-            <p className="text-xs font-medium text-gray-600 dark:text-gray-300 mb-2">Openstaande uitnodigingen</p>
+            <p className="text-xs font-medium text-gray-600 dark:text-gray-300 mb-2">{t('org.pendingInvites')}</p>
             <ul className="space-y-2">
               {invites.filter((i) => i.status === 'open').map((i) => (
                 <li key={i.id} className="flex items-center gap-3">
@@ -323,13 +316,14 @@ function OrgPanel({ org, currentUserId, onToast }: { org: MyOrg; currentUserId: 
                   <div className="flex-1 min-w-0">
                     <p className="text-sm text-gray-800 dark:text-gray-100 truncate">{i.email}</p>
                     <p className="text-[11px] text-gray-500 dark:text-gray-400">
-                      {ROLE_LABEL[i.role]} · verloopt {new Date(i.expiresAt).toLocaleDateString('nl-NL')}{i.invitedBy ? ` · door ${i.invitedBy}` : ''}
+                      {t('org.inviteExpires', { role: roleLabel(i.role), date: new Date(i.expiresAt).toLocaleDateString(dateLocale) })}
+                      {i.invitedBy ? ` · ${t('common.by', { name: i.invitedBy })}` : ''}
                     </p>
                   </div>
                   {canManage && (
                     <button onClick={() => revokeInvite(i)} disabled={busy || (!isOwner && i.role === 'eigenaar')}
                       className="px-2.5 py-1.5 text-xs font-medium border border-gray-200 dark:border-white/8 rounded-full bg-white dark:bg-white/3 text-gray-600 dark:text-gray-300 hover:bg-gray-50 transition-colors disabled:opacity-40">
-                      Intrekken
+                      {t('common.revoke')}
                     </button>
                   )}
                 </li>
@@ -343,41 +337,39 @@ function OrgPanel({ org, currentUserId, onToast }: { org: MyOrg; currentUserId: 
             {org.canCreateProjects !== false && (
               <div className="flex items-center justify-between gap-4 px-4 py-3">
                 <div className="min-w-0">
-                  <p className="text-sm font-medium text-gray-900 dark:text-gray-50">Nieuwe projecten aanmaken</p>
-                  <p className="text-xs text-gray-500 dark:text-gray-400">Deze instelling beheert New Story per organisatie.</p>
+                  <p className="text-sm font-medium text-gray-900 dark:text-gray-50">{t('org.createProjects')}</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">{t('org.createProjects.managedBy')}</p>
                 </div>
-                <span className="shrink-0 text-[11px] font-medium px-2 py-0.5 rounded-full text-green-700 bg-green-100 dark:text-green-300 dark:bg-green-500/20">Toegestaan</span>
+                <span className="shrink-0 text-[11px] font-medium px-2 py-0.5 rounded-full text-green-700 bg-green-100 dark:text-green-300 dark:bg-green-500/20">{t('org.createProjects.allowed')}</span>
               </div>
             )}
             {isOwner && (
               <div className="px-4 py-3 space-y-2">
                 <div className="flex items-center justify-between gap-4">
                   <div className="min-w-0">
-                    <p className="text-sm font-medium text-gray-900 dark:text-gray-50">Claude-token van de organisatie</p>
-                    <p className="text-xs text-gray-500 dark:text-gray-400">
-                      Hierop draait de AI-assistent voor de projecten van {org.name}. Plak een OAuth-token uit <code>claude setup-token</code> of een API-sleutel (sk-ant-api…).
-                    </p>
+                    <p className="text-sm font-medium text-gray-900 dark:text-gray-50">{t('org.credential.title')}</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">{t('org.credential.desc', { org: org.name })}</p>
                   </div>
                   {cred === undefined ? null : cred ? (
                     <div className="flex items-center gap-2 shrink-0">
                       <span className="text-[11px] font-medium text-green-700 dark:text-green-300 bg-green-100 dark:bg-green-500/20 px-2 py-0.5 rounded-full">
-                        {cred.label} · {cred.kind === 'api-key' ? 'API-sleutel' : 'OAuth-token'}
+                        {cred.label} · {cred.kind === 'api-key' ? t('org.credential.apiKey') : t('org.credential.oauth')}
                       </span>
                       <button onClick={removeCred} disabled={busy}
                         className="px-2.5 py-1.5 text-xs font-medium border border-red-200 rounded-full bg-white dark:bg-white/3 text-red-600 hover:bg-red-50 transition-colors disabled:opacity-40">
-                        Verwijderen
+                        {t('common.remove')}
                       </button>
                     </div>
                   ) : (
-                    <span className="shrink-0 text-[11px] font-medium text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-white/8 px-2 py-0.5 rounded-full">nog niet ingesteld</span>
+                    <span className="shrink-0 text-[11px] font-medium text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-white/8 px-2 py-0.5 rounded-full">{t('org.credential.notSet')}</span>
                   )}
                 </div>
                 <div className="flex gap-2">
-                  <input type="text" value={credLabel} onChange={(e) => setCredLabel(e.target.value)} placeholder="Label" className={`${inputCls} w-40! shrink-0`} />
-                  <input type="password" value={credToken} onChange={(e) => setCredToken(e.target.value)} placeholder="sk-ant-oat… of sk-ant-api…" className={`${inputCls} flex-1 min-w-0 font-mono`} autoComplete="off" />
+                  <input type="text" value={credLabel} onChange={(e) => setCredLabel(e.target.value)} placeholder={t('common.label')} className={`${inputCls} w-40! shrink-0`} />
+                  <input type="password" value={credToken} onChange={(e) => setCredToken(e.target.value)} placeholder={t('org.credential.tokenPlaceholder')} className={`${inputCls} flex-1 min-w-0 font-mono`} autoComplete="off" />
                   <button onClick={saveCred} disabled={busy || !credToken.trim()}
                     className="px-4 py-2 text-sm font-medium bg-brand-500 hover:bg-brand-600 text-white rounded-lg transition-colors disabled:opacity-50">
-                    {cred ? 'Vervangen' : 'Instellen'}
+                    {cred ? t('common.replace') : t('common.set')}
                   </button>
                 </div>
               </div>
@@ -387,24 +379,22 @@ function OrgPanel({ org, currentUserId, onToast }: { org: MyOrg; currentUserId: 
 
         {canManage && (
           <div className="pt-2">
-            <p className="text-xs font-medium text-gray-600 dark:text-gray-300 mb-2">Lid toevoegen</p>
+            <p className="text-xs font-medium text-gray-600 dark:text-gray-300 mb-2">{t('org.addMember')}</p>
             <div className="flex gap-2">
               <input type="email" value={email} onChange={(e) => setEmail(e.target.value)}
                 onKeyDown={(e) => { if (e.key === 'Enter') addMember(); }}
-                placeholder="persoon@bedrijf.nl" className={`${inputCls} flex-1 min-w-0`} />
-              <select value={role} onChange={(e) => setRole(e.target.value as 'beheerder' | 'lid')} className={`${inputCls} w-36! shrink-0`}>
-                <option value="lid">Lid</option>
-                <option value="beheerder">Beheerder</option>
+                placeholder={t('org.emailPlaceholder')} className={`${inputCls} flex-1 min-w-0`} />
+              <select value={role} onChange={(e) => setRole(e.target.value as 'beheerder' | 'lid')} className={`${inputCls} w-40! shrink-0`}>
+                <option value="lid">{t('role.lid')}</option>
+                <option value="beheerder">{t('role.beheerder')}</option>
               </select>
               <button onClick={addMember} disabled={busy || !email.trim()}
                 className="px-4 py-2 text-sm font-medium bg-brand-500 hover:bg-brand-600 text-white rounded-lg transition-colors disabled:opacity-50">
-                Toevoegen
+                {t('common.add')}
               </button>
             </div>
             <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-2">
-              Een bestaande gebruiker wordt direct lid; een nieuw adres krijgt een uitnodiging (14 dagen geldig) en
-              kan dan via Google inloggen. Nieuwe leden zien alleen de projecten van {org.name}.
-              {isOwner ? ' Een extra eigenaar wijs je aan via het rol-menu bij een bestaand lid.' : ''}
+              {t('org.addMemberHint', { org: org.name })}{isOwner ? ` ${t('org.addOwnerHint')}` : ''}
             </p>
           </div>
         )}
@@ -412,21 +402,21 @@ function OrgPanel({ org, currentUserId, onToast }: { org: MyOrg; currentUserId: 
         {canManage && (
           <div className="pt-2">
             <button onClick={loadAudit} className="text-xs font-medium text-gray-600 dark:text-gray-300 hover:underline">
-              {showAudit ? 'Logboek verbergen' : 'Logboek tonen'}
+              {showAudit ? t('org.audit.hide') : t('org.audit.show')}
             </button>
             {showAudit && (
               <ul className="mt-2 space-y-1 max-h-64 overflow-y-auto pr-1">
                 {audit === null ? (
-                  <li className="text-xs text-gray-500">Laden…</li>
+                  <li className="text-xs text-gray-500">{t('common.loading')}</li>
                 ) : audit.length === 0 ? (
-                  <li className="text-xs text-gray-500">Nog geen gebeurtenissen.</li>
+                  <li className="text-xs text-gray-500">{t('org.audit.empty')}</li>
                 ) : audit.map((e) => (
                   <li key={e.id} className="text-[11px] text-gray-600 dark:text-gray-300 flex gap-2">
-                    <span className="text-gray-400 shrink-0 tabular-nums">{new Date(e.at).toLocaleString('nl-NL', { dateStyle: 'short', timeStyle: 'short' })}</span>
+                    <span className="text-gray-400 shrink-0 tabular-nums">{new Date(e.at).toLocaleString(dateLocale, { dateStyle: 'short', timeStyle: 'short' })}</span>
                     <span className="truncate">
-                      <span className="font-medium">{ACTION_LABEL[e.action] ?? e.action}</span>
+                      <span className="font-medium">{auditLabel(e.action)}</span>
                       {describeMeta(e.meta) ? ` · ${describeMeta(e.meta)}` : ''}
-                      {e.actorEmail ? ` · door ${e.actorEmail}` : ''}
+                      {e.actorEmail ? ` · ${t('common.by', { name: e.actorEmail })}` : ''}
                     </span>
                   </li>
                 ))}
@@ -440,17 +430,15 @@ function OrgPanel({ org, currentUserId, onToast }: { org: MyOrg; currentUserId: 
 }
 
 export default function MyOrgSettings({ orgs, currentUserId, onToast }: Props) {
+  const { t } = useI18n();
   return (
     <div className="space-y-6">
       <div>
-        <h3 className="text-lg font-medium text-gray-900 dark:text-gray-50">Organisatie</h3>
-        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-          De leden van je organisatie. Eigenaren en beheerders kunnen leden toevoegen, van rol
-          veranderen en verwijderen; leden zien alleen wie er meedoet.
-        </p>
+        <h3 className="text-lg font-medium text-gray-900 dark:text-gray-50">{t('org.title')}</h3>
+        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{t('org.intro')}</p>
       </div>
       {orgs.length === 0 ? (
-        <p className="text-sm text-gray-500 dark:text-gray-400">Je bent nog geen lid van een organisatie.</p>
+        <p className="text-sm text-gray-500 dark:text-gray-400">{t('org.noneYet')}</p>
       ) : (
         orgs.map((org) => <OrgPanel key={org.id} org={org} currentUserId={currentUserId} onToast={onToast} />)
       )}

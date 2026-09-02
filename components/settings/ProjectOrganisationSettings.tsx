@@ -5,12 +5,14 @@
  * else (the API refuses non-superadmins anyway).
  */
 import { useCallback, useEffect, useState } from 'react';
+import { useI18n } from '@/contexts/I18nContext';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? '';
 
 interface OrgOption { id: string; name: string; type: 'intern' | 'klant' | string }
 
 export default function ProjectOrganisationSettings({ projectId }: { projectId: string }) {
+  const { t } = useI18n();
   const [orgId, setOrgId] = useState<string | null>(null);
   const [options, setOptions] = useState<OrgOption[] | null>(null); // null = not superadmin / not loaded
   const [busy, setBusy] = useState(false);
@@ -31,27 +33,28 @@ export default function ProjectOrganisationSettings({ projectId }: { projectId: 
   const move = async (next: string) => {
     if (!next || next === orgId) return;
     const target = options.find((o) => o.id === next);
-    if (!window.confirm(`Project verplaatsen naar ${target?.name ?? next}? Alleen leden van die organisatie zien het daarna nog; toewijzingen van anderen vervallen.`)) return;
+    const name = target?.name ?? next;
+    if (!window.confirm(t('projectOrg.confirmMove', { name }))) return;
     setBusy(true); setMsg(null);
     try {
       const res = await fetch(`${API_BASE}/api/projects/${projectId}/organization`, {
         method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ orgId: next }),
       });
       const json = await res.json();
-      if (!res.ok || !json.success) throw new Error(json.message || 'Verplaatsen mislukt');
+      if (!res.ok || !json.success) throw new Error(json.message || t('projectOrg.moveFailed'));
       setOrgId(next);
-      setMsg({ text: `Verplaatst naar ${target?.name ?? next}`, kind: 'ok' });
+      setMsg({ text: t('projectOrg.moved', { name }), kind: 'ok' });
     } catch (e) {
-      setMsg({ text: e instanceof Error ? e.message : 'Verplaatsen mislukt', kind: 'err' });
+      setMsg({ text: e instanceof Error ? e.message : t('projectOrg.moveFailed'), kind: 'err' });
     } finally { setBusy(false); }
   };
 
   return (
     <div className="rounded-xl border border-gray-200 dark:border-white/8 p-4 flex items-center justify-between gap-4">
       <div className="min-w-0">
-        <p className="font-medium text-gray-900 dark:text-gray-50">Organisatie</p>
+        <p className="font-medium text-gray-900 dark:text-gray-50">{t('projectOrg.title')}</p>
         <p className="text-xs text-gray-500 dark:text-gray-400">
-          Het project hoort bij precies één organisatie; alleen haar leden (en superadmins) zien het.
+          {t('projectOrg.desc')}
           {msg && <span className={`ml-2 ${msg.kind === 'ok' ? 'text-green-700 dark:text-green-300' : 'text-red-600'}`}>{msg.text}</span>}
         </p>
       </div>
@@ -61,9 +64,9 @@ export default function ProjectOrganisationSettings({ projectId }: { projectId: 
         onChange={(e) => move(e.target.value)}
         className="shrink-0 pl-3 pr-8 py-2 text-sm border border-gray-200 dark:border-white/8 rounded-lg bg-white dark:bg-white/6 text-gray-700 dark:text-gray-200 focus:outline-hidden focus:ring-0 disabled:opacity-50 cursor-pointer"
       >
-        {orgId === null && <option value="">— geen organisatie —</option>}
+        {orgId === null && <option value="">{t('projectOrg.none')}</option>}
         {options.map((o) => (
-          <option key={o.id} value={o.id}>{o.name}{o.type === 'klant' ? ' (klant)' : ''}</option>
+          <option key={o.id} value={o.id}>{o.name}{o.type === 'klant' ? ` (${t('orgType.klant.short')})` : ''}</option>
         ))}
       </select>
     </div>
