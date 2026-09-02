@@ -338,17 +338,17 @@ function OrgPanel({ org, currentUserId, onToast }: { org: MyOrg; currentUserId: 
           </div>
         )}
 
-        {canManage && (
+        {canManage && (org.canCreateProjects !== false || isOwner) && (
           <div className="rounded-xl border border-gray-200 dark:border-white/8 divide-y divide-gray-200 dark:divide-white/8">
-            <div className="flex items-center justify-between gap-4 px-4 py-3">
-              <div className="min-w-0">
-                <p className="text-sm font-medium text-gray-900 dark:text-gray-50">Nieuwe projecten aanmaken</p>
-                <p className="text-xs text-gray-500 dark:text-gray-400">Deze instelling beheert New Story per organisatie.</p>
+            {org.canCreateProjects !== false && (
+              <div className="flex items-center justify-between gap-4 px-4 py-3">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-gray-900 dark:text-gray-50">Nieuwe projecten aanmaken</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">Deze instelling beheert New Story per organisatie.</p>
+                </div>
+                <span className="shrink-0 text-[11px] font-medium px-2 py-0.5 rounded-full text-green-700 bg-green-100 dark:text-green-300 dark:bg-green-500/20">Toegestaan</span>
               </div>
-              <span className={`shrink-0 text-[11px] font-medium px-2 py-0.5 rounded-full ${org.canCreateProjects === false ? 'text-amber-800 bg-amber-100 dark:text-amber-200 dark:bg-amber-500/20' : 'text-green-700 bg-green-100 dark:text-green-300 dark:bg-green-500/20'}`}>
-                {org.canCreateProjects === false ? 'Niet toegestaan' : 'Toegestaan'}
-              </span>
-            </div>
+            )}
             {isOwner && (
               <div className="px-4 py-3 space-y-2">
                 <div className="flex items-center justify-between gap-4">
