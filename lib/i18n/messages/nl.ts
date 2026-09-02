@@ -53,6 +53,7 @@ export const nl: Record<keyof typeof en, string> = {
   'settings.tab.account': 'Account',
   'settings.tab.users': 'Gebruikers',
   'settings.tab.orgs': 'Organisaties',
+  'settings.tab.myOrg': 'Organisatie',
   'settings.tab.sharedMcp': 'Gedeelde MCP',
   'settings.tab.plugins': 'Plug-ins',
   'settings.tab.system': 'Systeem',

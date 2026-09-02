@@ -18,7 +18,7 @@ import { useT } from '@/contexts/I18nContext';
 import { uploadFileChunked } from '@/lib/client/upload';
 import { getDefaultModelForCli, getModelDisplayName } from '@/lib/constants/cliModels';
 import Image from 'next/image';
-import { Image as ImageIcon, Palette, Layers, Server, Database, Sparkles, Search } from 'lucide-react';
+import { Image as ImageIcon, Palette, Layers, Server, Database, Sparkles, Search, Building2 } from 'lucide-react';
 import BrandWordmark from '@/components/ui/BrandWordmark';
 import type { Project as ProjectSummary } from '@/types/project';
 import { fetchCliStatusSnapshot, createCliStatusFallback } from '@/hooks/useCLI';
@@ -115,6 +115,26 @@ export default function HomePage() {
   const [selectedImageGen, setSelectedImageGen] = useState<string>(''); // '' = none, 'grok'
   const [showBackendMenu, setShowBackendMenu] = useState(false);
   const [showDatabaseMenu, setShowDatabaseMenu] = useState(false);
+  // Organisations the signed-in user belongs to; the picker only shows for
+  // multi-org users (e.g. staff creating a site for a customer org).
+  const [myOrgs, setMyOrgs] = useState<{ id: string; name: string; type: string }[]>([]);
+  const [selectedOrgId, setSelectedOrgId] = useState<string>('');
+  const [showOrgMenu, setShowOrgMenu] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const r = await fetch(`${API_BASE}/api/orgs/mine`);
+        const j = r.ok ? await r.json() : null;
+        if (cancelled || !j?.success) return;
+        const orgs = (j.data?.orgs ?? []) as { id: string; name: string; type: string }[];
+        setMyOrgs(orgs);
+        const home = j.data?.homeOrgId as string | undefined;
+        setSelectedOrgId(orgs.some(o => o.id === home) ? (home as string) : (orgs[0]?.id ?? ''));
+      } catch { /* auth off or signed out: no picker */ }
+    })();
+    return () => { cancelled = true; };
+  }, []);
   const [showStackMenu, setShowStackMenu] = useState(false);
   const [showImageGenMenu, setShowImageGenMenu] = useState(false);
   const [showPluginMenu, setShowPluginMenu] = useState(false);
@@ -582,6 +602,7 @@ export default function HomePage() {
           backendId: selectedBackend || undefined,
           databaseId: selectedDatabase || undefined,
           imageProvider: selectedImageGen || undefined,
+          orgId: myOrgs.length > 1 && selectedOrgId ? selectedOrgId : undefined,
         })
       });
       
@@ -1332,6 +1353,39 @@ export default function HomePage() {
                     </>
                   )}
                 </div>
+                {/* Organisation picker — only for users who belong to more than one org */}
+                {myOrgs.length > 1 && (
+                  <div className="relative">
+                    <button
+                      type="button"
+                      onClick={() => setShowOrgMenu(v => !v)}
+                      title="Organisatie"
+                      className="justify-center whitespace-nowrap text-sm font-medium transition-colors duration-100 ease-in-out border border-gray-200 dark:border-white/9 bg-transparent shadow-xs hover:bg-gray-50 dark:hover:bg-white/5 hover:border-gray-300 dark:hover:border-white/18 px-3 py-2 flex h-8 items-center gap-1.5 rounded-full text-gray-700 dark:text-gray-200 hover:text-gray-900 dark:hover:text-gray-100"
+                    >
+                      <Building2 aria-hidden className="h-3.5 w-3.5 text-brand-500/80" />
+                      <span className="hidden md:flex text-sm font-medium">
+                        {myOrgs.find(o => o.id === selectedOrgId)?.name ?? 'Organisatie'}
+                      </span>
+                    </button>
+                    {showOrgMenu && (
+                      <>
+                        <div className="fixed inset-0 z-290" onClick={() => setShowOrgMenu(false)} />
+                        <div className="absolute bottom-full mb-2 left-0 z-300 w-72 rounded-xl border border-gray-200 dark:border-white/10 bg-white dark:bg-[#181310] shadow-xl p-1">
+                          {myOrgs.map(o => (
+                            <button key={o.id} type="button" onClick={() => { setSelectedOrgId(o.id); setShowOrgMenu(false); }}
+                              className={`w-full text-left px-3 py-2 rounded-lg transition-colors ${selectedOrgId === o.id ? 'bg-gray-100 dark:bg-white/[0.07]' : 'hover:bg-gray-50 dark:hover:bg-white/5'}`}>
+                              <div className="flex items-center justify-between">
+                                <span className="text-sm font-medium text-gray-900 dark:text-gray-50">{o.name}</span>
+                                {selectedOrgId === o.id && <span className="text-xs text-brand-500">✓</span>}
+                              </div>
+                              <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{o.type === 'klant' ? 'Klantorganisatie' : 'Interne organisatie'}</p>
+                            </button>
+                          ))}
+                        </div>
+                      </>
+                    )}
+                  </div>
+                )}
                 {/* Image-generation Selector (optional) */}
                 <div className="relative">
                   <button

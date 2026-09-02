@@ -61,6 +61,7 @@ export const en = {
   'settings.tab.account': 'Account',
   'settings.tab.users': 'Users',
   'settings.tab.orgs': 'Organizations',
+  'settings.tab.myOrg': 'Organisation',
   'settings.tab.sharedMcp': 'Shared MCP',
   'settings.tab.plugins': 'Plugins',
   'settings.tab.system': 'System',
