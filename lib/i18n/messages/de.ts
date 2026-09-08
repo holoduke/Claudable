@@ -327,4 +327,13 @@ export const de: Record<keyof typeof en, string> = {
   'claudeHelp.trouble.notFound': '„command not found: claude“: Die Installation wurde nicht abgeschlossen oder das Terminal nicht neu gestartet. Öffne ein neues Terminal und versuche es erneut.',
   'claudeHelp.trouble.invalid': 'Connect schlägt fehl: Stelle sicher, dass du das vollständige Token ohne Leerzeichen oder Zeilenumbrüche kopiert hast und dass dein Claude-Konto ein aktives Pro- oder Max-Abonnement hat.',
   'claudeHelp.docs': 'Claude-Code-Dokumentation',
+
+  // Rückstands-Banner im Chat-Bildschirm
+  'gitSync.behind': 'Das Git-Repository hat neue Änderungen',
+  'gitSync.behindCount': 'Das Git-Repository ist diesem Projekt {count} Commits voraus',
+  'gitSync.update': 'Aktualisieren',
+  'gitSync.updating': 'Aktualisieren…',
+  'gitSync.updated': 'Projekt aus dem Repository aktualisiert',
+  'gitSync.failed': 'Aktualisierung fehlgeschlagen',
+  'gitSync.dismiss': 'Ausblenden',
 };

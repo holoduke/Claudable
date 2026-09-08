@@ -327,4 +327,13 @@ export const nl: Record<keyof typeof en, string> = {
   'claudeHelp.trouble.notFound': '“command not found: claude”: de installatie is niet afgerond of de terminal is niet opnieuw gestart. Open een nieuwe terminal en probeer het opnieuw.',
   'claudeHelp.trouble.invalid': 'Connect mislukt: controleer of je het hele token zonder spaties of regeleinden hebt gekopieerd en of je Claude-account een actief Pro- of Max-abonnement heeft.',
   'claudeHelp.docs': 'Documentatie van Claude Code',
+
+  // Achterloop-banner in het chatscherm
+  'gitSync.behind': 'De Git-repository heeft nieuwe wijzigingen',
+  'gitSync.behindCount': 'De Git-repository loopt {count} commits voor op dit project',
+  'gitSync.update': 'Bijwerken',
+  'gitSync.updating': 'Bijwerken…',
+  'gitSync.updated': 'Project bijgewerkt vanuit de repository',
+  'gitSync.failed': 'Bijwerken mislukt',
+  'gitSync.dismiss': 'Negeren',
 };

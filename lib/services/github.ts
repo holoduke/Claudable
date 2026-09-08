@@ -43,7 +43,7 @@ async function withGitLock<T>(projectId: string, fn: () => Promise<T>): Promise<
 
 /** Resolve the API token: env (server automation) first, then DB-stored token.
     With a per-project provider override, only that provider's env token fits. */
-async function resolveGitToken(cfg?: GitProviderConfig): Promise<string> {
+export async function resolveGitToken(cfg?: GitProviderConfig): Promise<string> {
   if (cfg && cfg.provider !== getGitProviderConfig().provider) {
     const overrideToken = getEnvGitTokenFor(cfg);
     if (!overrideToken) {
@@ -75,7 +75,7 @@ async function resolveOwner(): Promise<string> {
   return user.login;
 }
 
-async function githubFetch(token: string, endpoint: string, init?: RequestInit, cfg?: GitProviderConfig) {
+export async function githubFetch(token: string, endpoint: string, init?: RequestInit, cfg?: GitProviderConfig) {
   const { apiBaseUrl, authScheme } = cfg ?? getGitProviderConfig();
   const response = await fetch(`${apiBaseUrl}${endpoint}`, {
     ...init,
@@ -189,7 +189,7 @@ export async function createRepository(options: CreateRepoOptions) {
   }
 }
 
-function resolveProjectRepoPath(projectId: string, repoPath?: string | null) {
+export function resolveProjectRepoPath(projectId: string, repoPath?: string | null) {
   if (repoPath) {
     return path.isAbsolute(repoPath) ? repoPath : path.resolve(process.cwd(), repoPath);
   }

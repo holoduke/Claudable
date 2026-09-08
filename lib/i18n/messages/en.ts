@@ -342,6 +342,15 @@ export const en = {
   'claudeHelp.trouble.notFound': '“command not found: claude”: the installation did not finish or the terminal was not restarted. Open a new terminal and try again.',
   'claudeHelp.trouble.invalid': 'Connect fails: make sure you copied the whole token without spaces or line breaks, and that your Claude account has an active Pro or Max subscription.',
   'claudeHelp.docs': 'Claude Code documentation',
+
+  // Behind-the-repo banner in the chat screen
+  'gitSync.behind': 'The Git repository has new changes',
+  'gitSync.behindCount': 'The Git repository is {count} commits ahead of this project',
+  'gitSync.update': 'Update',
+  'gitSync.updating': 'Updating…',
+  'gitSync.updated': 'Project updated from the repository',
+  'gitSync.failed': 'Update failed',
+  'gitSync.dismiss': 'Dismiss',
 };
 
 export type MessageKey = keyof typeof en;

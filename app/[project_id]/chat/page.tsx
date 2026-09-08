@@ -33,6 +33,7 @@ const DesignImportModal = dynamic(() => import('@/components/chat/DesignImportMo
 const SkillsModal = dynamic(() => import('@/components/chat/SkillsModal'), { ssr: false });
 const PublishPanel = dynamic(() => import('@/components/chat/PublishPanel'), { ssr: false });
 const DesignExplorerBoard = dynamic(() => import('@/components/chat/DesignExplorerBoard'), { ssr: false });
+const GitSyncBanner = dynamic(() => import('@/components/chat/GitSyncBanner'), { ssr: false });
 import { getFileLanguage, escapeHtml } from '@/lib/utils/format';
 import { ChatErrorBoundary } from '@/components/ErrorBoundary';
 import { useUserRequests } from '@/hooks/useUserRequests';
@@ -4070,7 +4071,13 @@ const persistProjectPreferences = useCallback(
           </div>
         </div>
       </div>
-      
+
+      {/* "Repo has new commits" banner + one-click update */}
+      <GitSyncBanner
+        projectId={projectId}
+        busy={isRunning || hasActiveRequests}
+        onSynced={() => setTimeout(() => refreshPreview(), 400)}
+      />
 
       {/* Publish Modal */}
       {showDesignImport && (

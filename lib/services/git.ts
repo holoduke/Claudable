@@ -189,6 +189,30 @@ function revParseHead(repoPath: string): string | null {
   }
 }
 
+/** Current HEAD commit sha, or null when the path is not a repo / has no commits. */
+export function getHeadCommit(repoPath: string): string | null {
+  return revParseHead(repoPath);
+}
+
+// The sha flows into git argv; only accept plain hex so it can never be an option.
+const COMMIT_SHA_RE = /^[0-9a-f]{7,64}$/iu;
+
+/**
+ * Whether `sha` is present locally AND reachable from HEAD. False means the
+ * commit is unknown here (never fetched) or on a diverged line — either way,
+ * the local checkout does not contain it.
+ */
+export function historyContains(repoPath: string, sha: string): boolean {
+  if (!COMMIT_SHA_RE.test(sha)) return false;
+  try {
+    runGit(['cat-file', '-e', `${sha}^{commit}`], repoPath);
+    runGit(['merge-base', '--is-ancestor', sha, 'HEAD'], repoPath);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export interface PullResult {
   /** Whether the pull changed the local tree (false = already up to date). */
   updated: boolean;

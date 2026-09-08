@@ -327,4 +327,13 @@ export const fr: Record<keyof typeof en, string> = {
   'claudeHelp.trouble.notFound': '« command not found: claude » : l’installation n’est pas terminée ou le terminal n’a pas été relancé. Ouvrez un nouveau terminal et réessayez.',
   'claudeHelp.trouble.invalid': 'Connect échoue : vérifiez que vous avez copié le jeton en entier, sans espaces ni sauts de ligne, et que votre compte Claude dispose d’un abonnement Pro ou Max actif.',
   'claudeHelp.docs': 'Documentation de Claude Code',
+
+  // Bannière de retard sur le dépôt dans l’écran de chat
+  'gitSync.behind': 'Le dépôt Git contient de nouvelles modifications',
+  'gitSync.behindCount': 'Le dépôt Git a {count} commits d’avance sur ce projet',
+  'gitSync.update': 'Mettre à jour',
+  'gitSync.updating': 'Mise à jour…',
+  'gitSync.updated': 'Projet mis à jour depuis le dépôt',
+  'gitSync.failed': 'Échec de la mise à jour',
+  'gitSync.dismiss': 'Ignorer',
 };
