@@ -233,6 +233,9 @@ export default function ChatPage() {
   // tools with a hint instead of leaving silently-dead buttons.
   const [bridgeAbsent, setBridgeAbsent] = useState(false);
   const bridgeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // When the iframe last fired onLoad — the auto-retry loop skips its reload
+  // while a fresh load's bridge-absence probe is still pending.
+  const lastIframeLoadRef = useRef(0);
   // Comments overview list (left pane): ALL comments across every route.
   const [showCommentsList, setShowCommentsList] = useState(false);
   const [allComments, setAllComments] = useState<(CommentPin & { route: string })[]>([]);
@@ -1662,7 +1665,14 @@ const persistProjectPreferences = useCallback(
   // can settle (bridgeAbsent → previewLoaded) before the next reload.
   useEffect(() => {
     if (!previewUrl || !showPreview || previewLoaded) return;
-    const t = setInterval(() => { refreshPreviewRef.current?.(); }, 6000);
+    const t = setInterval(() => {
+      // A document loaded recently: give the 5s bridge-absence probe room to
+      // latch previewLoaded before reloading again. Without this, a slow-ish
+      // load (>1s) resets the probe every cycle and the "Building your app"
+      // overlay never clears even though the app is rendering (livelock).
+      if (Date.now() - lastIframeLoadRef.current < 7000) return;
+      refreshPreviewRef.current?.();
+    }, 6000);
     return () => clearInterval(t);
   }, [previewUrl, showPreview, previewLoaded]);
 
@@ -3681,6 +3691,7 @@ const persistProjectPreferences = useCallback(
                           // Hide error overlay when loaded successfully
                           const overlay = document.getElementById('iframe-error-overlay');
                           if (overlay) overlay.style.display = 'none';
+                          lastIframeLoadRef.current = Date.now();
                           // Bridge-absence probe: if no plugin report lands within
                           // a grace window, this stack has no review bridge (non-Nuxt).
                           if (bridgeTimerRef.current) clearTimeout(bridgeTimerRef.current);
