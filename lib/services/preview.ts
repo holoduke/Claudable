@@ -173,7 +173,14 @@ class PreviewManager {
     };
   }
 
-  public async installDependencies(projectId: string): Promise<{ logs: string[] }> {
+  /** `force` runs the install even when node_modules already exists — needed
+   *  after a git sync that changed a dependency manifest: the stale
+   *  node_modules would otherwise skip the install and the dev server crashes
+   *  on the missing new package. */
+  public async installDependencies(
+    projectId: string,
+    opts?: { force?: boolean },
+  ): Promise<{ logs: string[] }> {
     const project = await getProjectById(projectId);
     if (!project) {
       throw new Error('Project not found');
@@ -224,7 +231,7 @@ class PreviewManager {
       const installPromise = (async () => {
         try {
           const hasNodeModules = await directoryExists(path.join(projectPath, 'node_modules'));
-          if (!hasNodeModules) {
+          if (!hasNodeModules || opts?.force) {
             await runInstallWithPreferredManager(
               projectPath,
               { ...process.env },
@@ -248,7 +255,7 @@ class PreviewManager {
       await runInstall();
     }
 
-    if (hadNodeModules) {
+    if (hadNodeModules && !opts?.force) {
       record('Dependencies already installed. Skipped install command.');
     } else {
       record('Dependency installation completed.');

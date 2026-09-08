@@ -49,7 +49,10 @@ export async function syncAndRestartPreview(projectId: string): Promise<SyncAndR
       // A dependency-manifest change needs a reinstall BEFORE restart, else the
       // dev server boots against stale node_modules and crashes.
       if (result.dependenciesChanged) {
-        await previewManager.installDependencies(projectId);
+        // force: the manifest changed, so the existing node_modules is stale —
+        // without it the install is skipped and the dev server crashes on the
+        // missing new package.
+        await previewManager.installDependencies(projectId, { force: true });
       }
       await previewManager.start(projectId);
       previewRestarted = true;
