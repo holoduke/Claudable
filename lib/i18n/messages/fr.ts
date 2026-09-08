@@ -330,6 +330,7 @@ export const fr: Record<keyof typeof en, string> = {
 
   // Bannière de retard sur le dépôt dans l’écran de chat
   'gitSync.behind': 'Le dépôt Git contient de nouvelles modifications',
+  'gitSync.behindOne': 'Le dépôt Git a 1 commit d’avance sur ce projet',
   'gitSync.behindCount': 'Le dépôt Git a {count} commits d’avance sur ce projet',
   'gitSync.update': 'Mettre à jour',
   'gitSync.updating': 'Mise à jour…',

@@ -118,9 +118,11 @@ export default function GitSyncBanner({ projectId, busy, onSynced }: GitSyncBann
   }
 
   const label =
-    status.behind_by && status.behind_by > 0
-      ? t('gitSync.behindCount', { count: status.behind_by })
-      : t('gitSync.behind');
+    status.behind_by === 1
+      ? t('gitSync.behindOne')
+      : status.behind_by && status.behind_by > 0
+        ? t('gitSync.behindCount', { count: status.behind_by })
+        : t('gitSync.behind');
 
   return (
     <div className="fixed top-14 left-1/2 -translate-x-1/2 z-40 max-w-[92%]">

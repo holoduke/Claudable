@@ -345,6 +345,7 @@ export const en = {
 
   // Behind-the-repo banner in the chat screen
   'gitSync.behind': 'The Git repository has new changes',
+  'gitSync.behindOne': 'The Git repository is 1 commit ahead of this project',
   'gitSync.behindCount': 'The Git repository is {count} commits ahead of this project',
   'gitSync.update': 'Update',
   'gitSync.updating': 'Updating…',

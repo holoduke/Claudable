@@ -330,6 +330,7 @@ export const de: Record<keyof typeof en, string> = {
 
   // Rückstands-Banner im Chat-Bildschirm
   'gitSync.behind': 'Das Git-Repository hat neue Änderungen',
+  'gitSync.behindOne': 'Das Git-Repository ist diesem Projekt 1 Commit voraus',
   'gitSync.behindCount': 'Das Git-Repository ist diesem Projekt {count} Commits voraus',
   'gitSync.update': 'Aktualisieren',
   'gitSync.updating': 'Aktualisieren…',

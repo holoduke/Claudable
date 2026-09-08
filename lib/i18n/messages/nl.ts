@@ -330,6 +330,7 @@ export const nl: Record<keyof typeof en, string> = {
 
   // Achterloop-banner in het chatscherm
   'gitSync.behind': 'De Git-repository heeft nieuwe wijzigingen',
+  'gitSync.behindOne': 'De Git-repository loopt 1 commit voor op dit project',
   'gitSync.behindCount': 'De Git-repository loopt {count} commits voor op dit project',
   'gitSync.update': 'Bijwerken',
   'gitSync.updating': 'Bijwerken…',
