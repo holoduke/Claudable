@@ -11,6 +11,41 @@ import { useCallback, useEffect, useState } from 'react';
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? '';
 const DISMISS_KEY = 'claudable-connect-claude-dismissed';
 
+/** Inline command with a small copy-to-clipboard button. */
+function CopyCmd({ cmd }: { cmd: string }) {
+  const [copied, setCopied] = useState(false);
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(cmd);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch { /* clipboard blocked (http / permissions) — select-all still works */ }
+  };
+  return (
+    <span className="inline-flex items-center gap-1 align-middle">
+      <code className="px-1.5 py-0.5 rounded-sm bg-gray-100 dark:bg-white/6 text-[13px] select-all">{cmd}</code>
+      <button
+        onClick={copy}
+        type="button"
+        title={copied ? 'Copied' : 'Copy'}
+        aria-label={`Copy "${cmd}"`}
+        className="p-1 rounded-sm text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-white/6 transition-colors"
+      >
+        {copied ? (
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" className="text-green-500">
+            <path d="M20 6L9 17l-5-5" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        ) : (
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none">
+            <rect x="9" y="9" width="11" height="11" rx="2" stroke="currentColor" strokeWidth="2" />
+            <path d="M5 15V5a2 2 0 0 1 2-2h10" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+          </svg>
+        )}
+      </button>
+    </span>
+  );
+}
+
 export default function ConnectClaudePrompt() {
   const [open, setOpen] = useState(false);
   const [label, setLabel] = useState('');
@@ -83,7 +118,7 @@ export default function ConnectClaudePrompt() {
               </p>
             </div>
             <ol className="text-sm text-gray-600 dark:text-gray-300 space-y-1 list-decimal list-inside">
-              <li>On your own machine, run <code className="px-1.5 py-0.5 rounded-sm bg-gray-100 dark:bg-white/6 text-[13px]">claude setup-token</code></li>
+              <li>On your own machine, run <CopyCmd cmd="claude setup-token" /></li>
               <li>Paste the token (starts with <code className="px-1 rounded-sm bg-gray-100 dark:bg-white/6 text-[13px]">sk-ant-oat…</code>) below</li>
             </ol>
             <div className="space-y-2">

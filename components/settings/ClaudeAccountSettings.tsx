@@ -21,10 +21,38 @@ interface Props {
 const CLAUDE_CODE_DOCS = 'https://docs.claude.com/en/docs/claude-code/setup';
 
 function Cmd({ children }: { children: string }) {
+  const [copied, setCopied] = useState(false);
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(children);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch { /* clipboard blocked (http / permissions) — select-all still works */ }
+  };
   return (
-    <code className="block w-full overflow-x-auto rounded-lg bg-gray-900 dark:bg-black/40 px-3 py-2 font-mono text-[13px] text-gray-100 select-all">
-      {children}
-    </code>
+    <span className="relative block w-full">
+      <code className="block w-full overflow-x-auto rounded-lg bg-gray-900 dark:bg-black/40 px-3 py-2 pr-10 font-mono text-[13px] text-gray-100 select-all">
+        {children}
+      </code>
+      <button
+        onClick={copy}
+        type="button"
+        title={copied ? 'Copied' : 'Copy'}
+        aria-label={`Copy "${children}"`}
+        className="absolute right-1.5 top-1/2 -translate-y-1/2 p-1.5 rounded-md text-gray-400 hover:text-white hover:bg-white/10 transition-colors"
+      >
+        {copied ? (
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" className="text-green-400">
+            <path d="M20 6L9 17l-5-5" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        ) : (
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+            <rect x="9" y="9" width="11" height="11" rx="2" stroke="currentColor" strokeWidth="2" />
+            <path d="M5 15V5a2 2 0 0 1 2-2h10" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+          </svg>
+        )}
+      </button>
+    </span>
   );
 }
 
