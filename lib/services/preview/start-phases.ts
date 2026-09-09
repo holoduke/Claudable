@@ -11,6 +11,7 @@ import { scaffoldForStack } from '@/lib/utils/scaffold-dispatch';
 import { stackKind } from '@/lib/config/stacks';
 import { ensureProjectRootStructure } from './scaffold';
 import { ensurePreviewRouteReporter } from './route-reporter';
+import { projectPreviewUrl } from './routes';
 import {
   perProjectPreview,
   writePreviewRoute,
@@ -657,6 +658,13 @@ export async function buildFrontendContainerArgs(
     await fs.mkdir(cacheDir, { recursive: true });
     cacheArgs = ['-v', `${toHostPath(cacheDir)}:${isLaravel ? '/composer-cache' : '/npm-cache'}`];
   } catch { /* cache is an optimization only */ }
+  // Public preview hostname (preview-<slug>.<domain>), for Vite's host check below.
+  const publicPreviewHost = (() => {
+    try {
+      const u = projectPreviewUrl(projectId);
+      return u ? new URL(u).hostname : null;
+    } catch { return null; }
+  })();
   // Build the container's env as an ordered record, then pass it via a single
   // 0600 env-file (writeContainerEnvFile) instead of `-e` on the argv. These
   // carry the PROJECT's secrets (DATABASE_URL, its own Env-tab values), and argv
@@ -687,6 +695,13 @@ export async function buildFrontendContainerArgs(
         HOST: '0.0.0.0',
         // Point npm at the shared cache volume mounted below (node-owned bind mount).
         ...(cacheArgs.length ? { npm_config_cache: '/npm-cache' } : {}),
+        // Recent Vite dev servers reject requests whose Host header isn't in
+        // server.allowedHosts ("Blocked request. This host is not allowed") —
+        // and the preview is reached via its public subdomain, not localhost.
+        // This escape-hatch env var (Vite ≥5.4.12/6.0.9) whitelists that host
+        // without every project needing a vite.config change; non-Vite stacks
+        // simply ignore it.
+        ...(publicPreviewHost ? { __VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS: publicPreviewHost } : {}),
       };
   if (composedBackendUrl) {
     // Composed backend URL (model B): PUBLIC url for the BROWSER (client-side).
@@ -833,6 +848,11 @@ export async function buildScrubbedEnv(ctx: ScrubbedEnvContext): Promise<NodeJS.
   }
   const bindHostTrim = process.env.PREVIEW_BIND_HOST?.trim();
   if (bindHostTrim) scrubbed.PREVIEW_BIND_HOST = bindHostTrim;
+  // Same Vite host-check allowance as the container path (see buildFrontendContainerArgs).
+  try {
+    const u = projectPreviewUrl(projectId);
+    if (u) scrubbed.__VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS = new URL(u).hostname;
+  } catch { /* no public subdomain — localhost previews need no allowance */ }
   try { for (const ev of await listEnvVars(projectId)) scrubbed[ev.key] = ev.value; } catch { /* best-effort */ }
   return scrubbed as NodeJS.ProcessEnv;
 }
