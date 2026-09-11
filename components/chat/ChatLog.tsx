@@ -13,6 +13,13 @@ import { useToast } from '@/components/ui/Toast';
 import { useT } from '@/contexts/I18nContext';
 
 import { type ToolAction, normalizeAction, inferActionFromToolName, pickFirstString, extractPathFromInput } from '@/lib/services/cli/tool-metadata';
+import {
+  RENDER_WINDOW_BASE,
+  RENDER_WINDOW_STEP,
+  windowOffset,
+  nextRenderLimit,
+  revealsFromMemory,
+} from '@/lib/utils/chat-window';
 
 type ToolExpansionState = {
   expanded: boolean;
@@ -1633,6 +1640,18 @@ export default function ChatLog({ projectId, onSessionStatusChange, onProjectSta
   // scrolling up → stick=false. No time window needed (and a window would
   // swallow the user's scroll-up during a fast stream — the bug this replaces).
   const stickToBottomRef = useRef(true);
+
+  // --- Render window -------------------------------------------------------
+  // Only the NEWEST `renderLimit` messages are mounted; the rules live in
+  // lib/utils/chat-window.ts (with tests). Older ones stay in memory and come
+  // back by widening the window before we ever ask the server for more.
+  const [renderLimit, setRenderLimit] = useState(RENDER_WINDOW_BASE);
+  // Set by a history FETCH so the growth effect below can tell "older messages
+  // arrived at the top" (reveal them) from "the agent streamed a new one at the
+  // bottom" (let the window slide).
+  const justPrependedRef = useRef(false);
+  const prevMessageCountRef = useRef(0);
+
   // The scrollable message list, plus the machinery for auto-loading older
   // history on scroll-up WITHOUT the viewport jumping. When we prepend older
   // messages, scrollHeight grows above the current view, so we capture the
@@ -1642,6 +1661,12 @@ export default function ChatLog({ projectId, onSessionStatusChange, onProjectSta
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const prependAnchorRef = useRef<{ height: number; top: number } | null>(null);
   const loadingOlderRef = useRef(false);
+  /** Capture the scroll geometry BEFORE more history mounts, so the layout
+   *  effect keeps the viewport on the same content (as a server prepend does). */
+  const anchorBeforeGrow = useCallback(() => {
+    const el = scrollContainerRef.current;
+    if (el) prependAnchorRef.current = { height: el.scrollHeight, top: el.scrollTop };
+  }, []);
   // The anchor-restore below sets scrollTop programmatically, which the browser
   // reports as a scroll event AFTER loadingOlderRef was already released. If the
   // prepended batch dedup'd down to little height, scrollTop can still be < 300
@@ -1675,7 +1700,8 @@ export default function ChatLog({ projectId, onSessionStatusChange, onProjectSta
       loadOlderRef.current();
     }
   };
-  // Restore the scroll anchor right after older messages are prepended.
+  // Restore the scroll anchor right after older messages are prepended — by a
+  // server fetch (messages grew) OR by widening the render window below.
   useLayoutEffect(() => {
     const anchor = prependAnchorRef.current;
     const el = scrollContainerRef.current;
@@ -1683,8 +1709,13 @@ export default function ChatLog({ projectId, onSessionStatusChange, onProjectSta
       el.scrollTop = anchor.top + (el.scrollHeight - anchor.height);
       prependAnchorRef.current = null;
       skipNextScrollLoadRef.current = true;
+      return;
     }
-  }, [messages]);
+    // The window collapsed back to its base size under a user who is following
+    // the stream: older messages unmount above the viewport, so re-pin to the
+    // bottom before paint rather than trusting the browser's scroll clamp.
+    if (el && stickToBottomRef.current) el.scrollTop = el.scrollHeight;
+  }, [messages, renderLimit]);
   // Keyed by the send's requestId (falls back to message id) so the optimistic
   // user message → server echo swap (different id, SAME requestId) doesn't snap
   // twice and override a scroll-up the user made right after sending.
@@ -1763,6 +1794,23 @@ export default function ChatLog({ projectId, onSessionStatusChange, onProjectSta
   }, []);
 
   useEffect(scrollToBottom, [messages, logs]);
+
+  // Keep the render window honest as the list changes:
+  //  - fetched history → grow, so what the user asked for is actually mounted;
+  //  - streamed message while they scrolled up → grow, so the text under their
+  //    eyes doesn't shift when the oldest mounted message would drop off;
+  //  - streamed message while they're following at the bottom → collapse back to
+  //    the base size, which is what keeps the DOM (and the jank) bounded.
+  useEffect(() => {
+    const grew = messages.length - prevMessageCountRef.current;
+    prevMessageCountRef.current = messages.length;
+    if (grew <= 0) return;
+    const prepended = justPrependedRef.current;
+    justPrependedRef.current = false;
+    setRenderLimit((current) =>
+      nextRenderLimit({ grew, prepended, stickToBottom: stickToBottomRef.current, current }),
+    );
+  }, [messages.length]);
 
   useEffect(() => {
     setExpandedToolMessages((prev) => {
@@ -1996,6 +2044,7 @@ export default function ChatLog({ projectId, onSessionStatusChange, onProjectSta
         if (normalized.length > 0) {
           const el = scrollContainerRef.current;
           if (el) prependAnchorRef.current = { height: el.scrollHeight, top: el.scrollTop };
+          justPrependedRef.current = true; // grow the window instead of sliding it
           setMessages((prev) => integrateMessages(prev, normalized));
         }
       }
@@ -2006,8 +2055,22 @@ export default function ChatLog({ projectId, onSessionStatusChange, onProjectSta
     }
   }, [projectId, hasMoreMessages, ensureStableMessageId]);
 
+  /**
+   * Reveal more history: first widen the render window over messages ALREADY in
+   * memory (instant, no request), and only fetch from the server once the window
+   * covers everything we hold. Both the scroll-up handler and the button use it.
+   */
+  const revealOlder = useCallback(() => {
+    if (revealsFromMemory(messages.length, renderLimit)) {
+      anchorBeforeGrow();
+      setRenderLimit((n) => n + RENDER_WINDOW_STEP);
+      return;
+    }
+    void loadOlderMessages();
+  }, [messages.length, renderLimit, anchorBeforeGrow, loadOlderMessages]);
+
   // Point the scroll-handler indirection at the current callback each render.
-  loadOlderRef.current = loadOlderMessages;
+  loadOlderRef.current = revealOlder;
 
   // Poll session status periodically. NOTE: its OWN interval ref — it used to
   // share pollIntervalRef with the history poller and each silently killed the
@@ -2189,6 +2252,11 @@ export default function ChatLog({ projectId, onSessionStatusChange, onProjectSta
     needsInitialScrollRef.current = true; // new project → land at the newest message again
     stickToBottomRef.current = true;
     lastUserSnapKeyRef.current = null;
+    // Start the next conversation with a small window again, and reset the
+    // growth baseline so the first load isn't read as "streamed messages".
+    setRenderLimit(RENDER_WINDOW_BASE);
+    prevMessageCountRef.current = 0;
+    justPrependedRef.current = false;
     setHasLoadedOnce(false);
     setIsLoading(true);
     setMessages([]);
@@ -2737,6 +2805,13 @@ export default function ChatLog({ projectId, onSessionStatusChange, onProjectSta
     }
   }, [onAddUserMessage]);
 
+  // Only the tail of the conversation is mounted (see "Render window" above).
+  // Counting on the RAW list keeps this an upper bound on mounted messages,
+  // which is what bounds the DOM; the display filter then thins it further.
+  const hiddenCount = windowOffset(messages.length, renderLimit);
+  const visibleMessages = hiddenCount > 0 ? messages.slice(hiddenCount) : messages;
+  const olderInMemory = hiddenCount;
+
   return (
     <div className="flex flex-col h-full bg-white dark:bg-[#0c0a09] ">
 
@@ -2796,21 +2871,24 @@ export default function ChatLog({ projectId, onSessionStatusChange, onProjectSta
           </div>
         )}
 
-        {/* Load older messages button */}
-        {hasMoreMessages && (
+        {/* Load older messages — counts what the window hides PLUS what the
+            server still holds, so the number matches what the click reveals. */}
+        {(hasMoreMessages || olderInMemory > 0) && (
           <div className="mb-4 flex justify-center">
             <button
-              onClick={loadOlderMessages}
+              onClick={revealOlder}
               className="px-4 py-2 text-sm text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-white/6 hover:bg-gray-200 dark:hover:bg-white/6 rounded-md transition-colors"
               disabled={isLoading}
             >
-              {isLoading ? 'Loading...' : `Load older messages (${Math.max(0, totalMessageCount - loadedRowCount)} remaining)`}
+              {isLoading
+                ? 'Loading...'
+                : `Load older messages (${olderInMemory + Math.max(0, totalMessageCount - loadedRowCount)} remaining)`}
             </button>
           </div>
         )}
 
         {/* Render chat messages */}
-        {messages.filter(shouldDisplayMessage).map((message, index) => {
+        {visibleMessages.filter(shouldDisplayMessage).map((message, index) => {
           const messageMetadata = message.metadata as Record<string, unknown> | null;
           const messageText = normalizeChatContent(message.content);
 
@@ -2822,7 +2900,7 @@ export default function ChatLog({ projectId, onSessionStatusChange, onProjectSta
               ? new Date(resetsAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
               : null;
             return (
-              <div className="mb-4" key={message.id ?? `limit-${index}`}>
+              <div className="mb-4" key={message.id ?? `limit-${hiddenCount + index}`}>
                 <div className="flex items-start gap-3 rounded-xl border border-amber-300 dark:border-amber-500/40 bg-amber-50 dark:bg-amber-950/30 px-4 py-3">
                   <span className="text-lg leading-none mt-0.5">⏳</span>
                   <div className="min-w-0">
@@ -2844,7 +2922,7 @@ export default function ChatLog({ projectId, onSessionStatusChange, onProjectSta
           const toolMessageKey = isToolMessage
             ? ensureStableMessageId(message)
             : null;
-          const reactKey = message.id ?? toolMessageKey ?? `message-${index}`;
+          const reactKey = message.id ?? toolMessageKey ?? `message-${hiddenCount + index}`;
           const toolExpanded =
             toolMessageKey != null ? expandedToolMessages[toolMessageKey]?.expanded : undefined;
           const onToggleTool =
