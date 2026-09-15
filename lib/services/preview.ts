@@ -13,6 +13,7 @@ import { recordBackendChunk } from '@/lib/services/diagnostics';
 import { scaffoldForStack } from '@/lib/utils/scaffold-dispatch';
 import { stackKind } from '@/lib/config/stacks';
 import { PREVIEW_CONFIG } from '@/lib/config/constants';
+import { selectEvictable } from './preview/eviction';
 import {
   previewRouteDir,
   previewUrlFor,
@@ -95,6 +96,14 @@ const PREVIEW_SWEEP_INTERVAL_MS = Math.max(
   10_000,
   Number.parseInt(process.env.PREVIEW_SWEEP_INTERVAL_MS || '', 10) || 5 * 60_000,
 );
+// The most recently used previews skip eviction entirely, so the projects
+// someone works on daily don't pay a ~15-20s cold start every time they come
+// back. Each warm dev server holds 0.5-1 GB, so this stays deliberately small;
+// 0 restores the old "evict everything idle" behaviour.
+const PREVIEW_KEEP_WARM = Math.max(
+  0,
+  Number.parseInt(process.env.PREVIEW_KEEP_WARM || '', 10) || 5,
+);
 
 class PreviewManager {
   private processes = new Map<string, PreviewProcess>();
@@ -130,16 +139,23 @@ class PreviewManager {
     return s;
   }
 
-  /** Stop previews that haven't been accessed within the idle window. */
+  /** Stop idle previews, except the most recently used ones (kept warm). */
   private evictIdle(): void {
     const now = Date.now();
-    for (const [projectId, p] of this.processes) {
-      if (p.status === 'starting') continue;
-      if (now - p.lastAccessedAt.getTime() > PREVIEW_IDLE_TIMEOUT_MS) {
-        const idleMin = Math.round((now - p.lastAccessedAt.getTime()) / 60_000);
-        console.log(`[PreviewManager] Evicting idle preview ${projectId} (idle ${idleMin}m, port ${p.port})`);
-        this.stop(projectId).catch(() => {});
-      }
+    const candidates = [...this.processes.entries()].map(([projectId, p]) => ({
+      projectId,
+      lastAccessedAt: p.lastAccessedAt,
+      status: p.status,
+    }));
+    for (const projectId of selectEvictable(candidates, {
+      now,
+      idleMs: PREVIEW_IDLE_TIMEOUT_MS,
+      keepWarm: PREVIEW_KEEP_WARM,
+    })) {
+      const p = this.processes.get(projectId);
+      const idleMin = p ? Math.round((now - p.lastAccessedAt.getTime()) / 60_000) : 0;
+      console.log(`[PreviewManager] Evicting idle preview ${projectId} (idle ${idleMin}m, port ${p?.port})`);
+      this.stop(projectId).catch(() => {});
     }
   }
 

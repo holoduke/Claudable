@@ -198,6 +198,39 @@ export function getHeadCommit(repoPath: string): string | null {
 const COMMIT_SHA_RE = /^[0-9a-f]{7,64}$/iu;
 
 /**
+ * How many files the working tree has changed but not committed — the usual
+ * shape of "not published yet", since an agent turn edits files and only the
+ * publish itself commits them. Ignored paths (node_modules, build output) are
+ * excluded by .gitignore. Returns 0 on any failure rather than guessing.
+ */
+export function countDirtyFiles(repoPath: string): number {
+  try {
+    const out = runGit(['status', '--porcelain'], repoPath);
+    return out.split(/\r?\n/u).filter((l) => l.trim().length > 0).length;
+  } catch {
+    return 0;
+  }
+}
+
+/**
+ * Commits in the local checkout that `baseSha` doesn't have — i.e. committed
+ * work the remote (and therefore the published site) is missing. Null when the
+ * base commit isn't known locally, so the caller can say "unknown" instead of
+ * reporting a wrong number.
+ */
+export function countCommitsAhead(repoPath: string, baseSha: string): number | null {
+  if (!COMMIT_SHA_RE.test(baseSha)) return null;
+  try {
+    runGit(['cat-file', '-e', `${baseSha}^{commit}`], repoPath);
+    const out = runGit(['rev-list', '--count', `${baseSha}..HEAD`], repoPath);
+    const n = Number.parseInt(out.trim(), 10);
+    return Number.isFinite(n) ? n : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Whether `sha` is present locally AND reachable from HEAD. False means the
  * commit is unknown here (never fetched) or on a diverged line — either way,
  * the local checkout does not contain it.

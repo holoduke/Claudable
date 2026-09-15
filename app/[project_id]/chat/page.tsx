@@ -367,6 +367,10 @@ export default function ChatPage() {
     document.addEventListener('mouseup', onUp);
   }, []);
   const [publishLoading, setPublishLoading] = useState(false);
+  // Work this project holds that the published branch doesn't — shown as a line
+  // under the Publish button so "the live site is older than what I see here"
+  // is visible without opening the panel. null = nothing to report / unknown.
+  const [unpublished, setUnpublished] = useState<{ count: number; kind: 'files' | 'commits' } | null>(null);
   const [githubConnected, setGithubConnected] = useState<boolean | null>(null);
   const [vercelConnected, setVercelConnected] = useState<boolean | null>(null);
   // Git provider config (server-driven). For the self-hosted Gitea flow, deploys
@@ -2351,6 +2355,32 @@ const persistProjectPreferences = useCallback(
     return () => { cancelled = true; clearInterval(interval); };
   }, [projectId, deploymentStatus, setDeployRun, setDeploymentStatus, startGiteaDeployPolling]);
 
+  // Is the published branch missing work that lives here? Re-checked on the same
+  // slow cadence as the CI watchdog, plus whenever a deploy finishes (the label
+  // should clear) or an agent turn ends (it just edited files, so it should
+  // appear). Uncommitted edits are the normal case — the publish is what commits.
+  useEffect(() => {
+    if (!projectId || hasActiveRequests) return;
+    let cancelled = false;
+    const check = async () => {
+      try {
+        const r = await fetch(`${API_BASE}/api/projects/${projectId}/github/sync-status`, { cache: 'no-store' });
+        if (!r.ok) return; // no git connection / no access — nothing to show
+        const d = await r.json().catch(() => null);
+        if (cancelled || !d?.success || !d.connected) return;
+        if (!d.unpublished) { setUnpublished(null); return; }
+        const files = typeof d.dirty_files === 'number' ? d.dirty_files : 0;
+        const commits = typeof d.ahead_by === 'number' ? d.ahead_by : 0;
+        setUnpublished(files > 0 ? { count: files, kind: 'files' } : { count: commits, kind: 'commits' });
+      } catch {
+        // transient — the next tick retries; keep the last known state
+      }
+    };
+    check();
+    const interval = setInterval(check, 120_000);
+    return () => { cancelled = true; clearInterval(interval); };
+  }, [projectId, deploymentStatus, hasActiveRequests]);
+
   // Stable message handlers with useCallback to prevent reassignment
   const createStableMessageHandlers = useCallback(() => {
     const addMessage = (message: any) => {
@@ -3602,7 +3632,18 @@ const persistProjectPreferences = useCallback(
                   {showPreview && previewUrl && (() => {
                     const publishing = deploymentStatus === 'deploying' || publishLoading;
                     const buildFailing = deploymentStatus === 'error' && !publishing;
+                    // Only meaningful when nothing is in flight: during a publish
+                    // the count is about to become stale anyway.
+                    const showUnpublished = !!unpublished && !publishing && !buildFailing;
+                    const unpublishedLabel = !unpublished
+                      ? ''
+                      : unpublished.kind === 'commits'
+                        ? t('topbar.unpublishedCommits', { count: unpublished.count })
+                        : unpublished.count === 1
+                          ? t('topbar.unpublishedOne')
+                          : t('topbar.unpublishedMany', { count: unpublished.count });
                     return (
+                    <div className="relative">
                     <button
                       className={`relative h-9 flex items-center gap-2 px-4 text-white rounded-lg transition-colors shadow-xs font-medium text-sm ${
                         publishing ? 'publish-regenboog' : buildFailing ? 'bg-red-500 hover:bg-red-600' : 'bg-brand-500 hover:bg-brand-600'
@@ -3625,6 +3666,17 @@ const persistProjectPreferences = useCallback(
                         <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-red-500 ring-2 ring-white animate-pulse"></span>
                       )}
                     </button>
+                    {/* Absolutely placed so the topbar keeps its height when the
+                        line appears/disappears. */}
+                    {showUnpublished && (
+                      <span
+                        className="absolute top-full right-0 mt-0.5 whitespace-nowrap text-[11px] leading-none text-amber-600 dark:text-amber-400 pointer-events-none"
+                        title={t('topbar.unpublishedTitle')}
+                      >
+                        {unpublishedLabel}
+                      </span>
+                    )}
+                    </div>
                     );
                   })()}
 

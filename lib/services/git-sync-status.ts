@@ -9,7 +9,7 @@ import { getProjectById } from './project';
 import { getProjectService } from './project-services';
 import { getGitProviderConfigFor } from './git-provider';
 import { resolveGitToken, githubFetch, projectGitBranch, resolveProjectRepoPath } from './github';
-import { getHeadCommit, historyContains } from './git';
+import { getHeadCommit, historyContains, countDirtyFiles, countCommitsAhead } from './git';
 
 export interface RemoteSyncStatus {
   /** False when the project has no git connection — nothing to compare. */
@@ -21,6 +21,12 @@ export interface RemoteSyncStatus {
   behind_by: number | null;
   local_sha: string | null;
   remote_sha: string | null;
+  /** True when this project holds work the published branch doesn't have. */
+  unpublished: boolean;
+  /** Committed-but-unpushed commits (null when it can't be determined). */
+  ahead_by: number | null;
+  /** Files edited since the last commit — the usual "not published yet" shape. */
+  dirty_files: number;
 }
 
 const NOT_CONNECTED: RemoteSyncStatus = {
@@ -30,6 +36,9 @@ const NOT_CONNECTED: RemoteSyncStatus = {
   behind_by: null,
   local_sha: null,
   remote_sha: null,
+  unpublished: false,
+  ahead_by: null,
+  dirty_files: 0,
 };
 
 /** Remote branch head sha. GitHub puts it in commit.sha, Gitea in commit.id. */
@@ -96,7 +105,22 @@ export async function getProjectSyncStatus(projectId: string): Promise<RemoteSyn
   const repoPath = resolveProjectRepoPath(projectId, project.repoPath);
   const localSha = getHeadCommit(repoPath);
 
-  const base = { connected: true, branch, local_sha: localSha, remote_sha: remoteSha };
+  // What this project holds that the published branch doesn't: uncommitted
+  // edits (the normal state right after an agent turn) plus any commits the
+  // remote is missing. Both are cheap local git calls.
+  const dirtyFiles = countDirtyFiles(repoPath);
+  const aheadBy = remoteSha ? countCommitsAhead(repoPath, remoteSha) : null;
+  const unpublished = dirtyFiles > 0 || (aheadBy ?? 0) > 0;
+
+  const base = {
+    connected: true,
+    branch,
+    local_sha: localSha,
+    remote_sha: remoteSha,
+    unpublished,
+    ahead_by: aheadBy,
+    dirty_files: dirtyFiles,
+  };
 
   if (!remoteSha) {
     // Remote branch head unreadable — can't claim anything, stay quiet.
