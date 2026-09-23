@@ -1,5 +1,6 @@
 export type ClaudeModelId =
   | 'claude-fable-5-1'
+  | 'claude-opus-5-5'
   | 'claude-fable-5'
   | 'claude-opus-5'
   | 'claude-sonnet-5'
@@ -39,6 +40,23 @@ export const CLAUDE_MODEL_DEFINITIONS: ClaudeModelDefinition[] = [
     ],
   },
   {
+    id: 'claude-opus-5-5',
+    name: 'Claude Opus 5.5',
+    description: 'For long-running agentic coding and knowledge work',
+    supportsImages: true,
+    aliases: [
+      'claude-opus-5-5',
+      'claude-opus-5.5',
+      'claude-opus5.5',
+      'opus-5-5',
+      'opus-5.5',
+      'opus5.5',
+      // Generic opus aliases resolve to the newest Opus
+      'claude-opus',
+      'opus',
+    ],
+  },
+  {
     id: 'claude-fable-5',
     name: 'Claude Fable 5',
     description: 'Previous Fable flagship',
@@ -54,17 +72,17 @@ export const CLAUDE_MODEL_DEFINITIONS: ClaudeModelDefinition[] = [
   {
     id: 'claude-opus-5',
     name: 'Claude Opus 5',
-    description: 'Claude 5 family — deepest reasoning',
+    description: 'Previous Opus generation',
     supportsImages: true,
+    // NOTE: the generic 'opus' / 'claude-opus' aliases live on the NEWEST Opus
+    // (5.5). Alias keys are unique in the map built below and the last
+    // definition wins, so repeating them here would silently steal them back.
     aliases: [
       'claude-opus-5',
       'claude-opus-5-latest',
       'claude-opus5',
       'opus-5',
       'opus5',
-      // Generic opus aliases resolve to the newest Opus
-      'claude-opus',
-      'opus',
     ],
   },
   {
