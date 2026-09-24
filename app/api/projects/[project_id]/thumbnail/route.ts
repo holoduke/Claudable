@@ -1,6 +1,6 @@
 /**
  * Project thumbnail.
- *   GET  /api/projects/:id/thumbnail  -> the PNG (304/404 when absent)
+ *   GET  /api/projects/:id/thumbnail  -> the PNG (a transparent 1x1 PNG when absent)
  *   POST /api/projects/:id/thumbnail  -> capture from the running preview
  */
 import { NextRequest, NextResponse } from 'next/server';
@@ -12,13 +12,24 @@ export const dynamic = 'force-dynamic';
 
 interface Ctx { params: Promise<{ project_id: string }> }
 
+const TRANSPARENT_PNG = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR4nGNgAAIAAAUAAXpeqz8AAAAASUVORK5CYII=',
+  'base64',
+);
+
 export async function GET(_req: NextRequest, { params }: Ctx) {
   const { project_id } = await params;
   const _gate = await denyUnlessProjectAccess(project_id);
   if (_gate) return _gate;
   const thumb = await getThumbnail(project_id);
   if (!thumb) {
-    return NextResponse.json({ success: false, error: 'No thumbnail' }, { status: 404 });
+    // No screenshot yet (preview never ran). A transparent pixel instead of a 404:
+    // the tile's placeholder initial shows through, without a console error per
+    // tile. Not cached, so the real screenshot appears as soon as it exists.
+    return new NextResponse(new Uint8Array(TRANSPARENT_PNG), {
+      status: 200,
+      headers: { 'Content-Type': 'image/png', 'Cache-Control': 'no-store', 'X-Thumbnail': 'placeholder' },
+    });
   }
   return new NextResponse(new Uint8Array(thumb.buffer), {
     status: 200,
