@@ -42,7 +42,7 @@ export interface PreviewConfig {
   // would block a box-hosted DB). Bind-mounts the project dir into a node image.
   frontend?: {
     isolate?: boolean;
-    image?: string;    // default "node:22-bookworm-slim"
+    image?: string;    // default NODE_IMAGE from lib/config/stack-versions.json
     dev?: string;      // dev command, {PORT} substituted (default derived per stack)
     memory?: string;   // default "1g"
     cpus?: string;     // default "2.0"

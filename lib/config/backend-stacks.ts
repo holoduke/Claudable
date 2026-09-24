@@ -1,3 +1,4 @@
+import { GO_IMAGE, GO_VERSION, NODE_IMAGE, PIP_REQUIREMENTS, PYTHON_IMAGE, npmDeps } from '@/lib/config/stack-versions';
 /**
  * Optional BACKEND stacks a project can be composed with (alongside the frontend
  * stack in stacks.ts). Each defines a starter scaffold — a minimal server + a
@@ -72,7 +73,7 @@ func env(k, def string) string {
 // on every edit. Runs as uid 1000 (set at runtime) against the mounted /app; caches
 // go to /tmp so a non-root uid can write them. The preview mounts backend/ over /app.
 const GO_DOCKERFILE = `# syntax=docker/dockerfile:1
-FROM golang:1.25-alpine
+FROM ${GO_IMAGE}
 RUN apk add --no-cache git && go install github.com/air-verse/air@latest
 WORKDIR /app
 ENV HOME=/tmp GOCACHE=/tmp/.cache GOFLAGS=-mod=mod
@@ -103,15 +104,15 @@ const NODE_PACKAGE = `{
   "private": true,
   "type": "module",
   "scripts": { "start": "node index.js" },
-  "dependencies": { "express": "^4.21.2", "cors": "^2.8.5" }
+  "dependencies": ${JSON.stringify(npmDeps('express', 'cors'))}
 }
 `;
 
-// Dev image with hot-reload: Node 22's built-in \`--watch\` restarts on every edit.
+// Dev image with hot-reload: Node's built-in \`--watch\` restarts on every edit.
 // The preview bind-mounts backend/ over /app (hiding the image's node_modules), so
 // the CMD installs deps into the mount on first start if missing. Runs as uid 1000;
 // caches go to /tmp. \`node --watch\` reloads instantly on the agent's changes.
-const NODE_DOCKERFILE = `FROM node:22-bookworm-slim
+const NODE_DOCKERFILE = `FROM ${NODE_IMAGE}
 WORKDIR /app
 ENV HOME=/tmp npm_config_cache=/tmp/.npm
 COPY backend/package.json ./
@@ -143,14 +144,12 @@ def hello():
     return {"message": "Hello from the Python backend"}
 `;
 
-const PY_REQS = `fastapi==0.115.6
-uvicorn[standard]==0.34.0
-`;
+const PY_REQS = `${PIP_REQUIREMENTS.join('\n')}\n`;
 
 // Dev image with hot-reload: \`uvicorn --reload\` (watchfiles, bundled with
 // uvicorn[standard]) restarts on every edit. The preview bind-mounts backend/ over
 // /app; site-packages live outside /app so deps survive the mount. Runs as uid 1000.
-const PY_DOCKERFILE = `FROM python:3.12-slim
+const PY_DOCKERFILE = `FROM ${PYTHON_IMAGE}
 WORKDIR /app
 ENV HOME=/tmp
 COPY backend/requirements.txt ./
@@ -179,7 +178,7 @@ export const BACKEND_STACKS: BackendStack[] = [
     port: 8080,
     files: () => ({
       'backend/main.go': GO_MAIN,
-      'backend/go.mod': 'module backend\n\ngo 1.25\n',
+      'backend/go.mod': `module backend\n\ngo ${GO_VERSION}\n`,
       'backend/Dockerfile': GO_DOCKERFILE,
     }),
   },

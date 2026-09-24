@@ -19,6 +19,7 @@ import fs from 'fs/promises';
 import path from 'path';
 import { getGitProviderConfig } from '@/lib/services/git-provider';
 import { stackKind, type StackKind } from '@/lib/config/stacks';
+import { NODE_ALPINE_IMAGE } from '@/lib/config/stack-versions';
 
 export interface ScaffoldOptions {
   repoName: string;
@@ -52,7 +53,7 @@ function dockerfile(stack: StackKind): string {
   // Shared prefix: install deps (lockfile or fresh) + a temporary build toolchain
   // for native addons (e.g. better-sqlite3), then build. Only the build output
   // location + how the app is served differ per framework.
-  const head = `FROM node:22-alpine
+  const head = `FROM ${NODE_ALPINE_IMAGE}
 WORKDIR /app
 
 # Prefer the lockfile (reproducible) but fall back to a fresh install when it has

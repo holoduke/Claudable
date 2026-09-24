@@ -1,12 +1,15 @@
 /**
- * Minimal Angular (standalone) starter — a blank canvas the agent builds on.
- * Uses the Angular 18 application builder + Tailwind v3 (Angular auto-detects
- * tailwind.config.js). The `dev` script binds 0.0.0.0 and the preview manager
- * appends `--port <n>`; `--disable-host-check` lets the managed preview proxy
- * reach it.
+ * Minimal Angular (standalone, zoneless) starter — a blank canvas the agent builds on.
+ * Uses the @angular/build application builder + Tailwind v4 via PostCSS
+ * (.postcssrc.json). Zoneless change detection is Angular's default since v21, so
+ * there is no zone.js. The `dev` script binds 0.0.0.0 and the preview manager
+ * appends `--port <n>` plus the host flags the managed preview proxy needs.
+ * Versions: lib/config/stack-versions.json.
  */
 import fs from 'fs/promises';
 import path from 'path';
+import { npmDeps } from '@/lib/config/stack-versions';
+import { PLACEHOLDER_FAVICON_SVG } from './scaffold-favicon';
 
 async function writeIfMissing(filePath: string, contents: string) {
   try {
@@ -35,27 +38,26 @@ export async function scaffoldAngularApp(projectPath: string, projectId: string)
       start: 'ng serve --host 0.0.0.0',
     },
     // All @angular/* packages MUST resolve to the SAME minor or npm hits an
-    // ERESOLVE peer conflict (e.g. compiler 20.3 vs animations 20.1). Pin them
-    // to one minor (~20.3.0). Minimal set — the agent adds forms/animations/etc.
-    dependencies: {
-      '@angular/common': '~20.3.0',
-      '@angular/compiler': '~20.3.0',
-      '@angular/core': '~20.3.0',
-      '@angular/platform-browser': '~20.3.0',
-      '@angular/router': '~20.3.0',
-      rxjs: '^7.8.0',
-      tslib: '^2.3.0',
-      'zone.js': '~0.15.0',
-    },
-    devDependencies: {
-      '@angular-devkit/build-angular': '~20.3.0',
-      '@angular/cli': '~20.3.0',
-      '@angular/compiler-cli': '~20.3.0',
-      typescript: '~5.8.0',
-      tailwindcss: '^3.4.0',
-      postcss: '^8.4.0',
-      autoprefixer: '^10.4.0',
-    },
+    // ERESOLVE peer conflict, so they share one tilde range in stack-versions.json.
+    // Minimal set — the agent adds forms/animations/etc.
+    dependencies: npmDeps(
+      '@angular/common',
+      '@angular/compiler',
+      '@angular/core',
+      '@angular/platform-browser',
+      '@angular/router',
+      'rxjs',
+      'tslib',
+    ),
+    devDependencies: npmDeps(
+      '@angular/build',
+      '@angular/cli',
+      '@angular/compiler-cli',
+      'typescript',
+      'tailwindcss',
+      '@tailwindcss/postcss',
+      'postcss',
+    ),
   };
   await writeIfMissing(path.join(projectPath, 'package.json'), `${JSON.stringify(packageJson, null, 2)}\n`);
 
@@ -74,13 +76,13 @@ export async function scaffoldAngularApp(projectPath: string, projectId: string)
             prefix: 'app',
             architect: {
               build: {
-                builder: '@angular-devkit/build-angular:application',
+                builder: '@angular/build:application',
                 options: {
                   outputPath: 'dist/app',
                   index: 'src/index.html',
                   browser: 'src/main.ts',
                   tsConfig: 'tsconfig.app.json',
-                  assets: [],
+                  assets: [{ glob: '**/*', input: 'public' }],
                   styles: ['src/styles.css'],
                   scripts: [],
                 },
@@ -91,7 +93,7 @@ export async function scaffoldAngularApp(projectPath: string, projectId: string)
                 defaultConfiguration: 'production',
               },
               serve: {
-                builder: '@angular-devkit/build-angular:dev-server',
+                builder: '@angular/build:dev-server',
                 configurations: {
                   production: { buildTarget: 'app:build:production' },
                   development: { buildTarget: 'app:build:development' },
@@ -152,24 +154,15 @@ export async function scaffoldAngularApp(projectPath: string, projectId: string)
     )}\n`,
   );
 
+  // Tailwind v4: the PostCSS plugin + a CSS import, no tailwind.config.js.
   await writeIfMissing(
-    path.join(projectPath, 'tailwind.config.js'),
-    `/** @type {import('tailwindcss').Config} */
-module.exports = {
-  content: ['./src/**/*.{html,ts}'],
-  theme: { extend: {} },
-  plugins: [],
-};
-`,
+    path.join(projectPath, '.postcssrc.json'),
+    `${JSON.stringify({ plugins: { '@tailwindcss/postcss': {} } }, null, 2)}\n`,
   );
 
-  await writeIfMissing(
-    path.join(projectPath, 'src/styles.css'),
-    `@tailwind base;
-@tailwind components;
-@tailwind utilities;
-`,
-  );
+  await writeIfMissing(path.join(projectPath, 'src/styles.css'), `@import "tailwindcss";\n`);
+
+  await writeIfMissing(path.join(projectPath, 'public/favicon.svg'), PLACEHOLDER_FAVICON_SVG);
 
   await writeIfMissing(
     path.join(projectPath, 'src/index.html'),
@@ -179,6 +172,7 @@ module.exports = {
     <meta charset="utf-8" />
     <title>Angular App</title>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="icon" type="image/svg+xml" href="favicon.svg" />
   </head>
   <body>
     <app-root></app-root>

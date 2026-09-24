@@ -1,0 +1,51 @@
+{
+  "$comment": "Versions for everything Claudable scaffolds: new-project package.json files, preview/deploy/backend images. Majors are pinned (caret/tilde) so fresh installs stay on tested majors; bump them here. `npm run check:stack-versions` reports anything behind the latest release.",
+  "node": {
+    "major": 24,
+    "image": "node:24-bookworm-slim",
+    "alpineImage": "node:24-alpine"
+  },
+  "go": {
+    "version": "1.27",
+    "image": "golang:1.27-alpine"
+  },
+  "python": {
+    "image": "python:3.14-slim"
+  },
+  "npm": {
+    "nuxt": "^4.5.2",
+    "@nuxt/ui": "^4.11.2",
+    "@nuxt/image": "^2.1.0",
+    "@nuxt/fonts": "^0.14.0",
+    "next": "^16.3.6",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@angular/common": "~22.2.0",
+    "@angular/compiler": "~22.2.0",
+    "@angular/core": "~22.2.0",
+    "@angular/platform-browser": "~22.2.0",
+    "@angular/router": "~22.2.0",
+    "@angular/build": "~22.2.0",
+    "@angular/cli": "~22.2.0",
+    "@angular/compiler-cli": "~22.2.0",
+    "rxjs": "^7.8.2",
+    "tslib": "^2.8.1",
+    "tailwindcss": "^4.3.3",
+    "@tailwindcss/postcss": "^4.3.3",
+    "postcss": "^8.5.28",
+    "typescript": "~6.0.3",
+    "@types/node": "^24.0.0",
+    "express": "^5.2.1",
+    "cors": "^2.8.6"
+  },
+  "pip": {
+    "fastapi": "0.141.1",
+    "uvicorn[standard]": "0.53.0"
+  },
+  "held": {
+    "typescript": "7.x is the native (Go) compiler; Angular 22 requires >=6.0 <6.1 and the Vue/Nuxt tooling (Volar) needs the JS API. Move when Angular/Volar support it.",
+    "@types/node": "Follows the Node runtime major (node.major), not the latest @types/node."
+  }
+}

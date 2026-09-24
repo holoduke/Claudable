@@ -6,6 +6,8 @@
  */
 import fs from 'fs/promises';
 import path from 'path';
+import { npmDeps } from '@/lib/config/stack-versions';
+import { PLACEHOLDER_FAVICON_SVG } from './scaffold-favicon';
 
 async function writeIfMissing(filePath: string, contents: string) {
   try {
@@ -31,21 +33,17 @@ export async function scaffoldNextApp(projectPath: string, projectId: string) {
       dev: 'next dev -H 0.0.0.0',
       build: 'next build',
       start: 'next start -H 0.0.0.0',
-      lint: 'next lint',
     },
-    dependencies: {
-      next: '^15.5.0',
-      react: '^19.0.0',
-      'react-dom': '^19.0.0',
-    },
-    devDependencies: {
-      typescript: '^5.7.2',
-      '@types/node': '^22.0.0',
-      '@types/react': '^19.0.0',
-      '@types/react-dom': '^19.0.0',
-      tailwindcss: '^4.0.0',
-      '@tailwindcss/postcss': '^4.0.0',
-    },
+    // Versions: lib/config/stack-versions.json. (`next lint` was removed in Next 16.)
+    dependencies: npmDeps('next', 'react', 'react-dom'),
+    devDependencies: npmDeps(
+      'typescript',
+      '@types/node',
+      '@types/react',
+      '@types/react-dom',
+      'tailwindcss',
+      '@tailwindcss/postcss',
+    ),
   };
 
   await writeIfMissing(path.join(projectPath, 'package.json'), `${JSON.stringify(packageJson, null, 2)}\n`);
@@ -93,6 +91,9 @@ export default nextConfig;
 export default config;
 `,
   );
+
+  // app/icon.svg: Next's file convention adds the <link rel="icon">.
+  await writeIfMissing(path.join(projectPath, 'app/icon.svg'), PLACEHOLDER_FAVICON_SVG);
 
   await writeIfMissing(
     path.join(projectPath, 'app/globals.css'),

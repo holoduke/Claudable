@@ -1,5 +1,7 @@
 import fs from 'fs/promises';
 import path from 'path';
+import { npmDeps } from '@/lib/config/stack-versions';
+import { PLACEHOLDER_FAVICON_SVG } from './scaffold-favicon';
 
 async function writeFileIfMissing(filePath: string, contents: string) {
   try {
@@ -39,18 +41,10 @@ export async function scaffoldBasicNextApp(
       preview: 'nuxt preview',
       postinstall: 'nuxt prepare',
     },
-    // Caret-pinned to the current majors: new apps get every minor/patch
-    // update (stay modern) but won't silently jump to a breaking new major
-    // (e.g. Nuxt 5 / Nuxt UI 5) on a fresh install. Bump these deliberately.
-    dependencies: {
-      nuxt: '^4.4.8',
-      '@nuxt/ui': '^4.9.0',
-      '@nuxt/image': '^2.0.0',
-      '@nuxt/fonts': '^0.14.0',
-    },
-    devDependencies: {
-      typescript: '^5.7.2',
-    },
+    // Majors pinned in lib/config/stack-versions.json: new apps get every
+    // minor/patch update but never silently jump to a breaking new major.
+    dependencies: npmDeps('nuxt', '@nuxt/ui', '@nuxt/image', '@nuxt/fonts'),
+    devDependencies: npmDeps('typescript'),
   };
 
   await writeFileIfMissing(
@@ -85,6 +79,8 @@ export default defineNuxtConfig({
 });
 `
   );
+
+  await writeFileIfMissing(path.join(projectPath, 'public/favicon.svg'), PLACEHOLDER_FAVICON_SVG);
 
   // Theme baseline: a single place to set the brand color + UI defaults so the
   // whole app stays visually coherent (light/dark handled by Nuxt UI tokens).

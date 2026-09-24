@@ -41,6 +41,7 @@ import {
 import { ensureStaticServer } from './static-server';
 import { waitForPreviewReady, appendCommandLogs } from './process-utils';
 import type { PreviewProcess } from './types';
+import { NODE_IMAGE } from '@/lib/config/stack-versions';
 
 type ProjectRecord = NonNullable<Awaited<ReturnType<typeof getProjectById>>>;
 
@@ -252,6 +253,19 @@ export async function publishPreviewRouteAndWarmCert(
   void fetch(resolvedUrl, { method: 'HEAD', signal: warmCtrl.signal }).catch(() => {}).finally(() => clearTimeout(warmTimer));
 }
 
+/** Major of @angular/core declared in the project's package.json, or null if unknown. */
+async function declaredAngularMajor(repoPath: string | null | undefined): Promise<number | null> {
+  if (!repoPath) return null;
+  try {
+    const pkg = JSON.parse(await fs.readFile(path.join(repoPath, 'package.json'), 'utf8'));
+    const range: unknown = pkg.dependencies?.['@angular/core'] ?? pkg.devDependencies?.['@angular/core'];
+    const major = typeof range === 'string' ? Number.parseInt(range.replace(/^[^\d]*/, ''), 10) : NaN;
+    return Number.isFinite(major) ? major : null;
+  } catch {
+    return null;
+  }
+}
+
 /** Per-stack dev-server args + the bind host and the host interface to publish on. */
 export async function buildDevServerArgs(
   projectId: string,
@@ -273,13 +287,20 @@ export async function buildDevServerArgs(
   const previewProject = await getProjectById(projectId).catch(() => null);
   if (stackKind(previewProject?.templateType) === 'angular') {
     // Angular's dev server rejects unknown Host headers, and the preview is
-    // reached via the public host — allow it explicitly. Derived from the
-    // resolved URL (no infra domain hardcoded); honored by the v20 builder.
-    try {
-      const host = new URL(resolvedUrl).hostname;
-      if (host) devArgs.push('--allowed-hosts', host);
-    } catch {
-      /* keep default args */
+    // reached via the public host — allow it. Up to v20 the CLI took the host
+    // (derived from the resolved URL, no infra domain hardcoded); from v21 the
+    // CLI flag is boolean-only and a value is parsed as the PROJECT name, so the
+    // dev server exits with "Invalid values: project".
+    const angularMajor = await declaredAngularMajor(previewProject?.repoPath);
+    if (angularMajor === null || angularMajor >= 21) {
+      devArgs.push('--allowed-hosts');
+    } else {
+      try {
+        const host = new URL(resolvedUrl).hostname;
+        if (host) devArgs.push('--allowed-hosts', host);
+      } catch {
+        /* keep default args */
+      }
     }
   } else if (bindHost && bindHost.trim().length > 0) {
     // Bind the dev server to all interfaces. Frameworks disagree on the flag:
@@ -612,7 +633,7 @@ export async function buildFrontendContainerArgs(
   const fe = cfg?.frontend ?? {}; // config optional — isolation is agnostic
   await dockerRmSync(feName); // clear any stale container before re-creating
   const hostProject = toHostPath(projectPath);
-  const image = fe.image || (isLaravel ? LARAVEL_PHP_IMAGE : 'node:22-bookworm-slim');
+  const image = fe.image || (isLaravel ? LARAVEL_PHP_IMAGE : NODE_IMAGE);
   // Reuse the SAME per-stack dev command the in-process path builds (devArgs
   // already carries --port + the stack's host/allowed-hosts flags), so this
   // works for nuxt/next/angular without per-project config.
