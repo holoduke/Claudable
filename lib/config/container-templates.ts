@@ -55,13 +55,15 @@ export const CONTAINER_TEMPLATES: ContainerTemplate[] = [
   {
     id: 'postgres',
     name: 'PostgreSQL',
-    description: 'Postgres 16 with pgvector. A dedicated database on this project’s private network, persistent.',
-    image: 'pgvector/pgvector:pg16',
+    description: 'Postgres 18 with pgvector. A dedicated database on this project’s private network, persistent.',
+    image: 'pgvector/pgvector:pg18',
     alias: 'db',
     kind: 'database',
     icon: '🐘',
     port: 5432,
-    mountPath: '/var/lib/postgresql/data',
+    // Postgres 18+ keeps its data in a versioned subdir and expects the volume one
+    // level up. Existing containers keep the image + mountPath stored at creation.
+    mountPath: '/var/lib/postgresql',
     secrets: 'postgres',
     containerEnv: { POSTGRES_USER: '{user}', POSTGRES_PASSWORD: '{pass}', POSTGRES_DB: '{db}' },
     injectEnv: { DATABASE_URL: 'postgresql://{user}:{pass}@{alias}:{port}/{db}' },
@@ -71,8 +73,8 @@ export const CONTAINER_TEMPLATES: ContainerTemplate[] = [
   {
     id: 'mysql',
     name: 'MySQL',
-    description: 'MySQL 8. A dedicated database on this project’s private network, persistent.',
-    image: 'mysql:8',
+    description: 'MySQL 8.4 LTS. A dedicated database on this project’s private network, persistent.',
+    image: 'mysql:8.4',
     alias: 'db',
     kind: 'database',
     icon: '🐬',
@@ -91,8 +93,8 @@ export const CONTAINER_TEMPLATES: ContainerTemplate[] = [
   {
     id: 'redis',
     name: 'Redis',
-    description: 'Redis 7 cache / key-value store on this project’s private network.',
-    image: 'redis:7-alpine',
+    description: 'Redis 8 cache / key-value store on this project’s private network.',
+    image: 'redis:8-alpine',
     alias: 'cache',
     kind: 'cache',
     icon: '⚡',
@@ -104,6 +106,8 @@ export const CONTAINER_TEMPLATES: ContainerTemplate[] = [
     id: 'mongo',
     name: 'MongoDB',
     description: 'MongoDB 7 document database on this project’s private network, persistent.',
+    // Held on 7: MongoDB 8 refuses to start on Linux kernel >= 6.19 (SERVER-121912),
+    // and prod-host runs kernel 7.0. Retry 8 once that issue is fixed.
     image: 'mongo:7',
     alias: 'mongo',
     kind: 'database',

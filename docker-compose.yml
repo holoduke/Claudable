@@ -96,7 +96,7 @@ services:
   # can front this. FULL FIX still recommended (that filter, fixed, or rootless
   # dockerd). Only used when PREVIEW_ISOLATION is set; otherwise it sits idle.
   dockerproxy:
-    image: tecnativa/docker-socket-proxy:0.3.0
+    image: tecnativa/docker-socket-proxy:v0.5.0
     container_name: claudable-dockerproxy
     restart: unless-stopped
     environment:

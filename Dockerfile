@@ -20,7 +20,7 @@ RUN apt-get update \
 # 150.x build SIGTRAPs on any headless run in this container, which silently
 # broke thumbnail capture and the PDF exporter. A versioned Google build keeps
 # rebuilds deterministic; bump the version deliberately, testing headless runs.
-ARG CHROME_HEADLESS_VERSION=141.0.7390.65
+ARG CHROME_HEADLESS_VERSION=154.0.8037.57
 RUN curl -fsSL "https://storage.googleapis.com/chrome-for-testing-public/${CHROME_HEADLESS_VERSION}/linux64/chrome-headless-shell-linux64.zip" -o /tmp/chs.zip \
   && unzip -q /tmp/chs.zip -d /opt \
   && mv /opt/chrome-headless-shell-linux64 /opt/chrome-headless-shell \
@@ -64,7 +64,7 @@ RUN curl -fsSL https://packages.sury.org/php/apt.gpg -o /etc/apt/trusted.gpg.d/s
 # Docker CLI ONLY (not the daemon) — for project-environment isolation, Claudable
 # builds/runs hardened sibling containers via the socket-proxy (DOCKER_HOST). Just
 # the static client binary; talks to a remote daemon, runs nothing locally.
-RUN curl -fsSL https://download.docker.com/linux/static/stable/x86_64/docker-27.5.1.tgz \
+RUN curl -fsSL https://download.docker.com/linux/static/stable/x86_64/docker-29.8.1.tgz \
     | tar -xz -C /usr/local/bin --strip-components=1 docker/docker \
   && docker --version
 
