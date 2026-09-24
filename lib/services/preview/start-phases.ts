@@ -36,6 +36,7 @@ import {
   buildBackendBaseEnv,
   collectEnvOverrides,
   parsePort,
+  readPreviewConfig,
   type PreviewConfig,
 } from './config';
 import { ensureStaticServer } from './static-server';
@@ -80,10 +81,21 @@ export async function resolveProjectWorkspace(projectId: string): Promise<Projec
 
   await ensureProjectRootStructure(projectPath, queueLog, stackKind(project.templateType));
 
+  // An imported repo that declares its own dev command (.claudable/preview.json
+  // frontend.dev, e.g. a monorepo whose app lives in a subfolder) must never get
+  // a starter app written into its root: that "missing root package.json" is by
+  // design there, and scaffolding would litter the repo (package.json, src/, …).
+  const ownDevCommand = Boolean((await readPreviewConfig(projectPath))?.frontend?.dev);
+
   if (!isStatic) {
     try {
       await fs.access(path.join(projectPath, 'package.json'));
     } catch {
+      if (ownDevCommand) {
+        queueLog('Skipping scaffold: .claudable/preview.json defines frontend.dev (imported project)');
+        await ensurePreviewRouteReporter(projectPath, projectId);
+        return { project, projectPath, isStatic, pendingLogs, queueLog };
+      }
       const proj = await getProjectById(projectId).catch(() => null);
       console.log(
         `[PreviewManager] Bootstrapping ${stackKind(proj?.templateType)} app for project ${projectId}`
