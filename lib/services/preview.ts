@@ -42,7 +42,7 @@ import {
   readPackageJson,
 } from './preview/scaffold';
 import { writeArchitectureSummary } from './preview/architecture';
-import { readPreviewConfig, resolvePreviewBounds } from './preview/config';
+import { readPreviewConfig, resolvePreviewBounds, substVars } from './preview/config';
 import {
   resolveProjectWorkspace,
   buildBaseSpawnEnv,
@@ -54,6 +54,7 @@ import {
   buildFrontendContainerArgs,
   buildScrubbedEnv,
   awaitReadinessAndFinalize,
+  ownFrontendDevCommand,
 } from './preview/start-phases';
 import type { PreviewProcess, PreviewInfo } from './preview/types';
 
@@ -472,7 +473,10 @@ class PreviewManager {
     // path (there's no PHP toolchain in the app process for an in-process run).
     const feKind = stackKind(project.templateType);
     const isLaravel = feKind === 'laravel';
-    const skipNodeInstall = isStatic || isLaravel;
+    // Imported repo with its own dev command and no root package.json: run that
+    // command (container or in-process), never the root npm install / dev script.
+    const ownDevCommand = isStatic ? null : await ownFrontendDevCommand(projectPath);
+    const skipNodeInstall = isStatic || isLaravel || ownDevCommand !== null;
 
     const { previewBounds, preferredPort } = await this.reservePreviewPort(projectId);
 
@@ -638,6 +642,10 @@ class PreviewManager {
       command = fe.command;
       args = fe.args;
       previewProcess.frontendEnvFileCleanup = fe.envFileCleanup;
+    } else if (ownDevCommand) {
+      // In-process run of the imported repo's own dev command (isolation off).
+      command = 'sh';
+      args = ['-c', substVars(ownDevCommand, { PORT: String(effectivePort), PROJECT: projectPath })];
     }
 
     // SECURITY: the IN-PROCESS framework dev server runs the PROJECT's own server
@@ -646,7 +654,7 @@ class PreviewManager {
     // the project-specific vars. (The container path is safe — secrets stay in the
     // docker CLI and never enter the container; the static server is Claudable's
     // own trusted code and keeps its CLAUDABLE_PROXY_* vars.)
-    if (!isStatic && !useFrontendContainer && command === npmCommand) {
+    if (!isStatic && !useFrontendContainer && (command === npmCommand || ownDevCommand !== null)) {
       spawnEnv = await buildScrubbedEnv({
         projectId,
         effectivePort,

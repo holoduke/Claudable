@@ -88,6 +88,8 @@ const NODE_INDEX = `import express from 'express';
 import cors from 'cors';
 
 // Minimal Node/Express backend. The agent builds this out; routes live under /api.
+// Express 5 routing: wildcards need a name ('/{*splat}', not '*') and optional
+// params use braces ('/items{/:id}', not '/items/:id?'); the old forms throw at startup.
 const app = express();
 app.use(cors({ origin: process.env.CORS_ORIGIN || true }));
 app.use(express.json());

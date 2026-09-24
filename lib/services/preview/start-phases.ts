@@ -81,11 +81,9 @@ export async function resolveProjectWorkspace(projectId: string): Promise<Projec
 
   await ensureProjectRootStructure(projectPath, queueLog, stackKind(project.templateType));
 
-  // An imported repo that declares its own dev command (.claudable/preview.json
-  // frontend.dev, e.g. a monorepo whose app lives in a subfolder) must never get
-  // a starter app written into its root: that "missing root package.json" is by
-  // design there, and scaffolding would litter the repo (package.json, src/, …).
-  const ownDevCommand = Boolean((await readPreviewConfig(projectPath))?.frontend?.dev);
+  // An imported repo that runs its own dev command must never get a starter app
+  // written into its root (see ownFrontendDevCommand).
+  const ownDevCommand = await ownFrontendDevCommand(projectPath);
 
   if (!isStatic) {
     try {
@@ -265,6 +263,19 @@ export async function publishPreviewRouteAndWarmCert(
   void fetch(resolvedUrl, { method: 'HEAD', signal: warmCtrl.signal }).catch(() => {}).finally(() => clearTimeout(warmTimer));
 }
 
+/**
+ * The dev command from `.claudable/preview.json` (`frontend.dev`) when the project
+ * has NO root package.json — an imported repo whose app lives in a subfolder
+ * (monorepo). Such a project is started with that command only: never scaffolded
+ * into and never given a root npm install / npm dev script. Null otherwise.
+ */
+export async function ownFrontendDevCommand(projectPath: string): Promise<string | null> {
+  const dev = (await readPreviewConfig(projectPath))?.frontend?.dev;
+  if (!dev) return null;
+  const hasRootPackage = await fs.access(path.join(projectPath, 'package.json')).then(() => true, () => false);
+  return hasRootPackage ? null : dev;
+}
+
 /** Major of @angular/core declared in the project's package.json, or null if unknown. */
 async function declaredAngularMajor(repoPath: string | null | undefined): Promise<number | null> {
   if (!repoPath) return null;
@@ -301,10 +312,11 @@ export async function buildDevServerArgs(
     // Angular's dev server rejects unknown Host headers, and the preview is
     // reached via the public host — allow it. Up to v20 the CLI took the host
     // (derived from the resolved URL, no infra domain hardcoded); from v21 the
-    // CLI flag is boolean-only and a value is parsed as the PROJECT name, so the
-    // dev server exits with "Invalid values: project".
+    // CLI flag is boolean-only (allow ALL hosts) and a value is parsed as the
+    // PROJECT name, so the dev server exits with "Invalid values: project".
+    // Unknown version → the host-restricted form (fails safe, not open).
     const angularMajor = await declaredAngularMajor(previewProject?.repoPath);
-    if (angularMajor === null || angularMajor >= 21) {
+    if (angularMajor !== null && angularMajor >= 21) {
       devArgs.push('--allowed-hosts');
     } else {
       try {
