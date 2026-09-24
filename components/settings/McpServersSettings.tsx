@@ -118,7 +118,7 @@ export default function McpServersSettings({ projectId }: Props) {
       const res = await fetch(`${API_BASE}/api/projects/${projectId}/mcp-servers/${s.id}/oauth/start`, { method: 'POST' });
       const json = await res.json();
       if (!res.ok || !json?.success || !json.data?.authUrl) throw new Error(json?.error || 'Could not start authentication');
-      window.location.href = json.data.authUrl; // redirect to the provider's consent screen
+      window.location.assign(json.data.authUrl); // redirect to the provider's consent screen
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Authentication failed to start');
     }

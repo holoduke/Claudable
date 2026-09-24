@@ -1683,6 +1683,9 @@ export default function ChatLog({ projectId, onSessionStatusChange, onProjectSta
       const t = m.createdAt;
       if (t && (!max || new Date(t).getTime() > new Date(max).getTime())) max = t as string;
     }
+    // Writing a ref inside an effect is the intended pattern; the React Compiler rule
+    // mistakes this ref (also read by the EventSource effect) for render state.
+    // eslint-disable-next-line react-hooks/immutability
     newestMessageTimeRef.current = max;
   }, [messages]);
   // Indirection so the scroll handler (defined above loadOlderMessages) can call
