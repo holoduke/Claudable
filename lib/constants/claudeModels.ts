@@ -186,8 +186,8 @@ export const CLAUDE_MODEL_DEFINITIONS: ClaudeModelDefinition[] = [
   },
 ];
 
-// Default agent model. On Opus 4.8 for now (Fable 5 is out of credits).
-export const CLAUDE_DEFAULT_MODEL: ClaudeModelId = 'claude-opus-4-8';
+// Default agent model: Opus 5.5 (needs Claude Code >= 2.1.280, see the Dockerfile).
+export const CLAUDE_DEFAULT_MODEL: ClaudeModelId = 'claude-opus-5-5';
 
 const CLAUDE_MODEL_ALIAS_MAP: Record<string, ClaudeModelId> = CLAUDE_MODEL_DEFINITIONS.reduce(
   (map, definition) => {
