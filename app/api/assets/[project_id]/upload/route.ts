@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { denyUnlessProjectAccess } from '@/lib/auth/gate';
 import fs from 'fs/promises';
 import { createWriteStream } from 'fs';
+import { realPathInside } from '@/lib/utils/safe-fs';
 import { Readable } from 'stream';
 import { pipeline } from 'stream/promises';
 import path from 'path';
@@ -85,6 +86,8 @@ async function finalizeAsset(
         : path.join(PROJECTS_DIR_ABSOLUTE, projectId);
       const uploadsDir = path.join(projectRoot, 'public', 'uploads');
       await fs.mkdir(uploadsDir, { recursive: true });
+      // public/uploads is agent-writable: never copy through a symlinked dir.
+      if (!(await realPathInside(projectRoot, uploadsDir))) throw new Error('public/uploads resolves outside the project');
       projectPublicPath = path.join(uploadsDir, uniqueName);
       try { await fs.access(projectPublicPath); } catch { await fs.copyFile(resolvedAbsolutePath, projectPublicPath); }
     } catch (e) {
@@ -121,6 +124,10 @@ export async function POST(request: Request, { params }: RouteContext) {
 
     const projectAssetsPath = resolveAssetsPath(project_id);
     await fs.mkdir(projectAssetsPath, { recursive: true });
+    // assets/ is agent-writable: refuse when it is (or sits behind) a symlink out of the project.
+    if (!(await realPathInside(path.join(PROJECTS_DIR_ABSOLUTE, project_id), projectAssetsPath))) {
+      return NextResponse.json({ success: false, error: 'Invalid assets directory' }, { status: 400 });
+    }
 
     // ---- Chunked raw-body upload (the only path that handles large files) -------
     // The client slices the file into sub-limit chunks (proxies & the Next server

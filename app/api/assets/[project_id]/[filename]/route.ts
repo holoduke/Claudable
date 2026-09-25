@@ -3,6 +3,7 @@ import { denyUnlessProjectAccess } from '@/lib/auth/gate';
 import fs from 'fs/promises';
 import path from 'path';
 import { getProjectById } from '@/lib/services/project';
+import { readFileInside } from '@/lib/utils/safe-fs';
 
 interface RouteContext {
   params: Promise<{ project_id: string; filename: string }>;
@@ -60,47 +61,25 @@ export async function GET(_request: Request, { params }: RouteContext) {
     if (/[\\/]/.test(filename) || filename.includes('..') || (filePath !== assetsDir && !filePath.startsWith(assetsDir + path.sep))) {
       return NextResponse.json({ success: false, error: 'Invalid filename' }, { status: 400 });
     }
-    console.log('📸 Checking file path:', {
-      filePath,
-      exists: await fs.access(filePath).then(() => true).catch(() => false)
-    });
-
-    const fileStat = await fs.stat(filePath).catch(() => null);
-    if (!fileStat || !fileStat.isFile()) {
-      console.log('📸 Asset serving failed: File not found:', {
-        filePath,
-        fileStat,
-        projectAssetsDir: path.join(PROJECTS_DIR, project_id, 'assets')
-      });
-
-      // Check if assets directory exists
-      const assetsDirExists = await fs.access(assetsDir).then(() => true).catch(() => false);
-      console.log('📸 Assets directory exists:', assetsDirExists);
-
-      // List files in assets directory if it exists
-      if (assetsDirExists) {
-        try {
-          const files = await fs.readdir(assetsDir);
-          console.log('📸 Files in assets directory:', files);
-        } catch (error) {
-          console.log('📸 Failed to list assets directory files:', error);
-        }
-      }
-
+    // Symlink-safe read: the assets dir is agent-writable, so a symlink here must
+    // never resolve outside the project (e.g. /proc/self/environ, the database).
+    const projectRoot = path.join(PROJECTS_DIR_ABSOLUTE, project_id);
+    const fileBuffer = await readFileInside(projectRoot, filePath);
+    if (!fileBuffer) {
       return NextResponse.json({ success: false, error: 'Image not found' }, { status: 404 });
     }
 
-    const fileBuffer = await fs.readFile(filePath);
     const response = new NextResponse(fileBuffer as unknown as BodyInit);
     response.headers.set('Content-Type', inferContentType(filename));
-    response.headers.set('Cache-Control', 'public, max-age=31536000, immutable');
-
-    console.log('📸 Asset serving success:', {
-      filename,
-      size: fileBuffer.length,
-      contentType: inferContentType(filename),
-      project_id
-    });
+    response.headers.set('X-Content-Type-Options', 'nosniff');
+    // Assets are project content behind the auth gate: never cache them in shared caches.
+    response.headers.set('Cache-Control', 'private, max-age=3600');
+    if (/\.svg$/i.test(filename)) {
+      // An SVG can carry script; served from the Claudable origin it would run
+      // with the viewer's session. Sandbox it and make it a download.
+      response.headers.set('Content-Security-Policy', "sandbox; default-src 'none'; style-src 'unsafe-inline'; img-src data:");
+      response.headers.set('Content-Disposition', 'attachment');
+    }
 
     return response;
   } catch (error) {

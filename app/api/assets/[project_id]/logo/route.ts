@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server';
 import { denyUnlessProjectAccess } from '@/lib/auth/gate';
-import fs from 'fs/promises';
 import path from 'path';
 import { getProjectById } from '@/lib/services/project';
+import { writeFileInside } from '@/lib/utils/safe-fs';
 
 interface RouteContext {
   params: Promise<{ project_id: string }>;
@@ -16,7 +16,7 @@ const PROJECTS_DIR_ABSOLUTE = path.isAbsolute(PROJECTS_DIR)
 export async function POST(request: Request, { params }: RouteContext) {
   try {
     const { project_id } = await params;
-    const _gate = await denyUnlessProjectAccess(project_id);
+    const _gate = await denyUnlessProjectAccess(project_id, { write: true });
     if (_gate) return _gate;
     const project = await getProjectById(project_id);
     if (!project) {
@@ -34,10 +34,10 @@ export async function POST(request: Request, { params }: RouteContext) {
     }
 
     const buffer = Buffer.from(b64, 'base64');
-    const assetsPath = path.join(PROJECTS_DIR_ABSOLUTE, project_id, 'assets');
-    await fs.mkdir(assetsPath, { recursive: true });
-    const logoPath = path.join(assetsPath, 'logo.png');
-    await fs.writeFile(logoPath, buffer);
+    // Symlink-safe: assets/ is agent-writable, a planted symlink must not turn
+    // this into an overwrite of a file outside the project.
+    const projectRoot = path.join(PROJECTS_DIR_ABSOLUTE, project_id);
+    await writeFileInside(projectRoot, path.join(projectRoot, 'assets', 'logo.png'), buffer);
 
     return NextResponse.json({ success: true, path: 'assets/logo.png' });
   } catch (error) {

@@ -50,7 +50,17 @@ function liveVersion(){
   return state.v;
 }
 var LR_SCRIPT = '<script>(function(){var v=null;setInterval(function(){fetch("/__claudable/livereload",{cache:"no-store"}).then(function(r){return r.json();}).then(function(j){if(v===null){v=j.v;return;}if(j.v!==v){location.reload();}}).catch(function(){});},1500);})();</' + 'script>';
+var REAL_ROOT = null;
+try { REAL_ROOT = fs.realpathSync(ROOT); } catch (e) { REAL_ROOT = ROOT; }
 function serve(res, fp, status){
+  // Symlink-safe: the served tree is agent-written, so a symlink must never make
+  // this server (running on the control plane) read a file outside the project.
+  fs.realpath(fp, function(re, real){
+    if (re || (real !== REAL_ROOT && real.indexOf(REAL_ROOT + path.sep) !== 0)) { res.writeHead(404, {'Content-Type':'text/plain'}); res.end('Not found'); return; }
+    serveReal(res, real, status);
+  });
+}
+function serveReal(res, fp, status){
   fs.readFile(fp, function(e, data){
     if (e) { res.writeHead(404, {'Content-Type':'text/plain'}); res.end('Not found'); return; }
     var mime = type(fp);
