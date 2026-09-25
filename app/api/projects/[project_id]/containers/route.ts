@@ -64,7 +64,7 @@ export async function GET(_req: NextRequest, { params }: RouteContext) {
     });
 
     // A backend can come from the composition (settings.backendType) OR from an
-    // imported project's .claudable/preview.json (e.g. demo-dashboard, set up at
+    // imported project's .claudable/preview.json (e.g. a dashboard app, set up at
     // import before the composition feature). Detect either.
     const backendType = typeof settings.backendType === 'string' ? settings.backendType : null;
     let importedBackend = false;

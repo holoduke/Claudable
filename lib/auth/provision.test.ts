@@ -77,7 +77,7 @@ beforeEach(() => {
   process.env.ALLOWED_EMAIL_DOMAINS = 'newstory.nl';
   process.env.BOOTSTRAP_ADMIN_EMAIL = 'boot@newstory.nl';
   orgs.push({ id: 'org-ns', name: 'New Story', domain: 'newstory.nl' });
-  orgs.push({ id: 'org-micros', name: 'acme.example', domain: 'acme.example' });
+  orgs.push({ id: 'org-acme', name: 'Acme BV', domain: 'acme.example' });
 });
 
 describe('who may sign in', () => {
@@ -96,20 +96,20 @@ describe('who may sign in', () => {
   });
 
   it('a pending invite admits any domain; expired or revoked ones do not', async () => {
-    invites.push({ id: 'i1', orgId: 'org-micros', email: 'a@gmail.com', role: 'lid', expiresAt: new Date(Date.now() + DAY), acceptedAt: null, revokedAt: null });
-    invites.push({ id: 'i2', orgId: 'org-micros', email: 'b@gmail.com', role: 'lid', expiresAt: new Date(Date.now() - DAY), acceptedAt: null, revokedAt: null });
-    invites.push({ id: 'i3', orgId: 'org-micros', email: 'c@gmail.com', role: 'lid', expiresAt: new Date(Date.now() + DAY), acceptedAt: null, revokedAt: new Date() });
+    invites.push({ id: 'i1', orgId: 'org-acme', email: 'a@gmail.com', role: 'lid', expiresAt: new Date(Date.now() + DAY), acceptedAt: null, revokedAt: null });
+    invites.push({ id: 'i2', orgId: 'org-acme', email: 'b@gmail.com', role: 'lid', expiresAt: new Date(Date.now() - DAY), acceptedAt: null, revokedAt: null });
+    invites.push({ id: 'i3', orgId: 'org-acme', email: 'c@gmail.com', role: 'lid', expiresAt: new Date(Date.now() + DAY), acceptedAt: null, revokedAt: new Date() });
     expect(await isSignInAllowed('a@gmail.com')).toBe(true);
     expect(await isSignInAllowed('b@gmail.com')).toBe(false);
     expect(await isSignInAllowed('c@gmail.com')).toBe(false);
   });
 
   it('a user REMOVED from their last org (audited) is refused until re-invited', async () => {
-    users.push({ id: 'u1', email: 'old@example.com', role: 'user', isActive: true, orgId: 'org-micros' });
-    removals.push({ userId: 'u1', orgId: 'org-micros' });
+    users.push({ id: 'u1', email: 'old@example.com', role: 'user', isActive: true, orgId: 'org-acme' });
+    removals.push({ userId: 'u1', orgId: 'org-acme' });
     expect(await isSignInAllowed('old@example.com')).toBe(false);
     expect(memberships).toEqual([]); // no resurrection
-    memberships.push({ orgId: 'org-micros', userId: 'u1', role: 'lid' });
+    memberships.push({ orgId: 'org-acme', userId: 'u1', role: 'lid' });
     expect(await isSignInAllowed('old@example.com')).toBe(true);
     users[0].isActive = false;
     expect(await isSignInAllowed('old@example.com')).toBe(false);
@@ -130,23 +130,23 @@ describe('where a new user lands', () => {
   });
 
   it('an invite provisions into the inviting org with the invited role and is marked accepted', async () => {
-    invites.push({ id: 'i1', orgId: 'org-micros', email: 'klant@gmail.com', role: 'beheerder', expiresAt: new Date(Date.now() + DAY), acceptedAt: null, revokedAt: null });
+    invites.push({ id: 'i1', orgId: 'org-acme', email: 'klant@gmail.com', role: 'beheerder', expiresAt: new Date(Date.now() + DAY), acceptedAt: null, revokedAt: null });
     const u = await provisionUser('klant@gmail.com', 'Klant', null);
-    expect(u.orgId).toBe('org-micros');
-    expect(memberships).toEqual([{ orgId: 'org-micros', userId: u.id, role: 'beheerder' }]);
+    expect(u.orgId).toBe('org-acme');
+    expect(memberships).toEqual([{ orgId: 'org-acme', userId: u.id, role: 'beheerder' }]);
     expect(invites[0].acceptedAt).not.toBeNull();
     expect(audit).toContain('org.invite.accepted');
   });
 
   it('a routine sign-in does NOT recreate a membership that was removed', async () => {
     users.push({ id: 'u1', email: 'old@newstory.nl', role: 'user', isActive: true, orgId: 'org-ns' });
-    memberships.push({ orgId: 'org-micros', userId: 'u1', role: 'lid' }); // still member elsewhere
+    memberships.push({ orgId: 'org-acme', userId: 'u1', role: 'lid' }); // still member elsewhere
     await provisionUser('old@newstory.nl', 'Old', null);
     expect(memberships.some((m) => m.orgId === 'org-ns')).toBe(false);
   });
 
   it('a brand-new user gets exactly one welcome e-mail, naming their org', async () => {
-    invites.push({ id: 'i1', orgId: 'org-micros', email: 'nieuw@gmail.com', role: 'lid', expiresAt: new Date(Date.now() + DAY), acceptedAt: null, revokedAt: null });
+    invites.push({ id: 'i1', orgId: 'org-acme', email: 'nieuw@gmail.com', role: 'lid', expiresAt: new Date(Date.now() + DAY), acceptedAt: null, revokedAt: null });
     await provisionUser('nieuw@gmail.com', 'Nieuw', null);
     expect(mails).toEqual(['nieuw@gmail.com']);
   });

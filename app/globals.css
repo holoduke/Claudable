@@ -296,7 +296,7 @@ summary:focus-visible,
   .publish-regenboog { animation: none; }
 }
 
-/* Demo Shop display + body fonts, reused on the login page. */
+/* Display + body fonts used on the login page. */
 @font-face {
   font-family: 'Gill Sans Nova';
   src: url('/fonts/GillSansNova-CnUltraBold.otf') format('opentype');

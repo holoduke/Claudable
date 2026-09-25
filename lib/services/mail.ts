@@ -5,9 +5,9 @@
  * every send resolves to { sent: false, reason: 'disabled' } so features like
  * invitations keep working, just without the e-mail):
  *   MAILGUN_API_KEY   Private API key (from the Mailgun dashboard).
- *   MAILGUN_DOMAIN    Sending domain registered in Mailgun, e.g. mg.newstory.tf.
+ *   MAILGUN_DOMAIN    Sending domain registered in Mailgun, e.g. mg.example.com.
  *   MAILGUN_REGION    'eu' (default — EU data residency) or 'us'.
- *   MAIL_FROM         Sender, e.g. "Claudable <noreply@mg.newstory.tf>".
+ *   MAIL_FROM         Sender, e.g. "Claudable <noreply@mg.example.com>".
  *                     Defaults to noreply@<MAILGUN_DOMAIN>.
  *   MAIL_REPLY_TO     Optional reply-to address.
  *
@@ -82,7 +82,7 @@ export async function sendMail(msg: MailMessage): Promise<MailResult> {
 
 /** Public app URL for links in e-mails (falls back to the auth URL). */
 export function appUrl(): string {
-  return (process.env.NEXT_PUBLIC_APP_URL || process.env.AUTH_URL || 'https://claudable.newstory.tf').replace(/\/+$/, '');
+  return (process.env.NEXT_PUBLIC_APP_URL || process.env.AUTH_URL || 'http://localhost:3000').replace(/\/+$/, '');
 }
 
 function esc(s: string): string {

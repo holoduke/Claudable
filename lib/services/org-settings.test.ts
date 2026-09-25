@@ -82,11 +82,11 @@ describe('org credential in the resolution order', () => {
   });
 
   it('is NOT treated as the personal credential of the admin who set it', async () => {
-    // root set acme.example's credential; root's most recent owned row is that org credential.
+    // root set Acme BV's credential; root's most recent owned row is that org credential.
     creds['c-org'].orgBound = true;
     ownCred['root'] = 'c-org';
     // In an org WITHOUT an org credential, root must fall through to the platform token,
-    // not silently run on acme.example's account.
+    // not silently run on Acme BV's account.
     expect(await resolveProjectClaudeToken('p-a', 'root')).toBeNull();
     expect(await runUsesRequestersOwnAccount('p-a', 'root')).toBe(false);
   });

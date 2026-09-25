@@ -13,7 +13,7 @@ import type { PreviewBackendConfig } from './config';
 // in-memory (reset on every restart/redeploy), so after a recreate each running
 // claudable-preview-* container is an orphan still holding its host port. A fresh
 // start would then collide on the port and the dev server "exits before reachable".
-// Sweep them so boot starts from a clean slate. (sample-app-api/db etc. are named
+// Sweep them so boot starts from a clean slate. (a project's own sidecars, e.g. <slug>-api/-db, are named
 // differently and are never matched.)
 export async function sweepOrphanedPreviewContainers(): Promise<void> {
   try {
@@ -71,7 +71,7 @@ export async function dockerRmSync(name: string): Promise<void> {
 // via it; icc on). Service containers stay on the egress-locked SANDBOX net (for
 // firewalled internet) AND join this net, so they reach each other DIRECTLY by an
 // internal-only ALIAS (e.g. http://api:8080) while egress stays locked — no
-// egress-firewall changes needed (proven on prod-host). The public URL is still injected
+// egress-firewall changes needed (proven in production). The public URL is still injected
 // for browser calls; the internal URL is for server-side/SSR/proxy hops.
 function projectNetworkName(projectId: string): string {
   return `claudable-proj-${previewSlug(projectId)}`;

@@ -127,7 +127,7 @@ The orchestrator must launch containers. Don't hand raw `docker.sock` to app cod
 2. **Isolation target for v1:** plain Docker now, gVisor later — confirm?
 3. **DooD mechanism:** rootless dockerd vs spawn-API sidecar?
 4. **Scope of "no leaks":** filesystem+process only, or also **network egress** policy?
-5. **Box capacity:** stay on prod-host, or is this the trigger to provision box2 (the
+5. **Box capacity:** stay on the current host, or is this the trigger to provision a second one (the
    provisioning bundle is ready) as the dedicated sandbox host?
 
 ## Rough effort

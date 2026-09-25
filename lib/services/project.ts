@@ -23,7 +23,7 @@ export async function getAllProjects(): Promise<Project[]> {
     },
     // Drop the (potentially huge) initial prompt from the LIST payload — it's the
     // full text a user typed to create the project, can be hundreds of KB, and is
-    // never rendered on the homepage tiles. On prod-host it was ~700KB of the ~723KB
+    // never rendered on the homepage tiles. In production it was ~700KB of the ~723KB
     // response for 16 projects (97%). Both callers (homepage list, admin
     // system-overview) ignore it; single-project reads still return it.
     omit: {
@@ -33,7 +33,7 @@ export async function getAllProjects(): Promise<Project[]> {
     include: {
       owner: { select: { name: true, email: true } },
       lastEditedBy: { select: { name: true, email: true } },
-      // Tenant label for the tiles ("acme.example" next to the name).
+      // Tenant label for the tiles (the organisation name next to the project name).
       organization: { select: { id: true, name: true, type: true } },
     },
   });

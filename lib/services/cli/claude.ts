@@ -345,7 +345,7 @@ async function buildAgentSystemPrompt(
  * unchanged). Full parity: the same system prompt, the same message pipeline
  * (thinking blocks + tool cards via the shared processor), session resume, and
  * the 3 tools (appdiag/images/itops) reachable over network-MCP with a
- * per-turn capability token. Proven feasible on prod-host.
+ * per-turn capability token. Proven feasible on the production host.
  */
 async function runContainerizedTurn(args: {
   projectId: string;

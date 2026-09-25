@@ -54,7 +54,7 @@ describe('e-mail sign-in codes', () => {
   it('sends a code only to an address that may sign in', async () => {
     expect(await requestLoginCode('stranger@example.com', '1.1.1.1')).toBe(false);
     expect(sent).toHaveLength(0);
-    expect(await requestLoginCode('client@acme.example', '1.1.1.2')).toBe(true);
+    expect(await requestLoginCode('Client@Acme.example', '1.1.1.2')).toBe(true);
     expect(sent[0].to).toBe('client@acme.example');
     expect(rows[0].codeHash).not.toContain(lastCode()); // only a hash is stored
   });

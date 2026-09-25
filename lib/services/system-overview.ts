@@ -127,7 +127,7 @@ export async function getSystemOverview(): Promise<SystemOverview> {
       ) return id;
     }
     // 2) Manually-deployed containers a Claudable project happens to own (e.g.
-    //    sample-app-api / sample-app-db): loose substring match, but only for slugs
+    //    <slug>-api / <slug>-db): loose substring match, but only for slugs
     //    long enough not to false-match (>= 6 chars) — excludes 'db'/'api'/'app'.
     for (const { id, slug } of slugMap) {
       if (slug.length >= 6 && name.includes(slug)) return id;
@@ -199,7 +199,7 @@ export async function getSystemOverview(): Promise<SystemOverview> {
   unassigned.sort((a, b) => a.name.localeCompare(b.name));
 
   return {
-    host: process.env.DEPLOY_HOST || process.env.HOSTNAME || 'prod-host',
+    host: process.env.DEPLOY_HOST || process.env.HOSTNAME || 'server',
     agentContainerized,
     previewIsolation: Boolean(process.env.PREVIEW_ISOLATION?.trim()),
     projects: projectRows,

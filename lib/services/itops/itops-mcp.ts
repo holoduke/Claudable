@@ -100,7 +100,7 @@ export function itopsToolDefs() {
       ),
       tool(
         'propose_new_app_host',
-        'Propose provisioning a NEW app-host box (like prod-host: Docker + Coolify + Traefik with keyless Route53 DNS-01). Produces a concrete, reviewable plan — it does NOT create anything.',
+        'Propose provisioning a NEW app-host box (like the current host: Docker + Coolify + Traefik with keyless Route53 DNS-01). Produces a concrete, reviewable plan — it does NOT create anything.',
         {
           domain: z.string().describe('Apex domain apps will live under, e.g. example.tf'),
           notes: z.string().optional().describe('Why / any specifics'),
@@ -120,7 +120,7 @@ export function itopsToolDefs() {
             `  5. Add wildcard DNS *.${args.domain} -> the box public IP (Route53).`,
             `  6. Register it in Claudable via ITOPS_DEPLOY_TARGETS.`,
             '',
-            'CRITICAL: keep it keyless — static AWS keys + the org ForceMFA policy break cert renewals (the prod-host trap).',
+            'CRITICAL: keep it keyless — static AWS keys + the org ForceMFA policy break cert renewals (a known trap).',
           ].filter(Boolean).join('\n');
           return text(plan);
         },

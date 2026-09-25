@@ -61,9 +61,9 @@ describe('mailer configuration', () => {
 
 describe('templates', () => {
   it('invitation names the org, the role, the address to log in with, and the login link', () => {
-    const m = inviteEmail({ to: 'klant@gmail.com', orgName: 'acme.example', role: 'eigenaar', invitedBy: 'admin@newstory.nl', expiresAt: new Date('2026-09-16T00:00:00Z') });
-    expect(m.subject).toBe('Uitnodiging voor acme.example in Claudable');
-    expect(m.text).toContain('acme.example');
+    const m = inviteEmail({ to: 'klant@gmail.com', orgName: 'Acme BV', role: 'eigenaar', invitedBy: 'admin@newstory.nl', expiresAt: new Date('2026-09-16T00:00:00Z') });
+    expect(m.subject).toBe('Uitnodiging voor Acme BV in Claudable');
+    expect(m.text).toContain('Acme BV');
     expect(m.text).toContain('eigenaar');
     expect(m.text).toContain('klant@gmail.com');
     expect(m.text).toContain('https://claudable.example.test/login');

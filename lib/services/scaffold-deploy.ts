@@ -498,7 +498,7 @@ export async function injectDeployScaffolding(repoPath: string, options: Scaffol
   // defines how it runs via `.claudable/preview.json` and ships its OWN
   // Dockerfile(s) + Gitea Actions workflows. Overwriting its Dockerfile and
   // `.gitea/workflows/deploy.yml` here would clobber a working CI/CD pipeline
-  // (e.g. SampleApp's Gitea Actions). Only projects Claudable scaffolded itself
+  // (e.g. an imported repo's own Gitea Actions). Only projects Claudable scaffolded itself
   // (no preview.json) get Claudable-managed deploy infra.
   try {
     await fs.access(path.join(repoPath, '.claudable', 'preview.json'));

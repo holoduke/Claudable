@@ -3,10 +3,10 @@ import { redactGitSecrets } from './git';
 
 describe('redactGitSecrets', () => {
   it('masks the token in an authenticated remote URL', () => {
-    const url = 'https://newstory:0000000000000000000000000000000000000000@git.example.com/newstory-org/demo-dashboard-dashboard.git';
+    const url = 'https://deploy:0000000000000000000000000000000000000000@git.example.com/acme-org/demo-dashboard.git';
     const out = redactGitSecrets(`Git command failed: git fetch ${url} main`);
     expect(out).not.toContain('0000000000000000000000000000000000000000');
-    expect(out).toContain('https://newstory:***@git.example.com');
+    expect(out).toContain('https://deploy:***@git.example.com');
   });
 
   it('masks tokens embedded in git stderr output', () => {

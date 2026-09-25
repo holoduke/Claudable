@@ -107,7 +107,7 @@ export const CONTAINER_TEMPLATES: ContainerTemplate[] = [
     name: 'MongoDB',
     description: 'MongoDB 7 document database on this project’s private network, persistent.',
     // Held on 7: MongoDB 8 refuses to start on Linux kernel >= 6.19 (SERVER-121912),
-    // and prod-host runs kernel 7.0. Retry 8 once that issue is fixed.
+    // and the production host runs kernel 7.0. Retry 8 once that issue is fixed.
     image: 'mongo:7',
     alias: 'mongo',
     kind: 'database',

@@ -6,7 +6,7 @@
  * for the Anthropic API, but not the host/DBs/other projects), and only the
  * project bind-mounted at /work.
  *
- * Proven feasible on prod-host (2026-07-03): `claude` CLI runs headless here and edits
+ * Proven feasible on the production host (2026-07-03): `claude` CLI runs headless here and edits
  * the mounted project. This module packages that as a streaming runner.
  *
  * WIRED into executeClaude as the DEFAULT path whenever PREVIEW_ISOLATION is set
