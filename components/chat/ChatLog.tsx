@@ -2979,6 +2979,15 @@ export default function ChatLog({ projectId, onSessionStatusChange, onProjectSta
                                           }
                                         };
 
+                                        // /uploads/<file> is a copy inside the Claudable container that
+                                        // does not survive a redeploy; the original stays in the project's
+                                        // assets. Try the persistent (access-checked) asset route first.
+                                        const persistentFor = (value: unknown) => {
+                                          const m = typeof value === 'string' ? value.trim().match(/^\/uploads\/([^/?#]+)$/) : null;
+                                          if (m) pushCandidate(`/api/assets/${projectId}/${m[1]}`);
+                                        };
+                                        persistentFor((attachment as Record<string, unknown>)?.publicUrl);
+                                        persistentFor((attachment as Record<string, unknown>)?.public_url);
                                         pushCandidate((attachment as Record<string, unknown>)?.publicUrl);
                                         pushCandidate((attachment as Record<string, unknown>)?.public_url);
                                         pushCandidate((attachment as Record<string, unknown>)?.url);
