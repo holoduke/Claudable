@@ -45,3 +45,19 @@ export class TenantPolicyError extends Error {
     this.name = 'TenantPolicyError';
   }
 }
+
+/**
+ * Whether a user is New Story staff for the purpose of New Story-internal shared
+ * resources (remote Claude Design projects, internal catalogs): a superadmin, or
+ * a member of at least one non-customer organisation. A user who is ONLY in
+ * customer organisations is not.
+ */
+export async function isInternalUser(user: { id: string; role: string } | null | undefined): Promise<boolean> {
+  if (!user) return false;
+  if (user.role === 'admin') return true;
+  const internalMembership = await prisma.orgMember.findFirst({
+    where: { userId: user.id, organization: { type: { not: CUSTOMER_ORG_TYPE } } },
+    select: { id: true },
+  });
+  return !!internalMembership;
+}

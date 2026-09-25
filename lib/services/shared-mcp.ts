@@ -15,6 +15,7 @@
  * single-tenant case); orgId set = only projects in that org.
  */
 import { prisma } from '@/lib/db/client';
+import { CUSTOMER_ORG_TYPE } from '@/lib/services/tenant-policy';
 import { encrypt, decrypt } from '@/lib/crypto';
 import { assertHostAllowed } from '@/lib/services/itops/net';
 import type { McpEntry, McpTransport } from '@/lib/services/project-mcp';
@@ -159,10 +160,20 @@ export async function deleteSharedMcpServer(id: string, orgId: string | null): P
   return res.count > 0;
 }
 
-/** Resolve the org a project belongs to (null when it has none / auth is off). */
-async function projectOrgId(projectId: string): Promise<string | null> {
-  const p = await prisma.project.findUnique({ where: { id: projectId }, select: { orgId: true } });
-  return p?.orgId ?? null;
+/**
+ * Which shared servers apply to a project: instance-wide ones (orgId null) plus
+ * the project's own org. A CUSTOMER org's projects get only their own org's
+ * servers — instance-wide servers are New Story-internal (their secrets would
+ * reach the customer's agent).
+ */
+async function sharedMcpOrgFilter(projectId: string): Promise<Array<{ orgId: string | null }>> {
+  const p = await prisma.project.findUnique({
+    where: { id: projectId },
+    select: { orgId: true, organization: { select: { type: true } } },
+  });
+  const orgId = p?.orgId ?? null;
+  if (orgId && p?.organization?.type === CUSTOMER_ORG_TYPE) return [{ orgId }];
+  return orgId ? [{ orgId: null }, { orgId }] : [{ orgId: null }];
 }
 
 /**
@@ -172,9 +183,7 @@ async function projectOrgId(projectId: string): Promise<string | null> {
  * secrets — server-side only.
  */
 export async function buildSharedMcpConfig(projectId: string): Promise<Record<string, McpEntry>> {
-  const orgId = await projectOrgId(projectId);
-  // Instance-wide (null) always applies; the project's org applies when it has one.
-  const orgFilter = orgId ? [{ orgId: null }, { orgId }] : [{ orgId: null }];
+  const orgFilter = await sharedMcpOrgFilter(projectId);
   // A `(null,'x')` and `(org,'x')` can legitimately coexist. Order so instance-wide
   // (null orgId) is applied FIRST and the org-specific row overwrites it in the
   // map below — org-specific wins, deterministically (SQLite sorts NULL first asc).
@@ -201,8 +210,7 @@ export async function buildSharedMcpConfig(projectId: string): Promise<Record<st
 
 /** Read-only view of shared servers applying to a project, for per-project MCP UI. */
 export async function listSharedMcpForProject(projectId: string): Promise<SharedMcpView[]> {
-  const orgId = await projectOrgId(projectId);
-  const orgFilter = orgId ? [{ orgId: null }, { orgId }] : [{ orgId: null }];
+  const orgFilter = await sharedMcpOrgFilter(projectId);
   const rows = await prisma.sharedMcpServer.findMany({ where: { OR: orgFilter }, orderBy: { createdAt: 'asc' } });
   return rows.map(toView);
 }

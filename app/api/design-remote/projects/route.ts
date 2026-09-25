@@ -7,6 +7,7 @@
 import { NextResponse } from 'next/server';
 import { getSessionUser, authEnabled } from '@/lib/auth/session';
 import { designRemoteEnabled, listRemoteDesignProjects } from '@/lib/services/design-remote';
+import { isInternalUser } from '@/lib/services/tenant-policy';
 import { createSuccessResponse, createErrorResponse, handleApiError } from '@/lib/utils/api-response';
 
 export const runtime = 'nodejs';
@@ -14,10 +15,13 @@ export const dynamic = 'force-dynamic';
 
 export async function GET() {
   try {
-    // Any signed-in user may browse the shared team designs; the credential is
-    // the server's, not theirs. Still require a session when the gate is on.
-    if (authEnabled() && !(await getSessionUser())) {
-      return createErrorResponse('unauthorized', 'Authentication required', 401);
+    // New Story staff may browse the shared team designs; the credential is the
+    // server's, not theirs. A customer-only user must not even see that they
+    // exist: answer as if the feature were off.
+    if (authEnabled()) {
+      const user = await getSessionUser();
+      if (!user) return createErrorResponse('unauthorized', 'Authentication required', 401);
+      if (!(await isInternalUser(user))) return createSuccessResponse({ enabled: false, projects: [] });
     }
     if (!designRemoteEnabled()) {
       return createSuccessResponse({ enabled: false, projects: [] });

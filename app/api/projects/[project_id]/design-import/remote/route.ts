@@ -8,6 +8,8 @@
 import { NextResponse } from 'next/server';
 import { denyUnlessProjectAccess } from '@/lib/auth/gate';
 import { getProjectById } from '@/lib/services/project';
+import { getSessionUser, authEnabled } from '@/lib/auth/session';
+import { isCustomerProject, isInternalUser } from '@/lib/services/tenant-policy';
 import { extractDesignImport, buildPortPrompt } from '@/lib/services/design-import';
 import { designRemoteEnabled, buildRemoteDesignArchive } from '@/lib/services/design-remote';
 
@@ -20,6 +22,11 @@ export async function POST(request: Request, { params }: RouteContext) {
     const { project_id } = await params;
     const gate = await denyUnlessProjectAccess(project_id, { write: true });
     if (gate) return gate;
+    // Remote designs are New Story's own (the server's claude.ai account): only
+    // staff may import them, and never into a customer project.
+    if (authEnabled() && (!(await isInternalUser(await getSessionUser())) || (await isCustomerProject(project_id)))) {
+      return NextResponse.json({ success: false, error: 'Remote Claude Design import is not available for this project.' }, { status: 403 });
+    }
 
     if (!designRemoteEnabled()) {
       return NextResponse.json(

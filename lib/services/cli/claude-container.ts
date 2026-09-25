@@ -115,7 +115,13 @@ export function buildAgentContainerArgs(o: ContainerTurnOptions): string[] {
   // (appended below). Only mount when both the host dir and at least one enabled
   // plugin dir are present, so an unconfigured instance changes nothing.
   if (o.pluginsHostPath && o.pluginsHostPath.trim() && o.pluginDirs && o.pluginDirs.length) {
-    args.push('-v', `${o.pluginsHostPath.trim()}:${CONTAINER_PLUGINS_MOUNT}:ro`);
+    // Mount ONLY the plugins enabled for this project (each read-only), not the
+    // whole marketplace store — that holds every org's clones.
+    for (const dir of o.pluginDirs) {
+      const rel = path.posix.relative(CONTAINER_PLUGINS_MOUNT, dir);
+      if (!rel || rel.startsWith('..') || path.posix.isAbsolute(rel)) continue;
+      args.push('-v', `${o.pluginsHostPath.trim().replace(/\/+$/, '')}/${rel}:${dir}:ro`);
+    }
   }
   if (!o.envFilePath) {
     for (const [k, v] of Object.entries(o.env ?? {})) args.push('-e', `${k}=${v}`);

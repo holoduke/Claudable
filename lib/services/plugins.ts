@@ -26,6 +26,7 @@ import path from 'path';
 import fs from 'fs/promises';
 import { spawnSync } from 'child_process';
 import { prisma } from '@/lib/db/client';
+import { CUSTOMER_ORG_TYPE } from '@/lib/services/tenant-policy';
 import { redactGitSecrets } from '@/lib/services/git';
 import { getEnvGitToken } from '@/lib/services/git-provider';
 import { getPlainServiceToken } from '@/lib/services/tokens';
@@ -397,9 +398,21 @@ export interface EffectivePlugin {
  * The plugins that apply to a project (instance-wide + its org), with their
  * effective on/off state. Powers the per-project UI and the /command list.
  */
+/**
+ * Which marketplaces apply to an org: instance-wide ones (orgId null) plus the
+ * org's own. A CUSTOMER org gets only its own — the instance-wide marketplaces
+ * are New Story's internal know-how and must not reach a customer's agent or UI.
+ */
+async function pluginOrgFilter(orgId: string | null): Promise<Array<{ orgId: string | null }>> {
+  if (!orgId) return [{ orgId: null }];
+  const org = await prisma.organization.findUnique({ where: { id: orgId }, select: { type: true } });
+  if (org?.type === CUSTOMER_ORG_TYPE) return [{ orgId }];
+  return [{ orgId: null }, { orgId }];
+}
+
 export async function listEffectivePlugins(projectId: string): Promise<EffectivePlugin[]> {
   const orgId = await projectOrgId(projectId);
-  const orgFilter = orgId ? [{ orgId: null }, { orgId }] : [{ orgId: null }];
+  const orgFilter = await pluginOrgFilter(orgId);
   const rows = await prisma.pluginMarketplace.findMany({ where: { enabled: true, OR: orgFilter }, orderBy: { createdAt: 'asc' } });
   const disabled = await getProjectDisabled(projectId);
   const out: EffectivePlugin[] = [];
@@ -459,7 +472,7 @@ async function commandsForPlugin(m: PluginMarketplace, pluginName: string): Prom
 export async function listProjectPluginCommands(projectId: string): Promise<PluginCommand[]> {
   const effective = await listEffectivePlugins(projectId);
   const orgId = await projectOrgId(projectId);
-  const orgFilter = orgId ? [{ orgId: null }, { orgId }] : [{ orgId: null }];
+  const orgFilter = await pluginOrgFilter(orgId);
   const rows = await prisma.pluginMarketplace.findMany({ where: { enabled: true, OR: orgFilter } });
   const byName = new Map(rows.map((m) => [m.name, m]));
   const out: PluginCommand[] = [];
@@ -479,7 +492,7 @@ export async function listProjectPluginCommands(projectId: string): Promise<Plug
  * exactly the commands its first turn will have.
  */
 export async function listOrgPluginCommands(orgId: string | null): Promise<PluginCommand[]> {
-  const orgFilter = orgId ? [{ orgId: null }, { orgId }] : [{ orgId: null }];
+  const orgFilter = await pluginOrgFilter(orgId);
   const rows = await prisma.pluginMarketplace.findMany({ where: { enabled: true, OR: orgFilter }, orderBy: { createdAt: 'asc' } });
   const out: PluginCommand[] = [];
   for (const m of rows) {
@@ -501,7 +514,7 @@ export async function listOrgPluginCommands(orgId: string | null): Promise<Plugi
 export async function resolveEnabledPluginDirs(projectId: string): Promise<string[]> {
   const effective = await listEffectivePlugins(projectId);
   const orgId = await projectOrgId(projectId);
-  const orgFilter = orgId ? [{ orgId: null }, { orgId }] : [{ orgId: null }];
+  const orgFilter = await pluginOrgFilter(orgId);
   const rows = await prisma.pluginMarketplace.findMany({ where: { enabled: true, OR: orgFilter } });
   const byName = new Map(rows.map((m) => [m.name, m]));
   const dirs: string[] = [];
