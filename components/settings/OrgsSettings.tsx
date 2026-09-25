@@ -387,7 +387,12 @@ export default function OrgsSettings({ onToast }: OrgsSettingsProps) {
                               </button>
                             </div>
                           ) : (
+                            org.type === 'klant' ? (
+                            // A customer org never falls back to the platform token: without a key the agent refuses.
+                            <span className="shrink-0 text-[11px] font-medium text-amber-700 dark:text-amber-300 bg-amber-100 dark:bg-amber-500/20 px-2 py-0.5 rounded-full">{t('orgs.credential.missingCustomer')}</span>
+                          ) : (
                             <span className="shrink-0 text-[11px] font-medium text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-white/8 px-2 py-0.5 rounded-full">{t('orgs.credential.platform')}</span>
+                          )
                           )}
                         </div>
                         <div className="flex gap-2">

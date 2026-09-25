@@ -292,6 +292,7 @@ export const en = {
   'orgs.credential.desc': 'The agent (claude -p) runs on it for the projects of {name} when neither project nor user has a token of their own. An OAuth token from claude setup-token or an API key (sk-ant-api…).',
   'orgs.credential.since': '{label} · since {date}',
   'orgs.credential.platform': 'platform token',
+  'orgs.credential.missingCustomer': 'not set — agent disabled',
   'orgs.credential.confirmRemove': 'Remove the Claude token of {name}? Projects fall back to the platform token.',
   'orgs.credential.labelPlaceholder': 'Label (e.g. {name} Claude)',
   'orgs.members': 'Members',

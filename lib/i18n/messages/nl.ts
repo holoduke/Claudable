@@ -277,6 +277,7 @@ export const nl: Record<keyof typeof en, string> = {
   'orgs.credential.desc': 'Hierop draait de agent (claude -p) voor projecten van {name} als project of gebruiker geen eigen token heeft. Een OAuth-token uit claude setup-token of een API-sleutel (sk-ant-api…).',
   'orgs.credential.since': '{label} · sinds {date}',
   'orgs.credential.platform': 'platform-token',
+  'orgs.credential.missingCustomer': 'niet ingesteld — agent uit',
   'orgs.credential.confirmRemove': 'Claude-token van {name} verwijderen? Projecten vallen terug op het platform-token.',
   'orgs.credential.labelPlaceholder': 'Label (bijv. {name} Claude)',
   'orgs.members': 'Leden',

@@ -277,6 +277,7 @@ export const fr: Record<keyof typeof en, string> = {
   'orgs.credential.desc': 'L’agent (claude -p) l’utilise pour les projets de {name} lorsque ni le projet ni l’utilisateur n’ont de jeton propre. Un jeton OAuth issu de claude setup-token ou une clé API (sk-ant-api…).',
   'orgs.credential.since': '{label} · depuis le {date}',
   'orgs.credential.platform': 'jeton de la plateforme',
+  'orgs.credential.missingCustomer': 'non défini — agent désactivé',
   'orgs.credential.confirmRemove': 'Supprimer le jeton Claude de {name} ? Les projets reviendront au jeton de la plateforme.',
   'orgs.credential.labelPlaceholder': 'Libellé (p. ex. {name} Claude)',
   'orgs.members': 'Membres',
