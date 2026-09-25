@@ -12,6 +12,8 @@ import { serializeMessage, createRealtimeMessage } from '@/lib/serializers/chat'
 import { createMessage } from '../message';
 import { updateProject } from '../project';
 import { markRateLimitExhausted, recordAssistantUsage, recordRateLimit, recordTurnResult } from '../agent-usage';
+import type { RunBilling } from '../agent-billing';
+import { bookRunResult } from '../run-cost';
 
 /**
  * Detect the CLI's subscription-limit refusal ("You've hit your limit ·
@@ -326,6 +328,8 @@ export interface AgentMessageProcessorContext {
   publishStatus: (status: string, message?: string) => void;
   /** Marks the user request completed (idempotent — the caller guards re-entry). */
   markCompleted: () => Promise<void>;
+  /** Customer org runs: book the result's cost against this organisation's budget. */
+  billing?: RunBilling;
 }
 
 /**
@@ -540,6 +544,13 @@ export function createAgentMessageProcessor(ctx: AgentMessageProcessorContext) {
         await recordTurnResult(projectId, message);
       } catch (error) {
         console.error('[ClaudeService] Failed to record turn usage:', error);
+      }
+      if (ctx.billing) {
+        try {
+          await bookRunResult(ctx.billing, message);
+        } catch (error) {
+          console.error('[ClaudeService] Failed to book run cost:', error);
+        }
       }
       // Commit the terminal DB status BEFORE announcing completion. The client's
       // busy→idle edge auto-sends the next queued message on this 'completed'

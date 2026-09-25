@@ -14,7 +14,7 @@ import {
   defaultAgentSandboxNet,
   agentHostPath,
 } from '@/lib/services/cli/claude-container';
-import { resolveProjectClaudeToken } from '@/lib/services/claude-credentials';
+import { resolveAgentRun } from '@/lib/services/agent-billing';
 import { getDefaultModelForCli, normalizeModelId } from '@/lib/constants/cliModels';
 import { prisma } from '@/lib/db/client';
 import { streamManager } from '@/lib/services/stream';
@@ -220,11 +220,11 @@ export async function generateFrame(
 
     if (aborted) throw new Error('cancelled');
     await fs.mkdir(scratch, { recursive: true });
-    const oauthToken =
-      (await resolveProjectClaudeToken(projectId, requesterUserId)) ||
-      process.env.CLAUDE_CODE_OAUTH_TOKEN ||
-      '';
-    if (!oauthToken) throw new Error('No Claude credential available for design generation');
+    // Same credential rules as the chat agent. Design generation is not metered
+    // against an organisation budget, so it is not available to customer orgs.
+    const run = await resolveAgentRun(projectId, requesterUserId);
+    if (run.billing) throw new Error('Design Explorer is not available for this organisation.');
+    const oauthToken = run.token;
 
     // Copy the canvas's reference image into the scratch so the agent can read it.
     const canvas = await prisma.designCanvas.findUnique({ where: { id: frame.canvasId }, select: { referenceImagePath: true } });

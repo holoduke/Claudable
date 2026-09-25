@@ -21,6 +21,8 @@ import { STATIC_SYSTEM_PROMPT } from './prompts/static-system-prompt';
 import { DOCUMENT_SYSTEM_PROMPT } from './prompts/document-system-prompt';
 import { stackKind } from '@/lib/config/stacks';
 import { resolveProjectClaudeToken, runUsesRequestersOwnAccount } from '../claude-credentials';
+import { resolveAgentRun } from '../agent-billing';
+import { isCustomerProject, TenantPolicyError } from '../tenant-policy';
 import { buildItopsMcpServer } from '../itops/itops-mcp';
 import { buildDiagnosticsMcpServer } from '../diagnostics-mcp';
 import { runAgentTurnContainerized, agentHostPath, defaultAgentSandboxNet, accountMcpConnectorsEnabled, type AgentStreamEvent } from './claude-container';
@@ -376,17 +378,11 @@ async function runContainerizedTurn(args: {
 
     const { systemPrompt, imagesOn } = await buildAgentSystemPrompt(projectId, modelLabel, resolvedModel);
 
-    // Credential: the project's assigned Claude token, falling back to the global env.
-    let oauthToken = process.env.CLAUDE_CODE_OAUTH_TOKEN || '';
-    try {
-      const projectToken = await resolveProjectClaudeToken(projectId, args.requesterUserId);
-      if (projectToken) oauthToken = projectToken;
-    } catch (e) {
-      console.error('[ClaudeContainer] Failed to resolve project Claude credential:', e);
-    }
-    if (!oauthToken) {
-      throw new Error('No Claude credential available (CLAUDE_CODE_OAUTH_TOKEN unset and no project credential).');
-    }
+    // Credential + budget: internal projects use the project/personal/org chain
+    // with the platform token as fallback; customer projects ONLY their org's key,
+    // within the org's monthly budget (see agent-billing.ts).
+    const run = await resolveAgentRun(projectId, args.requesterUserId);
+    const oauthToken = run.token;
 
     const absoluteProjectPath = path.isAbsolute(projectPath)
       ? path.resolve(projectPath)
@@ -452,7 +448,9 @@ async function runContainerizedTurn(args: {
     // enabled AND the run uses the acting user's OWN Claude account, so a
     // teammate on a project using a shared/global token never inherits another
     // user's Gmail/Drive/etc. Best-effort → deny (strict) on any lookup error.
+    // Customer runs use the org's key, never a person's account: no account connectors.
     const connectorsOk =
+      !run.billing &&
       accountMcpConnectorsEnabled() &&
       (await runUsesRequestersOwnAccount(projectId, args.requesterUserId).catch(() => false));
 
@@ -460,7 +458,8 @@ async function runContainerizedTurn(args: {
       projectId,
       projectPath: absoluteProjectPath,
       imagesOn,
-      itopsEnabled: args.itopsEnabled,
+      // it-ops tools are not project-scoped: never inside a customer project.
+      itopsEnabled: args.itopsEnabled && !run.billing,
       // Who's running — so their PRIVATE project MCP servers attach (shared ones
       // attach for everyone).
       requesterUserId: args.requesterUserId,
@@ -475,6 +474,7 @@ async function runContainerizedTurn(args: {
       requestId,
       publishStatus: args.publishStatus,
       markCompleted: args.safeMarkCompleted,
+      billing: run.billing,
     });
 
     // stream-json events arrive on stdout; chain handling onto a queue so
@@ -534,6 +534,7 @@ async function runContainerizedTurn(args: {
       {
         projectHostPath,
         readOnlyGitDir: hasPlainGitDir(absoluteProjectPath),
+        maxBudgetUsd: run.maxBudgetUsd,
         prompt: instruction,
         oauthToken,
         model: resolvedModel,
@@ -600,6 +601,9 @@ async function runContainerizedTurn(args: {
     // applyChanges can retry with a fresh session and the user isn't left with a
     // silent dead turn.
     const turnSucceeded = resultSubtype === 'success';
+    if (resultSubtype === 'error_max_budget_usd') {
+      throw new Error('This run stopped because the monthly budget of this organisation is used up.');
+    }
     if (!turnSucceeded) {
       throw new Error(
         result.error?.trim() ||
@@ -758,6 +762,9 @@ export async function executeClaude(
   // run in-process when such secrets are present — require the containerized
   // path (PREVIEW_ISOLATION / AGENT_CONTAINERIZED=true). DATABASE_URL is excluded
   // (it's a local sqlite file path here, not a shared secret).
+  if (!containerize && (await isCustomerProject(projectId))) {
+    throw new TenantPolicyError('Customer projects run the agent only in an isolated container (enable PREVIEW_ISOLATION / AGENT_CONTAINERIZED).');
+  }
   if (!containerize) {
     const sensitive = ['AUTH_SECRET', 'ENCRYPTION_KEY', 'GIT_TOKEN', 'GITHUB_TOKEN', 'COOLIFY_API_TOKEN', 'GOOGLE_CLIENT_SECRET'];
     const present = sensitive.filter((k) => (process.env[k] ?? '').trim().length > 0);

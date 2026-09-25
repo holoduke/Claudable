@@ -31,6 +31,7 @@ export interface AgentStreamEvent {
 export interface ContainerTurnOptions {
   projectHostPath: string;              // HOST path of the project (bind-mounted at /work)
   readOnlyGitDir?: boolean;             // overlay /work/.git read-only (the project has a plain .git dir)
+  maxBudgetUsd?: number;                // hard spend cap for this run (customer org budget)
   prompt: string;
   oauthToken: string;                   // CLAUDE_CODE_OAUTH_TOKEN (never persisted)
   model?: string;
@@ -158,6 +159,9 @@ export function buildAgentContainerArgs(o: ContainerTurnOptions): string[] {
   // (repeatable flag). Independent of --setting-sources; the CLI substitutes
   // ${CLAUDE_PLUGIN_ROOT} to each dir. Their commands become /<plugin>:<cmd>.
   for (const dir of o.pluginDirs ?? []) args.push('--plugin-dir', dir);
+  if (o.maxBudgetUsd !== undefined && Number.isFinite(o.maxBudgetUsd) && o.maxBudgetUsd > 0) {
+    args.push('--max-budget-usd', o.maxBudgetUsd.toFixed(4));
+  }
   if (o.systemPrompt) args.push('--system-prompt', o.systemPrompt);
   return args;
 }

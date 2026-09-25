@@ -139,6 +139,9 @@ model Organization {
   // Org-level Claude credential (OAuth token or API key) the agent runs with for
   // this org's projects when neither the project nor the requester brings one.
   claudeCredentialId String? @map("claude_credential_id")
+  // Monthly agent budget in EUR cents (customer orgs; null = no limit). Spend is
+  // the sum of UsageEvent.costEurCents in the current calendar month.
+  monthlyBudgetCents Int? @map("monthly_budget_cents")
   createdAt DateTime @default(now()) @map("created_at")
 
   claudeCredential ClaudeCredential? @relation("OrgClaudeCredential", fields: [claudeCredentialId], references: [id], onDelete: SetNull)
@@ -147,6 +150,7 @@ model Organization {
   members  OrgMember[]
   invites  OrgInvite[]
   auditEvents AuditEvent[]
+  usageEvents UsageEvent[]
 
   @@map("organizations")
 }
@@ -679,4 +683,28 @@ model DesignFrame {
 
   @@index([canvasId])
   @@map("design_frames")
+}
+
+/// One billed agent run (or run increment) of an organisation — the credits
+/// ledger. costUsd is the CLI's estimate at list price for this increment;
+/// costEurCents is that amount converted at the rate of the moment.
+model UsageEvent {
+  id           String   @id @default(cuid())
+  orgId        String   @map("org_id")
+  projectId    String?  @map("project_id")
+  userId       String?  @map("user_id")
+  sessionId    String?  @map("session_id")
+  source       String   @default("agent") // agent | design
+  model        String?
+  costUsd      Float    @map("cost_usd")
+  costEurCents Int      @map("cost_eur_cents")
+  inputTokens  Int      @default(0) @map("input_tokens")
+  outputTokens Int      @default(0) @map("output_tokens")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@index([orgId, createdAt])
+  @@index([sessionId])
+  @@map("usage_events")
 }
