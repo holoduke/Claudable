@@ -4,7 +4,9 @@ import { getPlainServiceToken } from '@/lib/services/tokens';
 import { getProjectById, updateProject } from '@/lib/services/project';
 import { getProjectService, upsertProjectServiceConnection, updateProjectServiceData } from '@/lib/services/project-services';
 import { clampAutoSyncMinutes, AUTO_SYNC_DEFAULT_MINUTES } from '@/lib/services/auto-sync-schedule';
-import { ensureGitRepository, ensureGitConfig, initializeMainBranch, addOrUpdateRemote, commitAll, pushToRemote, pullFromRemote, checkoutRemoteBranch } from '@/lib/services/git';
+import { ensureGitRepository, ensureGitConfig, initializeMainBranch, addOrUpdateRemote, commitAll, pushToRemote, pullFromRemote, checkoutRemoteBranch, changedPathsAgainstRemote } from '@/lib/services/git';
+import { isCustomerProject } from '@/lib/services/tenant-policy';
+import { protectedPathsIn } from '@/lib/services/publish-guard';
 import { getGitProviderConfig, getGitProviderConfigFor, getEnvGitToken, getEnvGitTokenFor } from '@/lib/services/git-provider';
 import type { GitProviderConfig } from '@/lib/services/git-provider';
 import { injectDeployScaffolding } from '@/lib/services/scaffold-deploy';
@@ -592,8 +594,13 @@ async function pushProjectToGitHubImpl(projectId: string): Promise<boolean> {
     ensureGitConfig(repoPath, userName, userEmail);
 
     // Keep deploy scaffolding present even if the agent edited the project.
+    // Customer projects never get (re)generated deploy files: their CI/infra is
+    // managed by New Story in the repository itself (see the publish guard).
     const repoName = (data.repo_name as string) || path.basename(repoPath);
-    await injectDeployScaffolding(repoPath, { repoName, templateType: project.templateType });
+    const customerProject = await isCustomerProject(projectId);
+    if (!customerProject) {
+      await injectDeployScaffolding(repoPath, { repoName, templateType: project.templateType });
+    }
 
     const committed = commitAll(repoPath, 'Update from Claudable');
     // NOTE: do NOT early-return when there's nothing new to commit. A freshly
@@ -623,6 +630,18 @@ async function pushProjectToGitHubImpl(projectId: string): Promise<boolean> {
     // user (not the org) for Gitea/GitHub basic auth to succeed.
     const authenticatedUrl = String(data.clone_url).replace('https://', `https://${encodeURIComponent(user.login)}:${token}@`);
     const baseBranch = projectGitBranch(data);
+
+    // Publish guard: a customer's publish may not change CI / infra / container
+    // build files (they decide what runs with the deploy credentials).
+    if (customerProject) {
+      const blocked = protectedPathsIn(changedPathsAgainstRemote(repoPath, authenticatedUrl, baseBranch));
+      if (blocked.length > 0) {
+        throw new GitHubError(
+          `Publishing is blocked: this change touches deployment files that New Story manages (${blocked.join(', ')}). Undo the changes to these files and publish again.`,
+          403,
+        );
+      }
+    }
 
     if (data.push_mode === 'pr') {
       // The base branch only accepts pull requests (org ruleset). Push to a

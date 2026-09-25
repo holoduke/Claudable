@@ -375,6 +375,24 @@ export function pullFromRemote(
   return { updated, before, after, changedFiles: updated ? diffNames(repoPath, before, after) : [] };
 }
 
+/**
+ * Paths this repository changes relative to the remote `branch` — what a push or
+ * PR would carry (three-dot diff: our side since the common ancestor). When the
+ * remote branch does not exist yet, every tracked path counts as changed.
+ */
+export function changedPathsAgainstRemote(repoPath: string, remoteUrl: string, branch: string): string[] {
+  let hasRemote = true;
+  try {
+    runGit(['fetch', remoteUrl, branch], repoPath);
+  } catch {
+    hasRemote = false;
+  }
+  const out = hasRemote
+    ? runGit(['diff', '--name-only', 'FETCH_HEAD...HEAD'], repoPath)
+    : runGit(['ls-files'], repoPath);
+  return out.split(/\r?\n/u).map((l) => l.trim()).filter(Boolean);
+}
+
 export function pushToRemote(
   repoPath: string,
   remoteName = 'origin',
