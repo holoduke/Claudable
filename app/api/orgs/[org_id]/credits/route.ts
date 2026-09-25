@@ -26,7 +26,7 @@ export async function GET(req: NextRequest, { params }: Ctx) {
     const seesPeople = gate.actor.superadmin || isOrgAdminRole(gate.actor.role);
     return createSuccessResponse({
       status,
-      usage: seesPeople ? usage : { ...usage, byUser: [] },
+      usage: seesPeople ? usage : { ...usage, byUser: [], staffCents: 0 },
       canEditBudget: gate.actor.superadmin,
     });
   } catch (error) {

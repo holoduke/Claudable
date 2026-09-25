@@ -1,15 +1,17 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Credits ledger + run gating for customer orgs, with Prisma, FX and crypto mocked.
-type Ev = { orgId: string; sessionId: string | null; costUsd: number; costEurCents: number; createdAt: Date; userId: string | null; projectId: string | null };
+type Ev = { orgId: string; sessionId: string | null; costUsd: number; costEurCents: number; createdAt: Date; userId: string | null; projectId: string | null; source?: string };
 const events: Ev[] = [];
 const orgs = new Map<string, { type: string; monthlyBudgetCents: number | null; claudeCredential: { id: string; token: string } | null }>();
 const projects = new Map<string, { orgId: string | null }>();
+const users = new Map<string, { id: string; role: string; internal: boolean }>();
 
 const inRange = (e: Ev, where: any) =>
   e.orgId === where.orgId &&
   (where.sessionId === undefined || e.sessionId === where.sessionId) &&
-  (!where.createdAt || (e.createdAt >= where.createdAt.gte && e.createdAt < where.createdAt.lt));
+  (!where.createdAt || (e.createdAt >= where.createdAt.gte && e.createdAt < where.createdAt.lt)) &&
+  (!where.source || (e.source ?? 'agent') !== where.source.not);
 
 vi.mock('@/lib/db/client', () => ({
   prisma: {
@@ -31,6 +33,8 @@ vi.mock('@/lib/db/client', () => ({
       }),
     },
     claudeCredential: { update: vi.fn(async () => ({})) },
+    user: { findUnique: vi.fn(async ({ where }: any) => users.get(where.id) ?? null) },
+    orgMember: { findFirst: vi.fn(async ({ where }: any) => (users.get(where.userId)?.internal ? { id: 'm' } : null)) },
   },
 }));
 vi.mock('@/lib/crypto', () => ({ decrypt: (s: string) => s, encrypt: (s: string) => s }));
@@ -51,6 +55,9 @@ beforeEach(() => {
   orgs.set('newstory', { type: 'intern', monthlyBudgetCents: null, claudeCredential: null });
   projects.set('site', { orgId: 'micros' });
   projects.set('internal', { orgId: 'newstory' });
+  users.clear();
+  users.set('customer', { id: 'customer', role: 'user', internal: false });
+  users.set('staffer', { id: 'staffer', role: 'user', internal: true });
   process.env.CLAUDE_CODE_OAUTH_TOKEN = 'sk-ant-oat-platform';
 });
 
@@ -78,20 +85,32 @@ describe('credits ledger', () => {
 describe('run gating', () => {
   it('runs a customer project on the org key with the remaining budget as cap', async () => {
     await recordRunUsage({ orgId: 'micros', sessionId: 's', cumulativeCostUsd: 10 }); // 900 cents spent
-    const run = await resolveAgentRun('site', 'user-1');
+    const run = await resolveAgentRun('site', 'customer');
     expect(run.token).toBe('sk-ant-api03-test');
-    expect(run.billing).toEqual({ orgId: 'micros', projectId: 'site', userId: 'user-1' });
+    expect(run.billing).toEqual({ orgId: 'micros', projectId: 'site', userId: 'customer' });
     expect(run.maxBudgetUsd).toBeCloseTo(4100 / 100 / 0.9);
   });
 
   it('refuses once the budget is used up', async () => {
     await recordRunUsage({ orgId: 'micros', sessionId: 's', cumulativeCostUsd: 60 }); // > €50
-    await expect(resolveAgentRun('site', 'user-1')).rejects.toBeInstanceOf(AgentRunRefusedError);
+    await expect(resolveAgentRun('site', 'customer')).rejects.toBeInstanceOf(AgentRunRefusedError);
   });
 
   it('never falls back to the platform token for a customer org without a key', async () => {
     orgs.set('micros', { type: 'klant', monthlyBudgetCents: 5000, claudeCredential: null });
-    await expect(resolveAgentRun('site', 'user-1')).rejects.toThrow(/no Anthropic API key/);
+    await expect(resolveAgentRun('site', 'customer')).rejects.toThrow(/no Anthropic API key/);
+  });
+
+  it('runs New Story staff on the org key outside the customer budget', async () => {
+    await recordRunUsage({ orgId: 'micros', sessionId: 's', cumulativeCostUsd: 60 }); // customer budget used up
+    const run = await resolveAgentRun('site', 'staffer');
+    expect(run.token).toBe('sk-ant-api03-test');
+    expect(run.billing).toEqual({ orgId: 'micros', projectId: 'site', userId: 'staffer', staff: true });
+    expect(run.maxBudgetUsd).toBeUndefined();
+    const before = (await getBudgetStatus('micros')).spentCents;
+    await recordRunUsage({ orgId: 'micros', sessionId: 'staff-1', source: 'staff', cumulativeCostUsd: 5 });
+    events[events.length - 1].source = 'staff';
+    expect((await getBudgetStatus('micros')).spentCents).toBe(before);
   });
 
   it('leaves internal projects on the existing chain (platform token fallback, no billing)', async () => {

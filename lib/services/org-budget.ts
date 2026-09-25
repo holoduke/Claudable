@@ -6,6 +6,9 @@
  * total its transcript saved), so each result is booked as the increment over
  * what was already booked for that session. Months are calendar months in UTC;
  * the budget resets on the 1st.
+ *
+ * Runs by New Story staff inside a customer project are booked with source
+ * 'staff': visible in the overview, but NOT counted against the customer's budget.
  */
 import { prisma } from '@/lib/db/client';
 import { usdToEurCents } from '@/lib/services/fx';
@@ -26,9 +29,12 @@ export function periodBounds(now = new Date(), monthOffset = 0): { start: Date; 
   return { start, end };
 }
 
+export const STAFF_SOURCE = 'staff';
+
+/** Budgeted spend: everything except New Story staff runs. */
 async function spentCentsBetween(orgId: string, start: Date, end: Date): Promise<number> {
   const agg = await prisma.usageEvent.aggregate({
-    where: { orgId, createdAt: { gte: start, lt: end } },
+    where: { orgId, createdAt: { gte: start, lt: end }, source: { not: STAFF_SOURCE } },
     _sum: { costEurCents: true },
   });
   return agg._sum.costEurCents ?? 0;
@@ -63,7 +69,7 @@ export interface RunUsageInput {
   projectId?: string | null;
   userId?: string | null;
   sessionId?: string | null;
-  source?: 'agent' | 'design';
+  source?: 'agent' | 'design' | 'staff';
   model?: string | null;
   /** Cumulative cost the CLI reports for this session so far (total_cost_usd). */
   cumulativeCostUsd: number;
@@ -106,9 +112,12 @@ export async function recordRunUsage(input: RunUsageInput): Promise<number> {
 export interface UsageBreakdown {
   periodStart: string;
   periodEnd: string;
+  /** Budgeted usage (excludes staff). */
   totalCents: number;
   runs: number;
-  byUser: Array<{ userId: string | null; name: string; email: string | null; cents: number; runs: number }>;
+  /** New Story staff usage in this org's projects (not budgeted). */
+  staffCents: number;
+  byUser: Array<{ userId: string | null; name: string; email: string | null; cents: number; runs: number; staff: boolean }>;
   byProject: Array<{ projectId: string | null; name: string; cents: number; runs: number }>;
   byDay: Array<{ day: string; cents: number }>;
 }
@@ -118,12 +127,14 @@ export async function getUsageBreakdown(orgId: string, monthOffset = 0, now = ne
   const { start, end } = periodBounds(now, monthOffset);
   const events = await prisma.usageEvent.findMany({
     where: { orgId, createdAt: { gte: start, lt: end } },
-    select: { userId: true, projectId: true, costEurCents: true, createdAt: true },
+    select: { userId: true, projectId: true, costEurCents: true, createdAt: true, source: true },
   });
+  const staffIds = new Set(events.filter((e) => e.source === STAFF_SOURCE && e.userId).map((e) => e.userId as string));
+  const budgeted = events.filter((e) => e.source !== STAFF_SOURCE);
 
-  const sum = <K>(key: (e: (typeof events)[number]) => K) => {
+  const sum = <K>(key: (e: (typeof events)[number]) => K, list: typeof events = events) => {
     const map = new Map<K, { cents: number; runs: number }>();
-    for (const e of events) {
+    for (const e of list) {
       const k = key(e);
       const cur = map.get(k) ?? { cents: 0, runs: 0 };
       map.set(k, { cents: cur.cents + e.costEurCents, runs: cur.runs + 1 });
@@ -131,9 +142,12 @@ export async function getUsageBreakdown(orgId: string, monthOffset = 0, now = ne
     return map;
   };
 
+  // People: everyone (staff tagged). Projects and days: budgeted usage only, so
+  // they add up to the budget total.
   const userTotals = sum((e) => e.userId);
-  const projectTotals = sum((e) => e.projectId);
-  const dayTotals = sum((e) => e.createdAt.toISOString().slice(0, 10));
+  const projectTotals = sum((e) => e.projectId, budgeted);
+  const dayTotals = sum((e) => e.createdAt.toISOString().slice(0, 10), budgeted);
+  const budgetedCents = budgeted.reduce((acc, e) => acc + e.costEurCents, 0);
 
   const userIds = [...userTotals.keys()].filter((id): id is string => !!id);
   const projectIds = [...projectTotals.keys()].filter((id): id is string => !!id);
@@ -148,12 +162,13 @@ export async function getUsageBreakdown(orgId: string, monthOffset = 0, now = ne
   return {
     periodStart: start.toISOString(),
     periodEnd: end.toISOString(),
-    totalCents: events.reduce((acc, e) => acc + e.costEurCents, 0),
-    runs: events.length,
+    totalCents: budgetedCents,
+    runs: budgeted.length,
+    staffCents: events.reduce((acc, e) => acc + e.costEurCents, 0) - budgetedCents,
     byUser: [...userTotals.entries()]
       .map(([userId, t]) => {
         const u = userId ? userById.get(userId) : undefined;
-        return { userId, name: u?.name || u?.email || 'Unknown', email: u?.email ?? null, ...t };
+        return { userId, name: u?.name || u?.email || 'Unknown', email: u?.email ?? null, staff: !!userId && staffIds.has(userId), ...t };
       })
       .sort((a, b) => b.cents - a.cents),
     byProject: [...projectTotals.entries()]

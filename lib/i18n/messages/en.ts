@@ -372,6 +372,9 @@ export const en = {
   'credits.budgetPlaceholder': 'No limit',
   'credits.budgetSaved': 'Budget saved',
   'credits.estimateNote': 'Estimates at Anthropic list prices, converted at the daily ECB rate. The budget resets on the 1st of each month.',
+  'credits.staff': 'New Story staff: {amount} (not counted towards the budget)',
+  'credits.staffBadge': 'New Story',
+  'credits.staffNote': 'Your runs as New Story staff do not count towards this budget.',
 };
 
 export type MessageKey = keyof typeof en;

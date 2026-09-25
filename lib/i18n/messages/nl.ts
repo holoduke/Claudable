@@ -357,4 +357,7 @@ export const nl: Record<keyof typeof en, string> = {
   'credits.budgetPlaceholder': 'Geen limiet',
   'credits.budgetSaved': 'Budget opgeslagen',
   'credits.estimateNote': 'Schatting op basis van Anthropic-lijstprijzen, omgerekend tegen de dagkoers van de ECB. Het budget vernieuwt op de 1e van elke maand.',
+  'credits.staff': 'New Story-medewerkers: {amount} (telt niet mee voor het budget)',
+  'credits.staffBadge': 'New Story',
+  'credits.staffNote': 'Jouw opdrachten als New Story-medewerker tellen niet mee voor dit budget.',
 };

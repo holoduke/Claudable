@@ -357,4 +357,7 @@ export const fr: Record<keyof typeof en, string> = {
   'credits.budgetPlaceholder': 'Sans limite',
   'credits.budgetSaved': 'Budget enregistré',
   'credits.estimateNote': 'Estimation aux prix catalogue d’Anthropic, convertie au taux quotidien de la BCE. Le budget est renouvelé le 1er de chaque mois.',
+  'credits.staff': 'Équipe New Story : {amount} (non compté dans le budget)',
+  'credits.staffBadge': 'New Story',
+  'credits.staffNote': 'Vos requêtes en tant que membre de l’équipe New Story ne comptent pas dans ce budget.',
 };

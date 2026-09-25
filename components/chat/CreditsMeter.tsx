@@ -20,6 +20,7 @@ interface Credits {
   remainingCents?: number | null;
   exhausted?: boolean;
   resetsAt?: string;
+  viewerIsStaff?: boolean;
 }
 
 interface Props {
@@ -62,7 +63,7 @@ export default function CreditsMeter({ projectId, refreshKey }: Props) {
   const pct = budget ? Math.min(100, Math.round((spent / budget) * 100)) : 0;
   const tone = credits.exhausted ? 'bg-red-500' : pct >= 90 ? 'bg-amber-500' : 'bg-brand-500';
 
-  if (credits.exhausted) {
+  if (credits.exhausted && !credits.viewerIsStaff) {
     return (
       <div role="status" className="mb-2 rounded-lg border border-red-200 dark:border-red-500/30 bg-red-50 dark:bg-red-500/10 px-3 py-2 text-xs text-red-700 dark:text-red-300">
         {t('credits.exhausted', { date: resetDate })}
@@ -84,6 +85,7 @@ export default function CreditsMeter({ projectId, refreshKey }: Props) {
       ) : (
         <span>{t('credits.meterUnlimited', { spent: euro(spent, dateLocale) })}</span>
       )}
+      {credits.viewerIsStaff && <span className="text-gray-400 dark:text-gray-500">· {t('credits.staffNote')}</span>}
       {resetDate && <span className="ml-auto">{t('credits.resets', { date: resetDate })}</span>}
     </div>
   );

@@ -17,7 +17,8 @@ interface CreditsData {
     periodStart: string;
     totalCents: number;
     runs: number;
-    byUser: Array<{ userId: string | null; name: string; email: string | null; cents: number; runs: number }>;
+    staffCents: number;
+    byUser: Array<{ userId: string | null; name: string; email: string | null; cents: number; runs: number; staff: boolean }>;
     byProject: Array<{ projectId: string | null; name: string; cents: number; runs: number }>;
   };
   canEditBudget: boolean;
@@ -158,6 +159,10 @@ export default function OrgCreditsPanel({ orgId, onToast }: Props) {
         </span>
       </div>
 
+      {usage.staffCents > 0 && (
+        <p className="text-xs text-gray-500 dark:text-gray-400">{t('credits.staff', { amount: euro(usage.staffCents, dateLocale) })}</p>
+      )}
+
       <div className="space-y-1">
         <p className="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">{t('credits.byProject')}</p>
         {table(usage.byProject.map((p) => ({ key: p.projectId ?? 'other', name: p.name, cents: p.cents, runs: p.runs })))}
@@ -165,7 +170,7 @@ export default function OrgCreditsPanel({ orgId, onToast }: Props) {
       {usage.byUser.length > 0 && (
         <div className="space-y-1">
           <p className="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">{t('credits.byPerson')}</p>
-          {table(usage.byUser.map((u) => ({ key: u.userId ?? 'unknown', name: u.name, sub: u.email !== u.name ? u.email : null, cents: u.cents, runs: u.runs })))}
+          {table(usage.byUser.map((u) => ({ key: u.userId ?? 'unknown', name: u.name, sub: u.staff ? t('credits.staffBadge') : (u.email !== u.name ? u.email : null), cents: u.cents, runs: u.runs })))}
         </div>
       )}
       <p className="text-[11px] text-gray-400 dark:text-gray-500">{t('credits.estimateNote')}</p>

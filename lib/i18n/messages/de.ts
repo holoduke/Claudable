@@ -357,4 +357,7 @@ export const de: Record<keyof typeof en, string> = {
   'credits.budgetPlaceholder': 'Kein Limit',
   'credits.budgetSaved': 'Budget gespeichert',
   'credits.estimateNote': 'Schätzung zu Anthropic-Listenpreisen, umgerechnet zum ECB-Tageskurs. Das Budget wird am 1. jedes Monats erneuert.',
+  'credits.staff': 'New-Story-Team: {amount} (zählt nicht zum Budget)',
+  'credits.staffBadge': 'New Story',
+  'credits.staffNote': 'Deine Aufträge als New-Story-Mitarbeiter zählen nicht zu diesem Budget.',
 };

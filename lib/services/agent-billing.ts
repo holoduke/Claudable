@@ -10,12 +10,15 @@
  *    every run is billed to, and counted against, the organisation;
  *  - a run is refused once the monthly budget is used up, and otherwise gets the
  *    remaining budget as a hard per-run cap (the CLI's --max-budget-usd), so a
- *    single long run cannot overshoot it.
+ *    single long run cannot overshoot it;
+ *  - New Story staff working in a customer project also run on the org's key
+ *    (never on the platform token inside a customer container), but outside the
+ *    customer's budget: booked as 'staff', no cap, never refused for budget.
  */
 import { prisma } from '@/lib/db/client';
 import { decrypt } from '@/lib/crypto';
 import { resolveProjectClaudeToken } from '@/lib/services/claude-credentials';
-import { projectTenant } from '@/lib/services/tenant-policy';
+import { isInternalUser, projectTenant } from '@/lib/services/tenant-policy';
 import { getBudgetStatus } from '@/lib/services/org-budget';
 import { eurCentsToUsd } from '@/lib/services/fx';
 
@@ -30,6 +33,8 @@ export interface RunBilling {
   orgId: string;
   projectId: string;
   userId: string | null;
+  /** A New Story staff run: recorded, not counted against the customer budget. */
+  staff?: boolean;
 }
 
 export interface AgentRunCredential {
@@ -75,6 +80,13 @@ export async function resolveAgentRun(projectId: string, requesterUserId?: strin
   }
   if (org?.claudeCredential) {
     prisma.claudeCredential.update({ where: { id: org.claudeCredential.id }, data: { lastUsedAt: new Date() } }).catch(() => {});
+  }
+
+  const requester = requesterUserId
+    ? await prisma.user.findUnique({ where: { id: requesterUserId }, select: { id: true, role: true } })
+    : null;
+  if (requester && (await isInternalUser(requester))) {
+    return { token, billing: { orgId: tenant.orgId, projectId, userId: requester.id, staff: true } };
   }
 
   const status = await getBudgetStatus(tenant.orgId);
