@@ -15,6 +15,7 @@
 
 import fs from 'fs/promises';
 import path from 'path';
+import { realPathInside, writeFileInside } from '@/lib/utils/safe-fs';
 import os from 'os';
 import { getProjectById } from '@/lib/services/project';
 
@@ -57,6 +58,23 @@ async function projectBaseDir(projectId: string): Promise<string> {
 
 async function skillsDir(projectId: string): Promise<string> {
   return path.join(await projectBaseDir(projectId), '.claude', 'skills');
+}
+
+/**
+ * SECURITY: `.claude/` is agent-writable. Before writing anything there, make
+ * sure `.claude` and `.claude/skills` resolve INSIDE the project — a symlinked
+ * skills dir would otherwise let a write land in another project or in the
+ * shared global skills (prompt-injecting every other project's agent).
+ */
+async function assertSkillsRootInside(projectId: string): Promise<{ base: string; root: string }> {
+  const base = await projectBaseDir(projectId);
+  const root = path.join(base, '.claude', 'skills');
+  for (const dir of [path.join(base, '.claude'), root]) {
+    if ((await pathExists(dir)) && !(await realPathInside(base, dir))) {
+      throw new SkillError('The skills directory resolves outside the project', 400);
+    }
+  }
+  return { base, root };
 }
 
 function parseFrontmatter(raw: string): { name?: string; description?: string; body: string } {
@@ -149,12 +167,11 @@ async function getDisabledSet(projectId: string): Promise<Set<string>> {
 }
 
 async function writeDisabledSet(projectId: string, set: Set<string>): Promise<void> {
-  const dir = await claudeDir(projectId);
-  await fs.mkdir(dir, { recursive: true });
-  await fs.writeFile(
-    path.join(dir, STATE_FILE),
+  const { base } = await assertSkillsRootInside(projectId);
+  await writeFileInside(
+    base,
+    path.join(base, '.claude', STATE_FILE),
     `${JSON.stringify({ disabled: [...set].sort() }, null, 2)}\n`,
-    'utf8',
   );
 }
 
@@ -247,8 +264,7 @@ export async function syncProjectSkills(projectId: string): Promise<void> {
 
 async function syncProjectSkillsUnlocked(projectId: string): Promise<void> {
   try {
-    const base = await projectBaseDir(projectId);
-    const root = await skillsDir(projectId);
+    const { base, root } = await assertSkillsRootInside(projectId);
     const disabledDir = path.join(root, DISABLED_SUBDIR);
     const lib = globalSkillsDir();
     const disabled = await getDisabledSet(projectId);
@@ -367,18 +383,21 @@ export async function saveSkill(
   input: { name: string; description?: string; content?: string; raw?: string },
 ): Promise<Skill> {
   const slug = normalizeSkillName(input.name);
-  const root = await skillsDir(projectId);
+  const { base, root } = await assertSkillsRootInside(projectId);
   // Write to wherever the skill currently lives so its enabled state is preserved.
   const parked = path.join(root, DISABLED_SUBDIR, slug);
   const dir = (await pathExists(parked)) ? parked : path.join(root, slug);
-  await fs.mkdir(dir, { recursive: true });
+  // A symlinked skill dir is a staged GLOBAL skill (or a planted link): read-only.
+  if (await isSymlink(dir)) {
+    throw new SkillError('Global skills are read-only; create a project skill with another name', 400);
+  }
 
   const raw =
     input.raw && input.raw.trim().length > 0
       ? input.raw
       : buildSkillMarkdown(slug, input.description ?? '', input.content ?? '');
 
-  await fs.writeFile(path.join(dir, 'SKILL.md'), raw.endsWith('\n') ? raw : `${raw}\n`, 'utf8');
+  await writeFileInside(base, path.join(dir, 'SKILL.md'), raw.endsWith('\n') ? raw : `${raw}\n`);
 
   const disabled = await getDisabledSet(projectId);
   const parsed = parseFrontmatter(raw);
@@ -405,15 +424,14 @@ export async function installSkillFromDir(
   srcDir: string,
 ): Promise<void> {
   const id = assertSafeSkillId(skillId);
-  const root = await skillsDir(projectId);
+  const { base, root } = await assertSkillsRootInside(projectId);
   const dest = path.join(root, id);
   await fs.rm(dest, { recursive: true, force: true });
-  await fs.mkdir(dest, { recursive: true });
 
   for (const entry of await fs.readdir(srcDir)) {
     const src = path.join(srcDir, entry);
     if ((await fs.stat(src)).isFile()) {
-      await fs.copyFile(src, path.join(dest, entry));
+      await writeFileInside(base, path.join(dest, entry), await fs.readFile(src));
     }
   }
 
@@ -424,7 +442,7 @@ export async function installSkillFromDir(
 
 export async function deleteSkill(projectId: string, name: string): Promise<boolean> {
   const slug = normalizeSkillName(name);
-  const root = await skillsDir(projectId);
+  const { root } = await assertSkillsRootInside(projectId);
   let removed = false;
   for (const dir of [path.join(root, slug), path.join(root, DISABLED_SUBDIR, slug)]) {
     try {

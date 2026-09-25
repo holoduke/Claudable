@@ -68,7 +68,7 @@ services:
       # Persist SQLite DB + all generated project repos across rebuilds.
       - ./data:/app/data
       # Global Agent Skills available to every project (settingSources: ['user']).
-      - ./global-skills:/home/node/.claude/skills
+      - ./global-skills:/home/node/.claude/skills:ro
       # Persist Claude Code conversation transcripts so session resume survives
       # container restarts/redeploys — otherwise the agent loses all context and
       # "forgets" the conversation after every deploy.
