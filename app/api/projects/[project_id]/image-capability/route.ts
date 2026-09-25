@@ -41,7 +41,7 @@ export async function GET(_req: NextRequest, { params }: RouteContext) {
 export async function POST(req: NextRequest, { params }: RouteContext) {
   try {
     const { project_id } = await params;
-    const denied = await denyUnlessProjectAccess(project_id, { write: true });
+    const denied = await denyUnlessProjectAccess(project_id, { write: true, configure: true });
     if (denied) return denied;
     const { error } = await gate(project_id);
     if (error) return error;
@@ -57,7 +57,7 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
 export async function DELETE(_req: NextRequest, { params }: RouteContext) {
   try {
     const { project_id } = await params;
-    const denied = await denyUnlessProjectAccess(project_id, { write: true });
+    const denied = await denyUnlessProjectAccess(project_id, { write: true, configure: true });
     if (denied) return denied;
     const { error } = await gate(project_id);
     if (error) return error;

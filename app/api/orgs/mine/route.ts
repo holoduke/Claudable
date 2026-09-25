@@ -29,6 +29,7 @@ export async function GET() {
         domain: r.organization.domain,
         role: r.role,
         canCreateProjects: r.organization.canCreateProjects,
+        allowOwnToken: r.organization.allowOwnToken,
         hasClaudeCredential: !!r.organization.claudeCredentialId,
         memberCount: r.organization._count.members,
         projectCount: r.organization._count.projects,

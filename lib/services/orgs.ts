@@ -69,6 +69,7 @@ export async function listOrgs() {
     type: o.type,
     domain: o.domain,
     canCreateProjects: o.canCreateProjects,
+    allowOwnToken: o.allowOwnToken,
     claudeCredential: o.claudeCredential ? { label: o.claudeCredential.label, since: o.claudeCredential.createdAt } : null,
     createdAt: o.createdAt,
     memberCount: o._count.members,
@@ -93,11 +94,12 @@ export async function createOrg(
 
 export async function updateOrg(
   id: string,
-  input: { name?: string; type?: string; domain?: string | null; canCreateProjects?: boolean },
+  input: { name?: string; type?: string; domain?: string | null; canCreateProjects?: boolean; allowOwnToken?: boolean },
   actor?: AuditActor | null,
 ) {
-  const data: { name?: string; type?: string; domain?: string | null; canCreateProjects?: boolean } = {};
+  const data: { name?: string; type?: string; domain?: string | null; canCreateProjects?: boolean; allowOwnToken?: boolean } = {};
   if (typeof input.canCreateProjects === 'boolean') data.canCreateProjects = input.canCreateProjects;
+  if (typeof input.allowOwnToken === 'boolean') data.allowOwnToken = input.allowOwnToken;
   if (input.name !== undefined) {
     const name = input.name.trim();
     if (!name) throw new Error('Naam mag niet leeg zijn');

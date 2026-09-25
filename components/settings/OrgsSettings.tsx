@@ -18,6 +18,7 @@ interface Org {
   type: 'intern' | 'klant';
   domain: string | null;
   canCreateProjects: boolean;
+  allowOwnToken: boolean;
   claudeCredential: { label: string; since: string } | null;
   memberCount: number;
   projectCount: number;
@@ -176,6 +177,14 @@ export default function OrgsSettings({ onToast }: OrgsSettingsProps) {
     const ok = await call(`/api/orgs/${org.id}`, { method: 'PATCH', body: JSON.stringify({ canCreateProjects: next }) },
       next ? t('orgs.createAllowed', { name: org.name }) : t('orgs.createDenied', { name: org.name }));
     if (!ok) setOrgs((prev) => prev.map((o) => (o.id === org.id ? { ...o, canCreateProjects: !next } : o)));
+  };
+
+  const toggleOwnToken = async (org: Org) => {
+    const next = !org.allowOwnToken;
+    setOrgs((prev) => prev.map((o) => (o.id === org.id ? { ...o, allowOwnToken: next } : o)));
+    const ok = await call(`/api/orgs/${org.id}`, { method: 'PATCH', body: JSON.stringify({ allowOwnToken: next }) },
+      next ? t('orgs.ownTokenAllowed', { name: org.name }) : t('orgs.ownTokenDenied', { name: org.name }));
+    if (!ok) setOrgs((prev) => prev.map((o) => (o.id === org.id ? { ...o, allowOwnToken: !next } : o)));
   };
 
   const setCredential = async (org: Org) => {
@@ -348,6 +357,19 @@ export default function OrgsSettings({ onToast }: OrgsSettingsProps) {
                           <span className={`inline-block h-5 w-5 transform rounded-full bg-white dark:bg-gray-900 transition-transform ${org.canCreateProjects ? 'translate-x-5' : 'translate-x-1'}`} />
                         </button>
                       </div>
+                      {org.type === 'klant' && (
+                        <div className="flex items-center justify-between gap-4 px-4 py-3">
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium text-gray-900 dark:text-gray-50">{t('orgs.ownToken')}</p>
+                            <p className="text-xs text-gray-500 dark:text-gray-400">{t('orgs.ownToken.desc', { name: org.name })}</p>
+                          </div>
+                          <button type="button" role="switch" aria-checked={org.allowOwnToken} aria-label={t('orgs.ownToken')} disabled={busy}
+                            onClick={() => toggleOwnToken(org)}
+                            className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors disabled:opacity-50 ${org.allowOwnToken ? 'bg-brand-500' : 'bg-gray-300 dark:bg-white/15'}`}>
+                            <span className={`inline-block h-5 w-5 transform rounded-full bg-white dark:bg-gray-900 transition-transform ${org.allowOwnToken ? 'translate-x-5' : 'translate-x-1'}`} />
+                          </button>
+                        </div>
+                      )}
                       <div className="px-4 py-3 space-y-2">
                         <div className="flex items-center justify-between gap-4">
                           <div className="min-w-0">

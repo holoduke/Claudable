@@ -29,7 +29,7 @@ export async function GET(_request: NextRequest, { params }: RouteContext) {
 export async function PATCH(request: NextRequest, { params }: RouteContext) {
   try {
     const { project_id } = await params;
-    const gate = await denyUnlessProjectAccess(project_id, { write: true });
+    const gate = await denyUnlessProjectAccess(project_id, { write: true, configure: true });
     if (gate) return gate;
     const body = (await request.json().catch(() => ({}))) as { marketplace?: string; plugin?: string; enabled?: boolean };
     if (typeof body.marketplace !== 'string' || typeof body.plugin !== 'string' || typeof body.enabled !== 'boolean') {

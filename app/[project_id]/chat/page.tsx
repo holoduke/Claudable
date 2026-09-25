@@ -293,6 +293,17 @@ export default function ChatPage() {
   // Which tab the settings modal opens on: the gear opens General; the publish
   // panel's "Open Settings → Services" jumps straight to the Deploy tab.
   const [settingsInitialTab, setSettingsInitialTab] = useState<'general' | 'services' | 'mcp' | 'plugins'>('general');
+  // A customer in their own (customer) project uses it but configures nothing:
+  // no project settings for them (the settings APIs refuse them as well).
+  const [customerViewer, setCustomerViewer] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`${API_BASE}/api/projects/${projectId}/credits`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => { if (!cancelled) setCustomerViewer(!!j?.data?.enabled && !j?.data?.viewerIsStaff); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [projectId]);
   // The MCP OAuth callback redirects back here with ?mcp_auth=success|error.
   // Surface the result and open the MCP tab so the user sees "authenticated".
   useEffect(() => {
@@ -3463,7 +3474,8 @@ const persistProjectPreferences = useCallback(
                       </>
                     )}
                   </div>
-                  {/* Settings — kept visible (common action) */}
+                  {/* Settings — kept visible (common action); not for a customer in a customer project */}
+                  {!customerViewer && (
                   <button
                     onClick={() => { setSettingsInitialTab('general'); setShowGlobalSettings(true); }}
                     className="h-9 w-9 flex items-center justify-center bg-gray-100 dark:bg-white/6 text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-200 dark:hover:bg-white/6 rounded-lg transition-colors"
@@ -3472,6 +3484,7 @@ const persistProjectPreferences = useCallback(
                   >
                     <FaCog size={16} />
                   </button>
+                  )}
 
                   {/* Overflow ("⋯") menu — secondary preview tools */}
                   <div className="relative">
@@ -4194,7 +4207,7 @@ const persistProjectPreferences = useCallback(
       )}
 
       {/* Project Settings Modal */}
-      {showGlobalSettings && (
+      {showGlobalSettings && !customerViewer && (
         <ProjectSettings
           isOpen={showGlobalSettings}
           onClose={() => setShowGlobalSettings(false)}

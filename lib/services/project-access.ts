@@ -17,6 +17,7 @@ import { prisma } from '@/lib/db/client';
 import { getSessionUser } from '@/lib/auth/session';
 import type { User, Project } from '@prisma/client';
 import { isOrgMember, orgIdsFor } from '@/lib/services/org-access';
+import { isCustomerProject, isInternalUser } from '@/lib/services/tenant-policy';
 
 export type Visibility = 'org' | 'restricted';
 
@@ -34,7 +35,23 @@ export async function requireProjectManager(projectId: string): Promise<ManagerG
   if (!canManageProject(user, project)) {
     return { ok: false, status: 403, code: 'forbidden', message: 'Only the project owner or an admin can manage access' };
   }
+  const denied = await denyCustomerConfig(user, projectId);
+  if (denied) return denied;
   return { ok: true, user, project };
+}
+
+const MANAGED_BY_NEW_STORY = { ok: false as const, status: 403, code: 'forbidden', message: 'This setting is managed by New Story' };
+
+/** In a customer project only New Story staff change settings; the customer only uses it. */
+async function denyCustomerConfig(user: User, projectId: string): Promise<typeof MANAGED_BY_NEW_STORY | null> {
+  return (await isCustomerProject(projectId)) && !(await isInternalUser(user)) ? MANAGED_BY_NEW_STORY : null;
+}
+
+/** A project writer who may also change the project's settings (not a customer in a customer project). */
+export async function requireProjectConfigurer(projectId: string): Promise<ManagerGate> {
+  const gate = await requireProjectWriter(projectId);
+  if (!gate.ok) return gate;
+  return (await denyCustomerConfig(gate.user, projectId)) ?? gate;
 }
 
 /** Resolve the signed-in WRITER for a project (owner/admin/org-member/editor),

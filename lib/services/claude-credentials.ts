@@ -351,6 +351,15 @@ export async function runUsesRequestersOwnAccount(
   return false;
 }
 
+/** The user's own (personal, most recent) Claude credential, decrypted — or null. */
+export async function resolvePersonalClaudeToken(userId: string): Promise<string | null> {
+  const own = await prisma.claudeCredential.findFirst({
+    where: { ownerId: userId, ...PERSONAL_ONLY },
+    orderBy: { createdAt: 'desc' },
+  });
+  return own ? decryptAndStamp(own) : null;
+}
+
 function decryptAndStamp(cred: ClaudeCredential): string | null {
   try {
     const token = decrypt(cred.token);

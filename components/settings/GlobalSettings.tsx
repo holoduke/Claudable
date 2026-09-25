@@ -234,6 +234,9 @@ export default function GlobalSettings({ isOpen, onClose, initialTab = 'account'
   // Non-staff users get the "Organisatie" tab for the orgs they belong to;
   // superadmins already have the all-orgs tab.
   const showMyOrg = !!currentUser && !isAdmin && myOrgs.length > 0;
+  // The personal Claude account: staff always; a customer only when one of
+  // their organisations allows its members to run on their own account.
+  const showClaudeTab = !!currentUser && (isAdmin || myOrgs.length === 0 || myOrgs.some((o) => o.type !== 'klant' || o.allowOwnToken));
 
   // If a non-admin somehow lands on the Users tab, fall back to General — but
   // only once we actually know who the user is, so an initialTab='users' isn't
@@ -401,7 +404,7 @@ export default function GlobalSettings({ isOpen, onClose, initialTab = 'account'
                 label: t('settings.group.personal'),
                 items: [
                   ...(currentUser ? [{ id: 'account' as const, label: t('settings.tab.account') }] : []),
-                  ...(currentUser ? [{ id: 'claude' as const, label: t('settings.tab.claude') }] : []),
+                  ...(showClaudeTab ? [{ id: 'claude' as const, label: t('settings.tab.claude') }] : []),
                 ],
               },
               {
@@ -656,7 +659,7 @@ export default function GlobalSettings({ isOpen, onClose, initialTab = 'account'
               </div>
             )}
 
-            {activeTab === 'claude' && currentUser && (
+            {activeTab === 'claude' && showClaudeTab && (
               <ClaudeAccountSettings onToast={showToast} />
             )}
 

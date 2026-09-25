@@ -20,7 +20,7 @@ interface RouteContext {
 export async function PATCH(request: NextRequest, { params }: RouteContext) {
   try {
     const { project_id, id } = await params;
-    const gate = await denyUnlessProjectAccess(project_id, { write: true });
+    const gate = await denyUnlessProjectAccess(project_id, { write: true, configure: true });
     if (gate) return gate;
     const body = (await request.json().catch(() => ({}))) as Partial<McpServerInput>;
     // A user may only edit shared servers or their OWN private ones.
@@ -39,7 +39,7 @@ export async function PATCH(request: NextRequest, { params }: RouteContext) {
 export async function DELETE(_request: NextRequest, { params }: RouteContext) {
   try {
     const { project_id, id } = await params;
-    const gate = await denyUnlessProjectAccess(project_id, { write: true });
+    const gate = await denyUnlessProjectAccess(project_id, { write: true, configure: true });
     if (gate) return gate;
     const actor = await getSessionUser();
     const ok = await deleteProjectMcpServer(project_id, id, actor?.id);

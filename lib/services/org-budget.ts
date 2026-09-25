@@ -8,7 +8,8 @@
  * the budget resets on the 1st.
  *
  * Runs by New Story staff inside a customer project are booked with source
- * 'staff': visible in the overview, but NOT counted against the customer's budget.
+ * 'staff', and customer runs on their own Claude account with source 'own'
+ * (at cost, no margin): both visible, but NOT counted against the budget.
  *
  * Each event stores the token cost (costEurCents) and the billed amount
  * (billedEurCents = cost + the org's margin at booking time). Everything the
@@ -35,11 +36,13 @@ export function periodBounds(now = new Date(), monthOffset = 0): { start: Date; 
 }
 
 export const STAFF_SOURCE = 'staff';
+export const OWN_TOKEN_SOURCE = 'own';
+const UNBUDGETED_SOURCES = [STAFF_SOURCE, OWN_TOKEN_SOURCE];
 
-/** Budgeted spend: everything except New Story staff runs. */
+/** Budgeted spend: everything except staff runs and runs on the customer's own account. */
 async function spentCentsBetween(orgId: string, start: Date, end: Date): Promise<number> {
   const agg = await prisma.usageEvent.aggregate({
-    where: { orgId, createdAt: { gte: start, lt: end }, source: { not: STAFF_SOURCE } },
+    where: { orgId, createdAt: { gte: start, lt: end }, source: { notIn: UNBUDGETED_SOURCES } },
     _sum: { billedEurCents: true },
   });
   return agg._sum.billedEurCents ?? 0;
@@ -93,7 +96,7 @@ export interface RunUsageInput {
   projectId?: string | null;
   userId?: string | null;
   sessionId?: string | null;
-  source?: 'agent' | 'design' | 'staff';
+  source?: 'agent' | 'design' | 'staff' | 'own';
   model?: string | null;
   /** Cumulative cost the CLI reports for this session so far (total_cost_usd). */
   cumulativeCostUsd: number;
@@ -116,7 +119,11 @@ export async function recordRunUsage(input: RunUsageInput): Promise<number> {
     increment = cumulative >= already ? cumulative - already : cumulative;
   }
   if (increment <= 0) return 0;
-  const [costEurCents, marginPercent] = await Promise.all([usdToEurCents(increment), getCreditMarginPercent(input.orgId)]);
+  // No margin on the customer's own account: New Story does not pay for it.
+  const [costEurCents, marginPercent] = await Promise.all([
+    usdToEurCents(increment),
+    input.source === OWN_TOKEN_SOURCE ? 0 : getCreditMarginPercent(input.orgId),
+  ]);
   await prisma.usageEvent.create({
     data: {
       orgId: input.orgId,
@@ -146,6 +153,8 @@ export interface UsageBreakdown {
   staffCents: number;
   /** Token cost of the budgeted usage, before margin (superadmin only). */
   costCents: number;
+  /** Customer runs on their own Claude account (at cost, not budgeted). */
+  ownCents: number;
   byUser: Array<{ userId: string | null; name: string; email: string | null; cents: number; runs: number; staff: boolean }>;
   byProject: Array<{ projectId: string | null; name: string; cents: number; runs: number }>;
   byDay: Array<{ day: string; cents: number }>;
@@ -159,7 +168,9 @@ export async function getUsageBreakdown(orgId: string, monthOffset = 0, now = ne
     select: { userId: true, projectId: true, costEurCents: true, billedEurCents: true, createdAt: true, source: true },
   });
   const staffIds = new Set(events.filter((e) => e.source === STAFF_SOURCE && e.userId).map((e) => e.userId as string));
-  const budgeted = events.filter((e) => e.source !== STAFF_SOURCE);
+  const budgeted = events.filter((e) => !UNBUDGETED_SOURCES.includes(e.source));
+  const ownRuns = events.filter((e) => e.source === OWN_TOKEN_SOURCE);
+  const onKey = events.filter((e) => e.source !== OWN_TOKEN_SOURCE);
 
   const sum = <K>(key: (e: (typeof events)[number]) => K, list: typeof events = events) => {
     const map = new Map<K, { cents: number; runs: number }>();
@@ -171,9 +182,9 @@ export async function getUsageBreakdown(orgId: string, monthOffset = 0, now = ne
     return map;
   };
 
-  // People: everyone (staff tagged). Projects and days: budgeted usage only, so
-  // they add up to the budget total.
-  const userTotals = sum((e) => e.userId);
+  // People: everyone on the org key (staff tagged). Projects and days: budgeted
+  // usage only, so they add up to the budget total.
+  const userTotals = sum((e) => e.userId, onKey);
   const projectTotals = sum((e) => e.projectId, budgeted);
   const dayTotals = sum((e) => e.createdAt.toISOString().slice(0, 10), budgeted);
   const budgetedCents = budgeted.reduce((acc, e) => acc + e.billedEurCents, 0);
@@ -193,7 +204,8 @@ export async function getUsageBreakdown(orgId: string, monthOffset = 0, now = ne
     periodEnd: end.toISOString(),
     totalCents: budgetedCents,
     runs: budgeted.length,
-    staffCents: events.reduce((acc, e) => acc + e.billedEurCents, 0) - budgetedCents,
+    staffCents: onKey.reduce((acc, e) => acc + e.billedEurCents, 0) - budgetedCents,
+    ownCents: ownRuns.reduce((acc, e) => acc + e.billedEurCents, 0),
     costCents: budgeted.reduce((acc, e) => acc + e.costEurCents, 0),
     byUser: [...userTotals.entries()]
       .map(([userId, t]) => {

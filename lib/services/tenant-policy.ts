@@ -52,6 +52,20 @@ export class TenantPolicyError extends Error {
  * a member of at least one non-customer organisation. A user who is ONLY in
  * customer organisations is not.
  */
+/**
+ * Whether a user may connect and run on their OWN Claude account: staff always;
+ * a customer only when one of their organisations allows it (superadmin flag).
+ */
+export async function mayUseOwnToken(user: { id: string; role: string } | null | undefined): Promise<boolean> {
+  if (!user) return false;
+  if (await isInternalUser(user)) return true;
+  const allowing = await prisma.orgMember.findFirst({
+    where: { userId: user.id, organization: { allowOwnToken: true } },
+    select: { id: true },
+  });
+  return !!allowing;
+}
+
 export async function isInternalUser(user: { id: string; role: string } | null | undefined): Promise<boolean> {
   if (!user) return false;
   if (user.role === 'admin') return true;

@@ -5,6 +5,7 @@
  */
 import { NextRequest } from 'next/server';
 import { getSessionUser } from '@/lib/auth/session';
+import { mayUseOwnToken } from '@/lib/services/tenant-policy';
 import { listMyCredentials, listOrgCredentials, saveCredential } from '@/lib/services/claude-credentials';
 import { createSuccessResponse, createErrorResponse, handleApiError } from '@/lib/utils/api-response';
 
@@ -30,6 +31,9 @@ export async function POST(request: NextRequest) {
   try {
     const me = await getSessionUser();
     if (!me) return createErrorResponse('unauthorized', 'Sign in to connect your Claude account', 401);
+    if (!(await mayUseOwnToken(me))) {
+      return createErrorResponse('forbidden', 'Your organisation does not allow connecting your own Claude account', 403);
+    }
 
     const body = (await request.json().catch(() => null)) ?? {};
     if (typeof body.token !== 'string' || !body.token.trim()) {

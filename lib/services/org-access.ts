@@ -20,6 +20,7 @@
 import { prisma } from '@/lib/db/client';
 import { getSessionUser } from '@/lib/auth/session';
 import type { User } from '@prisma/client';
+import { CUSTOMER_ORG_TYPE } from '@/lib/services/tenant-policy';
 
 export type OrgRole = 'eigenaar' | 'beheerder' | 'lid';
 
@@ -62,7 +63,7 @@ export interface OrgActor {
 }
 
 export type OrgGate =
-  | { ok: true; actor: OrgActor }
+  | { ok: true; actor: OrgActor; customerOrg?: boolean }
   | { ok: false; status: number; code: string; message: string };
 
 const NOT_FOUND: OrgGate = { ok: false, status: 404, code: 'not_found', message: 'Organisation not found' };
@@ -70,7 +71,7 @@ const NOT_FOUND: OrgGate = { ok: false, status: 404, code: 'not_found', message:
 async function resolveActor(orgId: string): Promise<OrgGate> {
   const user = await getSessionUser();
   if (!user) return { ok: false, status: 401, code: 'unauthorized', message: 'Sign in required' };
-  const org = await prisma.organization.findUnique({ where: { id: orgId }, select: { id: true } });
+  const org = await prisma.organization.findUnique({ where: { id: orgId }, select: { id: true, type: true } });
   if (!org) return { ok: false, status: 404, code: 'not_found', message: 'Organisation not found' };
   const membership = await prisma.orgMember.findUnique({
     where: { orgId_userId: { orgId, userId: user.id } },
@@ -79,6 +80,7 @@ async function resolveActor(orgId: string): Promise<OrgGate> {
   return {
     ok: true,
     actor: { user, superadmin: isSuperadmin(user), role: (membership?.role as OrgRole | undefined) ?? null },
+    customerOrg: org.type === CUSTOMER_ORG_TYPE,
   };
 }
 
@@ -92,11 +94,19 @@ export async function requireOrgMember(orgId: string): Promise<OrgGate> {
   return NOT_FOUND;
 }
 
-/** An eigenaar or beheerder of the org, or a superadmin. */
+/**
+ * An eigenaar or beheerder of the org, or a superadmin. A CUSTOMER org is
+ * managed by New Story only: its own members (whatever their role) can view,
+ * not change members, invites, the key or the audit trail.
+ */
 export async function requireOrgManager(orgId: string): Promise<OrgGate> {
   const gate = await resolveActor(orgId);
   if (!gate.ok) return gate;
-  if (gate.actor.superadmin || isOrgAdminRole(gate.actor.role)) return gate;
+  if (gate.actor.superadmin) return gate;
+  if (gate.customerOrg && gate.actor.role) {
+    return { ok: false, status: 403, code: 'forbidden', message: 'This organisation is managed by New Story' };
+  }
+  if (isOrgAdminRole(gate.actor.role)) return gate;
   if (!gate.actor.role) return NOT_FOUND;
   return { ok: false, status: 403, code: 'forbidden', message: 'Only an eigenaar or beheerder can manage members' };
 }

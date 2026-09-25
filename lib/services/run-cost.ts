@@ -17,7 +17,7 @@ export async function bookRunResult(billing: RunBilling, message: unknown): Prom
     projectId: billing.projectId,
     userId: billing.userId,
     sessionId: typeof m.session_id === 'string' ? m.session_id : null,
-    source: billing.staff ? 'staff' : 'agent',
+    source: billing.staff ? 'staff' : billing.ownToken ? 'own' : 'agent',
     model: modelUsage[0] ?? null,
     cumulativeCostUsd: num(m.total_cost_usd),
     inputTokens: num(usage.input_tokens) + num(usage.cache_creation_input_tokens) + num(usage.cache_read_input_tokens),

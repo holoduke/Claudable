@@ -22,6 +22,7 @@ export interface MyOrg {
   domain: string | null;
   role: 'eigenaar' | 'beheerder' | 'lid';
   canCreateProjects?: boolean;
+  allowOwnToken?: boolean;
   hasClaudeCredential?: boolean;
   memberCount: number;
   projectCount: number;
@@ -101,7 +102,9 @@ function OrgPanel({ org, currentUserId, onToast }: { org: MyOrg; currentUserId: 
   const [credLabel, setCredLabel] = useState('');
   const [credToken, setCredToken] = useState('');
 
-  const canManage = org.role === 'eigenaar' || org.role === 'beheerder';
+  // A customer organisation is managed by New Story: its members view, they don't change.
+  const managedByNewStory = org.type === 'klant';
+  const canManage = !managedByNewStory && (org.role === 'eigenaar' || org.role === 'beheerder');
   const isOwner = org.role === 'eigenaar';
   const ownerCount = members.filter((m) => m.role === 'eigenaar').length;
 
@@ -259,6 +262,9 @@ function OrgPanel({ org, currentUserId, onToast }: { org: MyOrg; currentUserId: 
       </div>
 
       <div className="p-4 space-y-3">
+        {managedByNewStory && (
+          <p className="text-xs text-gray-500 dark:text-gray-400">{t('org.managedByNewStory')}</p>
+        )}
         {loading ? (
           <p className="text-sm text-gray-500 dark:text-gray-400">{t('org.loadingMembers')}</p>
         ) : (

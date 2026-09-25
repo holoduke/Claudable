@@ -19,6 +19,7 @@ interface CreditsData {
     totalCents: number;
     runs: number;
     staffCents: number;
+    ownCents?: number;
     byUser: Array<{ userId: string | null; name: string; email: string | null; cents: number; runs: number; staff: boolean }>;
     byProject: Array<{ projectId: string | null; name: string; cents: number; runs: number }>;
   };
@@ -179,6 +180,10 @@ export default function OrgCreditsPanel({ orgId, onToast }: Props) {
         <p className="text-xs text-gray-500 dark:text-gray-400">
           {t('credits.costLine', { cost: euro(data.costCents, dateLocale), margin: euro(usage.totalCents - data.costCents, dateLocale) })}
         </p>
+      )}
+
+      {(usage.ownCents ?? 0) > 0 && (
+        <p className="text-xs text-gray-500 dark:text-gray-400">{t('credits.own', { amount: euro(usage.ownCents ?? 0, dateLocale) })}</p>
       )}
 
       {usage.staffCents > 0 && (

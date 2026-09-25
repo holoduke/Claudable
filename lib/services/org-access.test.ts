@@ -2,13 +2,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Org role policy + the org gates, with Prisma and the session mocked.
 const orgMembers: { orgId: string; userId: string; role: string }[] = [];
-const orgs = new Set<string>(['org-a', 'org-b']);
+const orgs = new Set<string>(['org-a', 'org-b', 'klant-c']);
 let sessionUser: any = null;
 
 vi.mock('@/lib/db/client', () => ({
   prisma: {
     organization: {
-      findUnique: vi.fn(async ({ where }: any) => (orgs.has(where.id) ? { id: where.id } : null)),
+      findUnique: vi.fn(async ({ where }: any) => (orgs.has(where.id) ? { id: where.id, type: where.id.startsWith('klant') ? 'klant' : 'intern' } : null)),
     },
     orgMember: {
       findUnique: vi.fn(async ({ where }: any) => {
@@ -106,5 +106,14 @@ describe('org gates', () => {
     expect(await requireOrgManager('org-b')).toMatchObject({ ok: true, actor: { role: 'beheerder' } });
     sessionUser = { id: 'root', role: 'admin' };
     expect(await requireOrgManager('org-a')).toMatchObject({ ok: true });
+  });
+
+  it('customer org: its own eigenaar can view but not manage; a superadmin can', async () => {
+    orgMembers.push({ orgId: 'klant-c', userId: 'cust', role: 'eigenaar' });
+    sessionUser = { id: 'cust', role: 'user' };
+    expect(await requireOrgMember('klant-c')).toMatchObject({ ok: true });
+    expect(await requireOrgManager('klant-c')).toMatchObject({ ok: false, status: 403 });
+    sessionUser = { id: 'root', role: 'admin' };
+    expect(await requireOrgManager('klant-c')).toMatchObject({ ok: true });
   });
 });

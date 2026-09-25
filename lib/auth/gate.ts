@@ -11,6 +11,7 @@
  *   const denied = await denyUnlessProjectAccess(project_id);        // read  (view/open)
  *   const denied = await denyUnlessProjectAccess(project_id, { write: true });  // write (agent/edit/deploy)
  *   const denied = await denyUnlessProjectAccess(project_id, { manage: true }); // manage (owner/admin: secrets, DB drop, delete)
+ *   const denied = await denyUnlessProjectAccess(project_id, { write: true, configure: true }); // project settings
  *   const denied = await denyUnlessAdmin();                          // org-global
  *   if (denied) return denied;
  *
@@ -18,9 +19,13 @@
  * org user on an org-visible project) run the agent, edit files/env values and
  * deploy; `manage` is owner/admin only — reserved for reading/setting secrets,
  * destroying containers/databases, and deleting/reconfiguring the project.
+ *
+ * In a CUSTOMER project, `manage` and `configure` (the project's settings: skills,
+ * MCP, plugins, design, credentials, …) are New Story staff only — the customer
+ * uses the project (chat, preview, publish) but configures nothing.
  */
 import { getSessionUser, getAdminUser, authEnabled } from '@/lib/auth/session';
-import { isInternalUser } from '@/lib/services/tenant-policy';
+import { isCustomerProject, isInternalUser } from '@/lib/services/tenant-policy';
 import { prisma } from '@/lib/db/client';
 import { canAccessProject, canManageProject, canWriteProject } from '@/lib/services/project-access';
 
@@ -34,7 +39,7 @@ function deny(status: number, code: string, message: string): Response {
  */
 export async function denyUnlessProjectAccess(
   projectId: string,
-  opts?: { manage?: boolean; write?: boolean },
+  opts?: { manage?: boolean; write?: boolean; configure?: boolean },
 ): Promise<Response | null> {
   if (!authEnabled()) return null;
   const user = await getSessionUser();
@@ -45,6 +50,9 @@ export async function denyUnlessProjectAccess(
   if (!project || !(await canAccessProject(user, project))) return deny(404, 'not_found', 'Project not found');
   if (opts?.manage && !canManageProject(user, project)) return deny(403, 'forbidden', 'Access denied');
   if (opts?.write && !opts?.manage && !(await canWriteProject(user, project))) return deny(403, 'forbidden', 'Access denied');
+  if ((opts?.manage || opts?.configure) && (await isCustomerProject(projectId)) && !(await isInternalUser(user))) {
+    return deny(403, 'forbidden', 'This setting is managed by New Story');
+  }
   return null;
 }
 

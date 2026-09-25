@@ -13,11 +13,15 @@
  *    single long run cannot overshoot it;
  *  - New Story staff working in a customer project also run on the org's key
  *    (never on the platform token inside a customer container), but outside the
- *    customer's budget: booked as 'staff', no cap, never refused for budget.
+ *    customer's budget: booked as 'staff', no cap, never refused for budget;
+ *  - when a superadmin allows it for the org (allowOwnToken), a customer who
+ *    connected their OWN Claude account runs on that instead: booked as 'own'
+ *    (visible, at cost), never counted against the budget or capped. Without
+ *    their own account they fall back to the org key and budget.
  */
 import { prisma } from '@/lib/db/client';
 import { decrypt } from '@/lib/crypto';
-import { resolveProjectClaudeToken } from '@/lib/services/claude-credentials';
+import { resolveProjectClaudeToken, resolvePersonalClaudeToken } from '@/lib/services/claude-credentials';
 import { isInternalUser, projectTenant } from '@/lib/services/tenant-policy';
 import { getBudgetStatus, getCreditMarginPercent } from '@/lib/services/org-budget';
 import { eurCentsToUsd } from '@/lib/services/fx';
@@ -48,6 +52,8 @@ export interface RunBilling {
   userId: string | null;
   /** A New Story staff run: recorded, not counted against the customer budget. */
   staff?: boolean;
+  /** A customer run on their own Claude account: recorded at cost, not budgeted. */
+  ownToken?: boolean;
 }
 
 export interface AgentRunCredential {
@@ -77,8 +83,17 @@ export async function resolveAgentRun(projectId: string, requesterUserId?: strin
 
   const org = await prisma.organization.findUnique({
     where: { id: tenant.orgId },
-    select: { claudeCredential: { select: { id: true, token: true } } },
+    select: { allowOwnToken: true, claudeCredential: { select: { id: true, token: true } } },
   });
+  const requester = requesterUserId
+    ? await prisma.user.findUnique({ where: { id: requesterUserId }, select: { id: true, role: true } })
+    : null;
+  const staff = !!requester && (await isInternalUser(requester));
+  if (!staff && requester && org?.allowOwnToken) {
+    const own = await resolvePersonalClaudeToken(requester.id);
+    if (own) return { token: own, billing: { orgId: tenant.orgId, projectId, userId: requester.id, ownToken: true } };
+  }
+
   let token = '';
   try {
     token = org?.claudeCredential ? decrypt(org.claudeCredential.token) : '';
@@ -95,10 +110,7 @@ export async function resolveAgentRun(projectId: string, requesterUserId?: strin
     prisma.claudeCredential.update({ where: { id: org.claudeCredential.id }, data: { lastUsedAt: new Date() } }).catch(() => {});
   }
 
-  const requester = requesterUserId
-    ? await prisma.user.findUnique({ where: { id: requesterUserId }, select: { id: true, role: true } })
-    : null;
-  if (requester && (await isInternalUser(requester))) {
+  if (requester && staff) {
     return { token, billing: { orgId: tenant.orgId, projectId, userId: requester.id, staff: true } };
   }
 

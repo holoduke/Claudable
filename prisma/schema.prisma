@@ -145,6 +145,9 @@ model Organization {
   // Margin (whole percent) New Story adds on top of the token cost; the billed
   // amount (cost + margin) is what the customer sees and what counts against the budget.
   creditMarginPercent Int @default(0) @map("credit_margin_percent")
+  // Customer orgs: may members run on their OWN Claude account (Claude tab)
+  // instead of the org key + budget? Superadmin-controlled; off by default.
+  allowOwnToken Boolean @default(false) @map("allow_own_token")
   createdAt DateTime @default(now()) @map("created_at")
 
   claudeCredential ClaudeCredential? @relation("OrgClaudeCredential", fields: [claudeCredentialId], references: [id], onDelete: SetNull)

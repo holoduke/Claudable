@@ -14,7 +14,7 @@ interface RouteContext { params: Promise<{ project_id: string; id: string }> }
 export async function POST(_request: NextRequest, { params }: RouteContext) {
   try {
     const { project_id, id } = await params;
-    const gate = await denyUnlessProjectAccess(project_id, { write: true });
+    const gate = await denyUnlessProjectAccess(project_id, { write: true, configure: true });
     if (gate) return gate;
     const server = await prisma.projectMcpServer.findFirst({ where: { id, projectId: project_id } });
     if (!server) return createErrorResponse('MCP server not found', undefined, 404);

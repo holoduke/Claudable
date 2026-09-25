@@ -62,7 +62,7 @@ export async function GET(_request: NextRequest, { params }: RouteContext) {
 export async function POST(request: NextRequest, { params }: RouteContext) {
   try {
     const { project_id } = await params;
-    const gate = await denyUnlessProjectAccess(project_id, { write: true });
+    const gate = await denyUnlessProjectAccess(project_id, { write: true, configure: true });
     if (gate) return gate;
     const body = (await request.json().catch(() => ({}))) as Partial<McpServerInput>;
     if (!body || typeof body.name !== 'string' || !body.transport) {

@@ -3,7 +3,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 // Credits ledger + run gating for customer orgs, with Prisma, FX and crypto mocked.
 type Ev = { orgId: string; sessionId: string | null; costUsd: number; costEurCents: number; billedEurCents: number; marginPercent: number; createdAt: Date; userId: string | null; projectId: string | null; source?: string };
 const events: Ev[] = [];
-const orgs = new Map<string, { type: string; monthlyBudgetCents: number | null; creditMarginPercent?: number; claudeCredential: { id: string; token: string } | null }>();
+const personal = new Map<string, string>();
+const orgs = new Map<string, { type: string; monthlyBudgetCents: number | null; creditMarginPercent?: number; allowOwnToken?: boolean; claudeCredential: { id: string; token: string } | null }>();
 const projects = new Map<string, { orgId: string | null }>();
 const users = new Map<string, { id: string; role: string; internal: boolean }>();
 
@@ -11,7 +12,7 @@ const inRange = (e: Ev, where: any) =>
   e.orgId === where.orgId &&
   (where.sessionId === undefined || e.sessionId === where.sessionId) &&
   (!where.createdAt || (e.createdAt >= where.createdAt.gte && e.createdAt < where.createdAt.lt)) &&
-  (!where.source || (e.source ?? 'agent') !== where.source.not);
+  (!where.source || !where.source.notIn.includes(e.source ?? 'agent'));
 
 vi.mock('@/lib/db/client', () => ({
   prisma: {
@@ -42,7 +43,10 @@ vi.mock('@/lib/services/fx', () => ({
   usdToEurCents: async (usd: number) => Math.round(usd * 0.9 * 100),
   eurCentsToUsd: async (cents: number) => cents / 100 / 0.9,
 }));
-vi.mock('@/lib/services/claude-credentials', () => ({ resolveProjectClaudeToken: vi.fn(async () => null) }));
+vi.mock('@/lib/services/claude-credentials', () => ({
+  resolveProjectClaudeToken: vi.fn(async () => null),
+  resolvePersonalClaudeToken: vi.fn(async (id: string) => personal.get(id) ?? null),
+}));
 
 import { recordRunUsage, getBudgetStatus, periodBounds, setCreditMargin } from './org-budget';
 import { resolveAgentRun, AgentRunRefusedError } from './agent-billing';
@@ -56,6 +60,7 @@ beforeEach(() => {
   projects.set('site', { orgId: 'micros' });
   projects.set('internal', { orgId: 'newstory' });
   users.clear();
+  personal.clear();
   users.set('customer', { id: 'customer', role: 'user', internal: false });
   users.set('staffer', { id: 'staffer', role: 'user', internal: true });
   process.env.CLAUDE_CODE_OAUTH_TOKEN = 'sk-ant-oat-platform';
@@ -148,5 +153,35 @@ describe('run gating', () => {
     expect(run.token).toBe('sk-ant-oat-platform');
     expect(run.billing).toBeUndefined();
     expect(run.maxBudgetUsd).toBeUndefined();
+  });
+});
+
+describe('own Claude account', () => {
+  it('runs a customer on their own account when the org allows it — outside the budget, at cost', async () => {
+    orgs.set('micros', { ...orgs.get('micros')!, allowOwnToken: true, creditMarginPercent: 10 });
+    personal.set('customer', 'sk-ant-oat-own');
+    await recordRunUsage({ orgId: 'micros', sessionId: 's', cumulativeCostUsd: 60 }); // budget used up
+    const run = await resolveAgentRun('site', 'customer');
+    expect(run.token).toBe('sk-ant-oat-own');
+    expect(run.billing).toEqual({ orgId: 'micros', projectId: 'site', userId: 'customer', ownToken: true });
+    expect(run.maxBudgetUsd).toBeUndefined();
+    const before = (await getBudgetStatus('micros')).spentCents;
+    await recordRunUsage({ orgId: 'micros', sessionId: 'own-1', source: 'own', cumulativeCostUsd: 1 });
+    const ev = events[events.length - 1];
+    expect(ev.billedEurCents).toBe(ev.costEurCents);
+    expect((await getBudgetStatus('micros')).spentCents).toBe(before);
+  });
+
+  it('falls back to the org key and budget without an own account', async () => {
+    orgs.set('micros', { ...orgs.get('micros')!, allowOwnToken: true });
+    const run = await resolveAgentRun('site', 'customer');
+    expect(run.token).toBe('sk-ant-api03-test');
+    expect(run.billing?.ownToken).toBeUndefined();
+  });
+
+  it('ignores an own account when the org does not allow it', async () => {
+    personal.set('customer', 'sk-ant-oat-own');
+    const run = await resolveAgentRun('site', 'customer');
+    expect(run.token).toBe('sk-ant-api03-test');
   });
 });
