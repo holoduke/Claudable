@@ -88,10 +88,77 @@ export function redactGitSecrets(s: string): string {
   return s.replace(/(https?:\/\/[^\s:@/]+:)[^\s@/]+@/gu, '$1***@');
 }
 
+/*
+ * SECURITY: a project's .git lives inside the directory the agent (and the
+ * project's preview) can write, but git runs HERE, in the Claudable process with
+ * its tokens. Hooks, `core.fsmonitor`, filter/diff drivers, `include.path`,
+ * `url.*.insteadOf`, a `.git` file pointing at another repository or object
+ * alternates would all let project-controlled content run commands or redirect a
+ * push (with its token) from the control plane. So every git call runs with those
+ * features forced off, a minimal env, and only on a repository whose config holds
+ * nothing but plain, known-safe keys.
+ */
+const HARDENED_GIT_ARGS = [
+  '-c', 'core.hooksPath=/dev/null',
+  '-c', 'core.fsmonitor=false',
+  '-c', 'core.pager=cat',
+  '-c', 'core.editor=true',
+  '-c', 'core.sshCommand=false',
+  '-c', 'protocol.ext.allow=never',
+  '-c', 'protocol.file.allow=never',
+  '-c', 'credential.helper=',
+];
+
+const SAFE_GIT_CONFIG_KEY =
+  /^(core\.(repositoryformatversion|filemode|bare|logallrefupdates|ignorecase|precomposeunicode|symlinks|autocrlf|safecrlf|eol)|remote\..+\.(url|fetch)|branch\..+\.(remote|merge|rebase)|user\.(name|email)|init\.defaultbranch|pull\.(rebase|ff)|extensions\.objectformat|gc\.auto|index\.version)$/i;
+
+function gitEnv(): NodeJS.ProcessEnv {
+  const env: Record<string, string | undefined> = { GIT_CONFIG_NOSYSTEM: '1', GIT_TERMINAL_PROMPT: '0' };
+  for (const key of ['PATH', 'HOME', 'LANG', 'LC_ALL', 'TZ']) {
+    if (process.env[key]) env[key] = process.env[key];
+  }
+  return env as NodeJS.ProcessEnv;
+}
+
+/** Refuse to run git on a repository whose .git could run code or redirect git. */
+export function assertSafeGitRepository(repoPath: string): void {
+  const gitPath = path.join(repoPath, '.git');
+  let stat: fs.Stats;
+  try {
+    stat = fs.lstatSync(gitPath);
+  } catch {
+    return; // no repository yet (git init / clone creates one)
+  }
+  if (!stat.isDirectory() || stat.isSymbolicLink()) {
+    throw new GitError('Refusing to run git: .git is not a plain directory (symlink or gitdir file).');
+  }
+  for (const redirect of ['commondir', path.join('objects', 'info', 'alternates')]) {
+    if (fs.existsSync(path.join(gitPath, redirect))) {
+      throw new GitError(`Refusing to run git: .git/${redirect} points git at another repository.`);
+    }
+  }
+  const configFile = path.join(gitPath, 'config');
+  if (!fs.existsSync(configFile)) return;
+  const listed = spawnSync('git', ['config', '--no-includes', '--file', configFile, '--list', '--name-only'], {
+    encoding: 'utf8',
+    env: gitEnv(),
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  if (listed.status !== 0) {
+    throw new GitError('Refusing to run git: the repository config could not be read.', listed.stderr || undefined);
+  }
+  const unsafe = listed.stdout.split(/\r?\n/u).map((k) => k.trim()).filter((k) => k && !SAFE_GIT_CONFIG_KEY.test(k));
+  if (unsafe.length > 0) {
+    throw new GitError(`Refusing to run git: unsafe setting(s) in .git/config: ${[...new Set(unsafe)].join(', ')}`);
+  }
+}
+
 function runGit(args: string[], cwd: string): string {
-  const result = spawnSync('git', args, {
+  assertSafeGitRepository(cwd);
+  const result = spawnSync('git', [...HARDENED_GIT_ARGS, ...args], {
     cwd,
     encoding: 'utf8',
+    env: gitEnv(),
     stdio: ['ignore', 'pipe', 'pipe'],
     maxBuffer: 1024 * 1024 * 20, // allow larger git output before hitting ENOBUFS
   });

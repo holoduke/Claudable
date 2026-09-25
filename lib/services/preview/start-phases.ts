@@ -2,6 +2,7 @@
 import { spawn, type ChildProcess } from 'child_process';
 import path from 'path';
 import fs from 'fs/promises';
+import fsSync from 'fs';
 import { getProjectById, updateProject } from '../project';
 import { getDatabaseUrl } from '@/lib/services/database';
 import { getInjectedEnv } from '@/lib/services/managed-containers';
@@ -274,6 +275,16 @@ export async function ownFrontendDevCommand(projectPath: string): Promise<string
   if (!dev) return null;
   const hasRootPackage = await fs.access(path.join(projectPath, 'package.json')).then(() => true, () => false);
   return hasRootPackage ? null : dev;
+}
+
+/** The project has a real .git directory (not a symlink / gitdir file). */
+export function hasPlainGitDir(projectPath: string): boolean {
+  try {
+    const st = fsSync.lstatSync(path.join(projectPath, '.git'));
+    return st.isDirectory() && !st.isSymbolicLink();
+  } catch {
+    return false;
+  }
 }
 
 /** Major of @angular/core declared in the project's package.json, or null if unknown. */
@@ -770,6 +781,8 @@ export async function buildFrontendContainerArgs(
   const args = [
     'run', '--rm', '--name', feName,
     '-w', '/app', '-v', `${hostProject}:/app`,
+    // The previewed (agent-written) app must not reach .git either: read-only.
+    ...(hasPlainGitDir(projectPath) ? ['-v', `${hostProject}/.git:/app/.git:ro`] : []),
     // Publish on all host interfaces (not just loopback): the frontend is
     // reached by the reverse proxy at the host GATEWAY IP, not via 127.0.0.1
     // (unlike the backend sidecar, which Claudable's own static server

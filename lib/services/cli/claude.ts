@@ -36,7 +36,7 @@ import { createMessage } from '../message';
 import { CLAUDE_DEFAULT_MODEL, normalizeClaudeModelId, getClaudeModelDisplayName } from '@/lib/constants/claudeModels';
 import path from 'path';
 import os from 'os';
-import { realpathSync } from 'fs';
+import fsSync, { realpathSync } from 'fs';
 
 /**
  * Persist + stream a visible "interrupted" marker so a stopped turn leaves a
@@ -533,6 +533,7 @@ async function runContainerizedTurn(args: {
     const { done, abort } = runAgentTurnContainerized(
       {
         projectHostPath,
+        readOnlyGitDir: hasPlainGitDir(absoluteProjectPath),
         prompt: instruction,
         oauthToken,
         model: resolvedModel,
@@ -656,6 +657,16 @@ async function runContainerizedTurn(args: {
     if (mcp) {
       await mcp.cleanup().catch((e) => console.error('[ClaudeContainer] MCP cleanup failed:', e));
     }
+  }
+}
+
+/** The project has a real .git directory (not a symlink / gitdir file) to protect. */
+function hasPlainGitDir(projectPath: string): boolean {
+  try {
+    const st = fsSync.lstatSync(path.join(projectPath, '.git'));
+    return st.isDirectory() && !st.isSymbolicLink();
+  } catch {
+    return false;
   }
 }
 

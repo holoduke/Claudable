@@ -30,6 +30,7 @@ export interface AgentStreamEvent {
 
 export interface ContainerTurnOptions {
   projectHostPath: string;              // HOST path of the project (bind-mounted at /work)
+  readOnlyGitDir?: boolean;             // overlay /work/.git read-only (the project has a plain .git dir)
   prompt: string;
   oauthToken: string;                   // CLAUDE_CODE_OAUTH_TOKEN (never persisted)
   model?: string;
@@ -82,6 +83,9 @@ export function buildAgentContainerArgs(o: ContainerTurnOptions): string[] {
     // HARD BOUNDARY: no docker socket, no DOCKER_HOST — the agent cannot reach the
     // control plane's Docker (can't self-provision). Egress-locked sandbox net only.
   ];
+  // .git is read by git in the Claudable process (publish/sync): the agent must
+  // not be able to plant hooks, config or refs there. Read-only overlay.
+  if (o.readOnlyGitDir) args.push('-v', `${o.projectHostPath}/.git:/work/.git:ro`);
   // Secrets (OAuth token, project DB URLs) travel via a 0600 env-file the docker
   // CLIENT reads locally — never on the world-readable argv.
   if (o.envFilePath) {
