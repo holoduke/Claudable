@@ -708,3 +708,19 @@ model UsageEvent {
   @@index([sessionId])
   @@map("usage_events")
 }
+
+/// One-time sign-in code sent by e-mail (for people without a Google account,
+/// e.g. a customer on Microsoft 365). Only a hash is stored; single use,
+/// short-lived, attempt-limited.
+model LoginCode {
+  id        String    @id @default(cuid())
+  email     String
+  codeHash  String    @map("code_hash")
+  expiresAt DateTime  @map("expires_at")
+  attempts  Int       @default(0)
+  usedAt    DateTime? @map("used_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  @@index([email, createdAt])
+  @@map("login_codes")
+}

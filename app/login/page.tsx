@@ -1,5 +1,6 @@
 import { signIn } from '@/lib/auth';
 import GoogleSignInButton from '@/components/auth/GoogleSignInButton';
+import EmailCodeSignIn from '@/components/auth/EmailCodeSignIn';
 import SpotlightCard from '@/components/auth/SpotlightCard';
 import BrandWordmark from '@/components/ui/BrandWordmark';
 
@@ -87,7 +88,7 @@ export default async function LoginPage({
         >
           <h1 className="text-[17px] font-semibold tracking-tight text-white/95">Welcome back</h1>
           <p className="mt-1.5 text-[13px] leading-relaxed text-white/40">
-            Sign in with your organization&rsquo;s Google account.
+            Sign in with your Google account, or with a code sent to your e-mail.
           </p>
 
           {error && (
@@ -97,7 +98,7 @@ export default async function LoginPage({
               </svg>
               <span>
                 {error === 'AccessDenied'
-                  ? "This Google account isn't authorized for Claudable. Ask an owner or admin of your organisation to invite you (invitations expire after 14 days)."
+                  ? "This account isn't authorized for Claudable. Ask an owner or admin of your organisation to invite you (invitations expire after 14 days)."
                   : 'Sign-in failed. Please try again.'}
               </span>
             </div>
@@ -112,6 +113,7 @@ export default async function LoginPage({
           >
             <GoogleSignInButton />
           </form>
+          <EmailCodeSignIn />
 
           <div className="mt-6 border-t border-white/6 pt-4">
             <div className="flex items-center justify-center gap-1.5 text-[12px] text-white/30">

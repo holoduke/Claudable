@@ -1,6 +1,8 @@
 import NextAuth from 'next-auth';
 import { authConfig } from './config';
+import Credentials from 'next-auth/providers/credentials';
 import { isSignInAllowed, provisionUser } from './provision';
+import { verifyLoginCode } from './email-code';
 import { prisma } from '@/lib/db/client';
 
 /**
@@ -11,6 +13,21 @@ import { prisma } from '@/lib/db/client';
  */
 export const { handlers, auth, signIn, signOut } = NextAuth({
   ...authConfig,
+  providers: [
+    ...authConfig.providers,
+    // One-time e-mail code (for addresses without a Google account). The code
+    // proves control of the mailbox; the signIn callback below still applies the
+    // same allow-list and provisioning as for Google.
+    Credentials({
+      id: 'email-code',
+      name: 'E-mail code',
+      credentials: { email: { type: 'email' }, code: { type: 'text' } },
+      async authorize(credentials) {
+        const email = await verifyLoginCode(credentials?.email, credentials?.code);
+        return email ? { email } : null;
+      },
+    }),
+  ],
   callbacks: {
     ...authConfig.callbacks,
     async signIn({ user, profile }) {

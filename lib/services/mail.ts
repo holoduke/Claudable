@@ -121,7 +121,7 @@ export function inviteEmail(input: {
   const text = [
     `Je bent${by} uitgenodigd voor de organisatie "${input.orgName}" in Claudable, als ${role}.`,
     '',
-    `Accepteren doe je door in te loggen met je Google-account voor ${input.to}:`,
+    `Accepteren doe je door in te loggen met je Google-account voor ${input.to}, of met een inlogcode die we naar dit adres mailen ("Inloggen met e-mailcode"):`,
     url,
     '',
     `De uitnodiging is geldig tot ${until}. Je ziet daarna alleen de projecten van ${input.orgName}.`,
@@ -129,11 +129,29 @@ export function inviteEmail(input: {
   const html = layout(
     `Uitnodiging voor ${input.orgName}`,
     `<p style="margin:0 0 12px">Je bent${esc(by)} uitgenodigd voor de organisatie <strong>${esc(input.orgName)}</strong> in Claudable, als <strong>${esc(role)}</strong>.</p>
-     <p style="margin:0 0 12px">Accepteren doe je door in te loggen met je Google-account voor <strong>${esc(input.to)}</strong>.</p>
+     <p style="margin:0 0 12px">Accepteren doe je door in te loggen met je Google-account voor <strong>${esc(input.to)}</strong>, of met een inlogcode die we naar dit adres mailen (&ldquo;Inloggen met e-mailcode&rdquo;).</p>
      <p style="margin:0;color:#5a6772">Geldig tot ${esc(until)}. Daarna zie je alleen de projecten van ${esc(input.orgName)}.</p>`,
     { label: 'Inloggen en accepteren', url },
   );
   return { to: input.to, subject: `Uitnodiging voor ${input.orgName} in Claudable`, text, html, tags: ['invite'] };
+}
+
+/** One-time sign-in code (e-mail code login). */
+export function loginCodeEmail(input: { to: string; code: string; validMinutes: number }): MailMessage {
+  const text = [
+    `Je inlogcode voor Claudable: ${input.code}`,
+    '',
+    `De code is ${input.validMinutes} minuten geldig en werkt één keer.`,
+    'Heb je niet geprobeerd in te loggen? Dan kun je deze e-mail negeren.',
+  ].join('\n');
+  const html = layout(
+    'Je inlogcode',
+    `<p style="margin:0 0 12px">Je inlogcode voor Claudable:</p>
+     <p style="margin:0 0 16px;font-size:28px;font-weight:700;letter-spacing:6px;font-family:monospace">${esc(input.code)}</p>
+     <p style="margin:0;color:#5a6772">${esc(String(input.validMinutes))} minuten geldig, werkt één keer. Niet zelf aangevraagd? Negeer deze e-mail.</p>`,
+    { label: 'Naar het inlogscherm', url: `${appUrl()}/login` },
+  );
+  return { to: input.to, subject: `Je inlogcode: ${input.code}`, text, html, tags: ['login-code'] };
 }
 
 /** Welcome e-mail on the first sign-in (account just created). */
