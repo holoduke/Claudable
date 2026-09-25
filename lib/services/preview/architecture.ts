@@ -2,6 +2,7 @@
 import path from 'path';
 import fs from 'fs/promises';
 import { stackKind } from '@/lib/config/stacks';
+import { writeFileInside } from '@/lib/utils/safe-fs';
 
 /**
  * Write a per-project `.claudable/ARCHITECTURE.md` describing how THIS project
@@ -53,7 +54,7 @@ export async function writeArchitectureSummary(opts: {
       ? '- Deploys via the project\'s **own** pipeline (its `docker-compose` + CI) — Claudable does not manage it.'
       : '- Publishes via Claudable → Gitea → Coolify.');
     L.push('');
-    await fs.mkdir(path.join(projectPath, '.claudable'), { recursive: true });
-    await fs.writeFile(path.join(projectPath, '.claudable', 'ARCHITECTURE.md'), L.join('\n'), 'utf8');
+    // Symlink-safe: .claudable/ is project (agent) content.
+    await writeFileInside(projectPath, path.join(projectPath, '.claudable', 'ARCHITECTURE.md'), L.join('\n'));
   } catch { /* best-effort — a doc write must never break the preview */ }
 }

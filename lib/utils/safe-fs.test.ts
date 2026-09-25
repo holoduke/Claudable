@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
-import { readFileInside, realPathInside, writeFileInside } from './safe-fs';
+import { readFileInside, readTextInside, readTextInsideSync, realPathInside, writeFileInside, writeFileInsideSync } from './safe-fs';
 
 describe('safe-fs (symlink-safe project file access)', () => {
   let base: string;
@@ -54,4 +54,21 @@ describe('safe-fs (symlink-safe project file access)', () => {
     await writeFileInside(root, path.join(root, 'assets', 'sub', 'a.png'), 'data');
     expect(fs.readFileSync(path.join(root, 'assets', 'sub', 'a.png'), 'utf8')).toBe('data');
   });
+
+  it('reads .gitignore text but refuses one that is a symlink out of the project', async () => {
+    expect(await readTextInside(root, path.join(root, '.gitignore'))).toBe('');
+    fs.symlinkSync(outside, path.join(root, '.gitignore'));
+    await expect(readTextInside(root, path.join(root, '.gitignore'))).rejects.toThrow(/outside/);
+    expect(() => readTextInsideSync(root, path.join(root, '.gitignore'))).toThrow(/outside/);
+  });
+
+  it('sync write refuses a symlinked target and a symlinked directory', () => {
+    fs.symlinkSync(outside, path.join(root, 'ARCH.md'));
+    expect(() => writeFileInsideSync(root, path.join(root, 'ARCH.md'), 'x')).toThrow();
+    fs.symlinkSync(base, path.join(root, '.claudable'));
+    expect(() => writeFileInsideSync(root, path.join(root, '.claudable', 'ARCHITECTURE.md'), 'x')).toThrow(/outside/);
+    expect(fs.readFileSync(outside, 'utf8')).toBe('TOP SECRET');
+    expect(fs.existsSync(path.join(base, 'ARCHITECTURE.md'))).toBe(false);
+  });
+
 });

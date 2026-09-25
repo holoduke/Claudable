@@ -21,7 +21,7 @@ import { STATIC_SYSTEM_PROMPT } from './prompts/static-system-prompt';
 import { DOCUMENT_SYSTEM_PROMPT } from './prompts/document-system-prompt';
 import { stackKind } from '@/lib/config/stacks';
 import { resolveProjectClaudeToken, runUsesRequestersOwnAccount } from '../claude-credentials';
-import { resolveAgentRun } from '../agent-billing';
+import { resolveAgentRun, AgentRunRefusedError, AgentTurnNonRetryableError, BUDGET_STOPPED_MESSAGE } from '../agent-billing';
 import { isCustomerProject, TenantPolicyError } from '../tenant-policy';
 import { buildItopsMcpServer } from '../itops/itops-mcp';
 import { buildDiagnosticsMcpServer } from '../diagnostics-mcp';
@@ -602,7 +602,7 @@ async function runContainerizedTurn(args: {
     // silent dead turn.
     const turnSucceeded = resultSubtype === 'success';
     if (resultSubtype === 'error_max_budget_usd') {
-      throw new Error('This run stopped because the monthly budget of this organisation is used up.');
+      throw new AgentTurnNonRetryableError(BUDGET_STOPPED_MESSAGE);
     }
     if (!turnSucceeded) {
       throw new Error(
@@ -620,9 +620,13 @@ async function runContainerizedTurn(args: {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     console.error('[ClaudeContainer] Turn failed:', errorMessage);
 
+    // A refusal (no org key, budget used up) or a budget stop is final: show it
+    // even on a resume attempt, and tell applyChanges not to retry.
+    const nonRetryable = error instanceof AgentRunRefusedError || error instanceof AgentTurnNonRetryableError;
+
     // When this attempt will be retried (e.g. a failed session resume), stay
     // silent so the user doesn't see a spurious error — just rethrow.
-    if (args.suppressUserError) {
+    if (args.suppressUserError && !nonRetryable) {
       throw new Error(errorMessage);
     }
 
@@ -655,7 +659,7 @@ async function runContainerizedTurn(args: {
       error: userErrorMessage,
       data: requestId ? { requestId } : undefined,
     });
-    throw new Error(errorMessage);
+    throw nonRetryable ? new AgentTurnNonRetryableError(errorMessage) : new Error(errorMessage);
   } finally {
     // Revoke the turn's tool token + remove the mcp-config from the project.
     if (mcp) {
@@ -1444,8 +1448,9 @@ export async function applyChanges(
     });
   } catch (error) {
     // Resuming a corrupt/incompatible session can fail immediately (exit code 1 /
-    // error_during_execution). Recover by retrying once with a fresh session.
-    if (sessionId) {
+    // error_during_execution). Recover by retrying once with a fresh session —
+    // unless the turn ended for a reason a retry cannot fix (budget, no key).
+    if (sessionId && !(error instanceof AgentTurnNonRetryableError)) {
       console.warn('[ClaudeService] Resume failed; retrying with a fresh session:', error instanceof Error ? error.message : error);
       await executeClaude(projectId, projectPath, instruction, model, undefined, requestId, {
         thinkingMode,

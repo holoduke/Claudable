@@ -2,6 +2,7 @@
 import path from 'path';
 import { clientLogToken } from '@/lib/services/client-log-token';
 import fs from 'fs/promises';
+import { readTextInside, writeFileInside } from '@/lib/utils/safe-fs';
 
 /**
  * Inject a tiny Nuxt client plugin that reports the current route to the
@@ -27,8 +28,9 @@ export async function ensurePreviewRouteReporter(projectPath: string, projectId:
 
     const rel = 'plugins/claudable-preview.client.ts';
     const pluginPath = path.join(projectPath, rel);
-    await fs.mkdir(path.dirname(pluginPath), { recursive: true });
-    await fs.writeFile(
+    // Symlink-safe: plugins/ is project (agent) content.
+    await writeFileInside(
+      projectPath,
       pluginPath,
       `// Auto-added by Claudable (preview only). Reports the current route to the
 // Claudable parent window so the preview URL bar can follow in-app navigation.
@@ -312,16 +314,14 @@ export default defineNuxtPlugin(() => {
   } catch {}
 });
 `,
-      'utf8',
     );
 
     // Keep it out of git / the deployed image.
     const giPath = path.join(projectPath, '.gitignore');
-    let gi = '';
-    try { gi = await fs.readFile(giPath, 'utf8'); } catch { /* none yet */ }
+    const gi = await readTextInside(projectPath, giPath);
     if (!gi.includes(rel)) {
       const sep = gi.length === 0 || gi.endsWith('\n') ? '' : '\n';
-      await fs.writeFile(giPath, `${gi}${sep}${rel}\n`, 'utf8');
+      await writeFileInside(projectPath, giPath, `${gi}${sep}${rel}\n`);
     }
   } catch {
     // Non-fatal: the route bar just won't follow in-app navigation.

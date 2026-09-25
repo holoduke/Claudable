@@ -18,6 +18,7 @@ import fs from 'fs/promises';
 import path from 'path';
 import { unzipSync } from 'fflate';
 import { shouldKeep, commonRootPrefix, screenName } from '@/lib/utils/design-keep';
+import { readTextInside, writeFileInside } from '@/lib/utils/safe-fs';
 
 const DEST_DIRNAME = 'design-reference';
 
@@ -174,21 +175,17 @@ async function ensureGitignored(projectPath: string, dirName: string): Promise<v
   const gitignorePath = path.join(projectPath, '.gitignore');
   const entry = `${dirName}/`;
   try {
-    let current = '';
-    try {
-      current = await fs.readFile(gitignorePath, 'utf8');
-    } catch {
-      // no .gitignore yet
-    }
+    const current = await readTextInside(projectPath, gitignorePath);
     const has = current
       .split('\n')
       .map((l) => l.trim())
       .some((l) => l === entry || l === dirName);
     if (!has) {
       const prefix = current && !current.endsWith('\n') ? '\n' : '';
-      await fs.appendFile(
+      await writeFileInside(
+        projectPath,
         gitignorePath,
-        `${prefix}\n# Claude Design import (reference only, not shipped)\n${entry}\n`
+        `${current}${prefix}\n# Claude Design import (reference only, not shipped)\n${entry}\n`,
       );
     }
   } catch {

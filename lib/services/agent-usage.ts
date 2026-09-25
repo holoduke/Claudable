@@ -40,16 +40,18 @@ let globalRateLimits: AgentRateLimits = {};
  * move them. Membership is cached per project (looked up once, async); until it
  * is known the windows are hidden — failing closed.
  */
-const customerProjectCache = new Map<string, boolean>();
+const TENANT_CACHE_MS = 5 * 60 * 1000; // a project can move between orgs
+const customerProjectCache = new Map<string, { isCustomer: boolean; at: number }>();
 function rememberTenant(projectId: string): void {
-  if (customerProjectCache.has(projectId)) return;
+  const hit = customerProjectCache.get(projectId);
+  if (hit && Date.now() - hit.at < TENANT_CACHE_MS) return;
   isCustomerProject(projectId)
-    .then((isCustomer) => customerProjectCache.set(projectId, isCustomer))
-    .catch(() => { /* stays unknown → hidden */ });
+    .then((isCustomer) => customerProjectCache.set(projectId, { isCustomer, at: Date.now() }))
+    .catch(() => { /* stays unknown/stale → re-checked next time */ });
 }
 function sharesPlatformAccount(projectId: string): boolean {
   rememberTenant(projectId);
-  return customerProjectCache.get(projectId) === false;
+  return customerProjectCache.get(projectId)?.isCustomer === false;
 }
 
 const nowIso = () => new Date().toISOString();
@@ -347,7 +349,7 @@ export async function resetProjectUsage(projectId: string): Promise<void> {
 
 /** Current snapshot for the status endpoint (falls back to the persisted copy after a restart). */
 export async function getAgentUsageSnapshot(projectId: string): Promise<AgentUsageSnapshot> {
-  customerProjectCache.set(projectId, await isCustomerProject(projectId));
+  customerProjectCache.set(projectId, { isCustomer: await isCustomerProject(projectId), at: Date.now() });
   let state = projectUsage.get(projectId);
   if (!state) {
     const persisted = await loadPersistedState(projectId);

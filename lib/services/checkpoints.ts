@@ -18,6 +18,7 @@
 import { spawn } from 'child_process';
 import fs from 'fs';
 import path from 'path';
+import { HARDENED_GIT_ARGS, gitEnv } from '@/lib/services/git';
 
 const PROJECTS_DIR = process.env.PROJECTS_DIR || './data/projects';
 const PROJECTS_DIR_ABSOLUTE = path.isAbsolute(PROJECTS_DIR) ? PROJECTS_DIR : path.resolve(process.cwd(), PROJECTS_DIR);
@@ -47,9 +48,11 @@ const GIT_TIMEOUT_MS = Number(process.env.CHECKPOINT_GIT_TIMEOUT_MS || 120_000);
 
 function git(projectId: string, projectPath: string, args: string[]): Promise<{ ok: boolean; out: string }> {
   return new Promise((resolve) => {
-    const child = spawn('git', args, {
+    // Hardened like every other git call on project content: the work tree is
+    // agent-written, so no hooks/fsmonitor/pager and no Claudable secrets in env.
+    const child = spawn('git', [...HARDENED_GIT_ARGS, ...args], {
       cwd: projectPath,
-      env: { ...process.env, GIT_DIR: gitDir(projectId), GIT_WORK_TREE: projectPath },
+      env: { ...gitEnv(), GIT_DIR: gitDir(projectId), GIT_WORK_TREE: projectPath },
     });
     let out = '';
     let settled = false;

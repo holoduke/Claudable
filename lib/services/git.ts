@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { spawnSync } from 'child_process';
+import { readTextInsideSync, writeFileInsideSync } from '@/lib/utils/safe-fs';
 
 class GitError extends Error {
   constructor(message: string, readonly output?: string) {
@@ -45,12 +46,13 @@ function ensureGitignore(repoPath: string) {
     fs.mkdirSync(repoPath, { recursive: true });
   }
 
-  if (!fs.existsSync(gitignorePath)) {
-    fs.writeFileSync(gitignorePath, `${DEFAULT_GITIGNORE_ENTRIES.join('\n')}\n`, 'utf8');
+  // Symlink-safe: .gitignore is project (agent) content.
+  const existing = readTextInsideSync(repoPath, gitignorePath);
+  if (!existing) {
+    writeFileInsideSync(repoPath, gitignorePath, `${DEFAULT_GITIGNORE_ENTRIES.join('\n')}\n`);
     return;
   }
 
-  const existing = fs.readFileSync(gitignorePath, 'utf8');
   const existingLines = existing.split(/\r?\n/);
   const normalized = new Set(existingLines.map((line) => line.trim()));
 
@@ -73,7 +75,7 @@ function ensureGitignore(repoPath: string) {
   const trimmedExisting = existing.replace(/\s+$/u, '');
   const separator = trimmedExisting.length > 0 ? '\n\n' : '';
   const nextContents = `${trimmedExisting}${separator}${additions.join('\n')}\n`;
-  fs.writeFileSync(gitignorePath, nextContents, 'utf8');
+  writeFileInsideSync(repoPath, gitignorePath, nextContents);
 }
 
 /**
@@ -98,7 +100,7 @@ export function redactGitSecrets(s: string): string {
  * features forced off, a minimal env, and only on a repository whose config holds
  * nothing but plain, known-safe keys.
  */
-const HARDENED_GIT_ARGS = [
+export const HARDENED_GIT_ARGS = [
   '-c', 'core.hooksPath=/dev/null',
   '-c', 'core.fsmonitor=false',
   '-c', 'core.pager=cat',
@@ -112,9 +114,14 @@ const HARDENED_GIT_ARGS = [
 const SAFE_GIT_CONFIG_KEY =
   /^(core\.(repositoryformatversion|filemode|bare|logallrefupdates|ignorecase|precomposeunicode|symlinks|autocrlf|safecrlf|eol)|remote\..+\.(url|fetch)|branch\..+\.(remote|merge|rebase)|user\.(name|email)|init\.defaultbranch|pull\.(rebase|ff)|extensions\.objectformat|gc\.auto|index\.version)$/i;
 
-function gitEnv(): NodeJS.ProcessEnv {
+export function gitEnv(): NodeJS.ProcessEnv {
   const env: Record<string, string | undefined> = { GIT_CONFIG_NOSYSTEM: '1', GIT_TERMINAL_PROMPT: '0' };
-  for (const key of ['PATH', 'HOME', 'LANG', 'LC_ALL', 'TZ']) {
+  for (const key of [
+    'PATH', 'HOME', 'LANG', 'LC_ALL', 'TZ',
+    // TLS trust + outbound proxy, so HTTPS remotes keep working where configured.
+    'SSL_CERT_FILE', 'SSL_CERT_DIR', 'GIT_SSL_CAINFO', 'HTTPS_PROXY', 'HTTP_PROXY', 'NO_PROXY',
+    'https_proxy', 'http_proxy', 'no_proxy',
+  ]) {
     if (process.env[key]) env[key] = process.env[key];
   }
   return env as NodeJS.ProcessEnv;

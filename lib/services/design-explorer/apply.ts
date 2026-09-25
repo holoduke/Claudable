@@ -9,6 +9,7 @@ import fs from 'fs/promises';
 import path from 'path';
 import { buildPortPrompt, type DesignImportManifest } from '@/lib/services/design-import';
 import { prisma } from '@/lib/db/client';
+import { readTextInside, writeFileInside } from '@/lib/utils/safe-fs';
 
 const DEST_DIRNAME = 'design-reference';
 
@@ -16,12 +17,11 @@ async function ensureGitignored(projectPath: string): Promise<void> {
   const gitignorePath = path.join(projectPath, '.gitignore');
   const entry = `${DEST_DIRNAME}/`;
   try {
-    let current = '';
-    try { current = await fs.readFile(gitignorePath, 'utf8'); } catch { /* none yet */ }
+    const current = await readTextInside(projectPath, gitignorePath);
     const has = current.split('\n').map((l) => l.trim()).some((l) => l === entry || l === DEST_DIRNAME);
     if (!has) {
       const prefix = current && !current.endsWith('\n') ? '\n' : '';
-      await fs.appendFile(gitignorePath, `${prefix}\n# Design reference (not shipped)\n${entry}\n`);
+      await writeFileInside(projectPath, gitignorePath, `${current}${prefix}\n# Design reference (not shipped)\n${entry}\n`);
     }
   } catch { /* best-effort */ }
 }

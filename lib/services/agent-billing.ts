@@ -29,6 +29,19 @@ export class AgentRunRefusedError extends Error {
   }
 }
 
+/**
+ * A turn that ended for a reason a retry cannot fix (no key, budget used up —
+ * before or during the run). applyChanges must not retry it with a fresh session.
+ */
+export class AgentTurnNonRetryableError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'AgentTurnNonRetryableError';
+  }
+}
+
+export const BUDGET_STOPPED_MESSAGE = 'This run stopped because the monthly budget of this organisation is used up.';
+
 export interface RunBilling {
   orgId: string;
   projectId: string;
