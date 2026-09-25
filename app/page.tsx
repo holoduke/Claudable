@@ -1084,8 +1084,10 @@ export default function HomePage() {
       {/* Main Content - Not affected by sidebar */}
       <div className="flex-1 flex flex-col min-w-0">
         <div className="flex-1 flex flex-col overflow-y-auto p-8">
-          <div className="w-full max-w-4xl mx-auto my-auto">
-            <div className="text-center mb-12">
+          {/* Without a prompt form (no create rights) the hero is small: centering it
+              vertically would push the project tiles far down, so top-align instead. */}
+          <div className={`w-full max-w-4xl mx-auto ${orgsLoaded && !canCreateAnywhere ? 'mt-4' : 'my-auto'}`}>
+            <div className={`text-center ${orgsLoaded && !canCreateAnywhere ? 'mb-0' : 'mb-12'}`}>
               <div className="flex flex-col items-center gap-5 mb-6 select-none">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
@@ -1607,7 +1609,7 @@ export default function HomePage() {
               /api/projects, which already filters to the projects the signed-in
               user may access when the auth gate is on. */}
           {projects.length > 0 && (
-            <div className="mt-12 w-full lg:w-[80%] mx-auto text-left">
+            <div className={`${orgsLoaded && !canCreateAnywhere ? 'mt-8' : 'mt-12'} w-full lg:w-[80%] mx-auto text-left`}>
               {/* Live project search — only worth showing once there is something to search (10+ projects). */}
               {projects.length >= 10 && (
               <div className="relative w-full max-w-sm mx-auto mb-5">
