@@ -1,4 +1,6 @@
 import { NextResponse } from 'next/server';
+import { isCustomerProject } from '@/lib/services/tenant-policy';
+import { renderNetworkLockArgs } from '@/lib/services/thumbnail';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
 import { randomUUID } from 'crypto';
@@ -58,6 +60,7 @@ export async function GET(request: Request, { params }: RouteContext) {
           '--disable-dev-shm-usage',
           '--no-pdf-header-footer',
           '--virtual-time-budget=5000',
+          ...((await isCustomerProject(project_id)) ? renderNetworkLockArgs(publishHost, status.port) : []),
           `--print-to-pdf=${tmp}`,
           url,
         ],

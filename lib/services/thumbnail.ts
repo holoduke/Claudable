@@ -9,12 +9,26 @@
  * by the GET route; they're regenerable, so losing them on redeploy is harmless.
  */
 import { execFile } from 'child_process';
+import { isCustomerProject } from '@/lib/services/tenant-policy';
 import { randomUUID } from 'crypto';
 import { promisify } from 'util';
 import fs from 'fs/promises';
 import path from 'path';
 import sharp from 'sharp';
 import { previewManager } from './preview';
+
+/**
+ * Chromium flags that confine a render to ONE origin: every request goes to a
+ * dead proxy except the preview itself. Used for customer projects, whose page
+ * content is customer/agent-controlled and would otherwise be able to reach the
+ * box's internal services (other previews, Gitea, metadata) from this renderer,
+ * which runs on the control plane. `<-loopback>` removes Chromium's implicit
+ * localhost bypass; it must come FIRST in the list (rules apply in order —
+ * after the host:port entry it also un-bypasses the preview on 127.0.0.1).
+ */
+export function renderNetworkLockArgs(host: string, port: number | string): string[] {
+  return ['--proxy-server=http://127.0.0.1:9', `--proxy-bypass-list=<-loopback>;${host}:${port}`];
+}
 
 const execFileP = promisify(execFile);
 
@@ -92,6 +106,7 @@ export async function captureThumbnail(projectId: string): Promise<boolean> {
   // connection-error page: the "broken" dashboard tiles).
   const publishHost = (process.env.PREVIEW_PUBLISH_HOST || process.env.DEPLOY_HOST_GATEWAY || '').trim() || 'localhost';
   const url = `http://${publishHost}:${status.port}/`;
+  const customerProject = await isCustomerProject(projectId);
 
   // Quality gate: don't screenshot a dev server that's mid-compile or erroring —
   // a broken "loading" shot is worse than keeping the previous thumbnail.
@@ -123,6 +138,7 @@ export async function captureThumbnail(projectId: string): Promise<boolean> {
         // is ~40% lighter — still crisp for the small grid tiles (retina 3x).
         '--window-size=1024,576',
         '--virtual-time-budget=5000', // let the dev server render before the shot
+        ...(customerProject ? renderNetworkLockArgs(publishHost, status.port) : []),
         `--screenshot=${tmp}`,
         url,
       ],
