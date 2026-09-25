@@ -235,6 +235,14 @@ class PreviewManager {
 
     await ensureProjectRootStructure(projectPath, record, kind);
 
+    // An imported repo with its own frontend.dev command (app in a subfolder, no
+    // root package.json) installs inside that command: never write a starter app
+    // into its root — the same guard as the preview start path.
+    if (await ownFrontendDevCommand(projectPath)) {
+      record('Imported project: dependencies are installed by its own dev command (.claudable/preview.json)');
+      return { logs };
+    }
+
     try {
       await fs.access(path.join(projectPath, 'package.json'));
     } catch {
