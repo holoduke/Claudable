@@ -698,9 +698,12 @@ export async function buildFrontendContainerArgs(
   // production leaks into the install, and Claudable's own container sets
   // exactly that — so pin it here rather than relying on every spawn path
   // remembering to override NODE_ENV.
+  // No root package.json (an import whose app lives in a subfolder and whose own
+  // fe.dev installs there): skip the root install — it can only fail and would
+  // rewrite a tracked root package-lock.json.
   const devScript = isLaravel
     ? inner
-    : `rm -rf .next/dev/lock 2>/dev/null; [ -n "$(ls -A node_modules 2>/dev/null)" ] || npm install --include=dev --prefer-offline --no-audit --no-fund; ${inner}`;
+    : `rm -rf .next/dev/lock 2>/dev/null; [ ! -f package.json ] || [ -n "$(ls -A node_modules 2>/dev/null)" ] || npm install --include=dev --prefer-offline --no-audit --no-fund; ${inner}`;
 
   // Shared package cache across ALL preview containers so a project's first
   // install reuses what others pulled. npm cacache (node) or composer cache
