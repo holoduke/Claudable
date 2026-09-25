@@ -16,6 +16,7 @@ import ConfirmDialog from '@/components/ui/ConfirmDialog';
 import PaletteToggle from '@/components/ui/PaletteToggle';
 import ChatInput from '@/components/chat/ChatInput';
 import AgentStatusBar from '@/components/chat/AgentStatusBar';
+import CreditsMeter from '@/components/chat/CreditsMeter';
 import type { AgentUsageSnapshot } from '@/types/agent-usage';
 
 // On-demand UI (code view, panels, modals) is code-split out of the initial
@@ -3139,6 +3140,7 @@ const persistProjectPreferences = useCallback(
                   <button onClick={() => setQueuedMessages([])} className="text-gray-400 hover:text-red-500">Clear</button>
                 </div>
               )}
+              <CreditsMeter projectId={projectId} refreshKey={agentStatus?.updatedAt} />
               <AgentStatusBar
                 projectId={projectId}
                 liveStatus={agentStatus}

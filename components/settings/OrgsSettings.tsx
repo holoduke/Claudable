@@ -7,6 +7,7 @@
  */
 import { useCallback, useEffect, useState } from 'react';
 import { useI18n } from '@/contexts/I18nContext';
+import OrgCreditsPanel from './OrgCreditsPanel';
 import { DATE_LOCALE } from '@/lib/i18n/config';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? '';
@@ -330,6 +331,8 @@ export default function OrgsSettings({ onToast }: OrgsSettingsProps) {
                         {t('common.remove')}
                       </button>
                     </div>
+
+                    {org.type === 'klant' && <OrgCreditsPanel orgId={org.id} onToast={onToast} />}
 
                     {/* Organisation settings (superadmin) */}
                     <div className="rounded-xl border border-gray-200 dark:border-white/8 divide-y divide-gray-200 dark:divide-white/8 bg-white dark:bg-white/3">

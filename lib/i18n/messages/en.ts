@@ -356,6 +356,22 @@ export const en = {
   'gitSync.updated': 'Project updated from the repository',
   'gitSync.failed': 'Update failed',
   'gitSync.dismiss': 'Dismiss',
+  'credits.title': 'Credits',
+  'credits.meter': '€{spent} of €{budget} used',
+  'credits.meterUnlimited': '€{spent} used this month',
+  'credits.resets': 'Resets on {date}',
+  'credits.exhausted': 'The monthly budget is used up. The assistant is available again on {date}.',
+  'credits.low': 'Almost at the monthly budget',
+  'credits.thisMonth': 'This month',
+  'credits.previousMonth': 'Previous month',
+  'credits.byPerson': 'Per person',
+  'credits.byProject': 'Per project',
+  'credits.runs': '{count} runs',
+  'credits.none': 'No usage in this period yet.',
+  'credits.budgetLabel': 'Monthly budget (€)',
+  'credits.budgetPlaceholder': 'No limit',
+  'credits.budgetSaved': 'Budget saved',
+  'credits.estimateNote': 'Estimates at Anthropic list prices, converted at the daily ECB rate. The budget resets on the 1st of each month.',
 };
 
 export type MessageKey = keyof typeof en;

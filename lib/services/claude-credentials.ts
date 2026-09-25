@@ -234,10 +234,15 @@ export async function setOrgCredential(
   label: string,
   token: string,
 ): Promise<{ id: string; label: string }> {
-  const org = await prisma.organization.findUnique({ where: { id: orgId }, select: { id: true, name: true, claudeCredentialId: true } });
+  const org = await prisma.organization.findUnique({ where: { id: orgId }, select: { id: true, name: true, claudeCredentialId: true, type: true } });
   if (!org) throw new Error('Organisation not found');
   const clean = token.trim();
   if (!clean) throw new Error('Token is required');
+  // A customer org is billed per use and held to a monthly budget: that needs a
+  // Console API key, not a (flat-rate, shared) subscription token.
+  if (org.type === 'klant' && credentialEnvName(clean) !== 'ANTHROPIC_API_KEY') {
+    throw new Error('A customer organisation needs an Anthropic Console API key (sk-ant-api…).');
+  }
   const previous = org.claudeCredentialId;
   const cred = await prisma.$transaction(async (tx) => {
     const created = await tx.claudeCredential.create({

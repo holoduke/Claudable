@@ -10,6 +10,7 @@
  */
 import { useCallback, useEffect, useState } from 'react';
 import { useI18n } from '@/contexts/I18nContext';
+import OrgCreditsPanel from './OrgCreditsPanel';
 import { DATE_LOCALE } from '@/lib/i18n/config';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? '';
@@ -331,6 +332,8 @@ function OrgPanel({ org, currentUserId, onToast }: { org: MyOrg; currentUserId: 
             </ul>
           </div>
         )}
+
+        {org.type === 'klant' && <OrgCreditsPanel orgId={org.id} onToast={onToast} />}
 
         {canManage && (org.canCreateProjects !== false || isOwner) && (
           <div className="rounded-xl border border-gray-200 dark:border-white/8 divide-y divide-gray-200 dark:divide-white/8">
