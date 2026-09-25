@@ -5,6 +5,7 @@
  *   DELETE            -> disconnect
  */
 import { NextRequest } from 'next/server';
+import { denyUnlessProjectAccess } from '@/lib/auth/gate';
 import { getSessionUser, authEnabled } from '@/lib/auth/session';
 import { prisma } from '@/lib/db/client';
 import { canAccessProject } from '@/lib/services/project-access';
@@ -40,6 +41,8 @@ export async function GET(_req: NextRequest, { params }: RouteContext) {
 export async function POST(req: NextRequest, { params }: RouteContext) {
   try {
     const { project_id } = await params;
+    const denied = await denyUnlessProjectAccess(project_id, { write: true });
+    if (denied) return denied;
     const { error } = await gate(project_id);
     if (error) return error;
     const body = (await req.json().catch(() => ({}))) as { apiKey?: unknown };
@@ -54,6 +57,8 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
 export async function DELETE(_req: NextRequest, { params }: RouteContext) {
   try {
     const { project_id } = await params;
+    const denied = await denyUnlessProjectAccess(project_id, { write: true });
+    if (denied) return denied;
     const { error } = await gate(project_id);
     if (error) return error;
     await disconnectImages(project_id);

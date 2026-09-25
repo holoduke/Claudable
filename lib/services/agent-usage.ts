@@ -10,6 +10,7 @@
  * singleton and are merged into every snapshot at read/publish time.
  */
 import { prisma } from '@/lib/db/client';
+import { isCustomerProject } from '@/lib/services/tenant-policy';
 import { streamManager } from './stream';
 import type {
   AgentRateLimits,
@@ -32,6 +33,24 @@ interface ProjectUsageState {
 
 const projectUsage = new Map<string, ProjectUsageState>();
 let globalRateLimits: AgentRateLimits = {};
+
+/*
+ * `globalRateLimits` describes New Story's Claude SUBSCRIPTION account. Customer
+ * projects run on their own API key, so they must neither see those windows nor
+ * move them. Membership is cached per project (looked up once, async); until it
+ * is known the windows are hidden — failing closed.
+ */
+const customerProjectCache = new Map<string, boolean>();
+function rememberTenant(projectId: string): void {
+  if (customerProjectCache.has(projectId)) return;
+  isCustomerProject(projectId)
+    .then((isCustomer) => customerProjectCache.set(projectId, isCustomer))
+    .catch(() => { /* stays unknown → hidden */ });
+}
+function sharesPlatformAccount(projectId: string): boolean {
+  rememberTenant(projectId);
+  return customerProjectCache.get(projectId) === false;
+}
 
 const nowIso = () => new Date().toISOString();
 
@@ -61,7 +80,8 @@ function buildSnapshot(projectId: string, state: ProjectUsageState): AgentUsageS
         : undefined,
     lastTurn: state.lastTurn,
     totals: state.totals,
-    rateLimits: Object.keys(globalRateLimits).length > 0 ? globalRateLimits : undefined,
+    rateLimits:
+      sharesPlatformAccount(projectId) && Object.keys(globalRateLimits).length > 0 ? globalRateLimits : undefined,
   };
 }
 
@@ -273,6 +293,7 @@ export function mergeApiRateLimits(limits: AgentRateLimits): void {
 /** SDK `rate_limit_event` → account-wide window utilization. Publishes to the project stream. */
 export function recordRateLimit(projectId: string, info: unknown): void {
   if (!info || typeof info !== 'object') return;
+  if (!sharesPlatformAccount(projectId)) return; // a customer's own key, not our account
   const i = info as Record<string, unknown>;
   const type = typeof i.rateLimitType === 'string' ? i.rateLimitType : undefined;
   const window = {
@@ -299,6 +320,7 @@ export function recordRateLimit(projectId: string, info: unknown): void {
  * 5-hour meter from the reply itself. Publishes so the chips flip red at once.
  */
 export function markRateLimitExhausted(projectId: string, resetsAtIso?: string): void {
+  if (!sharesPlatformAccount(projectId)) return;
   globalRateLimits = {
     ...globalRateLimits,
     fiveHour: { utilization: 1, status: 'rejected', ...(resetsAtIso ? { resetsAt: resetsAtIso } : {}) },
@@ -325,6 +347,7 @@ export async function resetProjectUsage(projectId: string): Promise<void> {
 
 /** Current snapshot for the status endpoint (falls back to the persisted copy after a restart). */
 export async function getAgentUsageSnapshot(projectId: string): Promise<AgentUsageSnapshot> {
+  customerProjectCache.set(projectId, await isCustomerProject(projectId));
   let state = projectUsage.get(projectId);
   if (!state) {
     const persisted = await loadPersistedState(projectId);

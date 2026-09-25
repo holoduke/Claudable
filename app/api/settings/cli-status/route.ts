@@ -4,6 +4,7 @@
  */
 
 import { NextResponse } from 'next/server';
+import { denyUnlessInternal } from '@/lib/auth/gate';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import type { CLIStatus } from '@/types/backend';
@@ -106,6 +107,8 @@ async function checkQwenCLI(): Promise<{
  * Check CLI installation status
  */
 export async function GET() {
+  const denied = await denyUnlessInternal();
+  if (denied) return denied;
   try {
     const status: CLIStatus = {
       claude: {

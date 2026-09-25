@@ -6,12 +6,15 @@
  * response is read. We just buffer the entries server-side per project so the
  * agent can later ask "what console errors is this app throwing?".
  *
- * No auth: this is preview telemetry on a VPN-gated box; we only accept it for
- * projects that exist, and every field is length-capped in recordConsole.
+ * No session (the preview is another origin), but every batch must carry the
+ * project's HMAC token (?t=, see client-log-token.ts) — the entries reach that
+ * project's agent, so nobody may inject into a project they can't see. Fields
+ * are length-capped in recordConsole.
  */
 import { NextRequest } from 'next/server';
 import { prisma } from '@/lib/db/client';
 import { recordConsole } from '@/lib/services/diagnostics';
+import { isValidClientLogToken } from '@/lib/services/client-log-token';
 
 export const runtime = 'nodejs';
 
@@ -32,6 +35,9 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
       return new Response(null, { status: 204 });
     }
 
+    if (!isValidClientLogToken(project_id, request.nextUrl.searchParams.get('t'))) {
+      return new Response(null, { status: 204 }); // silently drop, like an unknown project
+    }
     const project = await prisma.project.findUnique({ where: { id: project_id }, select: { id: true } });
     if (!project) return new Response(null, { status: 204 }); // silently drop; plugin ignores the response
 

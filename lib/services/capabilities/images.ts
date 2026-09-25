@@ -7,6 +7,7 @@
  * a future network MCP endpoint can reuse unchanged.
  */
 import { randomBytes } from 'crypto';
+import { isCustomerProject } from '@/lib/services/tenant-policy';
 import { encrypt, decrypt } from '@/lib/crypto';
 import { getProjectService, upsertProjectServiceConnection } from '@/lib/services/project-services';
 import { prisma } from '@/lib/db/client';
@@ -40,7 +41,8 @@ export async function getImagesConnection(projectId: string): Promise<{
   const data = await read(projectId);
   const connected = !!data && data.enabled !== false;
   const hasOwnKey = !!data?.apiKeyEnc;
-  const globalAvailable = !!process.env.XAI_API_KEY;
+  // Customer projects never use New Story's shared key (it bills New Story).
+  const globalAvailable = !!process.env.XAI_API_KEY && !(await isCustomerProject(projectId));
   return { connected, hasOwnKey, usesGlobalKey: connected && !hasOwnKey && globalAvailable, globalAvailable };
 }
 
@@ -66,6 +68,8 @@ export async function resolveImagesKey(projectId: string): Promise<string | null
   if (data.apiKeyEnc) {
     try { return decrypt(data.apiKeyEnc); } catch { /* fall back to shared */ }
   }
+  // The shared key is New Story's: only for its own (non-customer) projects.
+  if (await isCustomerProject(projectId)) return null;
   return process.env.XAI_API_KEY || null;
 }
 

@@ -4,6 +4,7 @@ import { getAgentUsageSnapshot, mergeApiRateLimits } from '@/lib/services/agent-
 import { resolveProjectClaudeToken } from '@/lib/services/claude-credentials';
 import { fetchSubscriptionUsage } from '@/lib/services/subscription-usage';
 import { getSessionUser } from '@/lib/auth/session';
+import { isCustomerProject } from '@/lib/services/tenant-policy';
 
 interface RouteContext {
   params: Promise<{ project_id: string }>;
@@ -26,7 +27,9 @@ export async function GET(_request: Request, { params }: RouteContext) {
     const denied = await denyUnlessProjectAccess(project_id);
     if (denied) return denied;
 
-    try {
+    // Customer projects run on their org's API key: no subscription windows to
+    // fetch (and New Story's platform account must never be queried for them).
+    if (!(await isCustomerProject(project_id))) try {
       const requester = await getSessionUser();
       const token =
         (await resolveProjectClaudeToken(project_id, requester?.id)) ??

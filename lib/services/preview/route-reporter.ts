@@ -1,5 +1,6 @@
 // Injected Nuxt client plugin: route reporter + visual-editor/comments/error bridges for the preview iframe.
 import path from 'path';
+import { clientLogToken } from '@/lib/services/client-log-token';
 import fs from 'fs/promises';
 
 /**
@@ -39,6 +40,7 @@ export default defineNuxtPlugin(() => {
   // validate incoming commands, so a page that frames the preview can't drive it.
   const CLAUDABLE_ORIGIN = ${JSON.stringify(claudableOrigin)};
   const CLAUDABLE_PROJECT_ID = ${JSON.stringify(projectId)};
+  const CLAUDABLE_LOG_TOKEN = ${JSON.stringify(clientLogToken(projectId))};
   let target = CLAUDABLE_ORIGIN || '*';
   try {
     if (!CLAUDABLE_ORIGIN && document.referrer) target = new URL(document.referrer).origin;
@@ -257,7 +259,7 @@ export default defineNuxtPlugin(() => {
   // Ship console/runtime errors to Claudable (server-side buffer) so the agent
   // can query "what's broken?" even when no chat window is watching. Batched,
   // text/plain (a CORS "simple" request → no preflight), fire-and-forget.
-  const SHIP_URL = CLAUDABLE_ORIGIN && CLAUDABLE_PROJECT_ID ? CLAUDABLE_ORIGIN + '/api/projects/' + encodeURIComponent(CLAUDABLE_PROJECT_ID) + '/client-logs' : '';
+  const SHIP_URL = CLAUDABLE_ORIGIN && CLAUDABLE_PROJECT_ID ? CLAUDABLE_ORIGIN + '/api/projects/' + encodeURIComponent(CLAUDABLE_PROJECT_ID) + '/client-logs?t=' + encodeURIComponent(CLAUDABLE_LOG_TOKEN) : '';
   let shipQueue = [];
   let shipTimer = 0;
   const ship = (level, message, at) => {

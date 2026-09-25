@@ -20,6 +20,7 @@
  * destroying containers/databases, and deleting/reconfiguring the project.
  */
 import { getSessionUser, getAdminUser, authEnabled } from '@/lib/auth/session';
+import { isInternalUser } from '@/lib/services/tenant-policy';
 import { prisma } from '@/lib/db/client';
 import { canAccessProject, canManageProject, canWriteProject } from '@/lib/services/project-access';
 
@@ -39,13 +40,11 @@ export async function denyUnlessProjectAccess(
   const user = await getSessionUser();
   if (!user) return deny(401, 'unauthorized', 'Authentication required');
   const project = await prisma.project.findUnique({ where: { id: projectId } });
-  if (!project) return deny(404, 'not_found', 'Project not found');
-  const ok = opts?.manage
-    ? canManageProject(user, project)
-    : opts?.write
-      ? await canWriteProject(user, project)
-      : await canAccessProject(user, project);
-  if (!ok) return deny(403, 'forbidden', 'Access denied');
+  // Someone who may not even READ the project gets the same 404 as for a
+  // project that does not exist: a 403 would confirm that the id is real.
+  if (!project || !(await canAccessProject(user, project))) return deny(404, 'not_found', 'Project not found');
+  if (opts?.manage && !canManageProject(user, project)) return deny(403, 'forbidden', 'Access denied');
+  if (opts?.write && !opts?.manage && !(await canWriteProject(user, project))) return deny(403, 'forbidden', 'Access denied');
   return null;
 }
 
@@ -54,6 +53,18 @@ export async function denyUnlessAdmin(): Promise<Response | null> {
   if (!authEnabled()) return null;
   const user = await getAdminUser();
   if (!user) return deny(403, 'forbidden', 'Admin access required');
+  return null;
+}
+
+/**
+ * Require New Story staff (a superadmin or a member of a non-customer org) —
+ * for New Story-internal lookups a customer-only user must not reach.
+ */
+export async function denyUnlessInternal(): Promise<Response | null> {
+  if (!authEnabled()) return null;
+  const user = await getSessionUser();
+  if (!user) return deny(401, 'unauthorized', 'Authentication required');
+  if (!(await isInternalUser(user))) return deny(403, 'forbidden', 'Access denied');
   return null;
 }
 

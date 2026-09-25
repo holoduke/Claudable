@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { denyUnlessSignedIn } from '@/lib/auth/gate';
+import { denyUnlessInternal } from '@/lib/auth/gate';
 import { checkVercelProjectAvailability } from '@/lib/services/vercel';
 
 interface RouteContext {
@@ -7,7 +7,7 @@ interface RouteContext {
 }
 
 export async function GET(request: Request, { params }: RouteContext) {
-  const _adg = await denyUnlessSignedIn(); if (_adg) return _adg;
+  const _adg = await denyUnlessInternal(); if (_adg) return _adg;
   try {
     const { name } = await params;
     const url = new URL(request.url);

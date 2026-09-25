@@ -6,6 +6,7 @@
  *   DELETE -> clear the buffer
  */
 import { NextRequest } from 'next/server';
+import { denyUnlessProjectAccess } from '@/lib/auth/gate';
 import { getSessionUser, authEnabled } from '@/lib/auth/session';
 import { prisma } from '@/lib/db/client';
 import { canAccessProject } from '@/lib/services/project-access';
@@ -46,7 +47,7 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
 export async function DELETE(_request: NextRequest, { params }: RouteContext) {
   try {
     const { project_id } = await params;
-    const denied = await gate(project_id);
+    const denied = await denyUnlessProjectAccess(project_id, { write: true });
     if (denied) return denied;
     clearDiagnostics(project_id);
     return createSuccessResponse({ cleared: true });
