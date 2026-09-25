@@ -19,7 +19,7 @@ import { prisma } from '@/lib/db/client';
 import { decrypt } from '@/lib/crypto';
 import { resolveProjectClaudeToken } from '@/lib/services/claude-credentials';
 import { isInternalUser, projectTenant } from '@/lib/services/tenant-policy';
-import { getBudgetStatus } from '@/lib/services/org-budget';
+import { getBudgetStatus, getCreditMarginPercent } from '@/lib/services/org-budget';
 import { eurCentsToUsd } from '@/lib/services/fx';
 
 export class AgentRunRefusedError extends Error {
@@ -111,5 +111,7 @@ export async function resolveAgentRun(projectId: string, requesterUserId?: strin
       'budget_exhausted',
     );
   }
-  return { token, billing, maxBudgetUsd: await eurCentsToUsd(status.remainingCents) };
+  // The budget is in billed euros (cost + margin); the CLI cap is raw token cost.
+  const margin = await getCreditMarginPercent(tenant.orgId);
+  return { token, billing, maxBudgetUsd: await eurCentsToUsd(status.remainingCents / (1 + margin / 100)) };
 }

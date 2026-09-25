@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Credits ledger + run gating for customer orgs, with Prisma, FX and crypto mocked.
-type Ev = { orgId: string; sessionId: string | null; costUsd: number; costEurCents: number; createdAt: Date; userId: string | null; projectId: string | null; source?: string };
+type Ev = { orgId: string; sessionId: string | null; costUsd: number; costEurCents: number; billedEurCents: number; marginPercent: number; createdAt: Date; userId: string | null; projectId: string | null; source?: string };
 const events: Ev[] = [];
-const orgs = new Map<string, { type: string; monthlyBudgetCents: number | null; claudeCredential: { id: string; token: string } | null }>();
+const orgs = new Map<string, { type: string; monthlyBudgetCents: number | null; creditMarginPercent?: number; claudeCredential: { id: string; token: string } | null }>();
 const projects = new Map<string, { orgId: string | null }>();
 const users = new Map<string, { id: string; role: string; internal: boolean }>();
 
@@ -18,7 +18,7 @@ vi.mock('@/lib/db/client', () => ({
     usageEvent: {
       aggregate: vi.fn(async ({ where }: any) => {
         const rows = events.filter((e) => inRange(e, where));
-        return { _sum: { costUsd: rows.length ? rows.reduce((a, e) => a + e.costUsd, 0) : null, costEurCents: rows.length ? rows.reduce((a, e) => a + e.costEurCents, 0) : null } };
+        return { _sum: { costUsd: rows.length ? rows.reduce((a, e) => a + e.costUsd, 0) : null, costEurCents: rows.length ? rows.reduce((a, e) => a + e.costEurCents, 0) : null, billedEurCents: rows.length ? rows.reduce((a, e) => a + e.billedEurCents, 0) : null } };
       }),
       create: vi.fn(async ({ data }: any) => { events.push({ createdAt: new Date(), ...data }); return data; }),
     },
@@ -44,7 +44,7 @@ vi.mock('@/lib/services/fx', () => ({
 }));
 vi.mock('@/lib/services/claude-credentials', () => ({ resolveProjectClaudeToken: vi.fn(async () => null) }));
 
-import { recordRunUsage, getBudgetStatus, periodBounds } from './org-budget';
+import { recordRunUsage, getBudgetStatus, periodBounds, setCreditMargin } from './org-budget';
 import { resolveAgentRun, AgentRunRefusedError } from './agent-billing';
 
 beforeEach(() => {
@@ -79,6 +79,36 @@ describe('credits ledger', () => {
     const { start, end } = periodBounds(new Date('2026-09-25T10:00:00Z'));
     expect(start.toISOString()).toBe('2026-09-01T00:00:00.000Z');
     expect(end.toISOString()).toBe('2026-10-01T00:00:00.000Z');
+  });
+});
+
+describe('credit margin', () => {
+  it('books cost plus the org margin and counts the billed amount against the budget', async () => {
+    orgs.set('micros', { ...orgs.get('micros')!, creditMarginPercent: 10 });
+    await recordRunUsage({ orgId: 'micros', sessionId: 'm1', cumulativeCostUsd: 1.0 }); // 90 cents cost
+    const ev = events[events.length - 1];
+    expect(ev.costEurCents).toBe(90);
+    expect(ev.billedEurCents).toBe(99);
+    expect(ev.marginPercent).toBe(10);
+    expect((await getBudgetStatus('micros')).spentCents).toBe(99);
+  });
+
+  it('bills at cost without a margin', async () => {
+    await recordRunUsage({ orgId: 'micros', sessionId: 'm2', cumulativeCostUsd: 1.0 });
+    expect(events[events.length - 1].billedEurCents).toBe(90);
+  });
+
+  it('caps a run so cost plus margin fits the remaining budget', async () => {
+    orgs.set('micros', { ...orgs.get('micros')!, creditMarginPercent: 10 });
+    await recordRunUsage({ orgId: 'micros', sessionId: 's', cumulativeCostUsd: 10 }); // 900 cost, 990 billed
+    const run = await resolveAgentRun('site', 'customer');
+    expect(run.maxBudgetUsd).toBeCloseTo((5000 - 990) / 1.1 / 100 / 0.9);
+  });
+
+  it('rejects an invalid margin', async () => {
+    await expect(setCreditMargin('micros', -5)).rejects.toThrow();
+    await expect(setCreditMargin('micros', 10.5)).rejects.toThrow();
+    await expect(setCreditMargin('micros', 500)).rejects.toThrow();
   });
 });
 

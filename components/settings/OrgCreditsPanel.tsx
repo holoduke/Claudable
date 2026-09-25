@@ -3,7 +3,8 @@
 /**
  * Credits overview of a customer organisation: budget meter, this or the
  * previous month's usage per project and (for eigenaar/beheerder/superadmin)
- * per person. A superadmin can set the monthly budget.
+ * per person. A superadmin can set the monthly budget and the credit margin
+ * (added on top of the token cost; all amounts shown to members include it).
  */
 import React, { useCallback, useEffect, useState } from 'react';
 import { useI18n } from '@/contexts/I18nContext';
@@ -22,6 +23,9 @@ interface CreditsData {
     byProject: Array<{ projectId: string | null; name: string; cents: number; runs: number }>;
   };
   canEditBudget: boolean;
+  /** Superadmin only. */
+  marginPercent?: number;
+  costCents?: number;
 }
 
 interface Props {
@@ -38,6 +42,7 @@ export default function OrgCreditsPanel({ orgId, onToast }: Props) {
   const [month, setMonth] = useState<0 | -1>(0);
   const [data, setData] = useState<CreditsData | null>(null);
   const [budgetInput, setBudgetInput] = useState('');
+  const [marginInput, setMarginInput] = useState('');
   const [saving, setSaving] = useState(false);
 
   const load = useCallback(async () => {
@@ -48,6 +53,7 @@ export default function OrgCreditsPanel({ orgId, onToast }: Props) {
       const next = json.data as CreditsData;
       setData(next);
       setBudgetInput(next.status.budgetCents === null ? '' : String(next.status.budgetCents / 100));
+      setMarginInput(String(next.marginPercent ?? 0));
     } catch (err) {
       onToast(err instanceof Error ? err.message : t('common.actionFailed'), 'error');
     }
@@ -58,8 +64,9 @@ export default function OrgCreditsPanel({ orgId, onToast }: Props) {
   const saveBudget = async () => {
     const trimmed = budgetInput.trim().replace(',', '.');
     const value = trimmed === '' ? null : Number(trimmed);
-    if (value !== null && (!Number.isFinite(value) || value < 0)) {
-      onToast(t('common.actionFailed'), 'error');
+    const margin = Number(marginInput.trim() || '0');
+    if ((value !== null && (!Number.isFinite(value) || value < 0)) || !Number.isInteger(margin) || margin < 0 || margin > 200) {
+      onToast(t('credits.invalidInput'), 'error');
       return;
     }
     setSaving(true);
@@ -67,11 +74,11 @@ export default function OrgCreditsPanel({ orgId, onToast }: Props) {
       const res = await fetch(`${API_BASE}/api/orgs/${orgId}/credits`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ monthlyBudgetEur: value }),
+        body: JSON.stringify({ monthlyBudgetEur: value, creditMarginPercent: margin }),
       });
       const json = await res.json().catch(() => null);
       if (!res.ok || !json?.success) throw new Error(json?.message || t('common.actionFailed'));
-      onToast(t('credits.budgetSaved'), 'success');
+      onToast(t('credits.saved'), 'success');
       await load();
     } catch (err) {
       onToast(err instanceof Error ? err.message : t('common.actionFailed'), 'error');
@@ -130,7 +137,7 @@ export default function OrgCreditsPanel({ orgId, onToast }: Props) {
       </div>
 
       {data.canEditBudget && (
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <label className="text-xs text-gray-600 dark:text-gray-300 shrink-0" htmlFor={`budget-${orgId}`}>{t('credits.budgetLabel')}</label>
           <input
             id={`budget-${orgId}`}
@@ -139,6 +146,15 @@ export default function OrgCreditsPanel({ orgId, onToast }: Props) {
             onChange={(e) => setBudgetInput(e.target.value)}
             placeholder={t('credits.budgetPlaceholder')}
             className="w-28 rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-white/5 px-3 py-1.5 text-sm text-gray-900 dark:text-gray-50"
+          />
+          <label className="text-xs text-gray-600 dark:text-gray-300 shrink-0" htmlFor={`margin-${orgId}`}>{t('credits.marginLabel')}</label>
+          <input
+            id={`margin-${orgId}`}
+            inputMode="numeric"
+            value={marginInput}
+            onChange={(e) => setMarginInput(e.target.value)}
+            placeholder="0"
+            className="w-16 rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-white/5 px-3 py-1.5 text-sm text-gray-900 dark:text-gray-50"
           />
           <button onClick={saveBudget} disabled={saving}
             className="px-3 py-1.5 text-xs font-medium bg-brand-500 hover:bg-brand-600 text-white rounded-lg transition-colors disabled:opacity-50">
@@ -158,6 +174,12 @@ export default function OrgCreditsPanel({ orgId, onToast }: Props) {
           {euro(usage.totalCents, dateLocale)} · {t('credits.runs', { count: String(usage.runs) })}
         </span>
       </div>
+
+      {data.costCents !== undefined && usage.totalCents > 0 && (
+        <p className="text-xs text-gray-500 dark:text-gray-400">
+          {t('credits.costLine', { cost: euro(data.costCents, dateLocale), margin: euro(usage.totalCents - data.costCents, dateLocale) })}
+        </p>
+      )}
 
       {usage.staffCents > 0 && (
         <p className="text-xs text-gray-500 dark:text-gray-400">{t('credits.staff', { amount: euro(usage.staffCents, dateLocale) })}</p>

@@ -9,6 +9,11 @@
  *
  * Runs by New Story staff inside a customer project are booked with source
  * 'staff': visible in the overview, but NOT counted against the customer's budget.
+ *
+ * Each event stores the token cost (costEurCents) and the billed amount
+ * (billedEurCents = cost + the org's margin at booking time). Everything the
+ * customer sees, and the budget, uses the billed amount; the raw cost is only
+ * shown to superadmins. Changing the margin never rewrites past events.
  */
 import { prisma } from '@/lib/db/client';
 import { usdToEurCents } from '@/lib/services/fx';
@@ -35,9 +40,9 @@ export const STAFF_SOURCE = 'staff';
 async function spentCentsBetween(orgId: string, start: Date, end: Date): Promise<number> {
   const agg = await prisma.usageEvent.aggregate({
     where: { orgId, createdAt: { gte: start, lt: end }, source: { not: STAFF_SOURCE } },
-    _sum: { costEurCents: true },
+    _sum: { billedEurCents: true },
   });
-  return agg._sum.costEurCents ?? 0;
+  return agg._sum.billedEurCents ?? 0;
 }
 
 export async function getBudgetStatus(orgId: string, now = new Date()): Promise<BudgetStatus> {
@@ -62,6 +67,25 @@ export async function setMonthlyBudget(orgId: string, budgetCents: number | null
     throw new Error('Budget must be a whole number of cents between 0 and 1,000,000 euro');
   }
   await prisma.organization.update({ where: { id: orgId }, data: { monthlyBudgetCents: budgetCents } });
+}
+
+export const MAX_CREDIT_MARGIN_PERCENT = 200;
+
+export async function setCreditMargin(orgId: string, percent: number): Promise<void> {
+  if (!Number.isInteger(percent) || percent < 0 || percent > MAX_CREDIT_MARGIN_PERCENT) {
+    throw new Error(`Margin must be a whole percentage between 0 and ${MAX_CREDIT_MARGIN_PERCENT}`);
+  }
+  await prisma.organization.update({ where: { id: orgId }, data: { creditMarginPercent: percent } });
+}
+
+/** The org's current margin in whole percent (0 when unset). */
+export async function getCreditMarginPercent(orgId: string): Promise<number> {
+  const org = await prisma.organization.findUnique({ where: { id: orgId }, select: { creditMarginPercent: true } });
+  return org?.creditMarginPercent ?? 0;
+}
+
+export function withMargin(cents: number, marginPercent: number): number {
+  return Math.round(cents * (1 + marginPercent / 100));
 }
 
 export interface RunUsageInput {
@@ -92,6 +116,7 @@ export async function recordRunUsage(input: RunUsageInput): Promise<number> {
     increment = cumulative >= already ? cumulative - already : cumulative;
   }
   if (increment <= 0) return 0;
+  const [costEurCents, marginPercent] = await Promise.all([usdToEurCents(increment), getCreditMarginPercent(input.orgId)]);
   await prisma.usageEvent.create({
     data: {
       orgId: input.orgId,
@@ -101,7 +126,9 @@ export async function recordRunUsage(input: RunUsageInput): Promise<number> {
       source: input.source ?? 'agent',
       model: input.model ?? null,
       costUsd: increment,
-      costEurCents: await usdToEurCents(increment),
+      costEurCents,
+      billedEurCents: withMargin(costEurCents, marginPercent),
+      marginPercent,
       inputTokens: Math.max(0, Math.round(input.inputTokens ?? 0)),
       outputTokens: Math.max(0, Math.round(input.outputTokens ?? 0)),
     },
@@ -117,6 +144,8 @@ export interface UsageBreakdown {
   runs: number;
   /** New Story staff usage in this org's projects (not budgeted). */
   staffCents: number;
+  /** Token cost of the budgeted usage, before margin (superadmin only). */
+  costCents: number;
   byUser: Array<{ userId: string | null; name: string; email: string | null; cents: number; runs: number; staff: boolean }>;
   byProject: Array<{ projectId: string | null; name: string; cents: number; runs: number }>;
   byDay: Array<{ day: string; cents: number }>;
@@ -127,7 +156,7 @@ export async function getUsageBreakdown(orgId: string, monthOffset = 0, now = ne
   const { start, end } = periodBounds(now, monthOffset);
   const events = await prisma.usageEvent.findMany({
     where: { orgId, createdAt: { gte: start, lt: end } },
-    select: { userId: true, projectId: true, costEurCents: true, createdAt: true, source: true },
+    select: { userId: true, projectId: true, costEurCents: true, billedEurCents: true, createdAt: true, source: true },
   });
   const staffIds = new Set(events.filter((e) => e.source === STAFF_SOURCE && e.userId).map((e) => e.userId as string));
   const budgeted = events.filter((e) => e.source !== STAFF_SOURCE);
@@ -137,7 +166,7 @@ export async function getUsageBreakdown(orgId: string, monthOffset = 0, now = ne
     for (const e of list) {
       const k = key(e);
       const cur = map.get(k) ?? { cents: 0, runs: 0 };
-      map.set(k, { cents: cur.cents + e.costEurCents, runs: cur.runs + 1 });
+      map.set(k, { cents: cur.cents + e.billedEurCents, runs: cur.runs + 1 });
     }
     return map;
   };
@@ -147,7 +176,7 @@ export async function getUsageBreakdown(orgId: string, monthOffset = 0, now = ne
   const userTotals = sum((e) => e.userId);
   const projectTotals = sum((e) => e.projectId, budgeted);
   const dayTotals = sum((e) => e.createdAt.toISOString().slice(0, 10), budgeted);
-  const budgetedCents = budgeted.reduce((acc, e) => acc + e.costEurCents, 0);
+  const budgetedCents = budgeted.reduce((acc, e) => acc + e.billedEurCents, 0);
 
   const userIds = [...userTotals.keys()].filter((id): id is string => !!id);
   const projectIds = [...projectTotals.keys()].filter((id): id is string => !!id);
@@ -164,7 +193,8 @@ export async function getUsageBreakdown(orgId: string, monthOffset = 0, now = ne
     periodEnd: end.toISOString(),
     totalCents: budgetedCents,
     runs: budgeted.length,
-    staffCents: events.reduce((acc, e) => acc + e.costEurCents, 0) - budgetedCents,
+    staffCents: events.reduce((acc, e) => acc + e.billedEurCents, 0) - budgetedCents,
+    costCents: budgeted.reduce((acc, e) => acc + e.costEurCents, 0),
     byUser: [...userTotals.entries()]
       .map(([userId, t]) => {
         const u = userId ? userById.get(userId) : undefined;
