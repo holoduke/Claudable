@@ -72,21 +72,21 @@ export default function CreditsMeter({ projectId, refreshKey }: Props) {
   }
 
   return (
-    <div className="mb-2 flex items-center gap-3 px-1 text-xs text-gray-500 dark:text-gray-400" title={t('credits.estimateNote')}>
+    <div className="mb-2 flex flex-wrap items-center gap-x-3 gap-y-1 px-1 text-xs text-gray-500 dark:text-gray-400" title={t('credits.estimateNote')}>
       <span className="font-medium text-gray-700 dark:text-gray-200">{t('credits.title')}</span>
       {budget !== null ? (
         <>
-          <div className="h-1.5 w-28 overflow-hidden rounded-full bg-gray-200 dark:bg-white/10" aria-hidden>
+          <div className="h-1.5 w-20 shrink-0 overflow-hidden rounded-full bg-gray-200 dark:bg-white/10" aria-hidden>
             <div className={`h-full ${tone} transition-all`} style={{ width: `${pct}%` }} />
           </div>
-          <span>{t('credits.meter', { spent: euro(spent, dateLocale), budget: euro(budget, dateLocale) })}</span>
+          <span className="whitespace-nowrap">{t('credits.meter', { spent: euro(spent, dateLocale), budget: euro(budget, dateLocale) })}</span>
           {pct >= 90 && <span className="text-amber-600 dark:text-amber-400">· {t('credits.low')}</span>}
         </>
       ) : (
         <span>{t('credits.meterUnlimited', { spent: euro(spent, dateLocale) })}</span>
       )}
-      {credits.viewerIsStaff && <span className="text-gray-400 dark:text-gray-500">· {t('credits.staffNote')}</span>}
-      {resetDate && <span className="ml-auto">{t('credits.resets', { date: resetDate })}</span>}
+      {resetDate && <span className="ml-auto whitespace-nowrap">{t('credits.resets', { date: resetDate })}</span>}
+      {credits.viewerIsStaff && <span className="basis-full text-gray-400 dark:text-gray-500">{t('credits.staffNote')}</span>}
     </div>
   );
 }
