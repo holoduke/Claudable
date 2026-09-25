@@ -360,10 +360,10 @@ export default function OrgsSettings({ onToast }: OrgsSettingsProps) {
                       {org.type === 'klant' && (
                         <div className="flex items-center justify-between gap-4 px-4 py-3">
                           <div className="min-w-0">
-                            <p className="text-sm font-medium text-gray-900 dark:text-gray-50">{t('orgs.ownToken')}</p>
+                            <p className="text-sm font-medium text-gray-900 dark:text-gray-50">{t('orgs.allowOwnToken')}</p>
                             <p className="text-xs text-gray-500 dark:text-gray-400">{t('orgs.ownToken.desc', { name: org.name })}</p>
                           </div>
-                          <button type="button" role="switch" aria-checked={org.allowOwnToken} aria-label={t('orgs.ownToken')} disabled={busy}
+                          <button type="button" role="switch" aria-checked={org.allowOwnToken} aria-label={t('orgs.allowOwnToken')} disabled={busy}
                             onClick={() => toggleOwnToken(org)}
                             className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors disabled:opacity-50 ${org.allowOwnToken ? 'bg-brand-500' : 'bg-gray-300 dark:bg-white/15'}`}>
                             <span className={`inline-block h-5 w-5 transform rounded-full bg-white dark:bg-gray-900 transition-transform ${org.allowOwnToken ? 'translate-x-5' : 'translate-x-1'}`} />

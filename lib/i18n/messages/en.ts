@@ -372,6 +372,7 @@ export const en = {
   'credits.budgetPlaceholder': 'No limit',
   'credits.budgetSaved': 'Budget saved',
   'org.managedByNewStory': 'This organisation is managed by New Story. You can see its members and credits here; changes go through New Story.',
+  'orgs.allowOwnToken': 'Allow own Claude account',
   'orgs.ownToken.desc': 'May members of {name} run on their own Claude account (Settings → Claude)? That usage does not count towards the budget. Off: everything runs on the organisation key within the budget.',
   'orgs.ownTokenAllowed': 'Members of {name} may now use their own Claude account',
   'orgs.ownTokenDenied': 'Members of {name} now always run on the organisation key',

@@ -357,6 +357,7 @@ export const fr: Record<keyof typeof en, string> = {
   'credits.budgetPlaceholder': 'Sans limite',
   'credits.budgetSaved': 'Budget enregistré',
   'org.managedByNewStory': 'Cette organisation est gérée par New Story. Vous voyez ici ses membres et sa consommation ; les modifications passent par New Story.',
+  'orgs.allowOwnToken': 'Autoriser son propre compte Claude',
   'orgs.ownToken.desc': 'Les membres de {name} peuvent-ils utiliser leur propre compte Claude (Paramètres → Claude) ? Cette consommation ne compte pas dans le budget. Désactivé : tout passe par la clé de l’organisation, dans la limite du budget.',
   'orgs.ownTokenAllowed': 'Les membres de {name} peuvent désormais utiliser leur propre compte Claude',
   'orgs.ownTokenDenied': 'Les membres de {name} utilisent désormais toujours la clé de l’organisation',

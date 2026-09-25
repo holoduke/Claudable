@@ -357,6 +357,7 @@ export const nl: Record<keyof typeof en, string> = {
   'credits.budgetPlaceholder': 'Geen limiet',
   'credits.budgetSaved': 'Budget opgeslagen',
   'org.managedByNewStory': 'Deze organisatie wordt beheerd door New Story. Je ziet hier de leden en het verbruik; wijzigingen lopen via New Story.',
+  'orgs.allowOwnToken': 'Eigen Claude-account toestaan',
   'orgs.ownToken.desc': 'Mogen leden van {name} op hun eigen Claude-account draaien (Instellingen → Claude)? Dat verbruik telt niet mee voor het budget. Uit: alles draait op de organisatiesleutel binnen het budget.',
   'orgs.ownTokenAllowed': 'Leden van {name} mogen nu hun eigen Claude-account gebruiken',
   'orgs.ownTokenDenied': 'Leden van {name} draaien nu altijd op de organisatiesleutel',
