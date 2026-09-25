@@ -65,6 +65,8 @@ export type OrgGate =
   | { ok: true; actor: OrgActor }
   | { ok: false; status: number; code: string; message: string };
 
+const NOT_FOUND: OrgGate = { ok: false, status: 404, code: 'not_found', message: 'Organisation not found' };
+
 async function resolveActor(orgId: string): Promise<OrgGate> {
   const user = await getSessionUser();
   if (!user) return { ok: false, status: 401, code: 'unauthorized', message: 'Sign in required' };
@@ -85,7 +87,9 @@ export async function requireOrgMember(orgId: string): Promise<OrgGate> {
   const gate = await resolveActor(orgId);
   if (!gate.ok) return gate;
   if (gate.actor.superadmin || gate.actor.role) return gate;
-  return { ok: false, status: 403, code: 'forbidden', message: 'You are not a member of this organisation' };
+  // Same answer as for an organisation that does not exist: a non-member must
+  // not learn that an organisation id is real.
+  return NOT_FOUND;
 }
 
 /** An eigenaar or beheerder of the org, or a superadmin. */
@@ -93,6 +97,7 @@ export async function requireOrgManager(orgId: string): Promise<OrgGate> {
   const gate = await resolveActor(orgId);
   if (!gate.ok) return gate;
   if (gate.actor.superadmin || isOrgAdminRole(gate.actor.role)) return gate;
+  if (!gate.actor.role) return NOT_FOUND;
   return { ok: false, status: 403, code: 'forbidden', message: 'Only an eigenaar or beheerder can manage members' };
 }
 

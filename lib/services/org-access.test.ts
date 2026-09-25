@@ -91,7 +91,7 @@ describe('org gates', () => {
     orgMembers.push({ orgId: 'org-a', userId: 'u1', role: 'lid' });
     sessionUser = { id: 'u1', role: 'user' };
     expect(await requireOrgMember('org-a')).toMatchObject({ ok: true, actor: { role: 'lid', superadmin: false } });
-    expect(await requireOrgMember('org-b')).toMatchObject({ ok: false, status: 403 });
+    expect(await requireOrgMember('org-b')).toMatchObject({ ok: false, status: 404 }); // outsiders can't tell it exists
     sessionUser = { id: 'root', role: 'admin' };
     expect(await requireOrgMember('org-b')).toMatchObject({ ok: true, actor: { role: null, superadmin: true } });
   });
