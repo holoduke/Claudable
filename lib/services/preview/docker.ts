@@ -281,6 +281,23 @@ export function toHostPath(p: string): string {
   return p;
 }
 
+/**
+ * Drop docker's "legacy builder is deprecated" notice from a build log. The
+ * legacy builder is DELIBERATE: backend builds run their RUN steps on the
+ * egress-locked sandbox network (`--network <custom>`), which BuildKit does not
+ * support. The notice says nothing about the project, so it only cluttered every
+ * preview start. (When Docker removes the legacy builder this needs a new
+ * isolation approach — that will surface as a build error, not be hidden.)
+ */
+export function withoutLegacyBuilderNotice(log: (chunk: Buffer | string) => void): (chunk: Buffer | string) => void {
+  const notice = /^\s*(DEPRECATED: The legacy builder is deprecated.*|BuildKit is currently disabled; enable it by removing the DOCKER_BUILDKIT=0|environment-variable\.)\s*$/u;
+  return (chunk) => {
+    const text = chunk.toString();
+    const kept = text.split('\n').filter((line) => !notice.test(line)).join('\n');
+    if (kept.trim().length > 0) log(kept.length === text.length ? chunk : kept);
+  };
+}
+
 let gnuTar: Promise<boolean> | null = null;
 /** The owner-normalising flags narrowBuildContext needs are GNU tar's (the Claudable image has it). */
 function hasGnuTar(): Promise<boolean> {
@@ -370,6 +387,7 @@ export async function runBackendContainer(
   // sandbox network, never on the default bridge (which reaches the host's
   // services and private ranges).
   const buildNet = process.env.PREVIEW_SANDBOX_NETWORK?.trim();
+  const buildLog = withoutLegacyBuilderNotice(log);
   const buildFlags = [...(buildNet ? ['--network', buildNet] : []), '-t', name];
   const narrow = (await hasGnuTar()) ? await narrowBuildContext(projectPath, c) : null;
   if (narrow) {
@@ -381,10 +399,10 @@ export async function runBackendContainer(
     const tar = spawn('tar', ['-cf', '-', '--owner=0', '--group=0', '--numeric-owner', '-C', narrow.contextDir, '--', ...narrow.paths], { stdio: ['ignore', 'pipe', 'pipe'] });
     const tarDone = new Promise<number>((res) => { tar.on('close', (code) => res(code ?? 1)); tar.on('error', () => res(1)); });
     tar.stderr?.on('data', log);
-    await appendCommandLogs('docker', ['build', ...buildFlags, '-f', narrow.dockerfile, '-'], projectPath, dockerEnv, log, undefined, tar.stdout!);
+    await appendCommandLogs('docker', ['build', ...buildFlags, '-f', narrow.dockerfile, '-'], projectPath, dockerEnv, buildLog, undefined, tar.stdout!);
     if ((await tarDone) !== 0) throw new Error('backend build context could not be packed');
   } else {
-    await appendCommandLogs('docker', ['build', ...buildFlags, '-f', c.dockerfile, c.context || '.'], projectPath, dockerEnv, log);
+    await appendCommandLogs('docker', ['build', ...buildFlags, '-f', c.dockerfile, c.context || '.'], projectPath, dockerEnv, buildLog);
   }
 
   // Clear any stale container from a previous start (ignore "no such container").

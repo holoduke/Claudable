@@ -120,7 +120,10 @@ export async function GET(
     },
 
     cancel(reason) {
-      console.log(`[SSE] Stream cancelled for project: ${project_id}`, reason ?? '');
+      // A closing tab cancels with a ResponseAborted error — that's a normal
+      // disconnect, not a failure: log one line, not a stack trace.
+      const why = reason instanceof Error ? reason.name : reason ? String(reason).slice(0, 80) : '';
+      console.log(`[SSE] Stream cancelled for project: ${project_id}${why ? ` (${why})` : ''}`);
       cleanup();
     },
   });
