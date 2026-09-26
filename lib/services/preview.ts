@@ -73,6 +73,7 @@ export {
   removeProjectNetwork,
   ensureSandboxNetwork,
 } from './preview/docker';
+import { dropHiddenLockfile, missingDependencies } from './preview/deps-check';
 export type { PreviewInfo } from './preview/types';
 
 /**
@@ -509,9 +510,13 @@ class PreviewManager {
     env: NodeJS.ProcessEnv,
     log: (chunk: Buffer | string) => void
   ): Promise<void> {
-    // If node_modules exists, skip
+    // node_modules present AND complete → nothing to do. A dependency declared in
+    // package.json but absent from node_modules (partial install, agent/sync edit)
+    // is repaired here — before, the install only ran when node_modules was missing.
+    let repair: string[] = [];
     if (await directoryExists(path.join(projectPath, 'node_modules'))) {
-      return;
+      repair = await missingDependencies(projectPath);
+      if (repair.length === 0) return;
     }
     const existing = this.installing.get(projectId);
     if (existing) {
@@ -521,8 +526,12 @@ class PreviewManager {
     }
     const installPromise = (async () => {
       try {
-        // Double-check just before install
-        if (!(await directoryExists(path.join(projectPath, 'node_modules')))) {
+        if (repair.length > 0) {
+          log(Buffer.from(`[PreviewManager] Missing dependencies (${repair.slice(0, 8).join(', ')}${repair.length > 8 ? ', …' : ''}) — reinstalling.`));
+          await dropHiddenLockfile(projectPath);
+          await runInstallWithPreferredManager(projectPath, env, log);
+        } else if (!(await directoryExists(path.join(projectPath, 'node_modules')))) {
+          // Double-check just before install
           await runInstallWithPreferredManager(projectPath, env, log);
         }
       } finally {

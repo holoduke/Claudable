@@ -34,6 +34,7 @@ import {
   containerServesPort,
 } from './docker';
 import { seedLockfile } from './lockfile-cache';
+import { missingDependencies } from './deps-check';
 import {
   substVars,
   buildBackendBaseEnv,
@@ -708,9 +709,19 @@ export async function buildFrontendContainerArgs(
   // No root package.json (an import whose app lives in a subfolder and whose own
   // fe.dev installs there): skip the root install — it can only fail and would
   // rewrite a tracked root package-lock.json.
+  // A non-empty node_modules can still be INCOMPLETE (a package added to
+  // package.json after the last install): then reinstall unconditionally, minus
+  // npm's hidden lockfile, which may claim the missing packages are there.
+  const missing = isLaravel ? [] : await missingDependencies(projectPath);
+  if (missing.length > 0) {
+    log(Buffer.from(`[PreviewManager] Missing dependencies (${missing.slice(0, 8).join(', ')}${missing.length > 8 ? ', …' : ''}) — reinstalling in the container.`));
+  }
+  const installStep = missing.length > 0
+    ? 'rm -f node_modules/.package-lock.json; npm install --include=dev --no-audit --no-fund'
+    : '[ -n "$(ls -A node_modules 2>/dev/null)" ] || npm install --include=dev --no-audit --no-fund';
   const devScript = isLaravel
     ? inner
-    : `rm -rf .next/dev/lock 2>/dev/null; [ ! -f package.json ] || [ -n "$(ls -A node_modules 2>/dev/null)" ] || npm install --include=dev --no-audit --no-fund; ${inner}`;
+    : `rm -rf .next/dev/lock 2>/dev/null; [ ! -f package.json ] || ${missing.length > 0 ? `{ ${installStep}; }` : installStep}; ${inner}`;
 
   // Shared package cache across ALL preview containers so a project's first
   // install reuses what others pulled. npm cacache (node) or composer cache
