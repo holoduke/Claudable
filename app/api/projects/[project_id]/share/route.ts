@@ -6,9 +6,8 @@
  * Manage rights required when the auth gate is on.
  */
 import { NextRequest } from 'next/server';
-import { getSessionUser, authEnabled } from '@/lib/auth/session';
 import { prisma } from '@/lib/db/client';
-import { canManageProject } from '@/lib/services/project-access';
+import { denyUnlessProjectAccess } from '@/lib/auth/gate';
 import { getOrCreateShare, getShare, revokeShare } from '@/lib/services/shares';
 import { createSuccessResponse, createErrorResponse, handleApiError } from '@/lib/utils/api-response';
 
@@ -19,14 +18,11 @@ interface RouteContext {
 }
 
 async function denyIfCannotManage(projectId: string): Promise<Response | null> {
-  const project = await prisma.project.findUnique({ where: { id: projectId } });
+  // Same answer for "does not exist" and "not yours" (no project-id oracle);
+  // managing the link is owner/admin, and staff-only in a customer project.
+  const project = await prisma.project.findUnique({ where: { id: projectId }, select: { id: true } });
   if (!project) return createErrorResponse('not_found', 'Project not found', 404);
-  if (authEnabled()) {
-    const user = await getSessionUser();
-    if (!user) return createErrorResponse('unauthorized', 'Authentication required', 401);
-    if (!canManageProject(user, project)) return createErrorResponse('forbidden', 'Only the project owner or an admin can share', 403);
-  }
-  return null;
+  return denyUnlessProjectAccess(projectId, { manage: true });
 }
 
 export async function GET(_request: NextRequest, { params }: RouteContext) {

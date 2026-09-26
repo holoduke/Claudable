@@ -394,9 +394,20 @@ export function changedPathsAgainstRemote(repoPath: string, remoteUrl: string, b
   } catch {
     hasRemote = false;
   }
-  const out = hasRemote
-    ? runGit(['diff', '--name-only', 'FETCH_HEAD...HEAD'], repoPath)
-    : runGit(['ls-files'], repoPath);
+  // Unreachable remote → every tracked file counts as changed (fail closed).
+  return hasRemote ? pathsDifferingFrom(repoPath, 'FETCH_HEAD') : splitLines(runGit(['ls-files'], repoPath));
+}
+
+/**
+ * Paths whose content differs between `ref` and HEAD. Two-dot = tree vs tree:
+ * every path the remote would see change if HEAD were pushed — including files
+ * the REMOTE changed since our base (a force-push would silently revert those).
+ */
+export function pathsDifferingFrom(repoPath: string, ref: string): string[] {
+  return splitLines(runGit(['diff', '--name-only', ref, 'HEAD'], repoPath));
+}
+
+function splitLines(out: string): string[] {
   return out.split(/\r?\n/u).map((l) => l.trim()).filter(Boolean);
 }
 

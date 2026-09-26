@@ -8,6 +8,7 @@ import { pipeline } from 'stream/promises';
 import path from 'path';
 import { randomUUID } from 'crypto';
 import { getProjectById } from '@/lib/services/project';
+import { isCustomerProject } from '@/lib/services/tenant-policy';
 
 interface RouteContext {
   params: Promise<{ project_id: string }>;
@@ -19,6 +20,30 @@ const PROJECTS_DIR_ABSOLUTE = path.isAbsolute(PROJECTS_DIR)
   : path.resolve(process.cwd(), PROJECTS_DIR);
 
 const MAX_UPLOAD_BYTES = Number(process.env.MAX_UPLOAD_BYTES || 5 * 1024 * 1024 * 1024);
+// Customer projects: a smaller per-file cap and a storage quota for the whole
+// project (assets + uploads in progress), so one tenant cannot fill the disk
+// every other project shares.
+const CUSTOMER_MAX_UPLOAD_BYTES = Number(process.env.CUSTOMER_MAX_UPLOAD_BYTES || 100 * 1024 * 1024);
+const CUSTOMER_STORAGE_QUOTA_BYTES = Number(process.env.CUSTOMER_STORAGE_QUOTA_BYTES || 10 * 1024 * 1024 * 1024);
+
+async function dirBytes(dir: string): Promise<number> {
+  const entries = await fs.readdir(dir, { withFileTypes: true }).catch(() => []);
+  let total = 0;
+  for (const e of entries) {
+    const p = path.join(dir, e.name);
+    if (e.isDirectory()) total += await dirBytes(p);
+    else if (e.isFile()) total += (await fs.stat(p).catch(() => null))?.size ?? 0;
+  }
+  return total;
+}
+
+function quotaReached(): NextResponse {
+  const gb = Math.round(CUSTOMER_STORAGE_QUOTA_BYTES / 1024 ** 3);
+  return NextResponse.json(
+    { success: false, error: `Storage limit for this project reached (${gb}GB). Remove files you no longer need, or ask New Story.` },
+    { status: 413 },
+  );
+}
 const UUID_RE = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/u;
 
 function resolveAssetsPath(projectId: string): string {
@@ -42,8 +67,8 @@ async function sweepStaleParts(tmpDir: string): Promise<void> {
   );
 }
 
-function tooLarge(): NextResponse {
-  const mb = Math.round(MAX_UPLOAD_BYTES / 1024 / 1024);
+function tooLarge(limit: number = MAX_UPLOAD_BYTES): NextResponse {
+  const mb = Math.round(limit / 1024 / 1024);
   const label = mb >= 1024 ? `${Math.round(mb / 1024)}GB` : `${mb}MB`;
   return NextResponse.json(
     { success: false, error: `File too large (max ${label})` },
@@ -118,6 +143,12 @@ export async function POST(request: Request, { params }: RouteContext) {
       return NextResponse.json({ success: false, error: 'Project not found' }, { status: 404 });
     }
 
+    const customer = await isCustomerProject(project_id);
+    const limit = customer ? Math.min(CUSTOMER_MAX_UPLOAD_BYTES, MAX_UPLOAD_BYTES) : MAX_UPLOAD_BYTES;
+    const uploadTmpDir = path.join(process.cwd(), 'data', 'tmp', 'uploads', project_id);
+    const overQuota = async () =>
+      customer && (await dirBytes(resolveAssetsPath(project_id))) + (await dirBytes(uploadTmpDir)) > CUSTOMER_STORAGE_QUOTA_BYTES;
+
     const contentType = request.headers.get('content-type') || '';
     const url = new URL(request.url);
     const chunkCount = Number(url.searchParams.get('chunks') || 0);
@@ -173,9 +204,13 @@ export async function POST(request: Request, { params }: RouteContext) {
       );
 
       const soFar = (await fs.stat(partPath)).size;
-      if (soFar > MAX_UPLOAD_BYTES) {
+      if (soFar > limit) {
         await fs.unlink(partPath).catch(() => {});
-        return tooLarge();
+        return tooLarge(limit);
+      }
+      if (await overQuota()) {
+        await fs.unlink(partPath).catch(() => {});
+        return quotaReached();
       }
 
       if (chunkIndex < chunkCount - 1) {
@@ -210,7 +245,7 @@ export async function POST(request: Request, { params }: RouteContext) {
       if (!(file instanceof File)) {
         return NextResponse.json({ success: false, error: 'File field is required' }, { status: 400 });
       }
-      if (file.size > MAX_UPLOAD_BYTES) return tooLarge();
+      if (file.size > limit) return tooLarge(limit);
       originalName = file.name || 'file';
       declaredType = file.type || '';
       bodyStream = Readable.fromWeb(file.stream() as any);
@@ -218,7 +253,7 @@ export async function POST(request: Request, { params }: RouteContext) {
       originalName = url.searchParams.get('filename') || 'file';
       declaredType = url.searchParams.get('type') || contentType || '';
       const declaredLen = Number(request.headers.get('content-length') || 0);
-      if (declaredLen && declaredLen > MAX_UPLOAD_BYTES) return tooLarge();
+      if (declaredLen && declaredLen > limit) return tooLarge(limit);
       if (!request.body) {
         return NextResponse.json({ success: false, error: 'Empty request body' }, { status: 400 });
       }
@@ -231,9 +266,13 @@ export async function POST(request: Request, { params }: RouteContext) {
     await pipeline(bodyStream, createWriteStream(resolvedAbsolutePath));
 
     const written = (await fs.stat(resolvedAbsolutePath)).size;
-    if (written > MAX_UPLOAD_BYTES) {
+    if (written > limit) {
       await fs.unlink(resolvedAbsolutePath).catch(() => {});
-      return tooLarge();
+      return tooLarge(limit);
+    }
+    if (await overQuota()) {
+      await fs.unlink(resolvedAbsolutePath).catch(() => {});
+      return quotaReached();
     }
 
     return finalizeAsset(project, project_id, resolvedAbsolutePath, uniqueName, originalName, declaredType);

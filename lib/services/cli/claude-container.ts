@@ -78,6 +78,7 @@ export function buildAgentContainerArgs(o: ContainerTurnOptions): string[] {
     '--security-opt', 'no-new-privileges',
     '--memory', o.memory || '2g',
     '--cpus', String(o.cpus || '2.0'),
+    '--pids-limit', '512',                         // a runaway/fork-bombing command cannot exhaust host PIDs
     '--pids-limit', '512',
     '-w', '/work',
     '-v', `${o.projectHostPath}:/work`,
