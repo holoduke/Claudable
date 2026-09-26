@@ -4,6 +4,7 @@
  */
 import React, { useEffect, useMemo, useState } from 'react';
 import { validateProjectName } from '@/lib/utils';
+import { ProjectWipeSection } from './ProjectWipeSection';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? '';
 
@@ -210,6 +211,8 @@ export function GeneralSettings({
                 {isSaving ? 'Saving...' : 'Save Changes'}
               </button>
             </div>
+
+            <ProjectWipeSection projectId={projectId} />
           </div>
         )}
       </div>

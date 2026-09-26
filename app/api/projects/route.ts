@@ -121,6 +121,17 @@ export async function POST(request: NextRequest) {
     if (!/^[A-Za-z0-9_-]{1,64}$/.test(input.project_id)) {
       return createErrorResponse('project_id must be 1-64 chars: letters, digits, hyphen, underscore', undefined, 400);
     }
+    // Containers, networks and preview routes are named after a slug of the id. Refuse an
+    // id whose runtime names would collide with an existing project's (e.g. "Foo" vs "foo",
+    // or "x-api" vs the backend of "x"): the projects would share — and could stop or
+    // delete — each other's containers and preview route.
+    {
+      const { sharedRuntimeNames } = await import('@/lib/services/project-wipe');
+      const existingIds = (await prisma.project.findMany({ select: { id: true } })).map((p) => p.id);
+      if (existingIds.includes(input.project_id) || sharedRuntimeNames(input.project_id, existingIds).size > 0) {
+        return createErrorResponse('project_id conflicts with an existing project; choose another id', undefined, 409);
+      }
+    }
 
     const project = await createProject(input);
 

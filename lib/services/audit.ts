@@ -23,6 +23,7 @@ export type AuditAction =
   | 'org.claude_credential.set'
   | 'org.claude_credential.removed'
   | 'project.org_changed'
+  | 'project.deleted'
   | 'project.visibility_changed'
   | 'project.member.added'
   | 'project.member.role_changed'

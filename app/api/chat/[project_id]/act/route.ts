@@ -290,6 +290,10 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
     const { project_id } = await params;
     const _gate = await denyUnlessProjectAccess(project_id, { write: true });
     if (_gate) return _gate;
+    const { isWiping } = await import('@/lib/services/project-wipe');
+    if (isWiping(project_id)) {
+      return NextResponse.json({ success: false, error: 'This project is being deleted.' }, { status: 409 });
+    }
 
     // it-ops follows the USER triggering this run (not the project). Resolve it
     // HERE, in request scope — the agent runs fire-and-forget below, where the
