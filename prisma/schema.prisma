@@ -255,6 +255,7 @@ model User {
   memberships   ProjectMember[]
   orgMemberships OrgMember[]
   claudeCredentials ClaudeCredential[]
+  apiTokens     ApiToken[]
   comments      Comment[]
   sentInvites   OrgInvite[]     @relation("SentInvites")
 
@@ -268,6 +269,24 @@ model User {
  * the org select it for a project. A project's runs use its assigned credential
  * (Project.claudeCredentialId), falling back to the global env token.
  */
+// Personal API token: lets a script or bot (e.g. the Slack "Hub" agent) call the API as this user.
+// The secret is never stored: a token is `clb_<id>.<HMAC(AUTH_SECRET, id)>`, so the proxy can reject a
+// forged token without the database, and this row makes it revocable. See lib/auth/api-token.ts.
+model ApiToken {
+  id         String    @id
+  userId     String    @map("user_id")
+  name       String
+  createdAt  DateTime  @default(now()) @map("created_at")
+  lastUsedAt DateTime? @map("last_used_at")
+  expiresAt  DateTime? @map("expires_at")
+  revokedAt  DateTime? @map("revoked_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("api_tokens")
+}
+
 model ClaudeCredential {
   id         String    @id @default(cuid())
   ownerId    String    @map("owner_id")

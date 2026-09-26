@@ -305,6 +305,29 @@ If you encounter the error: `Error output dangerously skip permissions cannot be
    npm install -g @anthropic-ai/claude-code --unsafe-perm=false
    ```
 
+## API tokens (scripts and bots)
+
+A signed-in user can create **personal API tokens** in *Settings → Account → API tokens* for a script or
+bot that should work as them, for example the Slack "Hub" assistant. A token:
+
+- is sent as `Authorization: Bearer clb_…` and only works on `/api/*` (never for the web UI);
+- has exactly the owner's **project access** and **never admin rights** (an admin's token acts as a normal user);
+- cannot create, list or revoke tokens itself (those routes need a real login);
+- expires after at most 365 days, can be revoked any time, and shows when it was last used.
+
+The full token is shown once. The database only stores its id: a token is `clb_<id>.<HMAC(AUTH_SECRET, id)>`,
+so a forged token is rejected at the proxy and rotating `AUTH_SECRET` invalidates all tokens.
+
+For a **service account** (a bot that should only reach projects it is explicitly added to), an admin runs
+inside the container:
+
+```bash
+docker exec claudable node scripts/create-api-token.mjs --email hub-bot@example.com --name "Slack Hub" \
+  --create-user --org <organisationId>
+```
+
+Add that account as a member of each project the bot may change.
+
 ## Integration Guide
 
 ### GitHub

@@ -18,6 +18,8 @@ export type AuditAction =
   | 'org.invite.revoked'
   | 'org.invite.accepted'
   | 'user.welcomed'
+  | 'user.api_token.created'
+  | 'user.api_token.revoked'
   | 'org.budget.set'
   | 'org.margin.set'
   | 'org.claude_credential.set'
@@ -38,7 +40,7 @@ export interface AuditInput {
   orgId?: string | null;
   actor?: AuditActor | null;
   action: AuditAction;
-  targetType?: 'user' | 'invite' | 'org' | 'project';
+  targetType?: 'user' | 'invite' | 'org' | 'project' | 'api_token';
   targetId?: string | null;
   meta?: Record<string, unknown>;
 }
