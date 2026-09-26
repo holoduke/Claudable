@@ -131,7 +131,7 @@ export function ProjectWipeSection({ projectId }: { projectId: string }) {
               )}
               {plan.network && <li>its private network and preview address</li>}
             </ul>
-            <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">{count} local item(s) in total.</p>
+            <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">Up to {count} local item(s) (only what exists is removed).</p>
           </div>
 
           {plan.database && (
