@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { signOutAction } from '@/app/actions/auth';
 import { useI18n } from '@/contexts/I18nContext';
 import type { MyOrg } from './MyOrgSettings';
+import ApiTokensSection from './ApiTokensSection';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? '';
 
@@ -14,8 +15,8 @@ interface MyAccountSettingsProps {
 
 /**
  * "Account" — everything that is about YOU: who you are signed in as, which
- * organisations you belong to (and as what), your interface language, the
- * it-ops toggle (admins), and sign out.
+ * organisations you belong to (and as what), API tokens for scripts and bots,
+ * your interface language, the it-ops toggle (admins), and sign out.
  */
 export default function MyAccountSettings({ user, onToast, onChanged }: MyAccountSettingsProps) {
   const { locale, setLocale, locales, t } = useI18n();
@@ -122,6 +123,9 @@ export default function MyAccountSettings({ user, onToast, onChanged }: MyAccoun
           </ul>
         )}
       </section>
+
+      {/* API tokens for scripts and bots that act as this user */}
+      <ApiTokensSection onToast={onToast} />
 
       {/* Preferences */}
       <section className="rounded-xl border border-gray-200 dark:border-white/8 divide-y divide-gray-200 dark:divide-white/8">

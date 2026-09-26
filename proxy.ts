@@ -1,10 +1,11 @@
 import NextAuth from 'next-auth';
 import { authConfig } from '@/lib/auth/config';
+import { bearerToken, hasValidSignature } from '@/lib/auth/api-token-signature';
 
 // Edge-safe instance (config has no Prisma) — used only to verify the session JWT.
 const { auth } = NextAuth(authConfig);
 
-export default auth((req) => {
+export default auth(async (req) => {
   // Safety valve: until AUTH_ENABLED=true the gate is off and the app behaves as
   // before, so a misconfigured login can never lock everyone out.
   if (process.env.AUTH_ENABLED !== 'true') return;
@@ -42,6 +43,10 @@ export default auth((req) => {
     /^\/api\/projects\/[^/]+\/(comments|client-logs)$/.test(pathname);
 
   if (req.auth || isPublic) return;
+
+  // Personal API token (scripts, the Slack bot): API routes only, never pages. A forged token stops
+  // here; revocation, expiry and the user's status are checked per request in getSessionUser().
+  if (pathname.startsWith('/api/') && (await hasValidSignature(bearerToken(req.headers.get('authorization'))))) return;
 
   // API calls get a 401; page navigations get redirected to the login page.
   if (pathname.startsWith('/api/')) {
