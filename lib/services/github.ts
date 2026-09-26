@@ -476,6 +476,17 @@ async function pullProjectFromGitHubImpl(projectId: string): Promise<SyncResult>
  * by a rules-based "pull request required" policy (e.g. a GitHub org ruleset)
  * that blocks direct pushes but needs zero approvals.
  */
+/**
+ * The merge call differs per host: GitHub `PUT {merge_method}`, Gitea `POST {Do}`
+ * (Gitea answers the GitHub form with 405, which the retry loop below would
+ * mistake for "mergeability still being computed").
+ */
+export function mergeRequestInit(cfg: Pick<GitProviderConfig, 'provider'>, title: string): RequestInit {
+  return cfg.provider === 'gitea'
+    ? { method: 'POST', body: JSON.stringify({ Do: 'merge', merge_title_field: title }) }
+    : { method: 'PUT', body: JSON.stringify({ merge_method: 'merge' }) };
+}
+
 export async function mergePublishPr(
   token: string,
   cfg: GitProviderConfig,
@@ -513,10 +524,7 @@ export async function mergePublishPr(
   let lastError: unknown;
   for (let attempt = 0; attempt < 5; attempt++) {
     try {
-      await githubFetch(token, `/repos/${owner}/${repo}/pulls/${pr.number}/merge`, {
-        method: 'PUT',
-        body: JSON.stringify({ merge_method: 'merge' }),
-      }, cfg);
+      await githubFetch(token, `/repos/${owner}/${repo}/pulls/${pr.number}/merge`, mergeRequestInit(cfg, title), cfg);
       return 'merged';
     } catch (error) {
       lastError = error;
