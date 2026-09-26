@@ -43,6 +43,7 @@ import {
 } from './preview/scaffold';
 import { writeArchitectureSummary } from './preview/architecture';
 import { readPreviewConfig, resolvePreviewBounds, substVars } from './preview/config';
+import { enforcePreviewConfigPolicy } from './preview/config-policy';
 import { isCustomerProject, TenantPolicyError } from './tenant-policy';
 import {
   resolveProjectWorkspace,
@@ -586,7 +587,11 @@ class PreviewManager {
     // handlers (and stop()) own teardown.
     let committed = false;
     try {
-    const cfg = await readPreviewConfig(projectPath);
+    // The project's own preview.json is agent/app-writable: it never decides
+    // anything outside its sandbox (see config-policy.ts).
+    const policy = await enforcePreviewConfigPolicy(await readPreviewConfig(projectPath), projectPath, { customer: customerProject });
+    for (const note of policy.notes) queueLog(`[PreviewManager] preview.json: ${note}`);
+    const cfg = policy.cfg;
     const sandboxNet = process.env.PREVIEW_SANDBOX_NETWORK?.trim();
     // Self-heal: recreate the shared egress-locked net if it went missing (a
     // prune has removed it in prod), so this start doesn't fail with

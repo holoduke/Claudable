@@ -8,6 +8,7 @@ import { randomUUID } from 'crypto';
 import { previewSlug } from './routes';
 import { appendCommandLogs } from './process-utils';
 import type { PreviewBackendConfig } from './config';
+import { realPathInside } from '@/lib/utils/safe-fs';
 
 // Remove orphaned preview containers on boot. Claudable's process tracking is
 // in-memory (reset on every restart/redeploy), so after a recreate each running
@@ -226,8 +227,20 @@ export async function runBackendContainer(
   const name = containerName || backendContainerName(projectId);
   const dockerEnv = process.env; // the CLI needs DOCKER_HOST + PATH
 
+  // Defense in depth (config-policy.ts already enforces this): the Dockerfile
+  // and build context must resolve inside the project — a context outside it
+  // would ship other projects / Claudable's data dir to the build.
+  for (const rel of [c.dockerfile, c.context || '.']) {
+    if (typeof rel !== 'string' || path.isAbsolute(rel) || !(await realPathInside(projectPath, path.resolve(projectPath, rel)))) {
+      throw new Error(`backend build refused: ${rel} is outside the project`);
+    }
+  }
   log(Buffer.from(`[PreviewManager] [backend] building image ${name} from ${c.dockerfile}…`));
-  await appendCommandLogs('docker', ['build', '-f', c.dockerfile, '-t', name, c.context || '.'], projectPath, dockerEnv, log);
+  // RUN steps execute project-controlled commands: build on the egress-locked
+  // sandbox network, never on the default bridge (which reaches the host's
+  // services and private ranges).
+  const buildNet = process.env.PREVIEW_SANDBOX_NETWORK?.trim();
+  await appendCommandLogs('docker', ['build', ...(buildNet ? ['--network', buildNet] : []), '-f', c.dockerfile, '-t', name, c.context || '.'], projectPath, dockerEnv, log);
 
   // Clear any stale container from a previous start (ignore "no such container").
   await new Promise<void>((res) => {
