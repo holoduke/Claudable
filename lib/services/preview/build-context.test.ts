@@ -88,3 +88,15 @@ describe('narrowBuildContext (filesystem)', async () => {
     expect(await narrowBuildContext(root, cfg)).toBeNull();
   });
 });
+
+describe('withoutLegacyBuilderNotice', async () => {
+  const { withoutLegacyBuilderNotice } = await import('./docker');
+  it('drops only docker\'s legacy-builder notice', () => {
+    const seen: string[] = [];
+    const log = withoutLegacyBuilderNotice((c) => seen.push(c.toString()));
+    log('DEPRECATED: The legacy builder is deprecated and will be removed in a future release.\n            BuildKit is currently disabled; enable it by removing the DOCKER_BUILDKIT=0\n            environment-variable.\n\n');
+    log('Step 1/9 : FROM golang:1.26-alpine\n');
+    log(Buffer.from('error: build failed\n'));
+    expect(seen).toEqual(['Step 1/9 : FROM golang:1.26-alpine\n', 'error: build failed\n']);
+  });
+});

@@ -654,7 +654,9 @@ function laravelDevScript(port: number): string {
     // theme it rebuilds public/build itself (its image has Node); the preview
     // then serves the updated manifest.
     'php artisan filament:assets || true',
-    'php artisan storage:link 2>/dev/null || true',
+    // Only when missing: artisan prints "ERROR The [public/storage] link already
+    // exists." to STDOUT on every later start.
+    '[ -e public/storage ] || php artisan storage:link || true',
     'php artisan migrate --force || true',
     `echo "[filament] starting php artisan serve on ${port}"`,
     `exec php artisan serve --host 0.0.0.0 --port ${port}`,
