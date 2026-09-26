@@ -148,53 +148,11 @@ export async function updateProject(
  * Delete project
  */
 export async function deleteProject(id: string): Promise<void> {
-  const project = await getProjectById(id);
-
-  // Tear down the project's runtime BEFORE the row is deleted: stop the preview
-  // (its frontend/backend containers + project network) and remove every managed
-  // container + volume — otherwise a deleted project leaks its DB container,
-  // volume and network. Best-effort + dynamic imports (avoid load-time cycles).
-  try {
-    const { removeAllServices } = await import('./managed-containers');
-    await removeAllServices(id);
-  } catch (error) {
-    console.warn('[ProjectService] Failed to remove managed containers on delete:', error);
-  }
-  try {
-    const { previewManager } = await import('./preview');
-    await previewManager.stop(id).catch(() => {});
-  } catch { /* preview may not be running */ }
-  try {
-    const { removeProjectNetwork } = await import('./preview');
-    await removeProjectNetwork(id);
-  } catch { /* net may already be gone or in use */ }
-
-  // Delete project directory
-  if (project?.repoPath) {
-    try {
-      await fs.rm(project.repoPath, { recursive: true, force: true });
-    } catch (error) {
-      console.warn(`[ProjectService] Failed to delete project directory:`, error);
-    }
-  }
-
-  // Also remove the side-car dirs that live OUTSIDE repoPath, else a deleted
-  // project leaks them on disk: the agent's persistent HOME (session transcripts)
-  // and the checkpoint shadow git repo. `id` is a validated slug (create route),
-  // and PROJECTS_DIR is the shared root, so these resolve safely under data/.
-  for (const rel of [['agent-homes', id], ['checkpoints', id], ['thumbnails', `${id}.png`]]) {
-    try {
-      const dir = path.resolve(PROJECTS_DIR_ABSOLUTE, '..', ...rel);
-      await fs.rm(dir, { recursive: true, force: true });
-    } catch { /* best-effort */ }
-  }
-
-  // Delete project from database (related data automatically deleted via Cascade)
-  await prisma.project.delete({
-    where: { id },
-  });
-
-  console.log(`[ProjectService] Deleted project: ${id}`);
+  // One safe code path for every delete: removes only what this project owns and
+  // never touches another project (see project-wipe.ts). External resources (Coolify
+  // DB, remote repo) stay unless the caller opts in via wipeProject().
+  const { wipeProject } = await import('./project-wipe');
+  await wipeProject(id, {});
 }
 
 /**

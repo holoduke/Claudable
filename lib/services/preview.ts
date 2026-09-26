@@ -318,6 +318,9 @@ class PreviewManager {
   }
 
   public async start(projectId: string): Promise<PreviewInfo> {
+    // Never (re)start a preview for a project that is being wiped.
+    const { isWiping } = await import('./project-wipe');
+    if (isWiping(projectId)) throw new Error('This project is being deleted.');
     const existing = this.processes.get(projectId);
     if (existing && existing.status !== 'error') {
       existing.lastAccessedAt = new Date();
