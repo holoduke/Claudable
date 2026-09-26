@@ -9,6 +9,7 @@ import { previewSlug } from './routes';
 import { appendCommandLogs } from './process-utils';
 import type { PreviewBackendConfig } from './config';
 import { realPathInside } from '@/lib/utils/safe-fs';
+import { narrowContextPaths } from './build-context';
 
 // Remove orphaned preview containers on boot. Claudable's process tracking is
 // in-memory (reset on every restart/redeploy), so after a recreate each running
@@ -280,6 +281,61 @@ export function toHostPath(p: string): string {
   return p;
 }
 
+let gnuTar: Promise<boolean> | null = null;
+/** The owner-normalising flags narrowBuildContext needs are GNU tar's (the Claudable image has it). */
+function hasGnuTar(): Promise<boolean> {
+  gnuTar ??= new Promise<boolean>((res) => {
+    let out = '';
+    const p = spawn('tar', ['--version'], { stdio: ['ignore', 'pipe', 'ignore'] });
+    p.stdout?.on('data', (d) => { out += d; });
+    p.on('close', () => res(/GNU tar/.test(out)));
+    p.on('error', () => res(false));
+  });
+  return gnuTar;
+}
+
+/**
+ * A minimal build context for this backend, or null to send the full context dir:
+ * when the project has its own .dockerignore (docker applies it; we don't
+ * re-implement it), when the Dockerfile lies outside the context, or when its
+ * COPY/ADD sources aren't provably literal. Missing sources are left out so the
+ * build fails exactly as it would with the full context.
+ */
+export async function narrowBuildContext(
+  projectPath: string,
+  c: NonNullable<PreviewBackendConfig['container']>,
+): Promise<{ contextDir: string; dockerfile: string; paths: string[] } | null> {
+  try {
+    const contextDir = path.resolve(projectPath, c.context || '.');
+    if (await fs.access(path.join(contextDir, '.dockerignore')).then(() => true, () => false)) return null;
+    const dockerfileAbs = path.resolve(projectPath, c.dockerfile);
+    const dockerfile = path.relative(contextDir, dockerfileAbs).split(path.sep).join('/');
+    if (!dockerfile || dockerfile.startsWith('..') || path.isAbsolute(dockerfile)) return null;
+    const paths = narrowContextPaths(await fs.readFile(dockerfileAbs, 'utf8'));
+    if (!paths) return null;
+    // tar follows symlinked PARENT dirs (docker's own context walk never does): every
+    // parent must resolve inside the context, or a `backend -> /etc` link would pack
+    // host files. The leaf itself is stored as-is (a symlink stays a symlink).
+    const realContext = await fs.realpath(contextDir);
+    const parentInside = async (rel: string) => {
+      const parent = path.dirname(path.join(contextDir, rel));
+      const real = await fs.realpath(parent).catch(() => null);
+      return real !== null && (real === realContext || real.startsWith(realContext + path.sep));
+    };
+    if (!(await parentInside(dockerfile))) return null;
+    const present: string[] = [];
+    for (const p of paths) {
+      if (!(await parentInside(p))) return null;
+      if (await fs.lstat(path.join(contextDir, p)).then(() => true, () => false)) present.push(p);
+    }
+    // The Dockerfile must be in the tar once: skip it when a listed dir already holds it.
+    const covered = present.some((p) => p === dockerfile || dockerfile.startsWith(p + '/'));
+    return { contextDir, dockerfile, paths: covered ? present : [dockerfile, ...present] };
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Build the project's own Dockerfile and run the backend in a HARDENED sibling
  * container (non-root by the image's own USER, cap-drop ALL, no-new-privileges,
@@ -314,7 +370,22 @@ export async function runBackendContainer(
   // sandbox network, never on the default bridge (which reaches the host's
   // services and private ranges).
   const buildNet = process.env.PREVIEW_SANDBOX_NETWORK?.trim();
-  await appendCommandLogs('docker', ['build', ...(buildNet ? ['--network', buildNet] : []), '-f', c.dockerfile, '-t', name, c.context || '.'], projectPath, dockerEnv, log);
+  const buildFlags = [...(buildNet ? ['--network', buildNet] : []), '-t', name];
+  const narrow = (await hasGnuTar()) ? await narrowBuildContext(projectPath, c) : null;
+  if (narrow) {
+    // Only the paths the Dockerfile COPYs (see build-context.ts) — same image, a
+    // fraction of the upload. Paths go to tar as argv, never through a shell.
+    log(Buffer.from(`[PreviewManager] [backend] build context narrowed to: ${narrow.paths.join(', ')}`));
+    // Owner normalised to root like the docker CLI's own context tar — otherwise the
+    // COPY cache keys (and the resulting image) differ from a full-context build.
+    const tar = spawn('tar', ['-cf', '-', '--owner=0', '--group=0', '--numeric-owner', '-C', narrow.contextDir, '--', ...narrow.paths], { stdio: ['ignore', 'pipe', 'pipe'] });
+    const tarDone = new Promise<number>((res) => { tar.on('close', (code) => res(code ?? 1)); tar.on('error', () => res(1)); });
+    tar.stderr?.on('data', log);
+    await appendCommandLogs('docker', ['build', ...buildFlags, '-f', narrow.dockerfile, '-'], projectPath, dockerEnv, log, undefined, tar.stdout!);
+    if ((await tarDone) !== 0) throw new Error('backend build context could not be packed');
+  } else {
+    await appendCommandLogs('docker', ['build', ...buildFlags, '-f', c.dockerfile, c.context || '.'], projectPath, dockerEnv, log);
+  }
 
   // Clear any stale container from a previous start (ignore "no such container").
   await new Promise<void>((res) => {
