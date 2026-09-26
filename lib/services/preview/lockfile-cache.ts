@@ -31,12 +31,15 @@ export function sharedNpmCacheDir(): string {
   return path.join(DATA_ROOT, '.npm-cache');
 }
 
-/** Env for any npm run in the Claudable process: shared cache, no audit/fund noise. */
+/**
+ * Env for any npm run in the Claudable process: shared cache, no audit/fund noise.
+ * Deliberately NOT prefer-offline: with a long-lived shared cache npm would trust stale
+ * registry metadata and fail (ETARGET) on versions published after it was cached.
+ */
 export function npmInstallEnv(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
   return {
     ...env,
     npm_config_cache: sharedNpmCacheDir(),
-    npm_config_prefer_offline: 'true',
     npm_config_audit: 'false',
     npm_config_fund: 'false',
     npm_config_update_notifier: 'false',

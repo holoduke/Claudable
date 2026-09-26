@@ -97,7 +97,7 @@ describe('npm env', () => {
     const env = npmInstallEnv({ PATH: '/bin' });
     expect(env.npm_config_cache).toBe(sharedNpmCacheDir());
     expect(sharedNpmCacheDir()).toBe(path.join(ROOT, 'data', '.npm-cache'));
-    expect(env.npm_config_prefer_offline).toBe('true');
+    expect(env.npm_config_prefer_offline).toBeUndefined(); // stale shared metadata → ETARGET
     expect(env.npm_config_audit).toBe('false');
   });
 });
