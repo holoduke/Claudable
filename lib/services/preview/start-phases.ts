@@ -691,8 +691,9 @@ export async function buildFrontendContainerArgs(
   // behind in the bind-mounted project, and the next `next dev` refuses to start
   // ("Unable to acquire lock") — every restart would fail until someone deletes
   // it by hand. Harmless for non-Next stacks (path simply doesn't exist).
-  // --prefer-offline: reuse the shared npm cache (mounted below) instead of
-  // re-downloading packages on every project's first install. Laravel supplies
+  // The shared npm cache (mounted below) spares re-downloading tarballs on every
+  // project's first install. No --prefer-offline: that trusts stale registry metadata
+  // in the long-lived cache and fails (ETARGET) on newly published versions. Laravel supplies
   // its own bootstrap+serve script (composer, not npm), so use it verbatim.
   // The install guard tests for a NON-EMPTY node_modules, not merely for the
   // directory: a failed/aborted install (or a bind-mount that pre-creates it)
@@ -709,7 +710,7 @@ export async function buildFrontendContainerArgs(
   // rewrite a tracked root package-lock.json.
   const devScript = isLaravel
     ? inner
-    : `rm -rf .next/dev/lock 2>/dev/null; [ ! -f package.json ] || [ -n "$(ls -A node_modules 2>/dev/null)" ] || npm install --include=dev --prefer-offline --no-audit --no-fund; ${inner}`;
+    : `rm -rf .next/dev/lock 2>/dev/null; [ ! -f package.json ] || [ -n "$(ls -A node_modules 2>/dev/null)" ] || npm install --include=dev --no-audit --no-fund; ${inner}`;
 
   // Shared package cache across ALL preview containers so a project's first
   // install reuses what others pulled. npm cacache (node) or composer cache
