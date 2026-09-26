@@ -18,6 +18,7 @@ import {
   previewRouteDir,
   previewUrlFor,
   previewSlug,
+  writePreviewRoute,
   removePreviewRoute,
   removeBackendRoute,
   sweepPreviewRoutes,
@@ -33,6 +34,10 @@ import {
   connectToProjectNet,
   latestMtimeMs,
   dockerPublishedPorts,
+  runningPreviewContainers,
+  prepullImages,
+  parsePublishedPorts,
+  containerServesPort,
 } from './preview/docker';
 import { killProcessTree, appendCommandLogs } from './preview/process-utils';
 import {
@@ -76,11 +81,16 @@ export type { PreviewInfo } from './preview/types';
  * cached previewUrl/previewPort is stale and — since ports get reused across
  * projects — could otherwise point a project at another project's preview.
  */
-async function clearAllPreviewState(): Promise<void> {
+async function clearAllPreviewState(keepProjectIds: string[] = []): Promise<void> {
   try {
+    // Also reset a stale 'running' status: nothing survives a restart except the
+    // previews that were re-adopted (keepProjectIds).
     await prisma.project.updateMany({
-      where: { OR: [{ previewUrl: { not: null } }, { previewPort: { not: null } }] },
-      data: { previewUrl: null, previewPort: null },
+      where: {
+        id: { notIn: keepProjectIds },
+        OR: [{ previewUrl: { not: null } }, { previewPort: { not: null } }, { status: 'running' }],
+      },
+      data: { previewUrl: null, previewPort: null, status: 'idle' },
     });
   } catch {
     /* non-fatal: the frontend uses live status, this is defense-in-depth */
@@ -130,10 +140,116 @@ class PreviewManager {
     // from before a restart — those servers are dead and their ports may be reused
     // by OTHER projects, so a stale URL could point at the wrong project. Clear them
     // and remove all stale per-project preview routes (dev servers are all dead).
-    void clearAllPreviewState();
-    void sweepPreviewRoutes();
-    void sweepOrphanedPreviewContainers(); // free ports held by containers from before the restart
+    this.recovery = this.recoverAfterRestart().catch((error) => {
+      console.error('[PreviewManager] recovery after restart failed:', error);
+    });
+  }
+
+  // Resolves once boot recovery is done; start() waits for it so it can't race it.
+  private recovery: Promise<void>;
+
+  /**
+   * After a (re)deploy the in-memory map is empty. Preview CONTAINERS however keep
+   * running, so instead of killing every one (everybody pays a cold start after each
+   * deploy) the ones that unambiguously belong to exactly one project are re-adopted.
+   * Everything else is cleaned up exactly as before.
+   */
+  private async recoverAfterRestart(): Promise<void> {
+    const adopted = await this.adoptRunningPreviews().catch((error) => {
+      console.error('[PreviewManager] preview re-adoption failed:', error);
+      return new Map<string, string>();
+    });
+    await clearAllPreviewState([...adopted.keys()]);
+    await sweepPreviewRoutes();
+    for (const projectId of adopted.keys()) {
+      const p = this.processes.get(projectId);
+      if (p) await writePreviewRoute(projectId, p.port).catch(() => {});
+    }
+    await sweepOrphanedPreviewContainers(
+      new Set(adopted.values()),
+      new Set([...adopted.keys()].map((id) => `claudable-proj-${previewSlug(id)}`)),
+    );
     void ensureSandboxNetwork(); // self-heal the shared egress-locked net if a prune removed it
+    if (adopted.size) console.log(`[PreviewManager] re-adopted ${adopted.size} running preview(s) after restart`);
+    // Slow warm-ups that must never delay a start: images + template lockfiles.
+    setTimeout(() => { void this.backgroundWarmups(); }, 30_000).unref?.();
+  }
+
+  /** Re-register running preview containers after a restart. Returns projectId → container. */
+  private async adoptRunningPreviews(): Promise<Map<string, string>> {
+    const adopted = new Map<string, string>();
+    if (!isolationEnabled()) return adopted;
+    const running = await runningPreviewContainers();
+    if (!running.length) return adopted;
+    const names = new Set(running.map((r) => r.name));
+    const bySlug = new Map<string, string[]>();
+    for (const p of await prisma.project.findMany({ select: { id: true } })) {
+      const slug = previewSlug(p.id);
+      bySlug.set(slug, [...(bySlug.get(slug) || []), p.id]);
+    }
+    const { start, end } = resolvePreviewBounds();
+    const gateway = (process.env.PREVIEW_PUBLISH_HOST || process.env.DEPLOY_HOST_GATEWAY || '').trim();
+    const probeHost = gateway && gateway !== '0.0.0.0' ? gateway : '127.0.0.1';
+    for (const r of running) {
+      const ids = bySlug.get(r.name.slice('claudable-preview-'.length)) || [];
+      if (ids.length !== 1) continue; // unknown or ambiguous owner → clean up
+      const projectId = ids[0];
+      // A composed backend carries rebuild hooks that can't be restored → cold start.
+      if (names.has(`${r.name}-api`)) continue;
+      const ports = [...parsePublishedPorts(r.ports)].filter((p) => p >= start && p <= end);
+      if (ports.length !== 1) continue;
+      const port = ports[0];
+      if (!(await containerServesPort(r.name, port))) continue;
+      const alive = await fetch(`http://${probeHost}:${port}/`, { method: 'HEAD', signal: AbortSignal.timeout(3000) })
+        .then(() => true, () => false);
+      if (!alive) continue;
+      // `docker wait` stands in for the lost `docker run` child: it exits when the
+      // container does, so the normal exit handling (cleanup, route removal) applies.
+      const waiter = spawn('docker', ['wait', r.name], { env: process.env, stdio: ['ignore', 'ignore', 'ignore'] });
+      const info: PreviewProcess = {
+        process: waiter,
+        frontendContainer: r.name,
+        backendContainer: null,
+        port,
+        url: previewUrlFor(projectId, port),
+        status: 'running',
+        logs: ['[PreviewManager] Reattached to the running preview after a Claudable restart.'],
+        startedAt: new Date(),
+        lastAccessedAt: new Date(),
+      };
+      this.processes.set(projectId, info);
+      this.attachChildHandlers(waiter, projectId, info, (chunk) => {
+        info.logs.push(String(chunk));
+        if (info.logs.length > LOG_LIMIT) info.logs.shift();
+      });
+      await updateProject(projectId, { previewUrl: info.url, previewPort: port, status: 'running' }).catch(() => {});
+      adopted.set(projectId, r.name);
+    }
+    return adopted;
+  }
+
+  /** Background, after boot: pull preview/service images and resolve template lockfiles. */
+  private async backgroundWarmups(): Promise<void> {
+    try {
+      const { NODE_IMAGE } = await import('@/lib/config/stack-versions');
+      const { LARAVEL_PHP_IMAGE } = await import('./preview/start-phases');
+      const images = [NODE_IMAGE, LARAVEL_PHP_IMAGE];
+      try {
+        const { getServices } = await import('@/lib/services/managed-containers');
+        for (const p of await prisma.project.findMany({ select: { id: true } })) {
+          for (const svc of await getServices(p.id).catch(() => [])) if (svc.image) images.push(svc.image);
+        }
+      } catch { /* no managed services */ }
+      if (isolationEnabled()) await prepullImages(images);
+    } catch (error) {
+      console.warn('[PreviewManager] image pre-pull failed:', error);
+    }
+    try {
+      const { prewarmTemplateLockfiles } = await import('./preview/lockfile-cache');
+      await prewarmTemplateLockfiles();
+    } catch (error) {
+      console.warn('[PreviewManager] lockfile prewarm failed:', error);
+    }
   }
 
   /** Ports currently held (live processes) or reserved in-flight. */
@@ -321,6 +437,7 @@ class PreviewManager {
     // Never (re)start a preview for a project that is being wiped.
     const { isWiping } = await import('./project-wipe');
     if (isWiping(projectId)) throw new Error('This project is being deleted.');
+    await this.recovery; // never race boot recovery (it may re-adopt this very preview)
     const existing = this.processes.get(projectId);
     if (existing && existing.status !== 'error') {
       existing.lastAccessedAt = new Date();
