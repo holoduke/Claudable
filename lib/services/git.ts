@@ -383,22 +383,6 @@ export function pullFromRemote(
 }
 
 /**
- * Paths this repository changes relative to the remote `branch` — what a push or
- * PR would carry (three-dot diff: our side since the common ancestor). When the
- * remote branch does not exist yet, every tracked path counts as changed.
- */
-export function changedPathsAgainstRemote(repoPath: string, remoteUrl: string, branch: string): string[] {
-  let hasRemote = true;
-  try {
-    runGit(['fetch', remoteUrl, branch], repoPath);
-  } catch {
-    hasRemote = false;
-  }
-  // Unreachable remote → every tracked file counts as changed (fail closed).
-  return hasRemote ? pathsDifferingFrom(repoPath, 'FETCH_HEAD') : splitLines(runGit(['ls-files'], repoPath));
-}
-
-/**
  * Paths whose content differs between `ref` and HEAD. Two-dot = tree vs tree:
  * every path the remote would see change if HEAD were pushed — including files
  * the REMOTE changed since our base (a force-push would silently revert those).
@@ -448,31 +432,6 @@ export function pushToRemote(
   }
 }
 
-/**
- * Point the local checkout at `branch` from the remote after the operating
- * branch is changed. Without this, the checkout keeps the OLD branch's history,
- * so the next sync/push weaves or force-rejects the wrong content across
- * branches. Best-effort and non-destructive: it only realigns when the tree is
- * clean AND the remote branch exists; a dirty tree or a brand-new branch is
- * left as-is (the next Sync reconciles). Returns whether it realigned.
- */
-export function checkoutRemoteBranch(
-  repoPath: string,
-  branch: string,
-  remoteUrl: string,
-): boolean {
-  // Refuse on a dirty tree — never silently discard the user's uncommitted work.
-  const dirty = runGit(['status', '--porcelain'], repoPath);
-  if (dirty.trim().length > 0) return false;
-  try {
-    runGit(['fetch', remoteUrl, branch], repoPath);
-  } catch {
-    return false; // branch doesn't exist on the remote yet
-  }
-  runGit(['checkout', '-B', branch, 'FETCH_HEAD'], repoPath);
-  return true;
-}
-
 export function ensureGitRepository(repoPath: string) {
   if (!fs.existsSync(repoPath)) {
     fs.mkdirSync(repoPath, { recursive: true });
@@ -481,4 +440,157 @@ export function ensureGitRepository(repoPath: string) {
     runGit(['init'], repoPath);
   }
   ensureGitignore(repoPath);
+}
+
+// ---- Branches (the toolbar branch switcher) ----------------------------------
+
+// Branch names flow into git argv: must start with an alnum (never an option)
+// and additionally pass git's own ref-name rules.
+const BRANCH_NAME_RE = /^[A-Za-z0-9][A-Za-z0-9._/-]{0,200}$/u;
+
+/** Whether `name` is a safe, valid git branch name. */
+export function isValidBranchName(name: string): boolean {
+  if (!BRANCH_NAME_RE.test(name) || name.includes('..')) return false;
+  const res = spawnSync('git', ['check-ref-format', '--branch', name], { encoding: 'utf8', env: gitEnv(), stdio: ['ignore', 'pipe', 'pipe'] });
+  return res.status === 0 && res.stdout.trim() === name;
+}
+
+/** The checked-out local branch, or null when HEAD is detached / unborn. */
+export function currentLocalBranch(repoPath: string): string | null {
+  try {
+    return runGit(['symbolic-ref', '--short', '-q', 'HEAD'], repoPath) || null;
+  } catch {
+    return null;
+  }
+}
+
+export function localBranchNames(repoPath: string): string[] {
+  try {
+    return splitLines(runGit(['for-each-ref', '--format=%(refname:short)', 'refs/heads'], repoPath));
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Fetch `branch` from the remote into FETCH_HEAD. False when the remote has no
+ * such branch; any other failure (network, auth) throws — a "not found" must
+ * never be reported for a remote we simply couldn't reach.
+ */
+export function fetchRemoteBranch(repoPath: string, branch: string, remoteUrl: string): boolean {
+  try {
+    runGit(['fetch', remoteUrl, `refs/heads/${branch}`], repoPath);
+    return true;
+  } catch (error) {
+    if (error instanceof GitError && /couldn't find remote ref|could not find remote ref/iu.test(error.output ?? '')) return false;
+    throw error;
+  }
+}
+
+/**
+ * Make sure the checked-out local branch is called `name`. Older checkouts sit on
+ * a local branch whose name differs from the branch they publish to (`git init`
+ * gives `master`, publishing maps HEAD:main); switching branches relies on local
+ * names matching, so the current line of work is renamed before leaving it.
+ */
+export function adoptBranchName(repoPath: string, name: string): void {
+  const current = currentLocalBranch(repoPath);
+  if (current === name) return;
+  if (localBranchNames(repoPath).includes(name)) return; // never clobber an existing local branch
+  if (current === null) runGit(['checkout', '-b', name], repoPath);
+  else runGit(['branch', '-m', current, name], repoPath);
+}
+
+export interface BranchSwitchResult {
+  before: string | null;
+  after: string | null;
+  changedFiles: string[];
+  /** The local branch has commits the remote lacks AND vice versa (next sync/publish reconciles). */
+  diverged: boolean;
+}
+
+/**
+ * Check out `target` (the tree must be clean — the caller commits first). A local
+ * branch keeps its own unpublished commits and is only fast-forwarded to the
+ * remote; a remote-only branch gets a local tracking copy. Never resets a branch
+ * (`checkout -B` would silently drop unpublished local commits).
+ */
+export function switchLocalBranch(repoPath: string, target: string, remoteUrl?: string): BranchSwitchResult {
+  if (runGit(['status', '--porcelain'], repoPath).trim().length > 0) {
+    throw new GitError('Cannot switch branches with uncommitted changes.');
+  }
+  const before = revParseHead(repoPath);
+  const onRemote = remoteUrl ? fetchRemoteBranch(repoPath, target, remoteUrl) : false; // local-only repo: no remote
+  let diverged = false;
+  if (localBranchNames(repoPath).includes(target)) {
+    runGit(['checkout', target, '--'], repoPath);
+    if (onRemote) {
+      try {
+        runGit(['merge', '--ff-only', 'FETCH_HEAD'], repoPath);
+      } catch {
+        diverged = !historyContains(repoPath, runGit(['rev-parse', 'FETCH_HEAD'], repoPath));
+      }
+    }
+  } else if (onRemote) {
+    runGit(['checkout', '-b', target, 'FETCH_HEAD'], repoPath);
+  } else {
+    throw new GitError(`Branch '${target}' does not exist.`);
+  }
+  const after = revParseHead(repoPath);
+  return { before, after, changedFiles: diffNames(repoPath, before, after), diverged };
+}
+
+/**
+ * Merge local branch `source` into local branch `target` WITHOUT touching the
+ * working tree: the merge is computed in the object store (`merge-tree
+ * --write-tree`), committed with both parents and `target` is moved with a
+ * compare-and-swap. The checked-out branch, its files and the running preview
+ * never change; a conflict leaves everything exactly as it was.
+ */
+export function mergeLocalBranch(repoPath: string, source: string, target: string): 'merged' | 'nothing' {
+  if (!localBranchNames(repoPath).includes(target)) throw new GitError(`Branch '${target}' does not exist.`);
+  const sourceSha = runGit(['rev-parse', '--verify', `refs/heads/${source}^{commit}`], repoPath);
+  const targetSha = runGit(['rev-parse', '--verify', `refs/heads/${target}^{commit}`], repoPath);
+  try {
+    runGit(['merge-base', '--is-ancestor', sourceSha, targetSha], repoPath);
+    return 'nothing'; // target already contains everything from source
+  } catch { /* not merged yet */ }
+  let tree: string;
+  try {
+    tree = runGit(['merge-tree', '--write-tree', '--no-messages', targetSha, sourceSha], repoPath).split(/\r?\n/u)[0].trim();
+  } catch (error) {
+    const detail = error instanceof GitError ? error.output ?? '' : '';
+    const conflicted = splitLines(detail).slice(1).map((l) => l.split('\t').pop() ?? l).filter(Boolean);
+    throw new GitError(
+      `Merge conflict: '${source}' and '${target}' both changed the same lines${conflicted.length ? ` (${[...new Set(conflicted)].slice(0, 5).join(', ')})` : ''}. Nothing was merged — resolve it on '${source}' first (e.g. ask the agent to bring '${target}' into this branch), then merge again.`,
+      detail || undefined,
+    );
+  }
+  if (!/^[0-9a-f]{40,64}$/u.test(tree)) throw new GitError('Could not merge: unexpected merge result.');
+  const commit = runGit(['commit-tree', tree, '-p', targetSha, '-p', sourceSha, '-m', `Merge branch '${source}' into ${target}`], repoPath);
+  // Compare-and-swap: refuses if `target` moved meanwhile.
+  runGit(['update-ref', '-m', `merge ${source}`, `refs/heads/${target}`, commit, targetSha], repoPath);
+  return 'merged';
+}
+
+/** Create `name` from the current HEAD and check it out (local only until published). */
+export function createLocalBranch(repoPath: string, name: string): void {
+  runGit(['checkout', '-b', name], repoPath);
+}
+
+/**
+ * Paths HEAD changes relative to its common ancestor with `ref` (three-dot): what
+ * merging HEAD into `ref` would bring in — not what `ref` gained meanwhile.
+ */
+export function pathsChangedSinceMergeBase(repoPath: string, ref: string): string[] {
+  return splitLines(runGit(['diff', '--name-only', `${ref}...HEAD`], repoPath));
+}
+
+/** The `origin` remote URL, or null when there is none. */
+export function originUrl(repoPath: string): string | null {
+  try {
+    return runGit(['remote', 'get-url', 'origin'], repoPath) || null;
+  } catch {
+    return null;
+  }
 }

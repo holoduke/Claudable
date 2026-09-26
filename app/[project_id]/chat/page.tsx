@@ -35,10 +35,12 @@ const SkillsModal = dynamic(() => import('@/components/chat/SkillsModal'), { ssr
 const PublishPanel = dynamic(() => import('@/components/chat/PublishPanel'), { ssr: false });
 const DesignExplorerBoard = dynamic(() => import('@/components/chat/DesignExplorerBoard'), { ssr: false });
 const GitSyncBanner = dynamic(() => import('@/components/chat/GitSyncBanner'), { ssr: false });
+const BranchSwitcher = dynamic(() => import('@/components/chat/BranchSwitcher'), { ssr: false });
 import { getFileLanguage, escapeHtml } from '@/lib/utils/format';
 import { ChatErrorBoundary } from '@/components/ErrorBoundary';
 import { useUserRequests } from '@/hooks/useUserRequests';
 import { useDeployPolling } from '@/hooks/useDeployPolling';
+import { useProjectBranches } from '@/hooks/useProjectBranches';
 import { useGlobalSettings } from '@/contexts/GlobalSettingsContext';
 import { getDefaultModelForCli, getModelDisplayName } from '@/lib/constants/cliModels';
 import {
@@ -1029,6 +1031,38 @@ const persistProjectPreferences = useCallback(
   }, []);
 
   const isGitea = gitProvider === 'gitea';
+
+  // Branches (toolbar switcher + branch-aware publish). Refetched when a turn
+  // starts/ends: the agent's edits change the dirty count and the busy flag.
+  const branches = useProjectBranches(projectId, isRunning || hasActiveRequests);
+  const branchPublish = branches.data?.mode === 'remote' ? branches.data : null;
+  /** Merge the current branch into the base branch, then follow the deploy it triggers. */
+  const mergeBranchAndDeploy = async () => {
+    let baselineRun: number | null = null;
+    if (isGitea) {
+      try {
+        const s = await fetch(`${API_BASE}/api/projects/${projectId}/deploy/status`, { cache: 'no-store' }).then((r) => (r.ok ? r.json() : null));
+        baselineRun = s?.found && typeof s.runNumber === 'number' ? s.runNumber : null;
+      } catch { /* no baseline: polling treats the newest run as this deploy */ }
+    }
+    try {
+      const r = await branches.act('git/merge');
+      if (r.merged) {
+        toast.success(t('branch.merged', { branch: r.branch, base: r.base }));
+        if (r.mode === 'remote') {
+          setShowPublishPanel(true);
+          if (isGitea) startGiteaDeployPolling(baselineRun);
+          else void loadDeployStatus();
+        }
+      } else {
+        toast.success(t('branch.nothingToMerge', { branch: r.branch, base: r.base }));
+      }
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : t('branch.failed'));
+    } finally {
+      void branches.refresh();
+    }
+  };
 
   // In the Gitea flow the live URL is derived from the repo + deploy domain.
   useEffect(() => {
@@ -3640,6 +3674,14 @@ const persistProjectPreferences = useCallback(
                     </button>
                   )}
 
+                  {/* Branch menu — switch / create / merge; left of Publish. */}
+                  <BranchSwitcher
+                    branches={branches}
+                    busy={isRunning || hasActiveRequests}
+                    onTreeChanged={() => { setTimeout(() => refreshPreview(), 400); void loadTree('.'); }}
+                    onMerge={mergeBranchAndDeploy}
+                  />
+
                   {/* Publish/Update — primary CTA, labeled brand button. Turns
                       into a red "Build failing" alarm when the latest CI run
                       failed, so a broken deploy is visible without opening
@@ -4201,8 +4243,11 @@ const persistProjectPreferences = useCallback(
           startGiteaDeployPolling={startGiteaDeployPolling}
           startDeploymentPolling={startDeploymentPolling}
           loadDeployStatus={loadDeployStatus}
-          onClose={() => setShowPublishPanel(false)}
+          onClose={() => { setShowPublishPanel(false); void branches.refresh(); }}
           onOpenServiceSettings={() => { setShowPublishPanel(false); setSettingsInitialTab('services'); setShowGlobalSettings(true); }}
+          branch={branchPublish?.current ?? null}
+          baseBranch={branchPublish?.base ?? null}
+          onMergeBranch={branchPublish ? mergeBranchAndDeploy : undefined}
         />
       )}
 

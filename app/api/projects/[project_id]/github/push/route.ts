@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { denyUnlessProjectAccess } from '@/lib/auth/gate';
-import { pushProjectToGitHub } from '@/lib/services/github';
+import { getProjectGitSettings, pushProjectToGitHub } from '@/lib/services/github';
 
 interface RouteContext {
   params: Promise<{ project_id: string }>;
@@ -12,9 +12,13 @@ export async function POST(_request: Request, { params }: RouteContext) {
     const _gate = await denyUnlessProjectAccess(project_id, { write: true });
     if (_gate) return _gate;
     const pushed = await pushProjectToGitHub(project_id);
+    // Which branch was published, and whether that is the deploy (base) branch.
+    const { branch, base_branch } = await getProjectGitSettings(project_id).catch(() => ({ branch: null, base_branch: null }));
     return NextResponse.json({
       success: true,
       pushed,
+      branch,
+      base_branch,
       message: pushed ? 'Changes pushed' : 'Already up to date — no changes to deploy',
     });
   } catch (error) {

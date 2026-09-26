@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { denyUnlessProjectAccess } from '@/lib/auth/gate';
-import { getProjectGitSettings, setProjectGitBranch, setProjectAutoSync } from '@/lib/services/github';
+import { getProjectGitSettings, setProjectAutoSync } from '@/lib/services/github';
+import { switchProjectBranch } from '@/lib/services/git-branches';
 
 interface RouteContext {
   params: Promise<{ project_id: string }>;
@@ -25,7 +26,7 @@ export async function GET(_request: Request, { params }: RouteContext) {
 
 /**
  * Update per-project git settings. Each field is optional; supply any of:
- *  - `branch` (validated against the remote)
+ *  - `branch` (switches the project to it — same safe switch as the toolbar menu)
  *  - `auto_sync` (boolean) — enable/disable background pull
  *  - `auto_sync_interval_minutes` (number) — cadence (clamped server-side)
  */
@@ -48,7 +49,7 @@ export async function PATCH(request: NextRequest, { params }: RouteContext) {
 
     const out: Record<string, unknown> = { success: true };
     if (hasBranch) {
-      out.branch = await setProjectGitBranch(project_id, body.branch);
+      out.branch = (await switchProjectBranch(project_id, body.branch)).branch;
     }
     if (hasAutoSync || hasInterval) {
       const auto = await setProjectAutoSync(project_id, {

@@ -16,4 +16,16 @@ import { startAutoSyncScheduler } from './auto-sync';
 // the guard makes the intent explicit and fails safe.
 if (process.env.NEXT_RUNTIME !== 'edge') {
   startAutoSyncScheduler();
+  // Every project is git: give projects without a repository a local one (and
+  // link an existing own-server origin). Delayed so it never competes with boot
+  // recovery; idempotent, so a second worker evaluating this is harmless.
+  const g = globalThis as Record<string, unknown>;
+  if (!g.__claudableGitSweep__) {
+    g.__claudableGitSweep__ = true;
+    setTimeout(() => {
+      void import('./git-adopt')
+        .then((m) => m.ensureAllProjectsGit())
+        .catch((e) => console.warn('[git] every-project-is-git sweep failed:', e));
+    }, 120_000).unref?.();
+  }
 }
