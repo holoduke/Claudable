@@ -908,6 +908,11 @@ class PreviewManager {
     void import('./thumbnail')
       .then((m) => m.captureThumbnailWithRetry(projectId))
       .catch(() => {});
+    // Every project is git: a new project gets its local repository once its
+    // scaffold exists (not earlier — scaffolders refuse a non-empty folder).
+    void import('./git-branches')
+      .then((m) => m.ensureLocalGit(projectId))
+      .catch((e) => console.warn(`[git] could not create local repository for ${projectId}:`, e instanceof Error ? e.message : e));
 
     return this.toInfo(previewProcess);
     } catch (err) {

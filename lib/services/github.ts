@@ -4,7 +4,7 @@ import { getPlainServiceToken } from '@/lib/services/tokens';
 import { getProjectById, updateProject } from '@/lib/services/project';
 import { getProjectService, upsertProjectServiceConnection, updateProjectServiceData } from '@/lib/services/project-services';
 import { clampAutoSyncMinutes, AUTO_SYNC_DEFAULT_MINUTES } from '@/lib/services/auto-sync-schedule';
-import { ensureGitRepository, ensureGitConfig, initializeMainBranch, addOrUpdateRemote, commitAll, pushToRemote, pullFromRemote, checkoutRemoteBranch, changedPathsAgainstRemote } from '@/lib/services/git';
+import { ensureGitRepository, ensureGitConfig, initializeMainBranch, addOrUpdateRemote, commitAll, pushToRemote, pullFromRemote, fetchRemoteBranch, isValidBranchName, pathsChangedSinceMergeBase, pathsDifferingFrom } from '@/lib/services/git';
 import { isCustomerProject } from '@/lib/services/tenant-policy';
 import { protectedPathsIn } from '@/lib/services/publish-guard';
 import { getGitProviderConfig, getGitProviderConfigFor, getEnvGitToken, getEnvGitTokenFor } from '@/lib/services/git-provider';
@@ -14,7 +14,7 @@ import { getDatabaseUrl } from '@/lib/services/database';
 import { stackKind } from '@/lib/config/stacks';
 import type { GitHubUserInfo, CreateRepoOptions, GitHubRepositoryInfo } from '@/types/shared';
 
-class GitHubError extends Error {
+export class GitHubError extends Error {
   constructor(message: string, readonly status?: number) {
     super(message);
     this.name = 'GitHubError';
@@ -28,7 +28,7 @@ class GitHubError extends Error {
 // without a dependency. Keyed by projectId; entries are short-lived.
 const gitLocks = new Map<string, Promise<unknown>>();
 
-async function withGitLock<T>(projectId: string, fn: () => Promise<T>): Promise<T> {
+export async function withGitLock<T>(projectId: string, fn: () => Promise<T>): Promise<T> {
   const prev = gitLocks.get(projectId) ?? Promise.resolve();
   // Swallow the previous op's rejection so one failure doesn't chain-reject
   // every queued op; each caller still sees its own fn's result/throw.
@@ -68,7 +68,7 @@ export async function resolveGitToken(cfg?: GitProviderConfig): Promise<string> 
 }
 
 /** Owner that repos are created/looked-up under: configured org, else the user. */
-async function resolveOwner(): Promise<string> {
+export async function resolveOwner(): Promise<string> {
   const { org } = getGitProviderConfig();
   if (org) {
     return org;
@@ -198,7 +198,7 @@ export function resolveProjectRepoPath(projectId: string, repoPath?: string | nu
   return path.resolve(process.cwd(), process.env.PROJECTS_DIR || './data/projects', projectId);
 }
 
-async function ensureProjectRepository(projectId: string, repoPath?: string | null) {
+export async function ensureProjectRepository(projectId: string, repoPath?: string | null) {
   const resolved = resolveProjectRepoPath(projectId, repoPath);
   await fs.mkdir(resolved, { recursive: true });
   return resolved;
@@ -321,12 +321,24 @@ export function projectGitBranch(data: Record<string, any> | undefined): string 
   return 'main';
 }
 
+/**
+ * The branch this project merges into and deploys from ("main"). Recorded the
+ * first time the project switches branch; until then it is simply the branch it
+ * has always published to.
+ */
+export function projectBaseBranch(data: Record<string, any> | undefined): string {
+  const base = typeof data?.base_branch === 'string' ? data.base_branch.trim() : '';
+  if (base && isValidBranchName(base)) return base;
+  return projectGitBranch(data);
+}
+
 export interface ProjectGitSettings {
   repo_url: string | null;
   repo_name: string | null;
   owner: string | null;
   default_branch: string;
   branch: string;
+  base_branch: string;
   last_pushed_at: string | null;
   last_synced_at: string | null;
   auto_sync: boolean;
@@ -345,6 +357,7 @@ export async function getProjectGitSettings(projectId: string): Promise<ProjectG
     owner: (data.owner as string) ?? null,
     default_branch: (data.default_branch as string) || 'main',
     branch: projectGitBranch(data),
+    base_branch: projectBaseBranch(data),
     last_pushed_at: (data.last_pushed_at as string) ?? null,
     last_synced_at: (data.last_synced_at as string) ?? null,
     auto_sync: data.auto_sync === true,
@@ -383,58 +396,6 @@ export async function setProjectAutoSync(
       next.auto_sync_interval_minutes ?? AUTO_SYNC_DEFAULT_MINUTES,
     ),
   };
-}
-
-/**
- * Set the branch this project pushes to and syncs from. Validates the name and
- * checks the branch actually exists on the remote before saving.
- */
-export async function setProjectGitBranch(projectId: string, branch: string): Promise<string> {
-  const trimmed = branch.trim();
-  if (!BRANCH_NAME_RE.test(trimmed) || trimmed.includes('..')) {
-    throw new GitHubError(`Invalid branch name: "${branch}"`, 400);
-  }
-  const service = await getProjectService(projectId, 'github');
-  const data = service?.serviceData as Record<string, any> | undefined;
-  if (!data?.owner || !data?.repo_name) {
-    throw new GitHubError('Git repository not connected', 404);
-  }
-  const cfg = getGitProviderConfigFor(data);
-  const token = await resolveGitToken(cfg);
-  try {
-    // Both GitHub and Gitea expose /repos/{owner}/{repo}/branches/{branch}.
-    await githubFetch(token, `/repos/${data.owner}/${data.repo_name}/branches/${encodeURIComponent(trimmed)}`, undefined, cfg);
-  } catch (error) {
-    if (error instanceof GitHubError && error.status === 404) {
-      throw new GitHubError(`Branch "${trimmed}" does not exist on ${data.owner}/${data.repo_name}`, 404);
-    }
-    throw error;
-  }
-  await updateProjectServiceData(projectId, 'github', { branch: trimmed });
-
-  // Realign the local checkout to the newly-selected branch so the next
-  // sync/push operates on that branch's history, not the previous one. Under
-  // the git lock (shares the working tree with push/pull); best-effort and
-  // non-destructive (skips on a dirty tree).
-  if (projectGitBranch(data) !== trimmed) {
-    await withGitLock(projectId, async () => {
-      try {
-        const project = await getProjectById(projectId);
-        if (!project) return;
-        const repoPath = await ensureProjectRepository(projectId, project.repoPath);
-        ensureGitRepository(repoPath);
-        const authenticatedUrl = String(data.clone_url).replace(
-          'https://',
-          `https://${encodeURIComponent((await getGithubUser()).login)}:${token}@`,
-        );
-        checkoutRemoteBranch(repoPath, trimmed, authenticatedUrl);
-      } catch (e) {
-        // Non-fatal: the branch setting is saved; the next Sync reconciles.
-        console.warn('[GitService] Could not realign local checkout to new branch:', e instanceof Error ? e.message : e);
-      }
-    });
-  }
-  return trimmed;
 }
 
 export interface SyncResult {
@@ -486,6 +447,10 @@ async function pullProjectFromGitHubImpl(projectId: string): Promise<SyncResult>
   commitAll(repoPath, 'Local changes before sync');
 
   const authenticatedUrl = String(data.clone_url).replace('https://', `https://${encodeURIComponent(user.login)}:${token}@`);
+  // A branch created here and not published yet has nothing to sync from.
+  if (!fetchRemoteBranch(repoPath, branch, authenticatedUrl)) {
+    return { updated: false, branch, dependenciesChanged: false, message: `Branch ${branch} is not published yet — nothing to sync` };
+  }
   const result = pullFromRemote(repoPath, 'origin', branch, authenticatedUrl);
 
   await updateProjectServiceData(projectId, 'github', {
@@ -511,14 +476,15 @@ async function pullProjectFromGitHubImpl(projectId: string): Promise<SyncResult>
  * by a rules-based "pull request required" policy (e.g. a GitHub org ruleset)
  * that blocks direct pushes but needs zero approvals.
  */
-async function mergePublishPr(
+export async function mergePublishPr(
   token: string,
   cfg: GitProviderConfig,
   owner: string,
   repo: string,
   prBranch: string,
   baseBranch: string,
-): Promise<void> {
+  title = 'Update from Claudable',
+): Promise<'merged' | 'nothing'> {
   const open = (await githubFetch(
     token,
     `/repos/${owner}/${repo}/pulls?state=open&head=${encodeURIComponent(`${owner}:${prBranch}`)}`,
@@ -531,12 +497,12 @@ async function mergePublishPr(
     try {
       pr = await githubFetch(token, `/repos/${owner}/${repo}/pulls`, {
         method: 'POST',
-        body: JSON.stringify({ title: 'Update from Claudable', head: prBranch, base: baseBranch }),
+        body: JSON.stringify({ title, head: prBranch, base: baseBranch }),
       }, cfg);
     } catch (error) {
       // "No commits between base and head" — the branch holds nothing new.
       if (error instanceof GitHubError && error.status === 422 && /no commits between/i.test(error.message)) {
-        return;
+        return 'nothing';
       }
       throw error;
     }
@@ -551,7 +517,7 @@ async function mergePublishPr(
         method: 'PUT',
         body: JSON.stringify({ merge_method: 'merge' }),
       }, cfg);
-      return;
+      return 'merged';
     } catch (error) {
       lastError = error;
       const status = error instanceof GitHubError ? error.status : undefined;
@@ -565,6 +531,18 @@ async function mergePublishPr(
     `Changes are pushed and waiting in a pull request, but it could not be merged automatically (${reason}). Merge it manually: ${url}`,
     502,
   );
+}
+
+/**
+ * Paths a publish of `target` would change on the remote. An existing remote
+ * branch: every differing path (two-dot — a push could revert what the remote
+ * gained). A new branch: what it changes relative to the base branch (three-dot);
+ * unknown base → every tracked file (fail closed).
+ */
+function publishedPathsChange(repoPath: string, url: string, target: string, base: string): string[] {
+  if (fetchRemoteBranch(repoPath, target, url)) return pathsDifferingFrom(repoPath, 'FETCH_HEAD');
+  if (target !== base && fetchRemoteBranch(repoPath, base, url)) return pathsChangedSinceMergeBase(repoPath, 'FETCH_HEAD');
+  return pathsDifferingFrom(repoPath, '4b825dc642cb6eb9a060e54bf8d69288fbee4904'); // vs the empty tree: every tracked file
 }
 
 export async function pushProjectToGitHub(projectId: string): Promise<boolean> {
@@ -629,12 +607,16 @@ async function pushProjectToGitHubImpl(projectId: string): Promise<boolean> {
     // Basic-auth the push with the token. The username must be the token-owning
     // user (not the org) for Gitea/GitHub basic auth to succeed.
     const authenticatedUrl = String(data.clone_url).replace('https://', `https://${encodeURIComponent(user.login)}:${token}@`);
-    const baseBranch = projectGitBranch(data);
+    // The current branch is the publish target; the base branch ("main") is where
+    // it eventually merges and what the host deploys.
+    const targetBranch = projectGitBranch(data);
+    const baseBranch = projectBaseBranch(data);
 
     // Publish guard: a customer's publish may not change CI / infra / container
-    // build files (they decide what runs with the deploy credentials).
+    // build files (they decide what runs with the deploy credentials — a branch
+    // push can run the branch's own workflows too).
     if (customerProject) {
-      const blocked = protectedPathsIn(changedPathsAgainstRemote(repoPath, authenticatedUrl, baseBranch));
+      const blocked = protectedPathsIn(publishedPathsChange(repoPath, authenticatedUrl, targetBranch, baseBranch));
       if (blocked.length > 0) {
         throw new GitHubError(
           `Publishing is blocked: this change touches deployment files that New Story manages (${blocked.join(', ')}). Undo the changes to these files and publish again.`,
@@ -643,7 +625,7 @@ async function pushProjectToGitHubImpl(projectId: string): Promise<boolean> {
       }
     }
 
-    if (data.push_mode === 'pr') {
+    if (data.push_mode === 'pr' && targetBranch === baseBranch) {
       // The base branch only accepts pull requests (org ruleset). Push to a
       // working branch and merge a PR through the API instead of pushing base
       // directly. The repo host still runs its deploy workflow on the merge.
@@ -660,7 +642,7 @@ async function pushProjectToGitHubImpl(projectId: string): Promise<boolean> {
       pushToRemote(repoPath, 'origin', prBranch, authenticatedUrl);
       await mergePublishPr(token, cfg, String(data.owner), repoName, prBranch, baseBranch);
     } else {
-      pushToRemote(repoPath, 'origin', baseBranch, authenticatedUrl);
+      pushToRemote(repoPath, 'origin', targetBranch, authenticatedUrl);
     }
 
     await updateProjectServiceData(projectId, 'github', {
@@ -814,7 +796,7 @@ async function getGithubDeployRunStatus(
   let jobRows: any[] = [];
   try {
     const token = await resolveGitToken(cfg);
-    const branch = projectGitBranch(data);
+    const branch = projectBaseBranch(data); // what the site deploys from
     const runsBody = await githubFetch(
       token,
       `/repos/${owner}/${repo}/actions/runs?branch=${encodeURIComponent(branch)}&per_page=1`,

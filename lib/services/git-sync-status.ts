@@ -8,7 +8,7 @@
 import { getProjectById } from './project';
 import { getProjectService } from './project-services';
 import { getGitProviderConfigFor } from './git-provider';
-import { resolveGitToken, githubFetch, projectGitBranch, resolveProjectRepoPath } from './github';
+import { GitHubError, resolveGitToken, githubFetch, projectGitBranch, resolveProjectRepoPath } from './github';
 import { getHeadCommit, historyContains, countDirtyFiles, countCommitsAhead } from './git';
 
 export interface RemoteSyncStatus {
@@ -94,16 +94,30 @@ export async function getProjectSyncStatus(projectId: string): Promise<RemoteSyn
   const token = await resolveGitToken(cfg);
   const branch = projectGitBranch(data);
 
-  const branchInfo = await githubFetch(
-    token,
-    `/repos/${data.owner}/${data.repo_name}/branches/${encodeURIComponent(branch)}`,
-    undefined,
-    cfg,
-  );
+  let branchInfo: unknown = null;
+  let notPublished = false;
+  try {
+    branchInfo = await githubFetch(
+      token,
+      `/repos/${data.owner}/${data.repo_name}/branches/${encodeURIComponent(branch)}`,
+      undefined,
+      cfg,
+    );
+  } catch (error) {
+    // A branch created in Claudable that hasn't been published yet.
+    if (!(error instanceof GitHubError && error.status === 404)) throw error;
+    notPublished = true;
+  }
   const remoteSha = remoteHeadSha(branchInfo);
 
   const repoPath = resolveProjectRepoPath(projectId, project.repoPath);
   const localSha = getHeadCommit(repoPath);
+  if (notPublished) {
+    return {
+      connected: true, branch, local_sha: localSha, remote_sha: null, unpublished: true,
+      ahead_by: null, dirty_files: countDirtyFiles(repoPath), behind: false, behind_by: null,
+    };
+  }
 
   // What this project holds that the published branch doesn't: uncommitted
   // edits (the normal state right after an agent turn) plus any commits the

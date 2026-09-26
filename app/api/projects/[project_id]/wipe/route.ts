@@ -10,6 +10,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { denyUnlessProjectAccess } from '@/lib/auth/gate';
 import { getSessionUser } from '@/lib/auth/session';
+import { isSameOrigin } from '@/lib/utils/same-origin';
 import { planWipe, wipeProject } from '@/lib/services/project-wipe';
 
 interface RouteContext {
@@ -18,17 +19,7 @@ interface RouteContext {
 
 const PROJECT_ID_RE = /^[A-Za-z0-9_-]{1,64}$/;
 
-/** Reject cross-site requests: Origin (or Referer) must be this host. */
-function sameOrigin(request: NextRequest): boolean {
-  const host = request.headers.get('x-forwarded-host') || request.headers.get('host');
-  const source = request.headers.get('origin') || request.headers.get('referer');
-  if (!host || !source) return false;
-  try {
-    return new URL(source).host === host;
-  } catch {
-    return false;
-  }
-}
+const sameOrigin = isSameOrigin;
 
 export async function GET(_request: NextRequest, { params }: RouteContext) {
   const { project_id } = await params;

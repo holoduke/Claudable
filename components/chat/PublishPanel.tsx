@@ -2,7 +2,9 @@
 import { FaRocket } from 'react-icons/fa';
 import { formatTimeAgo } from '@/lib/utils/format';
 import type { DeployRun, DeployRunJob, DeploymentStatus } from '@/hooks/useDeployPolling';
+import { useState } from 'react';
 import { useToast } from '@/components/ui/Toast';
+import { useT } from '@/contexts/I18nContext';
 
 /**
  * Pipeline step checklist + progress bar for a CI run (Vercel-style deploy
@@ -80,6 +82,11 @@ interface PublishPanelProps {
   loadDeployStatus: () => Promise<void>;
   onClose: () => void;
   onOpenServiceSettings: () => void;
+  /** The branch Publish pushes to, and the base branch the site deploys from. */
+  branch?: string | null;
+  baseBranch?: string | null;
+  /** Merge the current branch into the base branch (and follow the deploy). */
+  onMergeBranch?: () => Promise<void>;
 }
 
 /**
@@ -107,8 +114,36 @@ export default function PublishPanel({
   loadDeployStatus,
   onClose,
   onOpenServiceSettings,
+  branch = null,
+  baseBranch = null,
+  onMergeBranch,
 }: PublishPanelProps) {
   const toast = useToast();
+  const t = useT();
+  // On a non-base branch Publish only pushes the branch: nothing deploys until
+  // the branch is merged into the base branch.
+  const branchMode = !!branch && !!baseBranch && branch !== baseBranch;
+  const [branchPushed, setBranchPushed] = useState(false);
+  const [merging, setMerging] = useState(false);
+  const publishBranch = async () => {
+    try {
+      setPublishLoading(true);
+      const res = await fetch(`${API_BASE}/api/projects/${projectId}/github/push`, { method: 'POST' });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok || body?.success === false) throw new Error(body?.message || 'Publish failed');
+      setBranchPushed(true);
+      toast.success(t('publish.branchPushed', { branch: branch ?? '' }));
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Publish failed');
+    } finally {
+      setPublishLoading(false);
+    }
+  };
+  const mergeNow = async () => {
+    if (!onMergeBranch) return;
+    setMerging(true);
+    try { await onMergeBranch(); } finally { setMerging(false); }
+  };
   return (
     <div className="fixed inset-0 z-60 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/50" onClick={onClose} />
@@ -120,7 +155,7 @@ export default function PublishPanel({
             </div>
             <div>
               <h3 className="text-base font-semibold text-gray-900 dark:text-gray-50 ">Publish Project</h3>
-              <p className="text-xs text-gray-600 dark:text-gray-300 ">{isGitea ? 'Pushes your code to Git — auto-deploys via CI' : 'Deploy with Vercel, linked to your GitHub repo'}</p>
+              <p className="text-xs text-gray-600 dark:text-gray-300 ">{branchMode ? t('publish.branchTitle', { branch: branch ?? '' }) : isGitea ? 'Pushes your code to Git — auto-deploys via CI' : 'Deploy with Vercel, linked to your GitHub repo'}</p>
             </div>
           </div>
           <button onClick={onClose} className="text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 ">
@@ -129,6 +164,24 @@ export default function PublishPanel({
         </div>
 
         <div className="p-6 space-y-4">
+          {branchMode && (
+            <div className="p-4 rounded-xl border border-violet-200 bg-violet-50 dark:border-violet-900 dark:bg-violet-950/40">
+              <p className="text-sm text-violet-800 dark:text-violet-200">{t('publish.branchNote', { branch: branch ?? '', base: baseBranch ?? '' })}</p>
+              {branchPushed && (
+                <p className="mt-2 text-xs font-medium text-emerald-700 dark:text-emerald-300">✓ {t('publish.branchPushed', { branch: branch ?? '' })}</p>
+              )}
+              {onMergeBranch && (
+                <button
+                  disabled={merging || publishLoading || deploymentStatus === 'deploying'}
+                  onClick={() => void mergeNow()}
+                  className="mt-3 w-full px-3 py-2 rounded-lg border border-violet-300 dark:border-violet-800 text-sm font-medium text-violet-800 dark:text-violet-200 hover:bg-violet-100 dark:hover:bg-violet-900/50 disabled:opacity-50"
+                >
+                  {merging ? t('branch.merging') : t('publish.mergeNow', { branch: branch ?? '', base: baseBranch ?? '' })}
+                </button>
+              )}
+            </div>
+          )}
+
           {deploymentStatus === 'deploying' && (
             <div className="p-4 rounded-xl border border-blue-200 bg-blue-50 dark:border-blue-900 dark:bg-blue-950/40 ">
               <div className="flex items-center gap-2 mb-1">
@@ -240,6 +293,7 @@ export default function PublishPanel({
           <button
             disabled={publishLoading || deploymentStatus === 'deploying' || !githubConnected || (!isGitea && !vercelConnected)}
             onClick={async () => {
+              if (branchMode) { await publishBranch(); return; }
               // Self-hosted Gitea flow: push to the Gitea repo; the Actions
               // host-runner builds, deploys and routes the site. No Vercel.
               if (isGitea) {
@@ -354,7 +408,7 @@ export default function PublishPanel({
                 : 'bg-brand-500 hover:bg-brand-600'
             }`}
           >
-            {publishLoading ? 'Publishing…' : deploymentStatus === 'deploying' ? 'Deploying…' : (!githubConnected || (!isGitea && !vercelConnected)) ? 'Connect Services First' : (publishedUrl ? 'Update' : 'Publish')}
+            {publishLoading ? 'Publishing…' : deploymentStatus === 'deploying' ? 'Deploying…' : (!githubConnected || (!isGitea && !vercelConnected)) ? 'Connect Services First' : branchMode ? t('publish.branchTitle', { branch: branch ?? '' }) : (publishedUrl ? 'Update' : 'Publish')}
           </button>
         </div>
       </div>
