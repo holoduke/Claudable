@@ -31,16 +31,21 @@ export async function waitForPreviewReady(
   url: string,
   log: (chunk: Buffer | string) => void,
   timeoutMs = 60_000, // generous so a cold Angular/Next first build isn't cut off
-  intervalMs = 1_000
+  intervalMs = 500,
+  attemptTimeoutMs = 15_000
 ) {
   const start = Date.now();
   let attempts = 0;
 
-  // Per-attempt timeout so a hung connection can't block the readiness loop
-  // beyond the overall budget.
+  // Per-attempt timeout, capped by the overall budget. It is deliberately long: the
+  // first request to a dev server blocks while it compiles the page (~5 s for Nuxt),
+  // and aborting it every 2 s meant readiness was only noticed on a LATER attempt,
+  // seconds after the server was actually ready. Refused connections (server not
+  // listening yet) still fail fast and are retried every intervalMs.
   const fetchWithTimeout = (input: string, init?: RequestInit) => {
     const controller = new AbortController();
-    const t = setTimeout(() => controller.abort(), Math.min(intervalMs * 2, 5000));
+    const remaining = Math.max(1_000, timeoutMs - (Date.now() - start));
+    const t = setTimeout(() => controller.abort(), Math.min(attemptTimeoutMs, remaining));
     return fetch(input, { ...init, signal: controller.signal }).finally(() => clearTimeout(t));
   };
 
@@ -107,15 +112,20 @@ export async function appendCommandLogs(
   cwd: string,
   env: NodeJS.ProcessEnv,
   logger: (chunk: Buffer | string) => void,
-  timeoutMs: number = DEFAULT_COMMAND_TIMEOUT_MS
+  timeoutMs: number = DEFAULT_COMMAND_TIMEOUT_MS,
+  input?: NodeJS.ReadableStream
 ) {
   await new Promise<void>((resolve, reject) => {
     const child = spawn(command, args, {
       cwd,
       env,
       shell: process.platform === 'win32',
-      stdio: ['ignore', 'pipe', 'pipe'],
+      stdio: [input ? 'pipe' : 'ignore', 'pipe', 'pipe'],
     });
+    if (input && child.stdin) {
+      child.stdin.on('error', () => { /* consumer exited early; its exit code reports it */ });
+      input.pipe(child.stdin);
+    }
 
     let settled = false;
     const finish = (fn: () => void) => { if (!settled) { settled = true; clearTimeout(timer); fn(); } };

@@ -611,6 +611,15 @@ class PreviewManager {
   }
 
   private async startInternal(projectId: string): Promise<PreviewInfo> {
+    // Phase timings for the "Started in …" log line (where does a start spend its time?).
+    const t0 = Date.now();
+    const phases: string[] = [];
+    let tMark = t0;
+    const mark = (label: string) => {
+      const now = Date.now();
+      if (now - tMark >= 100) phases.push(`${label} ${((now - tMark) / 1000).toFixed(1)}s`);
+      tMark = now;
+    };
     const { project, projectPath, isStatic, pendingLogs, queueLog } =
       await resolveProjectWorkspace(projectId);
 
@@ -675,7 +684,9 @@ class PreviewManager {
       catch (e) { log(Buffer.from(`[svc] start failed: ${(e as Error).message}`)); }
     }
 
+    mark('prepare+services');
     if (!skipNodeInstall) await this.ensureDependenciesWithLock(projectId, projectPath, env, log);
+    mark('install');
 
     const packageJson = skipNodeInstall ? null : await readPackageJson(projectPath);
     const hasPredev = Boolean(packageJson?.scripts?.predev);
@@ -768,6 +779,7 @@ class PreviewManager {
       log,
     });
     backendContainer = composed.backendContainer;
+    mark('backend');
     const composedBackendUrl = composed.composedBackendUrl;
     const composedInternalUrl = composed.composedInternalUrl;
 
@@ -872,6 +884,7 @@ class PreviewManager {
     });
 
     this.attachChildHandlers(child, projectId, previewProcess, log);
+    mark('launch');
 
     await awaitReadinessAndFinalize({
       projectId,
@@ -882,6 +895,8 @@ class PreviewManager {
       effectivePort,
       log,
     });
+    mark('dev server ready');
+    log(Buffer.from(`[PreviewManager] Started in ${((Date.now() - t0) / 1000).toFixed(1)}s${phases.length ? ` (${phases.join(', ')})` : ''}.`));
 
     // Refresh the dashboard thumbnail once the app has had time to render —
     // server-side, so tiles refill on ANY preview start (share links, API,
