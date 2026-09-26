@@ -17,6 +17,7 @@ export DOCKER_BUILDKIT=1 COMPOSE_DOCKER_CLI_BUILD=1
 BUILD_ARGS=""
 if [ "${NO_CACHE:-}" = "1" ]; then BUILD_ARGS="--no-cache --pull"; fi
 PENDING=/tmp/claudable-deploy.pending
+BUILD_LOGS=/opt/claudable/webhook/builds
 exec 9>/tmp/claudable-deploy.lock
 if ! flock -n 9; then
   # A deploy is already running. Ask it to run once more when it finishes
@@ -34,15 +35,29 @@ while :; do
   git reset --hard origin/main --quiet
   HEAD=$(git rev-parse --short HEAD)
   log "building+recreating ($HEAD)${BUILD_ARGS:+ [$BUILD_ARGS]}"
-  docker compose build $BUILD_ARGS
+  # Full build output (incl. the test gate) goes to its own file; the poll log
+  # keeps only these summary lines. The last 10 build logs are kept.
+  mkdir -p "$BUILD_LOGS"
+  BUILD_LOG="$BUILD_LOGS/$(date -u +%Y%m%dT%H%M%SZ)-$HEAD.log"
+  if ! docker compose build $BUILD_ARGS >"$BUILD_LOG" 2>&1; then
+    log "BUILD FAILED ($HEAD) — current version stays live. Tail of $BUILD_LOG:"
+    tail -n 40 "$BUILD_LOG"
+    ls -1t "$BUILD_LOGS"/*.log 2>/dev/null | tail -n +11 | xargs -r rm -f
+    exit 1
+  fi
+  ls -1t "$BUILD_LOGS"/*.log 2>/dev/null | tail -n +11 | xargs -r rm -f
   docker compose up -d --force-recreate --remove-orphans
   docker image prune -f >/dev/null 2>&1 || true
   log "deployed $HEAD; waiting for health"
-  for i in $(seq 1 30); do
-    code=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:3700/ || echo 000)
-    if [ "$code" = "200" ]; then log "healthy ($HEAD) HTTP 200"; break; fi
+  # The container's own healthcheck (not an HTTP 200 on / — with auth on, / is a
+  # redirect, so that probe never passed and always burned its full minute).
+  health=unknown
+  for i in $(seq 1 60); do
+    health=$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' claudable 2>/dev/null || echo missing)
+    case "$health" in healthy|none) break ;; unhealthy) break ;; esac
     sleep 2
   done
+  log "health: $health ($HEAD)"
   # Re-check: if origin advanced during the build, or another trigger arrived,
   # loop and rebuild so we never leave a newer commit undeployed.
   git fetch origin main --quiet

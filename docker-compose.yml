@@ -22,6 +22,8 @@ services:
       timeout: 5s
       retries: 3
       start_period: 40s
+      # Probe every 2 s while starting, so a deploy sees "healthy" within seconds.
+      start_interval: 2s
     env_file:
       - .env
     environment:

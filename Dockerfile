@@ -101,11 +101,18 @@ COPY --chown=node:node prisma ./prisma
 COPY --chown=node:node prisma.config.ts tsconfig.json ./
 RUN DATABASE_URL="file:../data/cc.db" npx prisma generate
 
-# Build the Next.js app.
+# Test gate: the whole suite must pass before an image is built (~10 s). A red
+# test fails the build, so `docker compose up` never runs and the current
+# version stays live. (`next build` below already type-checks.)
 COPY --chown=node:node . .
+RUN DATABASE_URL="file:/tmp/test.db" npx vitest run --reporter=dot
+
+# Build the Next.js app.
 RUN DATABASE_URL="file:../data/cc.db" npm run build
 
 ENV NODE_ENV=production
+# `prisma db push` at start: no "update available" banner in the boot log.
+ENV PRISMA_HIDE_UPDATE_MESSAGE=true
 ENV PORT=3700
 ENV WEB_PORT=3700
 

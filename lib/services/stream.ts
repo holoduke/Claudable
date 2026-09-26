@@ -4,7 +4,6 @@
  */
 
 import type { RealtimeEvent } from '@/types';
-import { websocketManager } from '@/lib/server/websocket-manager';
 
 /**
  * SSE Stream Manager
@@ -56,8 +55,6 @@ export class StreamManager {
    * Send event to all clients of a project
    */
   public publish(projectId: string, event: RealtimeEvent): void {
-    websocketManager.broadcast(projectId, event);
-
     const projectStreams = this.streams.get(projectId);
     if (!projectStreams || projectStreams.size === 0) {
       return;
