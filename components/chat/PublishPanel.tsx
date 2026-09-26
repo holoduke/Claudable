@@ -235,7 +235,7 @@ export default function PublishPanel({
                   {deployRun.url ? <> · <a href={deployRun.url} target="_blank" rel="noopener noreferrer" className="underline">log</a></> : null}
                 </p>
               )}
-              <p className="text-xs text-gray-400 dark:text-gray-500 mt-2">Click Update to deploy your latest changes.</p>
+              {!branchMode && <p className="text-xs text-gray-400 dark:text-gray-500 mt-2">Click Update to deploy your latest changes.</p>}
             </div>
           )}
 
