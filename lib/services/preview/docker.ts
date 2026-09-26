@@ -16,21 +16,50 @@ import { realPathInside } from '@/lib/utils/safe-fs';
 // start would then collide on the port and the dev server "exits before reachable".
 // Sweep them so boot starts from a clean slate. (a project's own sidecars, e.g. <slug>-api/-db, are named
 // differently and are never matched.)
-export async function sweepOrphanedPreviewContainers(): Promise<void> {
+export async function sweepOrphanedPreviewContainers(
+  keepContainers: Set<string> = new Set(),
+  keepNetworks: Set<string> = new Set(),
+): Promise<void> {
+  // Exact names only: previews that were re-adopted after a restart (keep*) stay.
+  const names = async (args: string[]) =>
+    ((await dockerCapture(args, 15_000)) || '').split('\n').map((x) => x.trim()).filter(Boolean);
   try {
-    await new Promise<void>((res) => {
-      const p = spawn('sh', ['-c',
-        'ids=$(docker ps -aq --filter name=claudable-preview-); [ -n "$ids" ] && docker rm -f $ids >/dev/null 2>&1; ' +
-        // Phase 2: orphaned agent-turn containers (their parent docker-CLI process
-        // died with the old Claudable process; unnamed they would leak forever).
-        'ids=$(docker ps -aq --filter name=claudable-agent-); [ -n "$ids" ] && docker rm -f $ids >/dev/null 2>&1; ' +
-        // Phase 1: also drop orphaned per-project networks (safe once their containers are gone).
-        'for n in $(docker network ls --filter name=claudable-proj- --format "{{.Name}}"); do docker network rm "$n" >/dev/null 2>&1; done; true'],
-        { env: process.env, stdio: 'ignore' });
-      p.on('exit', () => res());
-      p.on('error', () => res());
-    });
+    for (const n of await names(['ps', '-a', '--filter', 'name=claudable-preview-', '--format', '{{.Names}}'])) {
+      if (n.startsWith('claudable-preview-') && !keepContainers.has(n)) await dockerCapture(['rm', '-f', n], 30_000);
+    }
+    // Phase 2: orphaned agent-turn containers (their parent docker-CLI process
+    // died with the old Claudable process; unnamed they would leak forever).
+    for (const n of await names(['ps', '-a', '--filter', 'name=claudable-agent-', '--format', '{{.Names}}'])) {
+      if (n.startsWith('claudable-agent-')) await dockerCapture(['rm', '-f', n], 30_000);
+    }
+    // Phase 1: also drop orphaned per-project networks (a network still in use fails harmlessly).
+    for (const n of await names(['network', 'ls', '--filter', 'name=claudable-proj-', '--format', '{{.Name}}'])) {
+      if (n.startsWith('claudable-proj-') && !keepNetworks.has(n)) await dockerCapture(['network', 'rm', n], 15_000);
+    }
   } catch { /* best-effort */ }
+}
+
+/** Running preview containers with their published ports (for re-adoption after a restart). */
+export async function runningPreviewContainers(): Promise<{ name: string; ports: string }[]> {
+  const out = await dockerCapture(['ps', '--filter', 'name=claudable-preview-', '--format', '{{.Names}}\t{{.Ports}}'], 15_000);
+  if (!out) return [];
+  return out.split('\n').map((l) => l.trim()).filter(Boolean).map((l) => {
+    const [name, ports = ''] = l.split('\t');
+    return { name, ports };
+  }).filter((c) => c.name.startsWith('claudable-preview-'));
+}
+
+/**
+ * Pull images that previews/services need but the host doesn't have yet — in the
+ * background, so the first preview after an image bump doesn't download inside its start.
+ */
+export async function prepullImages(images: string[]): Promise<void> {
+  for (const image of [...new Set(images.filter((i) => /^[a-z0-9][a-z0-9./_:-]*$/i.test(i)))]) {
+    if ((await dockerCapture(['image', 'inspect', '--format', '{{.Id}}', image], 15_000)) !== null) continue;
+    console.log(`[PreviewManager] pre-pulling image ${image}`);
+    const ok = (await dockerCapture(['pull', '--quiet', image], 15 * 60_000)) !== null;
+    console.log(`[PreviewManager] pre-pull ${image}: ${ok ? 'done' : 'failed'}`);
+  }
 }
 
 function dockerCapture(args: string[], timeoutMs = 5000): Promise<string | null> {

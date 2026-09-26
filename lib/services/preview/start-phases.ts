@@ -33,6 +33,7 @@ import {
   writeContainerEnvFile,
   containerServesPort,
 } from './docker';
+import { seedLockfile } from './lockfile-cache';
 import {
   substVars,
   buildBackendBaseEnv,
@@ -102,6 +103,10 @@ export async function resolveProjectWorkspace(projectId: string): Promise<Projec
       );
       await scaffoldForStack(projectPath, projectId, proj?.templateType, proj?.name);
     }
+
+    // First install (host or in the preview container): start from a pre-resolved
+    // template lockfile when one matches exactly (see lockfile-cache.ts).
+    await seedLockfile(projectPath, queueLog);
 
     // Make the preview report its route to the URL bar (cross-origin iframe).
     await ensurePreviewRouteReporter(projectPath, projectId);
@@ -585,7 +590,7 @@ export interface FrontendContainerContext {
 // pins symfony/* v8.1 which requires php >=8.4.1 (composer.json's ^8.3 is a
 // floor, not what the lock resolves to), so 8.3 fails `composer install`.
 // Overridable per-project via preview.json frontend.image.
-const LARAVEL_PHP_IMAGE = 'webdevops/php:8.4';
+export const LARAVEL_PHP_IMAGE = 'webdevops/php:8.4';
 
 /**
  * Install + run for a Filament (Laravel) project scaffolded from the NewStory

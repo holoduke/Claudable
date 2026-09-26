@@ -2,6 +2,7 @@
 import path from 'path';
 import fs from 'fs/promises';
 import { appendCommandLogs } from './process-utils';
+import { npmInstallEnv, seedLockfile } from './lockfile-cache';
 
 export const npmCommand = process.platform === 'win32' ? 'npm.cmd' : 'npm';
 const pnpmCommand = process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm';
@@ -163,12 +164,16 @@ export async function runInstallWithPreferredManager(
   env: NodeJS.ProcessEnv,
   logger: (chunk: Buffer | string) => void
 ): Promise<void> {
+  // npm: a pre-resolved template lockfile (if one matches) + the shared persistent cache.
+  // The lockfile, not the cache, is what turns a ~40 s first install into ~5 s.
+  await seedLockfile(projectPath, (m) => logger(`[PreviewManager] ${m}`));
   const manager = await detectPackageManager(projectPath);
   const { command, installArgs } = PACKAGE_MANAGER_COMMANDS[manager];
+  const installEnv = manager === 'npm' ? npmInstallEnv(env) : env;
 
   logger(`[PreviewManager] Installing dependencies using ${manager}.`);
   try {
-    await appendCommandLogs(command, installArgs, projectPath, env, logger);
+    await appendCommandLogs(command, installArgs, projectPath, installEnv, logger);
   } catch (error) {
     if (manager !== 'npm' && isCommandNotFound(error)) {
       logger(
@@ -178,7 +183,7 @@ export async function runInstallWithPreferredManager(
         PACKAGE_MANAGER_COMMANDS.npm.command,
         PACKAGE_MANAGER_COMMANDS.npm.installArgs,
         projectPath,
-        env,
+        npmInstallEnv(env),
         logger
       );
       return;
