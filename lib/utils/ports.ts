@@ -56,10 +56,22 @@ async function checkPort(host: string, port: number): Promise<boolean> {
   });
 }
 
+/**
+ * Previews in containers publish on the host GATEWAY IP (PREVIEW_PUBLISH_HOST /
+ * DEPLOY_HOST_GATEWAY, e.g. 10.0.1.1), not on loopback. Probing only loopback made
+ * such a port look free while another project's preview held it — the new project
+ * then got that port and its readiness probe was answered by the OTHER project.
+ */
+function publishProbeHosts(): string[] {
+  const extra = (process.env.PREVIEW_PUBLISH_HOST || process.env.DEPLOY_HOST_GATEWAY || '').trim();
+  return extra && extra !== '0.0.0.0' && extra !== '127.0.0.1' ? [extra] : [];
+}
+
 async function isPortAvailable(port: number): Promise<boolean> {
   const results = await Promise.allSettled([
     checkPort('127.0.0.1', port),
     checkPort('::1', port),
+    ...publishProbeHosts().map((h) => checkPort(h, port)),
   ]);
 
   return results.every((result) => {

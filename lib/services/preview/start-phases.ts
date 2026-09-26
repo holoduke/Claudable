@@ -31,6 +31,7 @@ import {
   connectToProjectNet,
   toHostPath,
   writeContainerEnvFile,
+  containerServesPort,
 } from './docker';
 import {
   substVars,
@@ -833,6 +834,8 @@ export interface ReadinessContext {
   projectId: string;
   previewProcess: PreviewProcess;
   useFrontendContainer: boolean;
+  /** Name of this project's frontend container (isolated mode). */
+  frontendContainer?: string | null;
   previewPublishHost: string;
   effectivePort: number;
   log: (chunk: Buffer | string) => void;
@@ -840,7 +843,7 @@ export interface ReadinessContext {
 
 /** Wait for the local dev server to answer, then persist the running state. */
 export async function awaitReadinessAndFinalize(opts: ReadinessContext): Promise<void> {
-  const { projectId, previewProcess, useFrontendContainer, previewPublishHost, effectivePort, log } = opts;
+  const { projectId, previewProcess, useFrontendContainer, frontendContainer, previewPublishHost, effectivePort, log } = opts;
 
   // Probe the LOCAL dev server for readiness — never the public URL. In
   // per-project mode the public URL is a fresh subdomain whose Let's Encrypt
@@ -858,6 +861,24 @@ export async function awaitReadinessAndFinalize(opts: ReadinessContext): Promise
   const ready = await waitForPreviewReady(readinessUrl, log).catch(
     () => false
   );
+
+  // Whatever answered the probe must be THIS project's server. If our container failed
+  // to start (e.g. "port is already allocated") something else answered on that port —
+  // another project's preview. Never mark that running or route it: that is the
+  // cross-project preview leak.
+  let foreignServer = false;
+  if (useFrontendContainer && frontendContainer) {
+    foreignServer = !(await containerServesPort(frontendContainer, effectivePort));
+  } else {
+    // in-process dev server: give an immediate bind failure (EADDRINUSE) time to surface
+    await new Promise((r) => setTimeout(r, 750));
+  }
+  if (foreignServer) {
+    log(Buffer.from(`[PreviewManager] Port ${effectivePort} is not served by this project's container — refusing to route it.`));
+    previewProcess.status = 'error';
+    await updateProject(projectId, { previewUrl: null, previewPort: null, status: 'idle' }).catch(() => {});
+    throw new Error(`Preview port ${effectivePort} is not served by this project's container (port conflict). Please retry.`);
+  }
 
   // The dev server exited (crash/build failure) while we were waiting.
   if (

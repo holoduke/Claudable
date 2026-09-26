@@ -33,6 +33,51 @@ export async function sweepOrphanedPreviewContainers(): Promise<void> {
   } catch { /* best-effort */ }
 }
 
+function dockerCapture(args: string[], timeoutMs = 5000): Promise<string | null> {
+  return new Promise((resolve) => {
+    try {
+      const p = spawn('docker', args, { env: process.env, stdio: ['ignore', 'pipe', 'ignore'] });
+      let out = '';
+      const t = setTimeout(() => { p.kill('SIGKILL'); resolve(null); }, timeoutMs);
+      p.stdout.on('data', (d) => { out += d; });
+      p.on('error', () => { clearTimeout(t); resolve(null); });
+      p.on('exit', (code) => { clearTimeout(t); resolve(code === 0 ? out : null); });
+    } catch {
+      resolve(null);
+    }
+  });
+}
+
+/** Host ports in `docker ps --format {{.Ports}}` output ("10.0.1.1:3711->3711/tcp, …"). */
+export function parsePublishedPorts(psPorts: string): Set<number> {
+  const ports = new Set<number>();
+  for (const m of psPorts.matchAll(/:(\d{1,5})(?:-(\d{1,5}))?->/g)) {
+    const from = Number(m[1]);
+    const to = m[2] ? Number(m[2]) : from;
+    for (let p = from; p <= to && p - from < 1000; p += 1) ports.add(p);
+  }
+  return ports;
+}
+
+/**
+ * Host ports published by ANY running container. Preview containers publish on the
+ * gateway IP (10.0.1.1), which a loopback probe can't see — without this a running
+ * preview's port looked free and was handed to another project (cross-project leak).
+ */
+export async function dockerPublishedPorts(): Promise<Set<number>> {
+  const out = await dockerCapture(['ps', '--format', '{{.Ports}}']);
+  return out === null ? new Set() : parsePublishedPorts(out);
+}
+
+/** True only if `container` is running AND publishes `port` on the host. */
+export async function containerServesPort(container: string, port: number): Promise<boolean> {
+  const out = await dockerCapture(['inspect', '-f', '{{.State.Running}} {{json .NetworkSettings.Ports}}', container]);
+  if (!out) return false;
+  const [running, ...rest] = out.trim().split(' ');
+  if (running !== 'true') return false;
+  return parsePublishedPorts(rest.join(' ').replace(/"HostPort":"(\d+)"/g, ':$1->')).has(port);
+}
+
 // A composed/sidecar backend's published port is derived from the frontend port
 // (no second pool slot). Guard the derivation: a widened PREVIEW_PORT range must
 // never produce a port past 65535 (docker -p would fail) — return null so the

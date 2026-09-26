@@ -32,6 +32,7 @@ import {
   ensureProjectNetwork,
   connectToProjectNet,
   latestMtimeMs,
+  dockerPublishedPorts,
 } from './preview/docker';
 import { killProcessTree, appendCommandLogs } from './preview/process-utils';
 import {
@@ -346,11 +347,18 @@ class PreviewManager {
     projectId: string
   ): Promise<{ previewBounds: { start: number; end: number }; preferredPort: number }> {
     const previewBounds = resolvePreviewBounds();
+    // Ports published by running containers (other projects' previews, also ones the
+    // in-memory map doesn't know about) are never free, even if nothing answers yet.
+    const occupied = async () => {
+      const s = this.usedPorts();
+      if (isolationEnabled()) for (const p of await dockerPublishedPorts()) s.add(p);
+      return s;
+    };
     let preferredPort: number;
     try {
       // Exclude ports held by other live/starting previews so a concurrent start
       // can't pick the same one before this project's dev server binds.
-      preferredPort = await findAvailablePort(previewBounds.start, previewBounds.end, this.usedPorts());
+      preferredPort = await findAvailablePort(previewBounds.start, previewBounds.end, await occupied());
     } catch (poolFull) {
       // Pool exhausted — evict the least-recently-used preview to free a port,
       // then try once more.
@@ -358,7 +366,7 @@ class PreviewManager {
       if (!victim || victim === projectId) throw poolFull;
       console.log(`[PreviewManager] Port pool full; evicting LRU preview ${victim} to make room for ${projectId}`);
       await this.stop(victim).catch(() => {});
-      preferredPort = await findAvailablePort(previewBounds.start, previewBounds.end, this.usedPorts());
+      preferredPort = await findAvailablePort(previewBounds.start, previewBounds.end, await occupied());
     }
     // Guard the async gap: another concurrent start (different project) may have
     // reserved this port while findAvailablePort was probing. This check and the
@@ -749,6 +757,7 @@ class PreviewManager {
       projectId,
       previewProcess,
       useFrontendContainer,
+      frontendContainer,
       previewPublishHost,
       effectivePort,
       log,
