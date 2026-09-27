@@ -386,6 +386,7 @@ export async function runBackendContainer(
   log: (chunk: string | Buffer) => void,
   publishHost: string = '127.0.0.1',
   containerName?: string,
+  extraRunArgs: string[] = [],
 ): Promise<string> {
   const name = containerName || backendContainerName(projectId);
   const dockerEnv = process.env; // the CLI needs DOCKER_HOST + PATH
@@ -456,6 +457,7 @@ export async function runBackendContainer(
   // which appendCommandLogs echoes into its failure message.
   const cenvFile = writeContainerEnvFile(containerEnv);
   runArgs.push(...cenvFile.args);
+  runArgs.push(...extraRunArgs); // e.g. the SQLite data mount (built by the caller from project paths)
   runArgs.push(name); // image tag == container name
 
   log(Buffer.from(`[PreviewManager] [backend] starting container on 127.0.0.1:${hostPort} (mem ${c.memory || '512m'}, cpus ${c.cpus || '1.0'}, cap-drop ALL)`));
