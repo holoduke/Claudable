@@ -164,6 +164,9 @@ export async function planWipe(projectId: string): Promise<WipePlan> {
     [CHECKPOINTS_ROOT, path.join(CHECKPOINTS_ROOT, projectId)],
     [THUMBS_ROOT, path.join(THUMBS_ROOT, `${projectId}.webp`)],
     [THUMBS_ROOT, path.join(THUMBS_ROOT, `${projectId}.png`)],
+    // per-project package caches of the isolated preview (start-phases.ts)
+    [path.join(DATA_ROOT, '.npm-cache', 'projects'), path.join(DATA_ROOT, '.npm-cache', 'projects', projectId)],
+    [path.join(DATA_ROOT, '.composer-cache', 'projects'), path.join(DATA_ROOT, '.composer-cache', 'projects', projectId)],
   ];
   const canvases = await prisma.designCanvas.findMany({ where: { projectId }, select: { id: true } }).catch(() => []);
   const canvasRoot = path.resolve(process.cwd(), 'data', 'design-canvases');
@@ -367,6 +370,9 @@ export async function wipeProject(
       if (existingVolumes.has(s.volume)) await rm('volume', s.volume, ['volume', 'rm', '-f', s.volume]);
     }
     if (plan.network && existingNetworks.has(plan.network)) {
+      // An attached Coolify DB stays (it has its own lifecycle) — detach it first.
+      const { detachForeignEndpoints } = await import('./preview/docker');
+      await detachForeignEndpoints(plan.network).catch(() => {});
       await rm('network', plan.network, ['network', 'rm', plan.network]);
     }
 

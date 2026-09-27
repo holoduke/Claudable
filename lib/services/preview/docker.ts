@@ -35,7 +35,10 @@ export async function sweepOrphanedPreviewContainers(
     }
     // Phase 1: also drop orphaned per-project networks (a network still in use fails harmlessly).
     for (const n of await names(['network', 'ls', '--filter', 'name=claudable-proj-', '--format', '{{.Name}}'])) {
-      if (n.startsWith('claudable-proj-') && !keepNetworks.has(n)) await dockerCapture(['network', 'rm', n], 15_000);
+      if (n.startsWith('claudable-proj-') && !keepNetworks.has(n)) {
+        await detachForeignEndpoints(n);
+        await dockerCapture(['network', 'rm', n], 15_000);
+      }
     }
   } catch { /* best-effort */ }
 }
@@ -63,7 +66,7 @@ export async function prepullImages(images: string[]): Promise<void> {
   }
 }
 
-function dockerCapture(args: string[], timeoutMs = 5000): Promise<string | null> {
+export function dockerCapture(args: string[], timeoutMs = 5000): Promise<string | null> {
   return new Promise((resolve) => {
     try {
       const p = spawn('docker', args, { env: process.env, stdio: ['ignore', 'pipe', 'ignore'] });
@@ -211,12 +214,25 @@ export async function connectToProjectNet(net: string, container: string, alias?
     await new Promise((r) => setTimeout(r, 500));
   }
 }
+/**
+ * Disconnect containers that are not Claudable's own (e.g. a project's Coolify
+ * database, attached by host-db.ts) from a project network. They outlive the
+ * preview, and `network rm` refuses while they're still connected.
+ */
+export async function detachForeignEndpoints(net: string): Promise<void> {
+  const out = await dockerCapture(['network', 'inspect', '-f', '{{range .Containers}}{{.Name}}\n{{end}}', net]);
+  for (const name of (out ?? '').split('\n').map((n) => n.trim()).filter(Boolean)) {
+    if (!name.startsWith('claudable-')) await dockerCli(['network', 'disconnect', '-f', net, name]);
+  }
+}
+
 export async function removeProjectNetwork(projectId: string): Promise<void> {
   // `network rm` fails with "has active endpoints" while the just-stopped
   // frontend/backend containers are still detaching, leaking the per-project
   // network until the next boot sweep. Retry a few times so it usually cleans up
   // now. Best-effort throughout — the boot sweep is the backstop.
   const name = projectNetworkName(projectId);
+  await detachForeignEndpoints(name);
   for (let attempt = 0; attempt < 4; attempt++) {
     if (await dockerCli(['network', 'rm', name])) return; // removed
     if (attempt < 3) await new Promise((r) => setTimeout(r, 1500));

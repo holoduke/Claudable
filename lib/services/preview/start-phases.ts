@@ -35,6 +35,7 @@ import {
 } from './docker';
 import { seedLockfile } from './lockfile-cache';
 import { missingDependencies } from './deps-check';
+import { attachHostDb } from './host-db';
 import {
   substVars,
   buildBackendBaseEnv,
@@ -166,6 +167,20 @@ export async function buildBaseSpawnEnv(
     projectDbUrl = containerDbUrl || await getDatabaseUrl(projectId);
     if (projectDbUrl) env.DATABASE_URL = projectDbUrl;
   } catch { /* non-fatal */ }
+
+  // A legacy Coolify HOST database no longer forces the dev server in-process:
+  // with isolation on, the DB container joins the project network and the
+  // isolated preview gets the in-network URL. If that fails the start fails —
+  // falling back to in-process would run project code in the control plane.
+  if (isolationEnabled() && !dbIsContainer && projectDbUrl) {
+    const internalUrl = await attachHostDb(projectId);
+    if (internalUrl) {
+      projectDbUrl = internalUrl;
+      dbIsContainer = true;
+      injectedEnv = { ...injectedEnv, DATABASE_URL: internalUrl };
+      env.DATABASE_URL = internalUrl;
+    }
+  }
 
   return { env, dbIsContainer, projectDbUrl, injectedEnv };
 }
@@ -725,14 +740,16 @@ export async function buildFrontendContainerArgs(
     ? inner
     : `rm -rf .next/dev/lock 2>/dev/null; [ ! -f package.json ] || ${missing.length > 0 ? `{ ${installStep}; }` : installStep}; ${inner}`;
 
-  // Shared package cache across ALL preview containers so a project's first
-  // install reuses what others pulled. npm cacache (node) or composer cache
-  // (laravel); both content-addressed → concurrent installs are safe. Dir lives
-  // under the data root so it's node-owned (containers run as uid 1000).
-  // Best-effort: never block a preview start on it.
+  // Package cache PER PROJECT (npm cacache for node, composer for laravel). It
+  // used to be one cache shared by every preview container — writable by each —
+  // so one project could plant poisoned registry metadata/tarballs that another
+  // project's next install would trust. Per project it only speeds up that
+  // project's own reinstalls. Under the data root so it's node-owned (containers
+  // run as uid 1000). Best-effort: never block a preview start on it.
   let cacheArgs: string[] = [];
   try {
-    const dir = isLaravel ? '.composer-cache' : '.npm-cache';
+    if (!/^[A-Za-z0-9_-]{1,64}$/u.test(projectId)) throw new Error('unsafe project id for a cache path');
+    const dir = path.join(isLaravel ? '.composer-cache' : '.npm-cache', 'projects', projectId);
     const cacheDir = path.resolve(path.dirname(process.env.PROJECTS_DIR || './data/projects'), dir);
     await fs.mkdir(cacheDir, { recursive: true });
     cacheArgs = ['-v', `${toHostPath(cacheDir)}:${isLaravel ? '/composer-cache' : '/npm-cache'}`];
