@@ -44,7 +44,10 @@ export async function scaffoldBasicNextApp(
     // Majors pinned in lib/config/stack-versions.json: new apps get every
     // minor/patch update but never silently jump to a breaking new major.
     dependencies: npmDeps('nuxt', '@nuxt/ui', '@nuxt/image', '@nuxt/fonts'),
-    devDependencies: npmDeps('typescript'),
+    // The template's i-lucide-* icons, bundled locally (Nuxt UI otherwise fetches
+    // them from the Iconify API at runtime and warns "Collection lucide is not
+    // found locally").
+    devDependencies: npmDeps('typescript', '@iconify-json/lucide'),
   };
 
   await writeFileIfMissing(
@@ -57,7 +60,10 @@ export async function scaffoldBasicNextApp(
     `// https://nuxt.com/docs/api/configuration/nuxt-config
 export default defineNuxtConfig({
   compatibilityDate: '2025-01-01',
-  devtools: { enabled: true },
+  // Off in the preview: its overlay isn't usable inside the preview iframe, it
+  // slows the dev start, and @nuxt/devtools 3.x prints a Vite 8 compatibility
+  // warning on every start. Turn it on locally if you want it.
+  devtools: { enabled: false },
   // @nuxt/ui: components + theming. @nuxt/image: optimized responsive images.
   // @nuxt/fonts: automatic, performant web-font loading.
   modules: ['@nuxt/ui', '@nuxt/image', '@nuxt/fonts'],

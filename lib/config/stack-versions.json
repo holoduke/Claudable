@@ -17,6 +17,7 @@
     "@nuxt/ui": "^4.11.2",
     "@nuxt/image": "^2.1.0",
     "@nuxt/fonts": "^0.14.0",
+    "@iconify-json/lucide": "^1.2.137",
     "next": "^16.3.6",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
@@ -42,7 +43,7 @@
   },
   "pip": {
     "fastapi": "0.141.1",
-    "uvicorn[standard]": "0.53.0"
+    "uvicorn[standard]": "0.54.0"
   },
   "held": {
     "typescript": "7.x is the native (Go) compiler; Angular 22 requires >=6.0 <6.1 and the Vue/Nuxt tooling (Volar) needs the JS API. Move when Angular/Volar support it.",
