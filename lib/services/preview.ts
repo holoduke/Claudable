@@ -330,10 +330,11 @@ class PreviewManager {
       return { logs: [`[PreviewManager] ${kind} project — no npm dependencies to install here`] };
     }
 
-    // Customer projects never run package scripts in the Claudable process. Clear
-    // node_modules instead (removes a symlink itself, never its target); the
-    // isolated preview container installs on its next start.
-    if (await isCustomerProject(projectId)) {
+    // With isolation (and always for customer projects) package scripts never run
+    // in the Claudable process. Clear node_modules instead (removes a symlink
+    // itself, never its target); the isolated preview container installs on its
+    // next start.
+    if (isolationEnabled() || await isCustomerProject(projectId)) {
       const root = project.repoPath ? path.resolve(project.repoPath) : path.join(process.cwd(), 'projects', projectId);
       await fs.rm(path.join(root, 'node_modules'), { recursive: true, force: true });
       return { logs: ['[PreviewManager] Dependencies are installed inside the isolated preview container on the next preview start.'] };
@@ -648,7 +649,12 @@ class PreviewManager {
     if (customerProject && !isolationEnabled()) {
       throw new TenantPolicyError('Customer projects can only be previewed with preview isolation (PREVIEW_ISOLATION) enabled.');
     }
-    const skipNodeInstall = isStatic || isLaravel || ownDevCommand !== null || customerProject;
+    // With isolation on, NO project runs package scripts in the Claudable process:
+    // the install (postinstall scripts!) and predev run inside the preview
+    // container (its start command installs when node_modules is missing or
+    // incomplete; the dev script runs its predev hook itself). Host-side installs
+    // gave project code the control plane's filesystem, env and Docker API.
+    const skipNodeInstall = isStatic || isLaravel || ownDevCommand !== null || customerProject || isolationEnabled();
 
     const { previewBounds, preferredPort } = await this.reservePreviewPort(projectId);
 
@@ -760,12 +766,19 @@ class PreviewManager {
     // legacy host DB is in play.
     // `frontend.isolate: false` (preview.json is agent-writable) and a legacy host
     // DB are never honoured for a customer project.
+    // `frontend.isolate: false` lives in the agent-writable preview.json, so with
+    // isolation on it is only honoured when the operator explicitly allows
+    // in-process previews (PREVIEW_ALLOW_INPROCESS=1) — never for a customer.
+    const allowInProcess = process.env.PREVIEW_ALLOW_INPROCESS === '1' && !customerProject;
     const useFrontendContainer =
-      !isStatic && isolationEnabled() && (customerProject || !projectDbUrl || dbIsContainer) &&
+      !isStatic && isolationEnabled() && (!projectDbUrl || dbIsContainer || customerProject) &&
       (feKind === 'nuxt' || feKind === 'next' || feKind === 'angular' || isLaravel) &&
-      (customerProject || cfg?.frontend?.isolate !== false);
+      !(allowInProcess && cfg?.frontend?.isolate === false);
     if (customerProject && !isStatic && !useFrontendContainer) {
       throw new TenantPolicyError(`Customer projects must run in the isolated preview container; the ${feKind} stack cannot.`);
+    }
+    if (isolationEnabled() && !isStatic && !useFrontendContainer && !allowInProcess) {
+      throw new Error(`This project cannot run in the isolated preview container (${feKind} stack${projectDbUrl && !dbIsContainer ? ', database not attachable' : ''}), and running it inside Claudable is disabled.`);
     }
     // A Laravel project can only run via the container path. If isolation is off
     // (local dev) or opted out, there is no in-process PHP fallback — fail with a
