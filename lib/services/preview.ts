@@ -38,6 +38,7 @@ import {
   prepullImages,
   parsePublishedPorts,
   containerServesPort,
+  dockerRmSync,
 } from './preview/docker';
 import { killProcessTree, appendCommandLogs } from './preview/process-utils';
 import {
@@ -571,6 +572,15 @@ class PreviewManager {
 
     child.on('exit', (code, signal) => {
       previewProcess.status = code === 0 ? 'stopped' : 'error';
+      // Stopped deliberately (stop() already tore everything down), or a NEWER
+      // preview for this project is registered: never touch shared state — the
+      // route, container/network names and DB row now belong to the new one.
+      if (this.processes.get(projectId) !== previewProcess) {
+        killProcessTree(previewProcess.backendProcess);
+        previewProcess.frontendEnvFileCleanup?.();
+        previewProcess.frontendEnvFileCleanup = null;
+        return;
+      }
       // Tear down the backend sidecar too — it must not outlive the frontend.
       killProcessTree(previewProcess.backendProcess);
       removeBackendContainer(previewProcess.backendContainer);
@@ -606,6 +616,11 @@ class PreviewManager {
 
     child.on('error', (error) => {
       previewProcess.status = 'error';
+      if (this.processes.get(projectId) !== previewProcess && this.processes.has(projectId)) {
+        // A newer preview owns the shared names/route — only report.
+        log(Buffer.from(`Preview process failed: ${error.message}`));
+        return;
+      }
       // Drop the dead entry so a subsequent start() isn't blocked by the
       // "already running" check at the top of start().
       killProcessTree(previewProcess.backendProcess);
@@ -1012,19 +1027,28 @@ class PreviewManager {
       };
     }
 
+    // Detach FIRST: the child's exit handler fires later and asynchronously. It
+    // must see that it is no longer the current preview — otherwise, on a quick
+    // stop→start (restart, branch switch, sync), the OLD process's exit removed
+    // the NEW preview's route, containers (same names), network and DB row.
+    this.processes.delete(projectId);
     try {
       killProcessTree(processInfo.process);
       killProcessTree(processInfo.backendProcess);
-      removeBackendContainer(processInfo.backendContainer);
-      removeBackendContainer(processInfo.frontendContainer);
+      // Awaited (not fire-and-forget), so the names and the project network are
+      // really gone before a following start re-creates them.
+      if (processInfo.backendContainer) await dockerRmSync(processInfo.backendContainer);
+      if (processInfo.frontendContainer) await dockerRmSync(processInfo.frontendContainer);
+      processInfo.backendContainer = null;
+      processInfo.frontendContainer = null;
+      processInfo.backendProcess = null;
       processInfo.frontendEnvFileCleanup?.();
       processInfo.frontendEnvFileCleanup = null;
-      void removeProjectNetwork(projectId); // Phase 1: drop the per-project net
+      await removeProjectNetwork(projectId); // Phase 1: drop the per-project net
     } catch (error) {
       console.error('[PreviewManager] Failed to stop preview process:', error);
     }
 
-    this.processes.delete(projectId);
     await updateProject(projectId, {
       previewUrl: null,
       previewPort: null,
