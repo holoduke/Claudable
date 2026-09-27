@@ -88,6 +88,12 @@ export default defineNuxtConfig({
 
   await writeFileIfMissing(path.join(projectPath, 'public/favicon.svg'), PLACEHOLDER_FAVICON_SVG);
 
+  // server/ must exist when the dev server starts: Nuxt's watcher does not pick
+  // up a server/ folder created later, so an API route the agent adds stayed a
+  // 404 until the preview restarted. With server/api/ present, new routes (and
+  // new server/ subfolders) register live.
+  await writeFileIfMissing(path.join(projectPath, 'server/api/.gitkeep'), '');
+
   // Theme baseline: a single place to set the brand color + UI defaults so the
   // whole app stays visually coherent (light/dark handled by Nuxt UI tokens).
   await writeFileIfMissing(
