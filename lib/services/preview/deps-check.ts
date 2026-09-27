@@ -56,3 +56,23 @@ export async function dropHiddenLockfile(projectPath: string): Promise<void> {
   const stat = await fs.lstat(hidden).catch(() => null);
   if (stat?.isFile()) await fs.unlink(hidden).catch(() => {});
 }
+
+/**
+ * Marker inside node_modules asking the preview container for a full install on
+ * its next start (a dependency manifest changed — a sync or branch switch — so
+ * versions may differ even when every name is present). Non-destructive: the
+ * running preview keeps its node_modules until the container reinstalls in place.
+ */
+export const REINSTALL_MARKER = '.claudable-reinstall';
+
+export async function requestContainerReinstall(projectPath: string): Promise<boolean> {
+  const nodeModules = path.join(projectPath, 'node_modules');
+  const stat = await fs.lstat(nodeModules).catch(() => null);
+  if (!stat?.isDirectory()) return false; // absent → the next start installs anyway; a symlink is never written through
+  await fs.writeFile(path.join(nodeModules, REINSTALL_MARKER), `${new Date().toISOString()}\n`);
+  return true;
+}
+
+export async function reinstallRequested(projectPath: string): Promise<boolean> {
+  return fs.lstat(path.join(projectPath, 'node_modules', REINSTALL_MARKER)).then((s) => s.isFile(), () => false);
+}
