@@ -569,9 +569,17 @@ const url = process.env.NEXT_PUBLIC_APP_URL || \`http://localhost:\${port}\`;
 console.log(\`🚀 Starting Nuxt dev server on \${url}\`);
 
 // Nuxt uses --host (not --hostname); ignore other passthrough flags.
+// The local binary directly (npx only as a fallback): skips npx's startup and
+// the "allow-scripts … passed on the command line" notice npx prints when it
+// inherits npm's config env from the surrounding dev script.
+const fs = require('fs');
+const localNuxt = path.join(projectRoot, 'node_modules', '.bin', isWindows ? 'nuxt.cmd' : 'nuxt');
+const [cmd, cmdArgs] = fs.existsSync(localNuxt)
+  ? [localNuxt, ['dev', '--port', String(port), '--host', host]]
+  : ['npx', ['nuxt', 'dev', '--port', String(port), '--host', host]];
 const child = spawn(
-  'npx',
-  ['nuxt', 'dev', '--port', String(port), '--host', host],
+  cmd,
+  cmdArgs,
   {
     cwd: projectRoot,
     stdio: 'inherit',
