@@ -70,7 +70,7 @@ export interface ManagedServiceView {
   injectKeys: string[];             // names of the env vars this service exposes (no values)
 }
 
-function serviceContainerName(projectId: string, id: string): string {
+export function serviceContainerName(projectId: string, id: string): string {
   return `claudable-svc-${previewSlug(projectId)}-${id}`;
 }
 function serviceVolumeName(projectId: string, id: string): string {
@@ -251,9 +251,31 @@ export interface CustomServiceInput {
   cpus?: string;
 }
 
+/**
+ * Validate a custom container's resource limits (they go straight into
+ * `docker run --memory/--cpus`): an unchecked `cpus: 64` / `memory: 200g` would
+ * let one project starve the whole box. Undefined → the runtime defaults.
+ */
+export function normalizeResources(memory?: unknown, cpus?: unknown): { memory?: string; cpus?: string } {
+  const out: { memory?: string; cpus?: string } = {};
+  if (memory !== undefined && memory !== null && memory !== '') {
+    const m = /^(\d{1,5})(m|g)$/i.exec(String(memory).trim());
+    const mb = m ? Number(m[1]) * (m[2].toLowerCase() === 'g' ? 1024 : 1) : NaN;
+    if (!(mb >= 128 && mb <= 4096)) throw new Error('Memory must be between 128m and 4g (e.g. 512m, 1g).');
+    out.memory = `${mb}m`;
+  }
+  if (cpus !== undefined && cpus !== null && cpus !== '') {
+    const n = Number(cpus);
+    if (!(Number.isFinite(n) && n >= 0.25 && n <= 4)) throw new Error('CPU must be between 0.25 and 4.');
+    out.cpus = String(Math.round(n * 100) / 100);
+  }
+  return out;
+}
+
 /** Add a fully CUSTOM container (any image). No template, no generated secrets. */
 export async function addCustomService(projectId: string, input: CustomServiceInput): Promise<ManagedServiceSpec> {
   const wantAlias = aliasSlug(input.alias || input.name);
+  const resources = normalizeResources(input.memory, input.cpus);
   return withSpecLock(projectId, async () => {
     const services = await getServices(projectId);
     // Unique id AND alias so two custom services never collide on either.
@@ -270,8 +292,8 @@ export async function addCustomService(projectId: string, input: CustomServiceIn
       injectEnvEnc: input.injectEnv && Object.keys(input.injectEnv).length ? encrypt(JSON.stringify(input.injectEnv)) : undefined,
       mountPath: input.mountPath,
       dependsOn: input.dependsOn && input.dependsOn.length ? input.dependsOn : undefined,
-      memory: input.memory,
-      cpus: input.cpus,
+      memory: resources.memory,
+      cpus: resources.cpus,
       ports: input.ports || [],
     };
     const next = services.filter((s) => s.id !== spec.id);

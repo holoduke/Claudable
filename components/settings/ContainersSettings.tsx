@@ -39,7 +39,7 @@ export default function ContainersSettings({ projectId }: { projectId: string })
   const [addBackend, setAddBackend] = useState(false);
   const [addService, setAddService] = useState(false);
   const [customOpen, setCustomOpen] = useState(false);
-  const [custom, setCustom] = useState({ name: '', image: '', alias: '', mountPath: '', env: '' });
+  const [custom, setCustom] = useState({ name: '', image: '', alias: '', mountPath: '', env: '', memory: '512m', cpus: '1' });
   const [error, setError] = useState('');
 
   const load = useCallback(async () => {
@@ -52,6 +52,22 @@ export default function ContainersSettings({ projectId }: { projectId: string })
   }, [projectId]);
 
   useEffect(() => { load(); }, [load]);
+
+  // Live CPU / memory per running container, refreshed while the panel is open.
+  const [stats, setStats] = useState<Record<string, { cpu: string; mem: string }>>({});
+  useEffect(() => {
+    let stopped = false;
+    const tick = async () => {
+      try {
+        const r = await fetch(`${API_BASE}/api/projects/${projectId}/containers/stats`, { cache: 'no-store' });
+        const j = await r.json();
+        if (!stopped && j?.success) setStats(j.stats ?? {});
+      } catch { /* keep the last values */ }
+    };
+    void tick();
+    const t = setInterval(tick, 5000);
+    return () => { stopped = true; clearInterval(t); };
+  }, [projectId]);
 
   // Surface the API's error text (so a failed add/action isn't silent).
   const errText = async (r: Response): Promise<string> => {
@@ -69,7 +85,7 @@ export default function ContainersSettings({ projectId }: { projectId: string })
       });
       if (!r.ok) { setError(await errText(r)); return false; }
       setAddBackend(false); setAddService(false); setCustomOpen(false);
-      setCustom({ name: '', image: '', alias: '', mountPath: '', env: '' });
+      setCustom({ name: '', image: '', alias: '', mountPath: '', env: '', memory: '512m', cpus: '1' });
       await load();
       return true;
     } catch (e) { setError((e as Error).message || 'Network error'); return false; }
@@ -122,6 +138,8 @@ export default function ContainersSettings({ projectId }: { projectId: string })
       alias: custom.alias.trim() || undefined,
       mountPath: custom.mountPath.trim() || undefined,
       env: Object.keys(env).length ? env : undefined,
+      memory: custom.memory,
+      cpus: custom.cpus,
     } });
   };
 
@@ -193,6 +211,11 @@ export default function ContainersSettings({ projectId }: { projectId: string })
                         <span className={`w-2 h-2 rounded-full ${statusColor(c.status)}`} />{c.status}
                       </span>
                     </div>
+                    {stats[c.id || c.kind] && (
+                      <div className="text-[11px] font-mono text-gray-500 dark:text-gray-400 mt-1" title="Live usage (refreshes every 5 s)">
+                        CPU {stats[c.id || c.kind].cpu} · RAM {stats[c.id || c.kind].mem}
+                      </div>
+                    )}
                     {c.url && (
                       /^https?:\/\//.test(c.url)
                         ? <a href={c.url} target="_blank" rel="noreferrer" className="text-xs text-brand-500 break-all mt-1 inline-block">{c.url}</a>
@@ -299,6 +322,20 @@ export default function ContainersSettings({ projectId }: { projectId: string })
                   placeholder="Network alias (e.g. cache)" className="text-sm px-3 py-2 rounded-lg border border-gray-200 dark:border-white/8 bg-transparent text-gray-900 dark:text-gray-100" />
                 <input value={custom.mountPath} onChange={(e) => setCustom(s => ({ ...s, mountPath: e.target.value }))}
                   placeholder="Volume mount path (optional)" className="text-sm px-3 py-2 rounded-lg border border-gray-200 dark:border-white/8 bg-transparent text-gray-900 dark:text-gray-100" />
+                <label className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
+                  Memory
+                  <select value={custom.memory} onChange={(e) => setCustom(s => ({ ...s, memory: e.target.value }))}
+                    className="flex-1 text-sm px-2 py-2 rounded-lg border border-gray-200 dark:border-white/8 bg-transparent text-gray-900 dark:text-gray-100">
+                    {['256m', '512m', '1g', '2g', '4g'].map(m => <option key={m} value={m}>{m.replace('m', ' MB').replace('g', ' GB')}</option>)}
+                  </select>
+                </label>
+                <label className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
+                  CPU
+                  <select value={custom.cpus} onChange={(e) => setCustom(s => ({ ...s, cpus: e.target.value }))}
+                    className="flex-1 text-sm px-2 py-2 rounded-lg border border-gray-200 dark:border-white/8 bg-transparent text-gray-900 dark:text-gray-100">
+                    {['0.5', '1', '2', '4'].map(c => <option key={c} value={c}>{c} {c === '1' ? 'core' : 'cores'}</option>)}
+                  </select>
+                </label>
               </div>
               <textarea value={custom.env} onChange={(e) => setCustom(s => ({ ...s, env: e.target.value }))}
                 placeholder="Env (one KEY=value per line)" rows={2}
