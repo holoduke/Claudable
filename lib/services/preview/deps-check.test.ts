@@ -55,3 +55,22 @@ describe('dropHiddenLockfile', () => {
     expect(fs.existsSync(path.join(dir, 'package-lock.json'))).toBe(true);
   });
 });
+
+describe('container reinstall marker', async () => {
+  const { requestContainerReinstall, reinstallRequested } = await import('./deps-check');
+  it('marks an existing node_modules without touching its contents', async () => {
+    const dir = project({ dependencies: { vue: '^3' } }, ['vue']);
+    expect(await reinstallRequested(dir)).toBe(false);
+    expect(await requestContainerReinstall(dir)).toBe(true);
+    expect(await reinstallRequested(dir)).toBe(true);
+    expect(fs.existsSync(path.join(dir, 'node_modules', 'vue'))).toBe(true);
+  });
+  it('does nothing without node_modules or through a symlinked node_modules', async () => {
+    expect(await requestContainerReinstall(project({}, null))).toBe(false);
+    const dir = project({}, null);
+    const target = fs.mkdtempSync(path.join(ROOT, 'elsewhere-'));
+    fs.symlinkSync(target, path.join(dir, 'node_modules'));
+    expect(await requestContainerReinstall(dir)).toBe(false);
+    expect(fs.readdirSync(target)).toEqual([]);
+  });
+});

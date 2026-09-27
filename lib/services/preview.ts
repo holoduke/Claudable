@@ -73,7 +73,7 @@ export {
   removeProjectNetwork,
   ensureSandboxNetwork,
 } from './preview/docker';
-import { dropHiddenLockfile, missingDependencies } from './preview/deps-check';
+import { dropHiddenLockfile, missingDependencies, requestContainerReinstall } from './preview/deps-check';
 export type { PreviewInfo } from './preview/types';
 
 /**
@@ -331,13 +331,19 @@ class PreviewManager {
     }
 
     // With isolation (and always for customer projects) package scripts never run
-    // in the Claudable process. Clear node_modules instead (removes a symlink
-    // itself, never its target); the isolated preview container installs on its
-    // next start.
+    // in the Claudable process: the isolated preview container installs on start
+    // whenever node_modules is missing or incomplete. NEVER delete node_modules
+    // here — the chat page calls this on every open, and wiping it under a running
+    // preview crashed the dev server (502). A forced call (a manifest changed)
+    // only leaves a marker so the next start runs a full, in-place install.
     if (isolationEnabled() || await isCustomerProject(projectId)) {
       const root = project.repoPath ? path.resolve(project.repoPath) : path.join(process.cwd(), 'projects', projectId);
-      await fs.rm(path.join(root, 'node_modules'), { recursive: true, force: true });
-      return { logs: ['[PreviewManager] Dependencies are installed inside the isolated preview container on the next preview start.'] };
+      const marked = opts?.force ? await requestContainerReinstall(root) : false;
+      return {
+        logs: [marked
+          ? '[PreviewManager] Dependencies changed — the isolated preview container reinstalls them on its next start.'
+          : '[PreviewManager] Dependencies are installed inside the isolated preview container when it starts.'],
+      };
     }
 
     const projectPath = project.repoPath

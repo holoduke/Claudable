@@ -34,7 +34,7 @@ import {
   containerServesPort,
 } from './docker';
 import { seedLockfile } from './lockfile-cache';
-import { missingDependencies } from './deps-check';
+import { missingDependencies, reinstallRequested, REINSTALL_MARKER } from './deps-check';
 import { attachHostDb } from './host-db';
 import { ensureNpmPolicyFile } from './npm-policy';
 import {
@@ -731,15 +731,18 @@ export async function buildFrontendContainerArgs(
   // package.json after the last install): then reinstall unconditionally, minus
   // npm's hidden lockfile, which may claim the missing packages are there.
   const missing = isLaravel ? [] : await missingDependencies(projectPath);
+  const reinstall = !isLaravel && (missing.length > 0 || await reinstallRequested(projectPath));
   if (missing.length > 0) {
     log(Buffer.from(`[PreviewManager] Missing dependencies (${missing.slice(0, 8).join(', ')}${missing.length > 8 ? ', …' : ''}) — reinstalling in the container.`));
+  } else if (reinstall) {
+    log(Buffer.from('[PreviewManager] Dependencies changed — reinstalling in the container.'));
   }
-  const installStep = missing.length > 0
-    ? 'rm -f node_modules/.package-lock.json; npm install --include=dev --no-audit --no-fund'
+  const installStep = reinstall
+    ? `rm -f node_modules/.package-lock.json; npm install --include=dev --no-audit --no-fund && rm -f node_modules/${REINSTALL_MARKER}`
     : '[ -n "$(ls -A node_modules 2>/dev/null)" ] || npm install --include=dev --no-audit --no-fund';
   const devScript = isLaravel
     ? inner
-    : `rm -rf .next/dev/lock 2>/dev/null; [ ! -f package.json ] || ${missing.length > 0 ? `{ ${installStep}; }` : installStep}; ${inner}`;
+    : `rm -rf .next/dev/lock 2>/dev/null; [ ! -f package.json ] || ${reinstall ? `{ ${installStep}; }` : installStep}; ${inner}`;
 
   // Package cache PER PROJECT (npm cacache for node, composer for laravel). It
   // used to be one cache shared by every preview container — writable by each —
