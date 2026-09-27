@@ -4,6 +4,7 @@
  * Interacts with projects using the Claude Agent SDK.
  */
 
+import { SQLITE_DIR, SQLITE_FILE, databasePromptNote, ensureSqliteDir, projectUsesSqlite, sqliteEnv } from '@/lib/services/sqlite-db';
 import { query } from '@anthropic-ai/claude-agent-sdk';
 import { credentialEnvName } from '@/lib/services/claude-credentials';
 import type { ClaudeSession, ClaudeResponse } from '@/types/backend';
@@ -328,11 +329,14 @@ async function buildAgentSystemPrompt(
 
   // If a Postgres was provisioned for this project, tell the agent so it builds
   // data-backed features against DATABASE_URL (set in the preview + deploy env).
+  // Covers a Coolify Postgres, a per-project Postgres CONTAINER (managed
+  // services; previously the agent was never told about those) and SQLite.
   try {
     const dbSvc = await getProjectService(projectId, 'database');
-    if ((dbSvc?.serviceData as { engine?: string } | undefined)?.engine === 'postgresql') {
-      systemPrompt += `\n\n## Database\nThis project has a PostgreSQL database. Its connection string is in the DATABASE_URL environment variable (already set in the running preview). Use it for any data persistence — prefer Prisma (schema datasource \`url = env("DATABASE_URL")\`, run \`prisma db push\`) or Drizzle/pg. Never hardcode credentials; always read DATABASE_URL from the environment.`;
-    }
+    const coolifyPg = (dbSvc?.serviceData as { engine?: string } | undefined)?.engine === 'postgresql';
+    const containerPg = !coolifyPg && /^postgres(ql)?:/u.test((await getInjectedEnv(projectId)).DATABASE_URL ?? '');
+    const kind = coolifyPg || containerPg ? 'postgres' : (await projectUsesSqlite(projectId)) ? 'sqlite' : null;
+    systemPrompt += databasePromptNote(kind);
   } catch { /* non-fatal */ }
 
   return { systemPrompt, imagesOn };
@@ -508,6 +512,11 @@ async function runContainerizedTurn(args: {
     try {
       await ensureServicesRunning(projectId);
       agentEnv = await getInjectedEnv(projectId);
+      // SQLite project: the same database file the preview uses, as the agent sees it.
+      if (!agentEnv.DATABASE_URL && await projectUsesSqlite(projectId)) {
+        await ensureSqliteDir(absoluteProjectPath);
+        agentEnv = { ...agentEnv, ...sqliteEnv(`/work/${SQLITE_DIR}/${SQLITE_FILE}`) };
+      }
     } catch { /* non-fatal */ }
 
     // Target architecture: the agent joins its PROJECT's own internal network

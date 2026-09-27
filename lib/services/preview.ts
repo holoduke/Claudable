@@ -879,6 +879,7 @@ class PreviewManager {
         env,
         projectDbUrl,
         composedBackendUrl,
+        projectPath,
       });
     }
 

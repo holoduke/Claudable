@@ -36,6 +36,7 @@ import {
 import { seedLockfile } from './lockfile-cache';
 import { missingDependencies, reinstallRequested, REINSTALL_MARKER } from './deps-check';
 import { attachHostDb } from './host-db';
+import { SQLITE_DIR, SQLITE_FILE, ensureSqliteDir, projectUsesSqlite, sqliteEnv } from '@/lib/services/sqlite-db';
 import { ensureNpmPolicyFile } from './npm-policy';
 import {
   substVars,
@@ -419,6 +420,10 @@ export async function startComposedBackend(ctx: ComposedBackendContext): Promise
     const beName = `${backendContainerName(projectId)}-api`;
     // Env recomputed on every (re)build so the backend picks up the latest Env-tab
     // vars + managed-service connection strings.
+    // SQLite project: the backend gets the project's .data/ folder at /data.
+    const sqliteMount = !projectDbUrl && await projectUsesSqlite(projectId)
+      ? ['-v', `${toHostPath(await ensureSqliteDir(projectPath))}:/data`]
+      : [];
     const computeCenv = async (): Promise<Record<string, string>> => {
       const cvars = { PROJECT: projectPath, PORT: String(c.port) };
       const cenv: Record<string, string> = {};
@@ -426,6 +431,7 @@ export async function startComposedBackend(ctx: ComposedBackendContext): Promise
       cenv.CORS_ORIGIN = resolvedUrl; // allow the frontend's origin
       Object.assign(cenv, injectedEnv);          // db:5432, cache:6379, …
       if (projectDbUrl) cenv.DATABASE_URL = projectDbUrl;
+      else if (sqliteMount.length) Object.assign(cenv, sqliteEnv(`/data/${SQLITE_FILE}`));
       try { for (const ev of await listEnvVars(projectId)) cenv[ev.key] = ev.value; } catch { /* best-effort */ }
       return cenv;
     };
@@ -434,7 +440,7 @@ export async function startComposedBackend(ctx: ComposedBackendContext): Promise
     // actually reflects the agent's source edits.
     const buildAndRunBackend = async (): Promise<string> => {
       const cenv = await computeCenv();
-      const name = await runBackendContainer(projectId, projectPath, c, backendPort, cenv, log, previewPublishHost, beName);
+      const name = await runBackendContainer(projectId, projectPath, c, backendPort, cenv, log, previewPublishHost, beName, sqliteMount);
       const projNet = await ensureProjectNetwork(projectId);
       await connectToProjectNet(projNet, beName, 'api');
       return name;
@@ -825,6 +831,10 @@ export async function buildFrontendContainerArgs(
     feEnv.INTERNAL_API_BASE = composedInternalUrl;
   }
   for (const [k, v] of Object.entries(injectedEnv)) feEnv[k] = v;
+  if (!isLaravel && !injectedEnv.DATABASE_URL && await projectUsesSqlite(projectId)) {
+    await ensureSqliteDir(projectPath);
+    Object.assign(feEnv, sqliteEnv(`/app/${SQLITE_DIR}/${SQLITE_FILE}`));
+  }
   try {
     for (const ev of await listEnvVars(projectId)) feEnv[ev.key] = ev.value;
   } catch { /* env vars are best-effort */ }
@@ -868,6 +878,8 @@ export interface ScrubbedEnvContext {
   env: NodeJS.ProcessEnv;
   projectDbUrl: string | null;
   composedBackendUrl: string | null;
+  /** For the SQLite database file (local in-process dev only). */
+  projectPath?: string;
 }
 
 /**
@@ -973,6 +985,9 @@ export async function buildScrubbedEnv(ctx: ScrubbedEnvContext): Promise<NodeJS.
   scrubbed.WEB_PORT = String(effectivePort);
   if (env.NEXT_PUBLIC_APP_URL) scrubbed.NEXT_PUBLIC_APP_URL = String(env.NEXT_PUBLIC_APP_URL);
   if (projectDbUrl) scrubbed.DATABASE_URL = projectDbUrl;
+  else if (ctx.projectPath && await projectUsesSqlite(projectId)) {
+    Object.assign(scrubbed, sqliteEnv(path.join(await ensureSqliteDir(ctx.projectPath), SQLITE_FILE)));
+  }
   if (composedBackendUrl) {
     scrubbed.NUXT_PUBLIC_API_BASE = scrubbed.NEXT_PUBLIC_API_BASE = scrubbed.API_BASE_URL = composedBackendUrl;
   }
