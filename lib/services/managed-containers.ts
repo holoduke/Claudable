@@ -251,6 +251,8 @@ export interface CustomServiceInput {
   cpus?: string;
 }
 
+export const DEFAULT_SERVICE_CAPS = ['CHOWN', 'DAC_OVERRIDE', 'FOWNER', 'SETGID', 'SETUID'];
+
 /**
  * Validate a custom container's resource limits (they go straight into
  * `docker run --memory/--cpus`): an unchecked `cpus: 64` / `memory: 200g` would
@@ -335,7 +337,12 @@ async function startService(
     '--cap-drop', 'ALL',
     '--restart', 'unless-stopped',
   ];
-  for (const cap of spec.capAdd ?? []) args.push('--cap-add', cap);
+  // A spec without its own capAdd (a CUSTOM container) gets the small set that
+  // standard images need to switch to their own user at start (redis, postgres,
+  // mysql, nginx… call setuid/setgid/chown) — with none they crash-looped on
+  // "setresuid failed: Operation not permitted". Same set as the DB templates and
+  // exactly what the socket-proxy create policy allows.
+  for (const cap of spec.capAdd ?? DEFAULT_SERVICE_CAPS) args.push('--cap-add', cap);
   if (spec.mountPath) {
     const vol = serviceVolumeName(projectId, spec.id);
     await docker(['volume', 'create', vol]);
