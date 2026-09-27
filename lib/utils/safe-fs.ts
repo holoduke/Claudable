@@ -60,6 +60,15 @@ export async function writeFileInside(root: string, target: string, data: Uint8A
 
 /** Create `dir` (recursively) and require that it resolves inside `root`; returns its real path. */
 export async function ensureDirInside(root: string, dir: string): Promise<string> {
+  // Check BEFORE creating: mkdir -p follows a symlinked ancestor, so creating
+  // first could make directories outside the project before the check refuses.
+  let existing = dir;
+  while (!(await fs.stat(existing).then(() => true, () => false))) {
+    const parent = path.dirname(existing);
+    if (parent === existing) break;
+    existing = parent;
+  }
+  if (!(await realPathInside(root, existing))) throw new Error('Refusing to use a directory outside the project');
   await fs.mkdir(dir, { recursive: true });
   const real = await realPathInside(root, dir);
   if (!real) throw new Error('Refusing to use a directory outside the project');
