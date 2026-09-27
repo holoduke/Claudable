@@ -203,6 +203,9 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
       if (!image) return createErrorResponse('bad_request', 'A custom container needs an image.', 400);
       const parseEnv = (v: unknown): Record<string, string> | undefined =>
         (v && typeof v === 'object') ? Object.fromEntries(Object.entries(v as Record<string, unknown>).map(([k, val]) => [k, String(val)])) : undefined;
+      const { normalizeResources } = await import('@/lib/services/managed-containers');
+      try { normalizeResources(custom!.memory, custom!.cpus); }
+      catch (e) { return createErrorResponse('bad_request', (e as Error).message, 400); }
       const spec = await addCustomService(project_id, {
         name: typeof custom!.name === 'string' && custom!.name.trim() ? custom!.name.trim() : image,
         image,
@@ -213,6 +216,8 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
         mountPath: typeof custom!.mountPath === 'string' ? custom!.mountPath : undefined,
         ports: Array.isArray(custom!.ports) ? (custom!.ports as unknown[]).map(Number).filter((n) => Number.isInteger(n)) : undefined,
         dependsOn: Array.isArray(custom!.dependsOn) ? (custom!.dependsOn as unknown[]).map(String) : undefined,
+        memory: typeof custom!.memory === 'string' ? custom!.memory : undefined,
+        cpus: custom!.cpus === undefined ? undefined : String(custom!.cpus),
       });
       return createSuccessResponse({ ok: true, id: spec.id });
     }
