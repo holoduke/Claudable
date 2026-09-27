@@ -538,20 +538,18 @@ export async function serviceAction(
   if (!spec) return { ok: false, out: `Unknown service: ${id}` };
   const name = serviceContainerName(projectId, id);
   if (action === 'stop') return docker(['stop', name]);
-  if (action === 'restart') {
-    const r = await docker(['restart', name]);
-    if (r.ok) return r;
-    // No container to restart (never started / removed) → create it fresh.
-    const net = await ensureProjectNetwork(projectId);
-    try { await startService(projectId, net, spec); return { ok: true, out: 'created' }; }
-    catch (e) { return { ok: false, out: (e as Error).message }; }
-  }
-  // start: try `docker start`, else create fresh on the project net.
-  const started = await docker(['start', name]);
-  if (started.ok) return started;
+  // start / restart RECREATE from the current spec (startService removes a
+  // non-running container before `docker run`): reusing the old container kept
+  // its old config forever — a changed memory/cpu/env/caps never applied. Data
+  // lives in the named volume, so it survives the recreate.
+  if (action === 'restart') await docker(['rm', '-f', name]);
   const net = await ensureProjectNetwork(projectId);
-  try { await startService(projectId, net, spec); return { ok: true, out: 'created' }; }
-  catch (e) { return { ok: false, out: (e as Error).message }; }
+  try {
+    await startService(projectId, net, spec);
+    return { ok: true, out: action === 'restart' ? 'recreated' : 'started' };
+  } catch (e) {
+    return { ok: false, out: (e as Error).message };
+  }
 }
 
 /** Recent logs from a managed container (newest last). */
