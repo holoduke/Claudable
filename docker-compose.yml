@@ -86,17 +86,12 @@ services:
   # control plane can reach it (host-network loopback; the containerized agent has
   # NO docker access). It filters by ENDPOINT, not request body.
   #
-  # RESIDUAL RISK (defense-in-depth gap, DOCUMENTED): /containers/create (POST=1)
-  # allows a host bind mount, so a party reaching this proxy could `docker run
-  # -v /:/h` for host root. tecnativa can't inspect the create body. Contained
-  # because only Claudable's trusted control plane reaches 127.0.0.1:2375 (the
-  # agent/preview sandboxes cannot), and the control-plane RCE vectors (in-process
-  # agent, OAuth SSRF) are closed in code. A body-inspecting filter exists
-  # (docker/socket-filter/filter.js) but is NOT wired in: proxying docker's
-  # foreground-run attach HIJACK through it broke preview stdout streaming, so it
-  # needs a correct raw-hijack implementation + an offline test harness before it
-  # can front this. FULL FIX still recommended (that filter, fixed, or rootless
-  # dockerd). Only used when PREVIEW_ISOLATION is set; otherwise it sits idle.
+  # Container-create policy (audit #7, CLOSED): the endpoint allowlist cannot
+  # see WHAT is created, so haproxy.cfg.template also inspects every
+  # /containers/create body and refuses host escapes (binds outside
+  # CLAUDABLE_BIND_ALLOW or with "..", privileged, host namespaces/network,
+  # devices, unconfined seccomp/apparmor, caps beyond the DB set). Attach/exec
+  # streams are untouched (no extra proxy in the path).
   dockerproxy:
     image: tecnativa/docker-socket-proxy:v0.5.0
     container_name: claudable-dockerproxy
@@ -136,6 +131,10 @@ services:
       - TASKS=0
       - NODES=0
       - PLUGINS=0
+      # Host paths Claudable may bind-mount (regex alternatives, no leading "/"):
+      # the data root + the global skills dir. Used by the create policy in
+      # haproxy.cfg.template — keep in step with DATA_HOST_DIR/GLOBAL_SKILLS_HOST_DIR.
+      - 'CLAUDABLE_BIND_ALLOW=${CLAUDABLE_BIND_ALLOW:-opt/claudable/data/|opt/claudable/global-skills[/:"]}'
     ports:
       # Loopback only — Claudable (host network) reaches it at 127.0.0.1:2375.
       - "127.0.0.1:2375:2375"
@@ -148,8 +147,3 @@ services:
       # haproxy.cfg from it at start; mounting the final file breaks boot.
       - ./docker/socket-proxy/haproxy.cfg.template:/usr/local/etc/haproxy/haproxy.cfg.template:ro
 
-  # NOTE: docker/socket-filter/filter.js (the bind-mount body filter for #7) is
-  # intentionally NOT wired in here yet — its transparent proxying broke docker's
-  # foreground-run attach hijack (preview stdout never streamed). It needs a
-  # correct raw-hijack implementation + an offline test before fronting
-  # dockerproxy. Kept in the repo for that follow-up.

@@ -20,6 +20,8 @@
 
 global
     log stdout format raw daemon "${LOG_LEVEL}"
+    # Room to buffer a whole /containers/create body for the policy below.
+    tune.bufsize 131072
 
     pidfile /run/haproxy.pid
     maxconn 4000
@@ -69,6 +71,31 @@ backend docker-events
 frontend dockerfrontend
     bind ${BIND_CONFIG}
     http-request deny unless METH_GET || { env(POST) -m bool }
+
+    # --- Container-create policy (audit #7) ----------------------------------
+    # The endpoint allowlist below cannot see WHAT is created: anyone reaching
+    # this proxy could `docker run -v /:/host --privileged` = host root. Inspect
+    # the create body and refuse host escapes. Legit Claudable containers only
+    # bind-mount under the data root (projects, caches, agent homes, plugins,
+    # npm policy) and the global skills dir, and add at most the DB caps.
+    # The patterns match real JSON keys only: inside an Env value those quotes
+    # are escaped (\"Privileged\"), so env content can never trigger a deny.
+    option http-buffer-request
+    acl c_create path,url_dec -m reg -i ^(/v[\d\.]+)?/containers/create$
+    # the whole body must be buffered and inspected — no unchecked tail
+    http-request deny deny_status 403 if METH_POST c_create !{ req.hdr(content-length) -m found }
+    http-request deny deny_status 403 if METH_POST c_create { req.body_size gt 100000 }
+    http-request deny deny_status 403 if METH_POST c_create { req.body -m reg -i "\"Privileged\"\s*:\s*true" }
+    http-request deny deny_status 403 if METH_POST c_create { req.body -m reg -i "\"(PidMode|IpcMode|UsernsMode|CgroupnsMode|UTSMode|NetworkMode)\"\s*:\s*\"host\"" }
+    http-request deny deny_status 403 if METH_POST c_create { req.body -m reg -i "\"(Devices|DeviceRequests|DeviceCgroupRules)\"\s*:\s*\[\s*[\{\"]" }
+    http-request deny deny_status 403 if METH_POST c_create { req.body -m reg -i "\"SecurityOpt\"\s*:\s*\[[^\]]*unconfined" }
+    # an element (after "[" or ",": cap names contain no commas) outside the DB caps
+    http-request deny deny_status 403 if METH_POST c_create { req.body -m reg "\"CapAdd\"\s*:\s*\[(?:[^\]]*,)?\s*\"(?!(?:CAP_)?(?:CHOWN|DAC_OVERRIDE|FOWNER|SETGID|SETUID)\")" }
+    # host binds: only under the data root / global skills, never with ".."
+    http-request deny deny_status 403 if METH_POST c_create { req.body -m reg "\"Binds\"\s*:\s*\[[^\]]*\"/(?!${CLAUDABLE_BIND_ALLOW})" }
+    http-request deny deny_status 403 if METH_POST c_create { req.body -m reg "\"Binds\"\s*:\s*\[[^\]]*\"[^\"]*\.\.[^\"]*\"" }
+    http-request deny deny_status 403 if METH_POST c_create { req.body -m reg "\"Source\"\s*:\s*\"/(?!${CLAUDABLE_BIND_ALLOW})" }
+    http-request deny deny_status 403 if METH_POST c_create { req.body -m reg "\"Source\"\s*:\s*\"[^\"]*\.\.[^\"]*\"" }
 
     # Allowed endpoints
     http-request allow if { path,url_dec -m reg -i ^(/v[\d\.]+)?/containers/[a-zA-Z0-9_.-]+/((stop)|(restart)|(kill)) } { env(ALLOW_RESTARTS) -m bool }
