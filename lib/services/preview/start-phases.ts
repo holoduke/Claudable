@@ -36,6 +36,7 @@ import {
 import { seedLockfile } from './lockfile-cache';
 import { missingDependencies } from './deps-check';
 import { attachHostDb } from './host-db';
+import { ensureNpmPolicyFile } from './npm-policy';
 import {
   substVars,
   buildBackendBaseEnv,
@@ -747,12 +748,19 @@ export async function buildFrontendContainerArgs(
   // project's own reinstalls. Under the data root so it's node-owned (containers
   // run as uid 1000). Best-effort: never block a preview start on it.
   let cacheArgs: string[] = [];
+  let npmPolicyMounted = false;
   try {
     if (!/^[A-Za-z0-9_-]{1,64}$/u.test(projectId)) throw new Error('unsafe project id for a cache path');
     const dir = path.join(isLaravel ? '.composer-cache' : '.npm-cache', 'projects', projectId);
     const cacheDir = path.resolve(path.dirname(process.env.PROJECTS_DIR || './data/projects'), dir);
     await fs.mkdir(cacheDir, { recursive: true });
     cacheArgs = ['-v', `${toHostPath(cacheDir)}:${isLaravel ? '/composer-cache' : '/npm-cache'}`];
+    if (!isLaravel) {
+      // Read-only npm policy (which dependency install scripts may run) — see npm-policy.ts.
+      const policy = await ensureNpmPolicyFile(path.resolve(path.dirname(process.env.PROJECTS_DIR || './data/projects')));
+      cacheArgs.push('-v', `${toHostPath(policy)}:/etc/claudable-npmrc:ro`);
+      npmPolicyMounted = true;
+    }
   } catch { /* cache is an optimization only */ }
   // Public preview hostname (preview-<slug>.<domain>), for Vite's host check below.
   const publicPreviewHost = (() => {
@@ -791,6 +799,7 @@ export async function buildFrontendContainerArgs(
         HOST: '0.0.0.0',
         // Point npm at the shared cache volume mounted below (node-owned bind mount).
         ...(cacheArgs.length ? { npm_config_cache: '/npm-cache' } : {}),
+        ...(npmPolicyMounted ? { NPM_CONFIG_USERCONFIG: '/etc/claudable-npmrc' } : {}),
         // Recent Vite dev servers reject requests whose Host header isn't in
         // server.allowedHosts ("Blocked request. This host is not allowed") —
         // and the preview is reached via its public subdomain, not localhost.
