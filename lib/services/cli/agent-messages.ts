@@ -395,7 +395,9 @@ export function createAgentMessageProcessor(ctx: AgentMessageProcessorContext) {
 
     if (message.type === 'rate_limit_event') {
       // Subscription window utilization (5-hour / weekly) — account-wide.
-      recordRateLimit(projectId, (message as Record<string, unknown>).rate_limit_info);
+      // Only runs on the PLATFORM subscription: a run billed to a customer org
+      // (its API key or a customer's own Claude account) reports THAT account.
+      if (!ctx.billing) recordRateLimit(projectId, (message as Record<string, unknown>).rate_limit_info);
       return null;
     }
 

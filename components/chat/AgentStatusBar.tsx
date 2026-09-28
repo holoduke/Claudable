@@ -47,8 +47,24 @@ const formatReset = (iso?: string): string | null => {
   return `resets in ${Math.round(hours / 24)}d`;
 };
 
+const windowTitle = (label: string, pct: number | undefined, resetsAt?: string): string => {
+  const reset = resetsAt && Date.parse(resetsAt) > Date.now() ? ` · ${formatReset(resetsAt)}` : '';
+  return pct === undefined ? `${label}: not known yet (refreshes on the next agent turn)` : `${label}: ${pct}% used${reset}`;
+};
+
+const formatAgo = (iso: string): string => {
+  const min = Math.round((Date.now() - Date.parse(iso)) / 60_000);
+  if (!Number.isFinite(min) || min < 1) return 'just now';
+  if (min < 60) return `${min} min ago`;
+  const h = Math.floor(min / 60);
+  return h < 48 ? `${h}h ago` : `${Math.round(h / 24)}d ago`;
+};
+
 const pctOfWindow = (w?: AgentRateLimitWindow): number | undefined => {
   if (!w || typeof w.utilization !== 'number') return undefined;
+  // Past its reset the stored number is stale (the account may have been used
+  // elsewhere since) — show "unknown" until the next agent turn refreshes it.
+  if (w.resetsAt && Date.parse(w.resetsAt) < Date.now()) return undefined;
   // The SDK reports utilization as 0..1; clamp defensively.
   const pct = w.utilization <= 1 ? w.utilization * 100 : w.utilization;
   return Math.max(0, Math.min(100, Math.round(pct)));
@@ -166,25 +182,29 @@ export default function AgentStatusBar({ projectId, liveStatus, open, onOpenChan
   }, [open, onOpenChange]);
 
   const contextPct = status?.contextPct !== undefined ? Math.round(status.contextPct) : undefined;
+  const limitsApplicable = status?.limitsApplicable === true;
   const fiveHourPct = pctOfWindow(status?.rateLimits?.fiveHour);
   const weekPct = pctOfWindow(status?.rateLimits?.sevenDay);
 
   const chips = useMemo(() => {
-    const parts: { key: string; label: string; pct?: number }[] = [
+    const parts: { key: string; label: string; pct?: number; title?: string }[] = [
       { key: 'ctx', label: 'Context', pct: contextPct },
     ];
-    if (fiveHourPct !== undefined) parts.push({ key: '5h', label: '5h', pct: fiveHourPct });
-    if (weekPct !== undefined) parts.push({ key: 'wk', label: 'Week', pct: weekPct });
+    // The plan windows are always shown for projects on the platform account
+    // ("–" until the first agent turn reports them).
+    if (limitsApplicable) {
+      parts.push({ key: '5h', label: '5h', pct: fiveHourPct, title: windowTitle('5-hour limit', fiveHourPct, status?.rateLimits?.fiveHour?.resetsAt) });
+      parts.push({ key: 'wk', label: 'Week', pct: weekPct, title: windowTitle('Weekly limit', weekPct, status?.rateLimits?.sevenDay?.resetsAt) });
+    }
     return parts;
-  }, [contextPct, fiveHourPct, weekPct]);
+  }, [contextPct, fiveHourPct, weekPct, limitsApplicable, status?.rateLimits]);
 
   const hasData = !!status && (status.contextUsedTokens !== undefined || !!status.totals?.turns || !!status.rateLimits);
 
-  // Nothing recorded yet: stay invisible (no strip) UNLESS the user explicitly
-  // asked to open it via /usage — then show a "nothing yet" popover so the
-  // command gives feedback instead of silently doing nothing (and later
-  // popping open uninvited when the first snapshot lands).
-  if (!hasData) {
+  // Nothing recorded for this project: still show the strip on the platform
+  // account (the account windows are what the team wants to see at all times);
+  // otherwise stay invisible unless /usage asked for it.
+  if (!hasData && !limitsApplicable) {
     if (!open) return null;
     return (
       <div className="relative flex justify-end mb-1.5" ref={panelRef}>
@@ -207,7 +227,7 @@ export default function AgentStatusBar({ projectId, liveStatus, open, onOpenChan
         className="flex items-center gap-2 px-2 py-1 rounded-md text-[11px] text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-white/6 transition-colors"
       >
         {chips.map((c) => (
-          <span key={c.key} className="flex items-center gap-1">
+          <span key={c.key} className="flex items-center gap-1" title={c.title}>
             <span className={`inline-block w-1.5 h-1.5 rounded-full ${meterColor(c.pct)}`} />
             <span>{c.label}</span>
             <span className={textColor(c.pct)}>{c.pct === undefined ? '–' : `${c.pct}%`}</span>
@@ -215,7 +235,7 @@ export default function AgentStatusBar({ projectId, liveStatus, open, onOpenChan
         ))}
       </button>
 
-      {open && (
+      {open && status && (
         <div className="absolute bottom-full right-0 mb-2 w-80 z-120 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-2xl p-4 space-y-4 text-left">
           <div className="flex items-center justify-between">
             <span className="text-sm font-semibold text-gray-900 dark:text-gray-50">Agent status</span>
@@ -247,6 +267,13 @@ export default function AgentStatusBar({ projectId, liveStatus, open, onOpenChan
             status={status.rateLimits?.sevenDay?.status}
             sub={formatReset(status.rateLimits?.sevenDay?.resetsAt)}
           />
+          {limitsApplicable && (
+            <p className="-mt-2 text-[10px] text-gray-400 dark:text-gray-500">
+              {status.rateLimits?.updatedAt
+                ? `Claude subscription (whole team) · updated ${formatAgo(status.rateLimits.updatedAt)} · refreshes after every agent turn`
+                : 'Claude subscription (whole team) · appears after the first agent turn'}
+            </p>
+          )}
 
           {status.lastTurn && (
             <div className="text-xs text-gray-600 dark:text-gray-300 space-y-1">

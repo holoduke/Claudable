@@ -54,4 +54,6 @@ export interface AgentUsageSnapshot {
   totals?: AgentUsageTotals;
   /** Account-wide subscription limits (not per project). */
   rateLimits?: AgentRateLimits;
+  /** False for projects on another account (a customer's key): hide the plan windows. */
+  limitsApplicable?: boolean;
 }
