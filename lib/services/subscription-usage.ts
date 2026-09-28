@@ -23,6 +23,7 @@ interface CacheEntry {
 }
 
 const cache = new Map<string, CacheEntry>();
+const warned = new Set<string>();
 
 function windowFrom(raw: unknown): AgentRateLimitWindow | undefined {
   if (!raw || typeof raw !== 'object') return undefined;
@@ -74,8 +75,11 @@ export async function fetchSubscriptionUsage(token: string): Promise<AgentRateLi
     });
     if (res.ok) {
       limits = mapUsageResponse(await res.json().catch(() => null));
-    } else {
-      console.warn(`[SubscriptionUsage] usage endpoint returned ${res.status}`);
+    } else if (!warned.has(key)) {
+      // 403 = a setup-token without the profile scope: expected, the numbers
+      // come from the CLI's rate_limit_event instead. Say it once, not per poll.
+      warned.add(key);
+      console.warn(`[SubscriptionUsage] usage endpoint returned ${res.status} (limits come from agent turns instead)`);
     }
   } catch (error) {
     console.warn('[SubscriptionUsage] fetch failed:', error instanceof Error ? error.message : error);

@@ -9,6 +9,9 @@
  * Rate limits are ACCOUNT-wide, not per-project, so they live in a module
  * singleton and are merged into every snapshot at read/publish time.
  */
+import fs from 'fs/promises';
+import fsSync from 'fs';
+import path from 'path';
 import { prisma } from '@/lib/db/client';
 import { isCustomerProject } from '@/lib/services/tenant-policy';
 import { streamManager } from './stream';
@@ -32,7 +35,29 @@ interface ProjectUsageState {
 }
 
 const projectUsage = new Map<string, ProjectUsageState>();
-let globalRateLimits: AgentRateLimits = {};
+
+// The account windows survive restarts (every deploy used to blank them until
+// the next turn): a small JSON file next to the data dir. Loaded once, written
+// on change. Best-effort — a read/write failure only means "no numbers yet".
+const RATE_LIMITS_FILE = path.join(
+  path.resolve(process.env.PROJECTS_DIR && path.isAbsolute(process.env.PROJECTS_DIR) ? process.env.PROJECTS_DIR : path.resolve(process.cwd(), process.env.PROJECTS_DIR || './data/projects'), '..'),
+  '.claude-rate-limits.json',
+);
+function loadRateLimits(): AgentRateLimits {
+  try {
+    const parsed = JSON.parse(fsSync.readFileSync(RATE_LIMITS_FILE, 'utf8')) as AgentRateLimits;
+    return parsed && typeof parsed === 'object' ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+function saveRateLimits(limits: AgentRateLimits): void {
+  const tmp = `${RATE_LIMITS_FILE}.tmp`;
+  fs.writeFile(tmp, JSON.stringify(limits))
+    .then(() => fs.rename(tmp, RATE_LIMITS_FILE))
+    .catch(() => { /* best-effort */ });
+}
+let globalRateLimits: AgentRateLimits = loadRateLimits();
 
 /*
  * `globalRateLimits` describes New Story's Claude SUBSCRIPTION account. Customer
@@ -84,6 +109,8 @@ function buildSnapshot(projectId: string, state: ProjectUsageState): AgentUsageS
     totals: state.totals,
     rateLimits:
       sharesPlatformAccount(projectId) && Object.keys(globalRateLimits).length > 0 ? globalRateLimits : undefined,
+    // Whether this project runs on (and may see) the platform subscription's windows.
+    limitsApplicable: sharesPlatformAccount(projectId),
   };
 }
 
@@ -290,29 +317,72 @@ export function mergeApiRateLimits(limits: AgentRateLimits): void {
     sevenDay: mergeWindow(globalRateLimits.sevenDay, limits.sevenDay),
     updatedAt: limits.updatedAt ?? nowIso(),
   };
+  saveRateLimits(globalRateLimits);
+}
+
+const isoFromEpoch = (v: unknown): string | undefined =>
+  typeof v === 'number' && v > 0 ? new Date(v * 1000).toISOString() : undefined;
+// Window fraction 0..1. The CLI reports fractions; tolerate a 0..100 percent.
+const fraction = (v: unknown): number | undefined =>
+  typeof v === 'number' && Number.isFinite(v) && v >= 0 ? Math.min(1, v > 1 ? v / 100 : v) : undefined;
+
+/**
+ * A `rate_limit_event` → the account's 5-hour / weekly windows (pure; exported
+ * for tests). Current CLIs put the real numbers for BOTH windows in
+ * `unifiedWindows` on every turn; the top-level fields describe only the window
+ * named in `rateLimitType` (status + reset; `utilization` is mostly absent).
+ */
+export function rateLimitsFromEvent(info: unknown, prev: AgentRateLimits): AgentRateLimits | null {
+  if (!info || typeof info !== 'object') return null;
+  const i = info as Record<string, unknown>;
+  const type = typeof i.rateLimitType === 'string' ? i.rateLimitType : undefined;
+  const status = typeof i.status === 'string' ? i.status : undefined;
+  const next: AgentRateLimits = { ...prev };
+  let changed = false;
+
+  const unified = i.unifiedWindows && typeof i.unifiedWindows === 'object' ? i.unifiedWindows as Record<string, unknown> : null;
+  for (const [key, field] of [['five_hour', 'fiveHour'], ['seven_day', 'sevenDay']] as const) {
+    const w = unified?.[key];
+    if (!w || typeof w !== 'object') continue;
+    const r = w as Record<string, unknown>;
+    const utilization = fraction(r.utilization);
+    const resetsAt = isoFromEpoch(r.resetsAt);
+    if (utilization === undefined && !resetsAt) continue;
+    next[field] = {
+      ...next[field],
+      ...(utilization !== undefined ? { utilization } : {}),
+      ...(resetsAt ? { resetsAt } : {}),
+      // A stale 'rejected' clears once the window is back under its cap.
+      status: next[field]?.status === 'rejected' && utilization !== undefined && utilization < 1 ? 'allowed' : next[field]?.status,
+    };
+    changed = true;
+  }
+
+  const field = type === 'five_hour' ? 'fiveHour'
+    : type === 'seven_day' || type === 'seven_day_opus' || type === 'seven_day_sonnet' ? 'sevenDay'
+    : null;
+  if (field) {
+    const utilization = fraction(i.utilization);
+    const resetsAt = isoFromEpoch(i.resetsAt);
+    next[field] = {
+      ...next[field],
+      ...(utilization !== undefined ? { utilization } : {}),
+      ...(resetsAt ? { resetsAt } : {}),
+      ...(status ? { status } : {}),
+    };
+    changed = true;
+  }
+  if (!changed) return null; // overage-only / unknown — not surfaced
+  return { ...next, updatedAt: nowIso() };
 }
 
 /** SDK `rate_limit_event` → account-wide window utilization. Publishes to the project stream. */
 export function recordRateLimit(projectId: string, info: unknown): void {
-  if (!info || typeof info !== 'object') return;
   if (!sharesPlatformAccount(projectId)) return; // a customer's own key, not our account
-  const i = info as Record<string, unknown>;
-  const type = typeof i.rateLimitType === 'string' ? i.rateLimitType : undefined;
-  const window = {
-    utilization: typeof i.utilization === 'number' ? i.utilization : undefined,
-    resetsAt:
-      typeof i.resetsAt === 'number' && i.resetsAt > 0
-        ? new Date(i.resetsAt * 1000).toISOString()
-        : undefined,
-    status: typeof i.status === 'string' ? i.status : undefined,
-  };
-  if (type === 'five_hour') {
-    globalRateLimits = { ...globalRateLimits, fiveHour: window, updatedAt: nowIso() };
-  } else if (type === 'seven_day' || type === 'seven_day_opus' || type === 'seven_day_sonnet') {
-    globalRateLimits = { ...globalRateLimits, sevenDay: window, updatedAt: nowIso() };
-  } else {
-    return; // overage/unknown — not surfaced in the panel
-  }
+  const next = rateLimitsFromEvent(info, globalRateLimits);
+  if (!next) return;
+  globalRateLimits = next;
+  saveRateLimits(globalRateLimits);
   publishSnapshot(projectId, getState(projectId));
 }
 
@@ -328,6 +398,7 @@ export function markRateLimitExhausted(projectId: string, resetsAtIso?: string):
     fiveHour: { utilization: 1, status: 'rejected', ...(resetsAtIso ? { resetsAt: resetsAtIso } : {}) },
     updatedAt: nowIso(),
   };
+  saveRateLimits(globalRateLimits);
   publishSnapshot(projectId, getState(projectId));
 }
 
