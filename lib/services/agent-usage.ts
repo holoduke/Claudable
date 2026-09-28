@@ -78,6 +78,22 @@ function sharesPlatformAccount(projectId: string): boolean {
   rememberTenant(projectId);
   return customerProjectCache.get(projectId)?.isCustomer === false;
 }
+/**
+ * Awaited variant: resolves the tenant when it isn't cached yet. The sync check
+ * above fails closed on a cold cache, which dropped the rate-limit event of a
+ * brand-new project's first turn and hid the strip on its first page load.
+ */
+async function sharesPlatformAccountAsync(projectId: string): Promise<boolean> {
+  const hit = customerProjectCache.get(projectId);
+  if (hit && Date.now() - hit.at < TENANT_CACHE_MS) return hit.isCustomer === false;
+  try {
+    const isCustomer = await isCustomerProject(projectId);
+    customerProjectCache.set(projectId, { isCustomer, at: Date.now() });
+    return !isCustomer;
+  } catch {
+    return false; // unknown → fail closed
+  }
+}
 
 const nowIso = () => new Date().toISOString();
 
@@ -377,8 +393,8 @@ export function rateLimitsFromEvent(info: unknown, prev: AgentRateLimits): Agent
 }
 
 /** SDK `rate_limit_event` → account-wide window utilization. Publishes to the project stream. */
-export function recordRateLimit(projectId: string, info: unknown): void {
-  if (!sharesPlatformAccount(projectId)) return; // a customer's own key, not our account
+export async function recordRateLimit(projectId: string, info: unknown): Promise<void> {
+  if (!(await sharesPlatformAccountAsync(projectId))) return; // a customer's own key, not our account
   const next = rateLimitsFromEvent(info, globalRateLimits);
   if (!next) return;
   globalRateLimits = next;

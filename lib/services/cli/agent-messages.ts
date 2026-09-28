@@ -397,7 +397,7 @@ export function createAgentMessageProcessor(ctx: AgentMessageProcessorContext) {
       // Subscription window utilization (5-hour / weekly) — account-wide.
       // Only runs on the PLATFORM subscription: a run billed to a customer org
       // (its API key or a customer's own Claude account) reports THAT account.
-      if (!ctx.billing) recordRateLimit(projectId, (message as Record<string, unknown>).rate_limit_info);
+      if (!ctx.billing) await recordRateLimit(projectId, (message as Record<string, unknown>).rate_limit_info);
       return null;
     }
 
