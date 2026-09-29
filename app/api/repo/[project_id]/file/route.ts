@@ -5,6 +5,8 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { denyUnlessProjectAccess } from '@/lib/auth/gate';
+import { getSessionUser } from '@/lib/auth/session';
+import { directEditGuardFor } from '@/lib/services/edit-profiles';
 import {
   readProjectFileContent,
   writeProjectFileContent,
@@ -73,7 +75,9 @@ export async function PUT(request: NextRequest, { params }: RouteContext) {
       );
     }
 
-    await writeProjectFileContent(project_id, path, content);
+    const user = await getSessionUser();
+    const guard = await directEditGuardFor(project_id, user?.id);
+    await writeProjectFileContent(project_id, path, content, guard);
     return NextResponse.json({ success: true, path });
   } catch (error) {
     if (error instanceof FileBrowserError) {

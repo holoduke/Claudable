@@ -244,10 +244,14 @@ export async function readProjectFileContent(
 
 const MAX_WRITE_BYTES = 1_000_000; // 1MB safeguard
 
+/** Returns a refusal message when a direct edit is not allowed (edit profiles), else null. */
+export type DirectEditGuard = (relPath: string, before: string, after: string) => string | null;
+
 export async function writeProjectFileContent(
   projectId: string,
   filePath: string,
-  content: string
+  content: string,
+  guard?: DirectEditGuard | null
 ): Promise<void> {
   const project = await getProjectById(projectId);
   if (!project) {
@@ -278,6 +282,14 @@ export async function writeProjectFileContent(
 
   if (content.length > MAX_WRITE_BYTES) {
     throw new FileBrowserError('File content too large', 400);
+  }
+
+  if (guard) {
+    const before = await fs.readFile(absolutePath, 'utf-8').catch(() => {
+      throw new FileBrowserError('Failed to read file', 500);
+    });
+    const refusal = guard(normalizedPath.replace(/\\/g, '/'), before, content);
+    if (refusal) throw new FileBrowserError(refusal, 403);
   }
 
   try {

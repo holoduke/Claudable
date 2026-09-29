@@ -10,6 +10,7 @@ import { prisma } from '@/lib/db/client';
 import { canWriteProject } from '@/lib/services/project-access';
 import { getProjectById } from '@/lib/services/project';
 import { revertToCheckpoint } from '@/lib/services/checkpoints';
+import { isRestricted, resolveEditProfile } from '@/lib/services/edit-profiles';
 import { getActiveRequests } from '@/lib/services/user-requests';
 import { createSuccessResponse, createErrorResponse, handleApiError } from '@/lib/utils/api-response';
 
@@ -32,6 +33,9 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
       if (!user) return createErrorResponse('unauthorized', 'Authentication required', 401);
       const dbProject = await prisma.project.findUnique({ where: { id: project_id } });
       if (!dbProject || !(await canWriteProject(user, dbProject))) return createErrorResponse('forbidden', 'Access denied', 403);
+      // Reverting restores the whole tree (code included): full edit profile only.
+      const { profile } = await resolveEditProfile(project_id, user.id);
+      if (isRestricted(profile)) return createErrorResponse('forbidden', `Your edit profile "${profile.label}" does not allow reverting`, 403);
     }
 
     // Don't revert while an agent turn is running: the executor's file writes

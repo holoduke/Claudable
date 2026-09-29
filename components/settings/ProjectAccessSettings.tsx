@@ -1,5 +1,6 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from 'react';
+import ProjectEditProfilesSettings from './ProjectEditProfilesSettings';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? '';
 
@@ -278,6 +279,10 @@ export default function ProjectAccessSettings({ projectId }: Props) {
           </div>
         </>
       )}
+
+      <div className="pt-5 border-t border-gray-200 dark:border-white/8">
+        <ProjectEditProfilesSettings projectId={projectId} />
+      </div>
     </div>
   );
 }
