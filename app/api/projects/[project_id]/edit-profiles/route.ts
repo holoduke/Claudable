@@ -23,7 +23,13 @@ interface Ctx { params: Promise<{ project_id: string }> }
 const MAX_PEOPLE = 200;
 
 function profileList(config: EditProfileConfig) {
-  return PROFILE_IDS.map((id) => (id === 'custom' ? { ...profileFor('custom', config), defined: Boolean(config.custom) } : { ...builtinProfile(id as BuiltinProfileId), defined: true }));
+  return PROFILE_IDS.map((id) => {
+    if (id !== 'custom') return { ...builtinProfile(id as BuiltinProfileId), defined: true };
+    // profileFor('custom') falls back to "content" for enforcement; the list must still say "custom".
+    return config.custom
+      ? { ...profileFor('custom', config), defined: true }
+      : { id: 'custom' as const, label: 'Custom', description: '', kinds: [], defined: false };
+  });
 }
 
 /** Everyone who can write the project and could get a profile, with whether they are exempt. */
