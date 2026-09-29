@@ -27,6 +27,7 @@ export type AuditAction =
   | 'project.org_changed'
   | 'project.deleted'
   | 'project.visibility_changed'
+  | 'project.edit_profiles_changed'
   | 'project.member.added'
   | 'project.member.role_changed'
   | 'project.member.removed';

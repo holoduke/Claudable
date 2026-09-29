@@ -12,7 +12,7 @@ interface RouteContext {
  */
 export async function POST(request: NextRequest, { params }: RouteContext) {
   const { project_id } = await params;
-  return branchRoute(request, project_id, { write: true }, () => mergeProjectBranchIntoBase(project_id));
+  return branchRoute(request, project_id, { write: true, fullEdit: true }, () => mergeProjectBranchIntoBase(project_id));
 }
 
 export const runtime = 'nodejs';

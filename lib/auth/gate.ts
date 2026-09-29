@@ -12,6 +12,7 @@
  *   const denied = await denyUnlessProjectAccess(project_id, { write: true });  // write (agent/edit/deploy)
  *   const denied = await denyUnlessProjectAccess(project_id, { manage: true }); // manage (owner/admin: secrets, DB drop, delete)
  *   const denied = await denyUnlessProjectAccess(project_id, { write: true, configure: true }); // project settings
+ *   const denied = await denyUnlessProjectAccess(project_id, { write: true, fullEdit: true });  // whole-tree changes (needs the full edit profile)
  *   const denied = await denyUnlessAdmin();                          // org-global
  *   if (denied) return denied;
  *
@@ -28,6 +29,7 @@ import { getSessionUser, getAdminUser, authEnabled } from '@/lib/auth/session';
 import { isCustomerProject, isInternalUser } from '@/lib/services/tenant-policy';
 import { prisma } from '@/lib/db/client';
 import { canAccessProject, canManageProject, canWriteProject } from '@/lib/services/project-access';
+import { isRestricted, resolveEditProfile } from '@/lib/services/edit-profiles';
 
 function deny(status: number, code: string, message: string): Response {
   return Response.json({ success: false, error: code, message }, { status });
@@ -39,7 +41,7 @@ function deny(status: number, code: string, message: string): Response {
  */
 export async function denyUnlessProjectAccess(
   projectId: string,
-  opts?: { manage?: boolean; write?: boolean; configure?: boolean },
+  opts?: { manage?: boolean; write?: boolean; configure?: boolean; fullEdit?: boolean },
 ): Promise<Response | null> {
   if (!authEnabled()) return null;
   const user = await getSessionUser();
@@ -52,6 +54,12 @@ export async function denyUnlessProjectAccess(
   if (opts?.write && !opts?.manage && !(await canWriteProject(user, project))) return deny(403, 'forbidden', 'Access denied');
   if ((opts?.manage || opts?.configure) && (await isCustomerProject(projectId)) && !(await isInternalUser(user))) {
     return deny(403, 'forbidden', 'This setting is managed by New Story');
+  }
+  // Settings and whole-tree changes (branches, revert, design import) need the
+  // full edit profile: they change code a restricted profile may not touch.
+  if (opts?.fullEdit || opts?.configure) {
+    const { profile } = await resolveEditProfile(projectId, user.id);
+    if (isRestricted(profile)) return deny(403, 'forbidden', `Your edit profile "${profile.label}" does not allow this`);
   }
   return null;
 }

@@ -20,7 +20,7 @@ interface RouteContext {
 export async function POST(request: Request, { params }: RouteContext) {
   try {
     const { project_id } = await params;
-    const gate = await denyUnlessProjectAccess(project_id, { write: true });
+    const gate = await denyUnlessProjectAccess(project_id, { write: true, fullEdit: true });
     if (gate) return gate;
     // Remote designs are New Story's own (the server's claude.ai account): only
     // staff may import them, and never into a customer project.

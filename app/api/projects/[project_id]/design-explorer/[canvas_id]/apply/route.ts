@@ -20,7 +20,7 @@ interface RouteContext { params: Promise<{ project_id: string; canvas_id: string
 export async function POST(request: NextRequest, { params }: RouteContext) {
   try {
     const { project_id, canvas_id } = await params;
-    const _gate = await denyUnlessProjectAccess(project_id, { write: true });
+    const _gate = await denyUnlessProjectAccess(project_id, { write: true, fullEdit: true });
     if (_gate) return _gate;
     let body: Record<string, unknown>;
     try {

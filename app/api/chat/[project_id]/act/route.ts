@@ -13,6 +13,7 @@ import {
 import { createMessage } from '@/lib/services/message';
 import { getSessionUser, authEnabled } from '@/lib/auth/session';
 import { createCheckpoint } from '@/lib/services/checkpoints';
+import { enforceTurnEditProfile, prepareTurnEditGuard, type TurnEditGuard } from '@/lib/services/edit-profile-enforce';
 import { streamManager } from '@/lib/services/stream';
 import { prisma } from '@/lib/db/client';
 
@@ -50,8 +51,13 @@ async function checkpointTurn(projectId: string, projectPath: string, instructio
 // in-flight checkpoint per project and make the NEXT turn wait for it before its
 // agent starts (see `await pendingCheckpoints...` below). No executor changes.
 const pendingCheckpoints = new Map<string, Promise<void>>();
-function runCheckpoint(projectId: string, projectPath: string, instruction: string, requestId?: string): void {
-  const p = checkpointTurn(projectId, projectPath, instruction, requestId);
+function runCheckpoint(projectId: string, projectPath: string, instruction: string, requestId?: string, editGuard?: TurnEditGuard | null): void {
+  // Edit profile backstop FIRST (put back what the profile forbids), then the
+  // checkpoint — both inside the pending entry so the next turn waits for them.
+  const p = (async () => {
+    if (editGuard) await enforceTurnEditProfile(editGuard, requestId);
+    await checkpointTurn(projectId, projectPath, instruction, requestId);
+  })();
   pendingCheckpoints.set(projectId, p);
   p.finally(() => { if (pendingCheckpoints.get(projectId) === p) pendingCheckpoints.delete(projectId); });
 }
@@ -513,6 +519,12 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
     // two turns (see pendingCheckpoints above). Fast (a git add -A) and bounded.
     await pendingCheckpoints.get(project_id)?.catch(() => {});
 
+    // Restricted edit profile: snapshot the baseline the post-turn check diffs against.
+    const editGuard = await prepareTurnEditGuard(project_id, projectPath, requester?.id).catch((error) => {
+      console.error('[API] Edit profile preparation failed:', error);
+      return null;
+    });
+
     // Claude-only deployment: cliPreference is sanitized to 'claude' above, so
     // only the Claude executor runs (the codex/cursor/qwen/glm adapters are
     // removed — glm redirected ANTHROPIC_BASE_URL to z.ai process-wide).
@@ -526,13 +538,16 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
         requesterItopsEnabled,
         requester?.id,
       ).then(() => {
-        runCheckpoint(project_id, projectPath, finalInstruction, requestId);
+        runCheckpoint(project_id, projectPath, finalInstruction, requestId, editGuard);
         // A compiled/production backend doesn't hot-reload — rebuild it if the agent
         // changed its source (no-op for frontend edits / dev-reload backends).
-        void previewManager.rebuildBackendIfChanged(project_id);
+        // After the edit-profile backstop + checkpoint, so a reverted change is never built.
+        void (pendingCheckpoints.get(project_id) ?? Promise.resolve()).catch(() => {}).then(() => previewManager.rebuildBackendIfChanged(project_id));
       })
        .catch(async (error) => {
         console.error('[API] Failed to initialize project:', error);
+        // The turn may have written files before it died: still apply the edit-profile backstop.
+        if (editGuard) runCheckpoint(project_id, projectPath, finalInstruction, requestId, editGuard);
         // Mark terminal on outright rejection — otherwise the request row stays
         // 'processing' and locks the project for ACTIVE_REQUEST_STALE_MS (~20m).
         if (requestId) {
@@ -565,13 +580,16 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
         requesterItopsEnabled,
         requester?.id,
       ).then(() => {
-        runCheckpoint(project_id, projectPath, finalInstruction, requestId);
+        runCheckpoint(project_id, projectPath, finalInstruction, requestId, editGuard);
         // A compiled/production backend doesn't hot-reload — rebuild it if the agent
         // changed its source (no-op for frontend edits / dev-reload backends).
-        void previewManager.rebuildBackendIfChanged(project_id);
+        // After the edit-profile backstop + checkpoint, so a reverted change is never built.
+        void (pendingCheckpoints.get(project_id) ?? Promise.resolve()).catch(() => {}).then(() => previewManager.rebuildBackendIfChanged(project_id));
       })
        .catch(async (error) => {
         console.error('[API] Failed to execute AI:', error);
+        // The turn may have written files before it died: still apply the edit-profile backstop.
+        if (editGuard) runCheckpoint(project_id, projectPath, finalInstruction, requestId, editGuard);
         // If the executor rejected outright, its own finally never marked the
         // request terminal — do it here so the row can't get stuck in an
         // active status and permanently lock the project.

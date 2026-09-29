@@ -5,6 +5,11 @@
  */
 
 import { SQLITE_DIR, SQLITE_FILE, databasePromptNote, ensureSqliteDir, projectUsesSqlite, sqliteEnv } from '@/lib/services/sqlite-db';
+import {
+  builtinProfile, editProfilePromptNote, guardHookSettings, isRestricted, profileEnvValue, resolveEditProfile,
+  RESTRICTED_DISALLOWED_TOOLS, RESTRICTED_TOOLS, type EditProfile,
+} from '@/lib/services/edit-profiles';
+import guardModule from '@/lib/edit-guard/guard.cjs';
 import { query } from '@anthropic-ai/claude-agent-sdk';
 import { credentialEnvName } from '@/lib/services/claude-credentials';
 import type { ClaudeSession, ClaudeResponse } from '@/types/backend';
@@ -142,6 +147,26 @@ function pathIsInside(childAbs: string, parentAbs: string): boolean {
 // against the host-escape the preview socket-proxy would otherwise enable.
 const CONTAINER_RUNTIME =
   /(?:^|[\s;&|(`$])(?:docker|docker-compose|podman|nerdctl|ctr|crictl)(?:\s|$)|DOCKER_HOST|docker\.sock|\/var\/run\/docker|:237[56]\b/i;
+
+/** Layer 2 in-process: the same guard the container runs as a command hook. */
+function buildEditProfileHook(projectAbsPath: string, profile: EditProfile) {
+  const guard = guardModule as unknown as {
+    evaluateEdit: (a: { profile: unknown; root: string; toolName: string; toolInput: Record<string, unknown>; readFile: (abs: string) => string | null }) => string | null;
+    readTextOrNull: (abs: string) => string | null;
+  };
+  const envProfile = JSON.parse(profileEnvValue(profile)) as unknown;
+  return async (input: any) => {
+    const reason = guard.evaluateEdit({
+      profile: envProfile,
+      root: projectAbsPath,
+      toolName: String(input?.tool_name ?? ''),
+      toolInput: (input?.tool_input ?? {}) as Record<string, unknown>,
+      readFile: guard.readTextOrNull,
+    });
+    if (!reason) return { continue: true };
+    return { hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: reason } };
+  };
+}
 
 function buildProjectGuardHook(projectAbsPath: string) {
   const projectsRoot = path.dirname(projectAbsPath); // e.g. /app/data/projects
@@ -308,7 +333,8 @@ async function buildAgentSystemPrompt(
   projectId: string,
   modelLabel: string,
   resolvedModel: string,
-): Promise<{ systemPrompt: string; imagesOn: boolean }> {
+  requesterUserId?: string,
+): Promise<{ systemPrompt: string; imagesOn: boolean; editProfile: EditProfile }> {
   // Pick the system prompt for the project's tech stack (Nuxt | Next.js | Angular).
   const stackProject = await getProjectById(projectId).catch(() => null);
   // Image generation available when the project (or Claudable) has an xAI key.
@@ -339,7 +365,18 @@ async function buildAgentSystemPrompt(
     systemPrompt += databasePromptNote(kind);
   } catch { /* non-fatal */ }
 
-  return { systemPrompt, imagesOn };
+  // Edit profile of the person running this turn (layer 1: the agent knows its
+  // limits; the guard hook and the post-turn check enforce them). An error
+  // restricts rather than opens up.
+  const editProfile = await resolveEditProfile(projectId, requesterUserId)
+    .then((r) => r.profile)
+    .catch((e) => {
+      console.error(`[ClaudeService] edit profile resolution failed for ${projectId}, restricting to content:`, e);
+      return builtinProfile('content');
+    });
+  systemPrompt += editProfilePromptNote(editProfile);
+
+  return { systemPrompt, imagesOn, editProfile };
 }
 
 /**
@@ -380,7 +417,8 @@ async function runContainerizedTurn(args: {
       throw new Error(`Project not found: ${projectId}. Cannot create messages for non-existent project.`);
     }
 
-    const { systemPrompt, imagesOn } = await buildAgentSystemPrompt(projectId, modelLabel, resolvedModel);
+    const { systemPrompt, imagesOn, editProfile } = await buildAgentSystemPrompt(projectId, modelLabel, resolvedModel, args.requesterUserId);
+    const restricted = isRestricted(editProfile);
 
     // Credential + budget: internal projects use the project/personal/org chain
     // with the platform token as fallback; customer projects ONLY their org's key,
@@ -564,7 +602,9 @@ async function runContainerizedTurn(args: {
         // runs at a privilege it already holds. Isolation is at the container/
         // network layer, not this flag. AGENT_ACCOUNT_MCP_CONNECTORS=0 disables
         // passthrough entirely.
-        strictMcpConfig: Boolean(mcp) && !connectorsOk,
+        // A restricted edit profile never loads extra MCP servers (a project's
+        // .mcp.json or account connectors could write files around the guard).
+        strictMcpConfig: restricted || (Boolean(mcp) && !connectorsOk),
         homeHostPath,
         skillsHostPath,
         skillsContainerPath,
@@ -575,7 +615,13 @@ async function runContainerizedTurn(args: {
         // harmless belt-and-suspenders for anything in the agent HOME.
         settingSources: 'project,user',
         containerName,
-        env: agentEnv,
+        env: restricted
+          ? { ...agentEnv, CLAUDABLE_EDIT_PROFILE: profileEnvValue(editProfile), CLAUDABLE_EDIT_ROOT: '/work' }
+          : agentEnv,
+        // Layer 2: the edit guard as a PreToolUse hook + no shell for restricted profiles.
+        ...(restricted
+          ? { settingsJson: guardHookSettings(), tools: RESTRICTED_TOOLS.join(' '), disallowedTools: RESTRICTED_DISALLOWED_TOOLS.join(' ') }
+          : {}),
       },
       onEvent,
     );
@@ -877,11 +923,13 @@ export async function executeClaude(
 
     // Stack prompt + model identity + tool/database guidance — shared with the
     // containerized path so both agents get IDENTICAL instructions.
-    const { systemPrompt: systemPromptForStack, imagesOn } = await buildAgentSystemPrompt(
+    const { systemPrompt: systemPromptForStack, imagesOn, editProfile } = await buildAgentSystemPrompt(
       projectId,
       modelLabel,
       resolvedModel,
+      options.requesterUserId,
     );
+    const restrictedProfile = isRestricted(editProfile);
 
     // it-ops follows the USER running the agent, NOT the project: attach the broker
     // only when the person who triggered this run has it-ops enabled. A different
@@ -978,8 +1026,12 @@ export async function executeClaude(
         // Lightweight cross-project guard: block tool calls that escape this
         // project (other projects / app source / secrets). See buildProjectGuardHook.
         hooks: {
-          PreToolUse: [{ hooks: [buildProjectGuardHook(absoluteProjectPath)] }],
+          PreToolUse: [
+            { hooks: [buildProjectGuardHook(absoluteProjectPath)] },
+            ...(restrictedProfile ? [{ matcher: 'Write|Edit|MultiEdit|NotebookEdit', hooks: [buildEditProfileHook(absoluteProjectPath, editProfile)] }] : []),
+          ],
         },
+        ...(restrictedProfile ? { tools: [...RESTRICTED_TOOLS], disallowedTools: [...RESTRICTED_DISALLOWED_TOOLS] } : {}),
         // it-ops tools (in-process MCP broker). Attached when the project's OWNER
         // has it-ops enabled — the tools run in THIS process (creds never reach the
         // scrubbed agent env). See itops-mcp.ts + user-itops.ts.

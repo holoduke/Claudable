@@ -16,6 +16,7 @@ import ConfirmDialog from '@/components/ui/ConfirmDialog';
 import PaletteToggle from '@/components/ui/PaletteToggle';
 import ChatInput from '@/components/chat/ChatInput';
 import AgentStatusBar from '@/components/chat/AgentStatusBar';
+import EditProfileBadge from '@/components/chat/EditProfileBadge';
 import CreditsMeter from '@/components/chat/CreditsMeter';
 import type { AgentUsageSnapshot } from '@/types/agent-usage';
 
@@ -3186,6 +3187,7 @@ const persistProjectPreferences = useCallback(
                 </div>
               )}
               <CreditsMeter projectId={projectId} refreshKey={agentStatus?.updatedAt} />
+              <EditProfileBadge projectId={projectId} />
               <AgentStatusBar
                 projectId={projectId}
                 liveStatus={agentStatus}

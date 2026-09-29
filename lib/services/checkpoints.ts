@@ -47,6 +47,11 @@ function gitDir(projectId: string): string {
 const GIT_TIMEOUT_MS = Number(process.env.CHECKPOINT_GIT_TIMEOUT_MS || 120_000);
 
 function git(projectId: string, projectPath: string, args: string[]): Promise<{ ok: boolean; out: string }> {
+  return gitRaw(projectId, projectPath, args, MAX_GIT_OUTPUT).then((r) => ({ ok: r.ok, out: r.out.toString('utf8').trim() }));
+}
+
+/** git with the untouched stdout (file contents: no trim, own size cap). stderr only on failure. */
+function gitRaw(projectId: string, projectPath: string, args: string[], maxBytes: number): Promise<{ ok: boolean; out: Buffer }> {
   return new Promise((resolve) => {
     // Hardened like every other git call on project content: the work tree is
     // agent-written, so no hooks/fsmonitor/pager and no Claudable secrets in env.
@@ -54,18 +59,23 @@ function git(projectId: string, projectPath: string, args: string[]): Promise<{ 
       cwd: projectPath,
       env: { ...gitEnv(), GIT_DIR: gitDir(projectId), GIT_WORK_TREE: projectPath },
     });
-    let out = '';
+    const chunks: Buffer[] = [];
+    const errChunks: Buffer[] = [];
+    let size = 0;
+    let errSize = 0;
     let settled = false;
-    const done = (r: { ok: boolean; out: string }) => { if (!settled) { settled = true; clearTimeout(timer); resolve(r); } };
-    const collect = (d: Buffer) => { if (out.length < MAX_GIT_OUTPUT) out += d.toString('utf8'); };
+    const done = (r: { ok: boolean; out: Buffer }) => { if (!settled) { settled = true; clearTimeout(timer); resolve(r); } };
     const timer = setTimeout(() => {
       try { child.kill('SIGKILL'); } catch { /* already gone */ }
-      done({ ok: false, out: `git ${args[0]} timed out after ${GIT_TIMEOUT_MS}ms` });
+      done({ ok: false, out: Buffer.from(`git ${args[0]} timed out after ${GIT_TIMEOUT_MS}ms`) });
     }, GIT_TIMEOUT_MS);
-    child.stdout?.on('data', collect);
-    child.stderr?.on('data', collect);
-    child.on('error', (e) => done({ ok: false, out: String(e?.message || e) }));
-    child.on('close', (code) => done({ ok: code === 0, out: out.trim() }));
+    child.stdout?.on('data', (d: Buffer) => { if (size < maxBytes) { chunks.push(d); size += d.length; } });
+    child.stderr?.on('data', (d: Buffer) => { if (errSize < MAX_GIT_OUTPUT) { errChunks.push(d); errSize += d.length; } });
+    child.on('error', (e) => done({ ok: false, out: Buffer.from(String(e?.message || e)) }));
+    child.on('close', (code) => {
+      const out = Buffer.concat(chunks).subarray(0, maxBytes);
+      done(code === 0 ? { ok: true, out } : { ok: false, out: Buffer.concat([out, ...errChunks]) });
+    });
   });
 }
 
@@ -155,5 +165,77 @@ export function revertToCheckpoint(
       if (commit.ok) { const r = await git(projectId, projectPath, ['rev-parse', 'HEAD']); newSha = r.ok ? r.out : null; }
     } catch { /* the revert itself succeeded; the bookkeeping commit is best-effort */ }
     return { ok: true, newSha };
+  });
+}
+
+/** Snapshot now (if anything changed) and return the current HEAD: the pre-turn baseline. */
+export async function checkpointBaseline(projectId: string, projectPath: string, message: string): Promise<string | null> {
+  await createCheckpoint(projectId, projectPath, message);
+  return withLock(projectId, async () => {
+    const head = await git(projectId, projectPath, ['rev-parse', '--verify', 'HEAD']);
+    return head.ok && /^[0-9a-f]{40}$/iu.test(head.out) ? head.out : null;
+  });
+}
+
+export type CheckpointChange = { status: 'A' | 'M' | 'D'; path: string };
+
+/** Files added/modified/deleted in the work-tree since `sha` (stages them; the next checkpoint commits). */
+export function changedPathsSince(projectId: string, projectPath: string, sha: string): Promise<CheckpointChange[] | null> {
+  return withLock(projectId, async () => {
+    if (!(await checkpointExistsUnlocked(projectId, projectPath, sha))) return null;
+    await git(projectId, projectPath, ['add', '-A']);
+    const diff = await gitRaw(projectId, projectPath, ['diff', '--cached', '--name-status', '-z', '--no-renames', sha], 16 * 1024 * 1024);
+    if (!diff.ok) return null;
+    const parts = diff.out.toString('utf8').split('\0').filter((x) => x !== '');
+    const changes: CheckpointChange[] = [];
+    for (let i = 0; i + 1 < parts.length; i += 2) {
+      const code = parts[i][0];
+      const status = code === 'A' ? 'A' : code === 'D' ? 'D' : 'M';
+      changes.push({ status, path: parts[i + 1] });
+    }
+    return changes;
+  });
+}
+
+/** A file's content at a checkpoint, or null when it did not exist there. */
+export function readFileAtCheckpoint(projectId: string, projectPath: string, sha: string, relPath: string, maxBytes = 8 * 1024 * 1024): Promise<Buffer | null> {
+  return withLock(projectId, async () => {
+    if (!/^[0-9a-f]{7,40}$/iu.test(sha)) return null;
+    const r = await gitRaw(projectId, projectPath, ['cat-file', 'blob', `${sha}:${relPath}`], maxBytes);
+    return r.ok ? r.out : null;
+  });
+}
+
+/**
+ * Put individual paths back to how they were at `sha`: files that existed are
+ * restored, files that did not are deleted. Everything else is left alone.
+ */
+export function restorePathsFromCheckpoint(
+  projectId: string,
+  projectPath: string,
+  sha: string,
+  paths: { path: string; existed: boolean }[],
+): Promise<{ ok: boolean; error?: string }> {
+  return withLock(projectId, async () => {
+    if (!(await checkpointExistsUnlocked(projectId, projectPath, sha))) return { ok: false, error: 'Checkpoint not found' };
+    const root = path.resolve(projectPath);
+    const inside = (p: string) => {
+      const abs = path.resolve(root, p);
+      return abs.startsWith(root + path.sep) ? abs : null;
+    };
+    const literal = (p: string) => `:(literal)${p}`;
+    const existed = paths.filter((p) => p.existed && inside(p.path)).map((p) => p.path);
+    const added = paths.filter((p) => !p.existed && inside(p.path)).map((p) => p.path);
+    const errors: string[] = [];
+    if (existed.length) {
+      const r = await git(projectId, projectPath, ['restore', '--source', sha, '--staged', '--worktree', '--', ...existed.map(literal)]);
+      if (!r.ok) errors.push(r.out.slice(0, 300));
+    }
+    for (const p of added) {
+      const abs = inside(p);
+      if (abs) await fs.promises.rm(abs, { force: true }).catch((e) => errors.push(String(e)));
+    }
+    if (added.length) await git(projectId, projectPath, ['rm', '-q', '--cached', '--ignore-unmatch', '--', ...added.map(literal)]);
+    return errors.length ? { ok: false, error: errors.join('; ') } : { ok: true };
   });
 }

@@ -6,14 +6,14 @@ import { isSameOrigin } from '@/lib/utils/same-origin';
 export async function branchRoute<T extends object>(
   request: NextRequest,
   projectId: string,
-  opts: { write: boolean },
+  opts: { write: boolean; fullEdit?: boolean },
   fn: () => Promise<T>,
 ): Promise<Response> {
   try {
     if (opts.write && !isSameOrigin(request)) {
       return NextResponse.json({ success: false, message: 'Cross-site request refused' }, { status: 403 });
     }
-    const gate = await denyUnlessProjectAccess(projectId, opts.write ? { write: true } : undefined);
+    const gate = await denyUnlessProjectAccess(projectId, opts.write ? { write: true, fullEdit: opts.fullEdit } : undefined);
     if (gate) return gate;
     return NextResponse.json({ success: true, ...(await fn()) });
   } catch (error) {

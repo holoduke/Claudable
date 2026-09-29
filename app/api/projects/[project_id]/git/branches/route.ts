@@ -16,7 +16,7 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
 export async function POST(request: NextRequest, { params }: RouteContext) {
   const { project_id } = await params;
   const body = (await request.json().catch(() => null)) ?? {};
-  return branchRoute(request, project_id, { write: true }, () => createProjectBranch(project_id, body.name));
+  return branchRoute(request, project_id, { write: true, fullEdit: true }, () => createProjectBranch(project_id, body.name));
 }
 
 export const runtime = 'nodejs';
