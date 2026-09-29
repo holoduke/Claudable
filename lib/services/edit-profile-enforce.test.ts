@@ -110,3 +110,12 @@ describe('edit profile config', () => {
     expect(s.hooks.PreToolUse[0].matcher).toContain('Write');
   });
 });
+
+describe('.gitignore handling', () => {
+  it('only Claudable-appended lines are skipped', () => {
+    expect(mod.isManagedGitignoreChange('node_modules\n', 'node_modules\n.data/\n')).toBe(true);
+    expect(mod.isManagedGitignoreChange('node_modules\n', 'node_modules\napp/plugins/claudable-preview.client.ts\n')).toBe(true);
+    expect(mod.isManagedGitignoreChange('node_modules\n', 'node_modules\nsrc/\n')).toBe(false);
+    expect(mod.isManagedGitignoreChange('node_modules\n.env\n', 'node_modules\n')).toBe(false);
+  });
+});

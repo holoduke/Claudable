@@ -10,6 +10,13 @@
  * Files Claudable itself or the running preview (re)writes during a turn are
  * skipped here — they are not the agent's doing, and the hook already stops the
  * agent from touching them.
+ *
+ * Known limit: the shadow checkpoint repo honours the project's .gitignore, so
+ * ignored paths (.env, .data/, build output) are invisible to this diff. Snapshotting
+ * them would drag secrets and databases into every checkpoint and revert. For a
+ * restricted profile the only file-writing tools are Write/Edit (tool allowlist, no
+ * shell, no MCP), and the guard hook classifies every path they touch — dot-files
+ * and unknown files as code.
  */
 import fs from 'fs/promises';
 import path from 'path';
@@ -32,13 +39,23 @@ const MANAGED_PATHS = [
   /(^|\/)claudable-preview\.client\.ts$/,
   /^\.claudable\//,
   /^\.data\//,
-  /^\.gitignore$/,
   /(^|\/)(package-lock\.json|npm-shrinkwrap\.json|pnpm-lock\.yaml|yarn\.lock|bun\.lockb?|composer\.lock)$/,
   /(^|\/)(next-env|components|auto-imports|typed-router|components\.d)\.d\.ts$/,
   /\.tsbuildinfo$/,
 ];
 
 export const isManagedPath = (rel: string): boolean => MANAGED_PATHS.some((re) => re.test(rel));
+
+/** Lines Claudable itself appends to a project's .gitignore (SQLite dir, preview plugin). */
+const MANAGED_GITIGNORE_LINE = /^(\/?\.data\/?|\/?[\w./-]*claudable-preview\.client\.ts)$/;
+
+/** True when .gitignore only gained Claudable's own lines at the end. */
+export function isManagedGitignoreChange(before: string | null, after: string | null): boolean {
+  if (after === null) return false;
+  const base = before ?? '';
+  if (!after.startsWith(base)) return false;
+  return after.slice(base.length).split(/\r?\n/).map((l) => l.trim()).filter(Boolean).every((l) => MANAGED_GITIGNORE_LINE.test(l));
+}
 
 /** Resolve the requester's profile; for a restricted one, snapshot the baseline. Null = unrestricted. */
 export async function prepareTurnEditGuard(projectId: string, projectPath: string, userId: string | null | undefined): Promise<TurnEditGuard | null> {
@@ -74,6 +91,7 @@ export async function findViolations(guard: TurnEditGuard): Promise<Violation[] 
       ? null
       : (await readFileAtCheckpoint(guard.projectId, guard.projectPath, guard.baselineSha, change.path))?.toString('utf8') ?? null;
     const after = change.status === 'D' ? null : await readCurrent(guard.projectPath, change.path);
+    if (change.path === '.gitignore' && isManagedGitignoreChange(before, after)) continue;
     const kinds = classifyFileChange(change.path, before, after);
     if (!changeAllowed(guard.profile, kinds, change.path)) violations.push({ path: change.path, kinds: [...kinds] });
   }

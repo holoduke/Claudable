@@ -144,3 +144,36 @@ describe('classifyChange — hardening', () => {
     expect(kinds('utils/x.ts', a, "// note\nconst x = compute(\n  a,\n  b,\n)".replace(',\n)', '\n)'))).toEqual([]);
   });
 });
+
+describe('classifyChange — obfuscated script urls', () => {
+  it('entity-encoded, whitespace-split and escaped javascript: urls are code', () => {
+    const a = '<a href="/ok">Link</a>';
+    for (const bad of ['&#106;avascript:alert(1)', 'java\tscript:alert(1)', ' JAVASCRIPT:alert(1)', 'javascript&colon;alert(1)', 'data:text/html,<script>', 'java&#x0A;script:x']) {
+      expect(kinds('pages/a.vue', a, a.replace('/ok', bad))).toEqual(['code']);
+    }
+    expect(kinds('pages/a.vue', a, a.replace('/ok', 'https://example.com/a?b=c&d=e'))).toEqual(['text']);
+    expect(kinds('pages/a.vue', a, a.replace('/ok', 'mailto:info@example.com'))).toEqual(['text']);
+    const s = "const links = [{ label: 'A', href: '/a' }]";
+    expect(kinds('components/N.vue', `<script setup>${s}</script>`, `<script setup>${s.replace("'/a'", "'\\x6aavascript:x'")}</script>`)).toEqual(['code']);
+  });
+});
+
+describe('classifyChange — review findings', () => {
+  const js = (body: string) => `<script setup>\n${body}\n</script>`;
+  it('assignments to text-like names are code (redirect, script src, CSP)', () => {
+    expect(kinds('pages/a.vue', js('location.href = "/thanks"'), js('location.href = "https://evil.example.com"'))).toEqual(['code']);
+    expect(kinds('utils/x.ts', 'el.src = "/app.js"', 'el.src = "https://evil.example.com/x.js"')).toEqual(['code']);
+    expect(kinds('utils/x.ts', 'const title = "A"', 'const title = "B"')).toEqual(['code']);
+    const csp = (v: string) => js(`useHead({ meta: [{ httpEquiv: 'Content-Security-Policy', content: "${v}" }] })`);
+    expect(kinds('app.vue', csp("default-src 'self'"), csp("default-src *"))).toEqual(['code']);
+  });
+  it('object-literal copy keys stay text; ternaries and case labels do not count', () => {
+    expect(kinds('pages/a.vue', js("const hero = { title: 'A', subtitle: 'B' }"), js("const hero = { title: 'X', subtitle: 'Y' }"))).toEqual(['text']);
+    expect(kinds('utils/x.ts', "const r = ok ? title : 'a'", "const r = ok ? title : 'b'")).toEqual(['code']);
+    expect(kinds('utils/x.ts', "const r = { a: ok ? 'x' : 'y' }", "const r = { a: ok ? 'x' : 'z' }")).toEqual(['code']);
+  });
+  it('server dirs are code regardless of case', () => {
+    expect(kinds('Server/api/x.ts', "const x = { label: 'a' }", "const x = { label: 'b' }")).toEqual(['code']);
+    expect(kinds('src/Api/x.ts', "const x = { label: 'a' }", "const x = { label: 'b' }")).toEqual(['code']);
+  });
+});
