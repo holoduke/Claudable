@@ -77,9 +77,10 @@ function tooLarge(limit: number = MAX_UPLOAD_BYTES): NextResponse {
 }
 
 /**
- * Finalize a stored asset: only IMAGES get mirrored into public/uploads (they're
- * referenced by <img>); zips/docs/etc. are read by the agent from disk, so we skip
- * the extra (potentially large) copies. Returns the API response.
+ * Finalize a stored asset. Chat attachments stay in the project's assets/ and are
+ * NOT copied into any public/ dir: a screenshot attached for a bug report must not
+ * end up on the published site. The agent copies an image into public/ itself
+ * when the user wants it on the site (see the agent's attachments prompt).
  */
 async function finalizeAsset(
   project: { repoPath?: string | null },
@@ -89,47 +90,14 @@ async function finalizeAsset(
   originalName: string,
   declaredType: string,
 ): Promise<NextResponse> {
-  const isImage = (declaredType || '').startsWith('image/');
-  let hostPublicPath: string | null = null;
-  let projectPublicPath: string | null = null;
-  let publicUrl: string | null = null;
-
-  if (isImage) {
-    try {
-      const rootUploadsDir = path.join(process.cwd(), 'public', 'uploads');
-      await fs.mkdir(rootUploadsDir, { recursive: true });
-      const hostDestination = path.join(rootUploadsDir, uniqueName);
-      try { await fs.access(hostDestination); } catch { await fs.copyFile(resolvedAbsolutePath, hostDestination); }
-      hostPublicPath = hostDestination;
-      publicUrl = `/uploads/${uniqueName}`;
-    } catch (e) {
-      console.warn('[Assets Upload] Failed to mirror into application public/uploads:', e);
-    }
-    try {
-      const projectRoot = project.repoPath
-        ? (path.isAbsolute(project.repoPath) ? project.repoPath : path.resolve(/* turbopackIgnore: true */ process.cwd(), project.repoPath))
-        : path.join(PROJECTS_DIR_ABSOLUTE, projectId);
-      const uploadsDir = path.join(projectRoot, 'public', 'uploads');
-      await fs.mkdir(uploadsDir, { recursive: true });
-      // public/uploads is agent-writable: never copy through a symlinked dir.
-      if (!(await realPathInside(projectRoot, uploadsDir))) throw new Error('public/uploads resolves outside the project');
-      projectPublicPath = path.join(uploadsDir, uniqueName);
-      try { await fs.access(projectPublicPath); } catch { await fs.copyFile(resolvedAbsolutePath, projectPublicPath); }
-    } catch (e) {
-      console.warn('[Assets Upload] Failed to mirror into project public/uploads:', e);
-      projectPublicPath = null;
-      if (!hostPublicPath) publicUrl = null;
-    }
-  }
-
   return NextResponse.json({
     success: true,
     path: `assets/${uniqueName}`,
     absolute_path: resolvedAbsolutePath,
     filename: uniqueName,
     original_filename: originalName,
-    public_path: hostPublicPath ?? projectPublicPath,
-    public_url: publicUrl,
+    public_path: null,
+    public_url: null,
   });
 }
 
