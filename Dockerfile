@@ -20,7 +20,7 @@ RUN apt-get update \
 # 150.x build SIGTRAPs on any headless run in this container, which silently
 # broke thumbnail capture and the PDF exporter. A versioned Google build keeps
 # rebuilds deterministic; bump the version deliberately, testing headless runs.
-ARG CHROME_HEADLESS_VERSION=154.0.8037.57
+ARG CHROME_HEADLESS_VERSION=154.0.8037.92
 RUN curl -fsSL "https://storage.googleapis.com/chrome-for-testing-public/${CHROME_HEADLESS_VERSION}/linux64/chrome-headless-shell-linux64.zip" -o /tmp/chs.zip \
   && unzip -q /tmp/chs.zip -d /opt \
   && mv /opt/chrome-headless-shell-linux64 /opt/chrome-headless-shell \
@@ -73,7 +73,7 @@ RUN curl -fsSL https://download.docker.com/linux/static/stable/x86_64/docker-29.
 # audited CLI for the security controls that depend on its flags (notably
 # `--strict-mcp-config` and `--allowedTools`, which gate design-generation
 # isolation). Bump deliberately after verifying those flags still behave.
-ARG CLAUDE_CODE_VERSION=2.1.281
+ARG CLAUDE_CODE_VERSION=2.1.286
 RUN npm install -g @anthropic-ai/claude-code@${CLAUDE_CODE_VERSION} \
   && claude --version
 
