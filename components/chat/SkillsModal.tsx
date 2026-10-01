@@ -43,9 +43,15 @@ export default function SkillsModal({ projectId, isOpen, onClose }: SkillsModalP
     }
   }, [projectId]);
 
+  // Clear the search each time the modal opens (adjusted during render).
+  const [wasOpen, setWasOpen] = useState(false);
+  if (isOpen !== wasOpen) {
+    setWasOpen(isOpen);
+    if (isOpen) setQuery('');
+  }
+
   useEffect(() => {
     if (isOpen) {
-      setQuery('');
       load();
     }
   }, [isOpen, load]);

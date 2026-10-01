@@ -2,7 +2,7 @@
  * Vercel Project Connection Modal
  * Create and connect a Vercel project to the existing GitHub repository
  */
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? '';
 
@@ -29,13 +29,28 @@ export default function VercelProjectModal({
   const [isAvailable, setIsAvailable] = useState<boolean | null>(null);
   const [checkingAvailability, setCheckingAvailability] = useState(false);
 
-  // Initialize with project name when modal opens
-  useEffect(() => {
-    if (isOpen && projectName) {
-      const sanitizedName = projectName.toLowerCase().replace(/[^a-z0-9-]/g, '-');
-      setVercelProjectName(sanitizedName);
+  // Set the name and, when it actually changes, refresh the availability hint.
+  // The real availability check is temporarily disabled to avoid API issues:
+  // any non-empty name counts as available.
+  const applyProjectName = (name: string) => {
+    setVercelProjectName(name);
+    if (name === vercelProjectName) return;
+    if (name.trim()) {
+      setIsAvailable(true);
+      setError('');
+    } else {
+      setIsAvailable(null);
     }
-  }, [isOpen, projectName]);
+  };
+
+  // Initialize with project name when modal opens (adjusted during render).
+  const [initFor, setInitFor] = useState<{ isOpen: boolean; projectName: string } | null>(null);
+  if (!initFor || initFor.isOpen !== isOpen || initFor.projectName !== projectName) {
+    setInitFor({ isOpen, projectName });
+    if (isOpen && projectName) {
+      applyProjectName(projectName.toLowerCase().replace(/[^a-z0-9-]/g, '-'));
+    }
+  }
 
   // Check project name availability
   const checkAvailability = async (name: string) => {
@@ -75,17 +90,6 @@ export default function VercelProjectModal({
       setCheckingAvailability(false);
     }
   };
-
-  // Debounced availability check - temporarily disabled
-  useEffect(() => {
-    // Temporarily disable availability check to avoid API issues
-    if (vercelProjectName.trim()) {
-      setIsAvailable(true);
-      setError('');
-    } else {
-      setIsAvailable(null);
-    }
-  }, [vercelProjectName]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -180,7 +184,7 @@ export default function VercelProjectModal({
             <input
               type="text"
               value={vercelProjectName}
-              onChange={(e) => setVercelProjectName(e.target.value)}
+              onChange={(e) => applyProjectName(e.target.value)}
               placeholder="my-awesome-project"
               className="w-full px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-md focus:outline-hidden focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-50 "
               required

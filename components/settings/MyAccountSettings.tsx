@@ -27,12 +27,12 @@ export default function MyAccountSettings({ user, onToast, onChanged }: MyAccoun
   const count = (n: number, kind: 'members' | 'projects') => (n === 1 ? t(`common.${kind}.one`) : t(`common.${kind}.other`, { count: n }));
 
   useEffect(() => {
-    let cancelled = false;
-    fetch(`${API_BASE}/api/orgs/mine`)
+    const controller = new AbortController();
+    fetch(`${API_BASE}/api/orgs/mine`, { signal: controller.signal })
       .then((r) => (r.ok ? r.json() : null))
-      .then((j) => { if (!cancelled) setOrgs(j?.success ? ((j.data?.orgs as MyOrg[]) ?? []) : []); })
-      .catch(() => { if (!cancelled) setOrgs([]); });
-    return () => { cancelled = true; };
+      .then((j) => { if (!controller.signal.aborted) setOrgs(j?.success ? ((j.data?.orgs as MyOrg[]) ?? []) : []); })
+      .catch(() => { if (!controller.signal.aborted) setOrgs([]); }); // AbortError → ignored
+    return () => controller.abort();
   }, []);
 
   const toggleItops = async () => {

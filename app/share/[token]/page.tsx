@@ -1,18 +1,32 @@
 "use client";
-import { use, useCallback, useEffect, useRef, useState } from 'react';
+import { use, useCallback, useEffect, useRef, useState, useSyncExternalStore, useLayoutEffect } from 'react';
 import CommentsLayer, { type CommentPin, type ComposeAnchor } from '@/components/chat/CommentsLayer';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? '';
 
 interface ShareInfo { projectId: string; projectName: string; previewUrl: string | null }
 
+const GUEST_NAME_KEY = 'claudable-guest-name';
+// The saved guest name is read straight from localStorage; nothing needs to be
+// notified of changes (the name is only written once, on confirm).
+const subscribeNoop = () => () => {};
+const readSavedGuestName = (): string | null => {
+  try { return localStorage.getItem(GUEST_NAME_KEY) || null; } catch { return null; }
+};
+const noSavedGuestNameOnServer = (): string | null => null;
+
 /** Public stakeholder-review page: live preview + leave pinned comments as a guest. */
 export default function SharePage({ params }: { params: Promise<{ token: string }> }) {
   const { token } = use(params);
   const [info, setInfo] = useState<ShareInfo | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [guestName, setGuestName] = useState<string>('');
-  const [nameConfirmed, setNameConfirmed] = useState(false);
+  // A previously entered guest name (restored from localStorage after hydration)
+  // skips the name prompt; otherwise the typed name is used once confirmed.
+  const savedGuestName = useSyncExternalStore(subscribeNoop, readSavedGuestName, noSavedGuestNameOnServer);
+  const [typedName, setTypedName] = useState<string>('');
+  const [typedConfirmed, setTypedConfirmed] = useState(false);
+  const nameConfirmed = typedConfirmed || savedGuestName !== null;
+  const guestName = typedConfirmed ? typedName : (savedGuestName ?? typedName);
   const [route, setRoute] = useState('/');
   const [comments, setComments] = useState<CommentPin[]>([]);
   const [positions, setPositions] = useState<Record<string, { x: number | null; y: number | null }>>({});
@@ -36,20 +50,17 @@ export default function SharePage({ params }: { params: Promise<{ token: string 
   const activeIdRef = useRef<string | null>(null);
   activeIdRef.current = activeId;
 
-  // Restore a previously entered guest name.
-  useEffect(() => {
-    try {
-      const saved = localStorage.getItem('claudable-guest-name');
-      if (saved) { setGuestName(saved); setNameConfirmed(true); }
-    } catch { /* ignore */ }
-  }, []);
-
   // Resolve the share link.
   useEffect(() => {
-    fetch(`${API_BASE}/api/share/${token}`)
+    const controller = new AbortController();
+    fetch(`${API_BASE}/api/share/${token}`, { signal: controller.signal })
       .then((r) => r.json())
-      .then((j) => { if (j.success) setInfo(j.data); else setError(j.message || 'Invalid or revoked link'); })
-      .catch(() => setError('Could not load this share link'));
+      .then((j) => {
+        if (controller.signal.aborted) return;
+        if (j.success) setInfo(j.data); else setError(j.message || 'Invalid or revoked link');
+      })
+      .catch(() => { if (!controller.signal.aborted) setError('Could not load this share link'); });
+    return () => { controller.abort(); };
   }, [token]);
 
   const post = useCallback((msg: Record<string, unknown>) => {
@@ -68,10 +79,13 @@ export default function SharePage({ params }: { params: Promise<{ token: string 
   }, [info, token]);
 
   // Track pane size for popover clamping.
-  useEffect(() => {
+  useLayoutEffect(() => {
     const el = paneRef.current;
     if (!el) return;
+    // eslint-disable-next-line @eslint-react/set-state-in-effect -- measuring the DOM before paint is what a layout effect is for
     const compute = () => setViewport({ w: el.clientWidth, h: el.clientHeight });
+    // Measure before paint (layout effect): ResizeObserver's first callback only
+    // arrives a frame later.
     compute();
     const ro = new ResizeObserver(compute);
     ro.observe(el);
@@ -109,7 +123,6 @@ export default function SharePage({ params }: { params: Promise<{ token: string 
   useEffect(() => {
     if (!info?.previewUrl || !nameConfirmed) return;
     post({ type: commentMode ? 'enter' : 'exit' });
-    if (!commentMode) { setCompose(null); setActiveId(null); }
   }, [commentMode, info?.previewUrl, nameConfirmed, previewLoaded, post]);
   // The share endpoint returns immediately and warms the dev server in the
   // background, so the first iframe load can hit a not-yet-ready (502) preview.
@@ -124,8 +137,14 @@ export default function SharePage({ params }: { params: Promise<{ token: string 
     }, 3500);
     return () => clearInterval(id);
   }, [nameConfirmed, info?.previewUrl, previewLoaded]);
-  // Reload pins on route change.
-  useEffect(() => { if (nameConfirmed) { setActiveId(null); setCompose(null); loadComments(route); } }, [route, nameConfirmed, loadComments]);
+  // Reload pins on route change; drop the open thread/composer first
+  // (adjusted during render rather than in the effect).
+  const [pinsResetFor, setPinsResetFor] = useState<{ route: string; nameConfirmed: boolean } | null>(null);
+  if (!pinsResetFor || pinsResetFor.route !== route || pinsResetFor.nameConfirmed !== nameConfirmed) {
+    setPinsResetFor({ route, nameConfirmed });
+    if (nameConfirmed) { setActiveId(null); setCompose(null); }
+  }
+  useEffect(() => { if (nameConfirmed) loadComments(route); }, [route, nameConfirmed, loadComments]);
   // Push pins to the bridge.
   useEffect(() => {
     if (!nameConfirmed) return;
@@ -166,12 +185,12 @@ export default function SharePage({ params }: { params: Promise<{ token: string 
           <h1 className="text-lg font-semibold text-gray-900 dark:text-gray-50 mb-1">Review “{info.projectName}”</h1>
           <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">Enter your name so your comments are attributed.</p>
           <input
-            autoFocus value={guestName} onChange={(e) => setGuestName(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter' && guestName.trim()) { try { localStorage.setItem('claudable-guest-name', guestName.trim()); } catch {} setNameConfirmed(true); } }}
+            autoFocus value={guestName} onChange={(e) => setTypedName(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter' && guestName.trim()) { try { localStorage.setItem(GUEST_NAME_KEY, guestName.trim()); } catch {} setTypedConfirmed(true); } }}
             placeholder="Your name" className="w-full border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 text-sm mb-3 focus:outline-hidden focus:ring-2 focus:ring-brand-500/30"
           />
           <button
-            onClick={() => { if (guestName.trim()) { try { localStorage.setItem('claudable-guest-name', guestName.trim()); } catch {} setNameConfirmed(true); } }}
+            onClick={() => { if (guestName.trim()) { try { localStorage.setItem(GUEST_NAME_KEY, guestName.trim()); } catch {} setTypedConfirmed(true); } }}
             disabled={!guestName.trim()}
             className="w-full h-9 rounded-lg bg-brand-500 text-white text-sm font-medium hover:bg-brand-600 disabled:opacity-40"
           >Start reviewing</button>
@@ -186,7 +205,12 @@ export default function SharePage({ params }: { params: Promise<{ token: string 
         <span className="w-2 h-2 rounded-full bg-brand-500" />
         <span className="font-semibold text-gray-900 dark:text-gray-50 text-sm">{info.projectName}</span>
         <button
-          onClick={() => setCommentMode((v) => !v)}
+          onClick={() => {
+            const next = !commentMode;
+            setCommentMode(next);
+            // Browsing mode closes any open composer/thread.
+            if (!next) { setCompose(null); setActiveId(null); }
+          }}
           title={commentMode ? 'Commenting on — click the page to leave a comment. Click to browse instead.' : 'Browsing — links work. Click to leave comments.'}
           className={`h-8 flex items-center gap-1.5 px-2.5 rounded-lg text-xs font-medium border transition-colors ${
             commentMode ? 'bg-brand-500 text-white border-brand-500' : 'bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-200 border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800'

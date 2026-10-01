@@ -2,7 +2,7 @@
  * Project Settings Component (Refactored)
  * Main settings modal with tabs
  */
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { FaCog, FaRobot, FaLock, FaPlug, FaUsers, FaPalette, FaCube, FaMagic } from 'react-icons/fa';
 import { SettingsModal } from './SettingsModal';
 import { GeneralSettings } from './GeneralSettings';
@@ -126,9 +126,13 @@ export function ProjectSettings({
 
   const [activeTab, setActiveTab] = useState<SettingsTab>(resolvedInitialTab);
 
-  useEffect(() => {
+  // Re-sync the tab when the resolved initial tab changes (adjusted during
+  // render rather than in an effect).
+  const [prevResolvedInitialTab, setPrevResolvedInitialTab] = useState(resolvedInitialTab);
+  if (resolvedInitialTab !== prevResolvedInitialTab) {
+    setPrevResolvedInitialTab(resolvedInitialTab);
     setActiveTab(resolvedInitialTab);
-  }, [resolvedInitialTab]);
+  }
 
   const availableTabs = tabs.length ? tabs : [
     {

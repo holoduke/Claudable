@@ -46,6 +46,9 @@ export default function EmailCodeSignIn() {
     setError(null);
     const result = await signIn('email-code', { email, code, redirect: false });
     if (result?.ok && !result.error) {
+      // Full reload is intentional: the new session cookie must be picked up by
+      // the server-rendered auth gate and every client auth context.
+      // eslint-disable-next-line @next/next/no-location-assign-relative-destination -- hard reload after sign-in resets auth state
       window.location.href = '/';
       return;
     }

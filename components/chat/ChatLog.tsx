@@ -389,6 +389,36 @@ const areMessagesEqual = (prev: ChatMessage[], next: ChatMessage[]) => {
   return true;
 };
 
+/**
+ * Pair list items with content-derived React keys (repeats get an occurrence
+ * suffix) plus their position, for lists that carry no id of their own.
+ */
+const withContentKeys = <T,>(
+  items: readonly T[],
+  keyOf: (item: T) => string,
+): Array<{ item: T; key: string; position: number }> => {
+  const seen = new Map<string, number>();
+  return items.map((item, position) => {
+    const base = keyOf(item);
+    const n = (seen.get(base) ?? 0) + 1;
+    seen.set(base, n);
+    return { item, key: n === 1 ? base : `${base}#${n}`, position };
+  });
+};
+
+const attachmentKeySource = (attachment: unknown): string => {
+  const a = (attachment ?? {}) as Record<string, unknown>;
+  const v = a.path ?? a.url ?? a.publicUrl ?? a.public_url ?? a.assetUrl ?? a.name;
+  return typeof v === 'string' && v ? v : 'attachment';
+};
+
+/** Same check as Children.toArray(children).some(isString && includes), without toArray. */
+const childrenContainText = (children: React.ReactNode, needle: string): boolean => {
+  if (typeof children === 'string') return children.includes(needle);
+  if (Array.isArray(children)) return children.some((child) => childrenContainText(child, needle));
+  return false;
+};
+
 const mergeMetadataObjects = (
   existing: Record<string, unknown> | null | undefined,
   incoming: Record<string, unknown> | null | undefined
@@ -926,7 +956,7 @@ export default function ChatLog({ projectId, onSessionStatusChange, onProjectSta
   // keep it always-on and stable rather than toggling it off WebSocket state.
   const [enableSseFallback, setEnableSseFallback] = useState(true);
   const [isSseConnected, setIsSseConnected] = useState(false);
-  const [failedImageUrls, setFailedImageUrls] = useState<Set<string>>(new Set());
+  const [failedImageUrls, setFailedImageUrls] = useState<Set<string>>(() => new Set());
   const [expandedToolMessages, setExpandedToolMessages] = useState<Record<string, ToolExpansionState>>({});
   const fallbackMessageIdRef = useRef<Map<string, string>>(new Map());
   const visibleToolMessageIdsRef = useRef<Set<string>>(new Set());
@@ -1044,13 +1074,13 @@ export default function ChatLog({ projectId, onSessionStatusChange, onProjectSta
   const [loadedRowCount, setLoadedRowCount] = useState(0);
 
   // Enhanced deduplication system to prevent duplicate messages
-  const processedMessageIds = useRef(new Set<string>());
-  const processedRequestIds = useRef(new Map<string, string>());
-  const pendingMessageIds = useRef(new Set<string>());
+  const processedMessageIdsRef = useRef(new Set<string>());
+  const processedRequestIdsRef = useRef(new Map<string, string>());
+  const pendingMessageIdsRef = useRef(new Set<string>());
 
   // Transport layer coordination - track message sources
-  const messageSources = useRef<Map<string, 'websocket' | 'sse' | 'optimistic' | 'unknown'>>(new Map());
-  const activeTransport = useRef<'websocket' | 'sse' | null>(null);
+  const messageSourcesRef = useRef<Map<string, 'websocket' | 'sse' | 'optimistic' | 'unknown'>>(new Map());
+  const activeTransportRef = useRef<'websocket' | 'sse' | null>(null);
 
   // Comprehensive debugging system
   const messageLifecycleRef = useRef<Map<string, {
@@ -1089,14 +1119,14 @@ export default function ChatLog({ projectId, onSessionStatusChange, onProjectSta
 
   const isMessageProcessed = useCallback((message: ChatMessage): boolean => {
     // Check by message ID first
-    if (message.id && processedMessageIds.current.has(message.id)) {
+    if (message.id && processedMessageIdsRef.current.has(message.id)) {
       console.debug(`[ChatLog] Message already processed by ID: ${message.id}`);
       return true;
     }
 
     // Check by request ID for optimistic message replacement
-    if (message.requestId && processedRequestIds.current.has(message.requestId)) {
-      const existingMessageId = processedRequestIds.current.get(message.requestId);
+    if (message.requestId && processedRequestIdsRef.current.has(message.requestId)) {
+      const existingMessageId = processedRequestIdsRef.current.get(message.requestId);
       if (existingMessageId === message.id) {
         console.debug(`[ChatLog] Message already processed by RequestId: ${message.requestId} -> ${message.id}`);
         return true;
@@ -1107,14 +1137,14 @@ export default function ChatLog({ projectId, onSessionStatusChange, onProjectSta
   }, []);
 
   const markMessageAsProcessed = useCallback((message: ChatMessage, transport?: 'websocket' | 'sse' | 'optimistic' | 'unknown') => {
-    const source = transport || activeTransport.current || 'unknown';
+    const source = transport || activeTransportRef.current || 'unknown';
     const shouldFinalize = !message.isStreaming || message.isFinal;
 
     if (message.id) {
       if (shouldFinalize) {
-        processedMessageIds.current.add(message.id);
+        processedMessageIdsRef.current.add(message.id);
       }
-      messageSources.current.set(message.id, source);
+      messageSourcesRef.current.set(message.id, source);
 
       // Track message lifecycle
       trackMessageLifecycle(message.id, 'processed', {
@@ -1131,18 +1161,18 @@ export default function ChatLog({ projectId, onSessionStatusChange, onProjectSta
       );
     }
     if (shouldFinalize && message.requestId) {
-      processedRequestIds.current.set(message.requestId, message.id || '');
+      processedRequestIdsRef.current.set(message.requestId, message.id || '');
       console.debug(`[ChatLog] Marked message as processed by RequestId: ${message.requestId} -> ${message.id}`);
     }
-  }, [activeTransport, trackMessageLifecycle]);
+  }, [activeTransportRef, trackMessageLifecycle]);
 
   // Cleanup processed IDs when project changes to prevent memory leaks
   useEffect(() => {
-    const processedIds = processedMessageIds.current;
-    const processedRequests = processedRequestIds.current;
-    const sources = messageSources.current;
+    const processedIds = processedMessageIdsRef.current;
+    const processedRequests = processedRequestIdsRef.current;
+    const sources = messageSourcesRef.current;
     const lifecycleMap = messageLifecycleRef.current;
-    const pendingIds = pendingMessageIds.current;
+    const pendingIds = pendingMessageIdsRef.current;
 
     return () => {
       processedIds.clear();
@@ -1150,7 +1180,7 @@ export default function ChatLog({ projectId, onSessionStatusChange, onProjectSta
       sources.clear();
       lifecycleMap.clear();
       pendingIds.clear();
-      activeTransport.current = null;
+      activeTransportRef.current = null;
     };
   }, [projectId]);
 
@@ -1183,7 +1213,7 @@ export default function ChatLog({ projectId, onSessionStatusChange, onProjectSta
 
   const handleRealtimeMessage = useCallback((message: unknown) => {
     const chatMessage = toChatMessage(message);
-    const transportSource = activeTransport.current || 'unknown';
+    const transportSource = activeTransportRef.current || 'unknown';
     const messageId = chatMessage.id ?? null;
 
     console.debug(`[ChatLog] Received realtime message: ID=${chatMessage.id}, Role=${chatMessage.role}, Type=${chatMessage.messageType}, RequestId=${chatMessage.requestId}, Streaming=${chatMessage.isStreaming}, Transport=${transportSource}`);
@@ -1198,7 +1228,7 @@ export default function ChatLog({ projectId, onSessionStatusChange, onProjectSta
 
     const isFinalUpdate = !chatMessage.isStreaming || chatMessage.isFinal;
 
-    if (messageId && pendingMessageIds.current.has(messageId) && !isFinalUpdate) {
+    if (messageId && pendingMessageIdsRef.current.has(messageId) && !isFinalUpdate) {
       console.debug(`[ChatLog] Message already pending processing: ID=${messageId}`);
       return;
     }
@@ -1213,7 +1243,7 @@ export default function ChatLog({ projectId, onSessionStatusChange, onProjectSta
 
     // Enhanced transport-based duplicate detection
     if (chatMessage.id) {
-      const existingSource = messageSources.current.get(chatMessage.id);
+      const existingSource = messageSourcesRef.current.get(chatMessage.id);
       if (existingSource && existingSource !== transportSource) {
         if (!isFinalUpdate) {
           console.warn(`[ChatLog] Duplicate streaming message from different transport: ID=${chatMessage.id}, existing=${existingSource}, new=${transportSource}. Skipping interim duplicate.`);
@@ -1225,7 +1255,7 @@ export default function ChatLog({ projectId, onSessionStatusChange, onProjectSta
     }
 
     if (messageId) {
-      pendingMessageIds.current.add(messageId);
+      pendingMessageIdsRef.current.add(messageId);
     }
 
     const expandedMessages = expandMessageWithToolPlaceholder(chatMessage);
@@ -1279,8 +1309,8 @@ export default function ChatLog({ projectId, onSessionStatusChange, onProjectSta
     }
 
     if (messageId) {
-      pendingMessageIds.current.delete(messageId);
-      if (!processedInUpdate && !processedMessageIds.current.has(messageId)) {
+      pendingMessageIdsRef.current.delete(messageId);
+      if (!processedInUpdate && !processedMessageIdsRef.current.has(messageId)) {
         trackMessageLifecycle(messageId, 'processed', {
           role: chatMessage.role,
           requestId: chatMessage.requestId,
@@ -1299,7 +1329,7 @@ export default function ChatLog({ projectId, onSessionStatusChange, onProjectSta
     setIsWaitingForResponse,
     isMessageProcessed,
     markMessageAsProcessed,
-    activeTransport,
+    activeTransportRef,
     trackMessageLifecycle,
     ensureStableMessageId,
   ]);
@@ -1468,7 +1498,7 @@ export default function ChatLog({ projectId, onSessionStatusChange, onProjectSta
       if (disposed) return;
 
       try {
-        activeTransport.current = 'sse';
+        activeTransportRef.current = 'sse';
 
         const streamUrl = resolveStreamUrl();
         let source: EventSource;
@@ -1520,6 +1550,9 @@ export default function ChatLog({ projectId, onSessionStatusChange, onProjectSta
           }
         };
       } catch (error) {
+        // Reached synchronously only if the EventSource constructor throws on the
+        // first connect; keep the explicit "disconnected" state for that path.
+        // eslint-disable-next-line @eslint-react/set-state-in-effect -- error path of a subscription setup, not derivable state
         setIsSseConnected(false);
         console.error('🔄 [Realtime] Failed to establish SSE connection:', error);
       }
@@ -1597,9 +1630,6 @@ export default function ChatLog({ projectId, onSessionStatusChange, onProjectSta
       const t = m.createdAt;
       if (t && (!max || new Date(t).getTime() > new Date(max).getTime())) max = t as string;
     }
-    // Writing a ref inside an effect is the intended pattern; the React Compiler rule
-    // mistakes this ref (also read by the EventSource effect) for render state.
-    // eslint-disable-next-line react-hooks/immutability
     newestMessageTimeRef.current = max;
   }, [messages]);
   // Indirection so the scroll handler (defined above loadOlderMessages) can call
@@ -1730,6 +1760,9 @@ export default function ChatLog({ projectId, onSessionStatusChange, onProjectSta
   }, [messages.length]);
 
   useEffect(() => {
+    // Reconciles expansion state with the message list; ensureStableMessageId
+    // writes fallbackMessageIdRef, so this cannot run during render.
+    // eslint-disable-next-line @eslint-react/set-state-in-effect -- functional reconcile that needs a ref-writing helper; returns prev when unchanged
     setExpandedToolMessages((prev) => {
       const prevKeys = Object.keys(prev);
 
@@ -2171,6 +2204,10 @@ export default function ChatLog({ projectId, onSessionStatusChange, onProjectSta
     lastUserSnapKeyRef.current = null;
     // Start the next conversation with a small window again, and reset the
     // growth baseline so the first load isn't read as "streamed messages".
+    // The state resets stay in this effect on purpose: they must run in the same
+    // commit as the ref resets above (refs cannot be written during render) and
+    // after the loadData effect declared earlier.
+    /* eslint-disable @eslint-react/set-state-in-effect -- project-switch reset coupled to ref resets + effect order */
     setRenderLimit(RENDER_WINDOW_BASE);
     prevMessageCountRef.current = 0;
     justPrependedRef.current = false;
@@ -2179,6 +2216,7 @@ export default function ChatLog({ projectId, onSessionStatusChange, onProjectSta
     setMessages([]);
     setLogs([]);
     setExpandedToolMessages({});
+    /* eslint-enable @eslint-react/set-state-in-effect */
     fallbackMessageIdRef.current.clear();
     visibleToolMessageIdsRef.current.clear();
   }, [projectId]);
@@ -2354,13 +2392,7 @@ export default function ChatLog({ projectId, onSessionStatusChange, onProjectSta
             components={{
               p: ({children}) => {
                 // Check for Planning tool message pattern
-                const childrenArray = React.Children.toArray(children);
-                const hasPlanning = childrenArray.some(child => {
-                  if (typeof child === 'string' && child.includes('Planning for next moves...')) {
-                    return true;
-                  }
-                  return false;
-                });
+                const hasPlanning = childrenContainText(children, 'Planning for next moves...');
                 if (hasPlanning) {
                   return <p className="mb-2 last:mb-0 wrap-break-word">
                     <code className="bg-gray-100 dark:bg-white/6 px-2 py-1 rounded-sm text-xs font-mono">
@@ -2394,13 +2426,7 @@ export default function ChatLog({ projectId, onSessionStatusChange, onProjectSta
               // Check if this paragraph contains Planning tool message
               // The message now comes as plain text "Planning for next moves..."
               // ReactMarkdown passes the whole paragraph with child elements
-              const childrenArray = React.Children.toArray(children);
-              const hasPlanning = childrenArray.some(child => {
-                if (typeof child === 'string' && child.includes('Planning for next moves...')) {
-                  return true;
-                }
-                return false;
-              });
+              const hasPlanning = childrenContainText(children, 'Planning for next moves...');
               if (hasPlanning) {
                 return <p className="mb-2 last:mb-0 wrap-break-word">
                   <code className="bg-gray-100 dark:bg-white/6 px-2 py-1 rounded-sm text-xs font-mono">
@@ -2882,7 +2908,7 @@ export default function ChatLog({ projectId, onSessionStatusChange, onProjectSta
                                 if (attachments.length > 0) {
                                   return (
                                     <div className="mt-2 flex flex-wrap gap-2">
-                                      {attachments.map((attachment: any, idx: number) => {
+                                      {withContentKeys<any>(attachments, attachmentKeySource).map(({ item: attachment, key: attachmentKey, position: idx }) => {
                                         const candidateRawUrls: string[] = [];
                                         const pushCandidate = (value: unknown) => {
                                           if (typeof value === 'string') {
@@ -2940,7 +2966,7 @@ export default function ChatLog({ projectId, onSessionStatusChange, onProjectSta
                                         };
 
                                         return (
-                                          <div key={idx} className="relative group">
+                                          <div key={attachmentKey} className="relative group">
                                             <div className="w-40 h-40 bg-gray-200 dark:bg-white/6 rounded-lg overflow-hidden border border-gray-300 dark:border-white/8 ">
                                               {allCandidatesFailed ? (
                                                 // Show an icon when loading fails
@@ -2978,10 +3004,10 @@ export default function ChatLog({ projectId, onSessionStatusChange, onProjectSta
                                   // Fallback to old method for backward compatibility
                                   return (
                                     <div className="mt-2 flex flex-wrap gap-2">
-                                      {imagePaths.map((path, idx) => {
+                                      {withContentKeys(imagePaths, (p) => p).map(({ item: path, key: pathKey, position: idx }) => {
                                         const filename = path.split('/').pop() || 'image';
                                         return (
-                                          <div key={idx} className="relative group">
+                                          <div key={pathKey} className="relative group">
                                             <div className="w-40 h-40 bg-gray-200 dark:bg-white/6 rounded-lg overflow-hidden border border-gray-300 dark:border-white/8 flex items-center justify-center">
                                               <svg className="w-16 h-16 text-gray-400 dark:text-gray-500 " fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
@@ -3088,9 +3114,9 @@ export default function ChatLog({ projectId, onSessionStatusChange, onProjectSta
           // Hide internal tool results and system logs
           const hideTypes = ['tool_result', 'tool_start', 'system'];
           return !hideTypes.includes(log.type);
-        }).map((log, index) => (
+        }).map((log) => (
           <div
-            key={log.id ?? `log-${index}`}
+            key={log.id}
             className="mb-4 w-full cursor-pointer"
             onClick={() => openDetailModal(log)}
           >

@@ -1,5 +1,5 @@
 "use client";
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import React, { createContext, use, useCallback, useEffect, useMemo, useState } from 'react';
 import { getDefaultModelForCli } from '@/lib/constants/cliModels';
 
 export type GlobalAISettings = {
@@ -29,10 +29,10 @@ const defaultSettings: GlobalAISettings = {
   },
 };
 
-const Ctx = createContext<GlobalSettingsCtx | null>(null);
+const GlobalSettingsContext = createContext<GlobalSettingsCtx | null>(null);
 
 export function useGlobalSettings() {
-  const ctx = useContext(Ctx);
+  const ctx = use(GlobalSettingsContext);
   if (!ctx) throw new Error('useGlobalSettings must be used within GlobalSettingsProvider');
   return ctx;
 }
@@ -60,5 +60,5 @@ export default function GlobalSettingsProvider({ children }: { children: React.R
 
   const value = useMemo(() => ({ settings, setSettings, refresh }), [settings, refresh]);
 
-  return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
+  return <GlobalSettingsContext value={value}>{children}</GlobalSettingsContext>;
 }

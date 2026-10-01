@@ -189,7 +189,8 @@ interface DiffViewProps {
 }
 
 const DiffView: React.FC<DiffViewProps> = ({ diff }) => {
-  const allLines = buildLines(diff);
+  // Diff lines are positional: the rendered line number is their identity.
+  const allLines = buildLines(diff).map((line, no) => ({ ...line, no }));
   const truncated = allLines.length > MAX_RENDER_LINES;
   const lines = truncated ? allLines.slice(0, MAX_RENDER_LINES) : allLines;
   const hidden = allLines.length - lines.length;
@@ -199,8 +200,8 @@ const DiffView: React.FC<DiffViewProps> = ({ diff }) => {
   return (
     <div className="overflow-x-auto rounded-md border border-gray-200 dark:border-white/8">
       <div className="min-w-full font-mono text-xs leading-relaxed">
-        {lines.map((line, idx) => (
-          <div key={idx} className={`flex whitespace-pre ${LINE_CLASS[line.kind]}`}>
+        {lines.map((line) => (
+          <div key={line.no} className={`flex whitespace-pre ${LINE_CLASS[line.kind]}`}>
             <span
               className="select-none w-4 shrink-0 pl-1 text-center opacity-60"
               aria-hidden="true"

@@ -144,14 +144,14 @@ export default function AgentStatusBar({ projectId, liveStatus, open, onOpenChan
     if (!projectId) return;
     if (!open && hasFetchedRef.current) return;
     hasFetchedRef.current = true;
-    let cancelled = false;
-    fetch(`${API_BASE}/api/chat/${projectId}/agent-status`)
+    const controller = new AbortController();
+    fetch(`${API_BASE}/api/chat/${projectId}/agent-status`, { signal: controller.signal })
       .then((r) => (r.ok ? r.json() : null))
       .then((j) => {
-        if (!cancelled && j?.success && j.data) setFetched(j.data as AgentUsageSnapshot);
+        if (!controller.signal.aborted && j?.success && j.data) setFetched(j.data as AgentUsageSnapshot);
       })
-      .catch(() => {});
-    return () => { cancelled = true; };
+      .catch(() => { /* aborted or offline: keep the previous snapshot */ });
+    return () => controller.abort();
   }, [projectId, open]);
 
   // Live SSE snapshots supersede the initial fetch — except the rate-limit

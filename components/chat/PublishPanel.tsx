@@ -16,6 +16,13 @@ function DeployJobList({ jobs, tone }: { jobs?: DeployRunJob[]; tone: 'blue' | '
   const terminal = ['success', 'failure', 'cancelled', 'skipped'];
   const done = jobs.filter((j) => terminal.includes(j.status)).length;
   const pct = Math.round((done / jobs.length) * 100);
+  // Stable keys from the job name; repeated names get an occurrence suffix.
+  const seenNames = new Map<string, number>();
+  const keyedJobs = jobs.map((job) => {
+    const n = (seenNames.get(job.name) ?? 0) + 1;
+    seenNames.set(job.name, n);
+    return { job, key: n === 1 ? job.name : `${job.name}#${n}` };
+  });
   const barBg = tone === 'blue' ? 'bg-blue-200/60 dark:bg-blue-900/50' : 'bg-red-200/60 dark:bg-red-900/50';
   const barFill = tone === 'blue' ? 'bg-blue-600 dark:bg-blue-400' : 'bg-red-600 dark:bg-red-400';
   const textDim = tone === 'blue' ? 'text-blue-700/80 dark:text-blue-300/80' : 'text-red-700/80 dark:text-red-300/80';
@@ -46,8 +53,8 @@ function DeployJobList({ jobs, tone }: { jobs?: DeployRunJob[]; tone: 'blue' | '
         <span className={`text-[10px] tabular-nums ${textDim}`}>{done}/{jobs.length} · {pct}%</span>
       </div>
       <ul className="space-y-1">
-        {jobs.map((j, i) => (
-          <li key={`${j.name}-${i}`} className="flex items-center gap-2 text-xs">
+        {keyedJobs.map(({ job: j, key }) => (
+          <li key={key} className="flex items-center gap-2 text-xs">
             <span className="shrink-0 flex items-center justify-center w-4">{icon(j.status)}</span>
             <span className={`truncate ${j.status === 'skipped' || j.status === 'cancelled' ? 'text-gray-400 dark:text-gray-500 line-through' : 'text-gray-700 dark:text-gray-200'}`}>
               {j.name}

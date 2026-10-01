@@ -89,7 +89,6 @@ export default function HomePage() {
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const [prompt, setPrompt] = useState('');
   const DEFAULT_ASSISTANT: ActiveCliId = DEFAULT_ACTIVE_CLI;
-  const DEFAULT_MODEL = getDefaultModelForCli(DEFAULT_ASSISTANT);
   const sanitizeAssistant = useCallback(
     (cli?: string | null) => sanitizeActiveCli(cli, DEFAULT_ASSISTANT),
     [DEFAULT_ASSISTANT]
@@ -123,9 +122,8 @@ export default function HomePage() {
       organization: project.organization ?? null,
     };
   }, [sanitizeAssistant, normalizeModelForAssistant]);
-  const [selectedAssistant, setSelectedAssistant] = useState<ActiveCliId>(DEFAULT_ASSISTANT);
-  const [selectedModel, setSelectedModel] = useState(DEFAULT_MODEL);
-  const [usingGlobalDefaults, setUsingGlobalDefaults] = useState(true);
+  // Assistant/model the user picked on this page; null = follow Global Settings.
+  const [selectionOverride, setSelectionOverride] = useState<{ assistant: ActiveCliId; model: string } | null>(null);
   const [selectedDesign, setSelectedDesign] = useState<{ id: string; name: string } | null>(null);
   const [showDesignPicker, setShowDesignPicker] = useState(false);
   const [selectedStack, setSelectedStack] = useState<string>(DEFAULT_STACK);
@@ -175,107 +173,9 @@ export default function HomePage() {
   const promptRef = useRef<HTMLTextAreaElement>(null);
   const [projectSearch, setProjectSearch] = useState('');
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [cliStatus, setCLIStatus] = useState<CLIStatus>({});
-  const [isInitialLoad, setIsInitialLoad] = useState(true);
-  const selectedAssistantOption = ACTIVE_CLI_OPTIONS_MAP[selectedAssistant];
-  
-  // Get available models based on current assistant
-  const availableModels = MODEL_OPTIONS_BY_ASSISTANT[selectedAssistant] || [];
-  
-  // Sync with Global Settings (until user overrides locally)
-  const { settings: globalSettings } = useGlobalSettings();
-  
-  // Load org-wide plugin commands for the "Plugins" starter menu (best-effort).
-  useEffect(() => {
-    let cancelled = false;
-    fetch(`${API_BASE}/api/plugins/commands`)
-      .then((r) => (r.ok ? r.json() : null))
-      .then((j) => { if (!cancelled && j?.success && Array.isArray(j.data)) setPluginCommands(j.data); })
-      .catch(() => {});
-    return () => { cancelled = true; };
-  }, []);
-
-  // Check if this is a fresh page load (not navigation)
-  useEffect(() => {
-    const isPageRefresh = !sessionStorage.getItem('navigationFlag');
-    
-    if (isPageRefresh) {
-      // Fresh page load or refresh - use global defaults
-      sessionStorage.setItem('navigationFlag', 'true');
-      setIsInitialLoad(true);
-      setUsingGlobalDefaults(true);
-    } else {
-      // Navigation within session - check for stored selections
-      const storedAssistantRaw = sessionStorage.getItem('selectedAssistant');
-      const storedModelRaw = sessionStorage.getItem('selectedModel');
-
-      if (storedModelRaw) {
-        const storedAssistant = sanitizeAssistant(storedAssistantRaw);
-        let storedModel = normalizeModelForAssistant(storedAssistant, storedModelRaw);
-        // If the remembered model is no longer offered (e.g. after a model/CLI
-        // change), fall back to the current default so the picker never shows a
-        // stale/unavailable option.
-        const avail = MODEL_OPTIONS_BY_ASSISTANT[storedAssistant] || [];
-        if (avail.length && !avail.some((m) => m.id === storedModel)) {
-          storedModel = getDefaultModelForCli(storedAssistant);
-        }
-        setSelectedAssistant(storedAssistant);
-        setSelectedModel(storedModel);
-        setUsingGlobalDefaults(false);
-        setIsInitialLoad(false);
-        return;
-      }
-    }
-    
-    // Clean up navigation flag on unmount
-    return () => {
-      // Don't clear on navigation, only on actual page unload
-    };
-  }, [sanitizeAssistant, normalizeModelForAssistant]);
-  
-  // Apply global settings when using defaults
-  useEffect(() => {
-    if (!usingGlobalDefaults || !isInitialLoad) return;
-    
-    const cli = sanitizeAssistant(globalSettings?.default_cli);
-    setSelectedAssistant(cli);
-    const modelFromGlobal = globalSettings?.cli_settings?.[cli]?.model;
-    setSelectedModel(normalizeModelForAssistant(cli, modelFromGlobal));
-  }, [globalSettings, usingGlobalDefaults, isInitialLoad, sanitizeAssistant, normalizeModelForAssistant]);
-  
-  // Save selections to sessionStorage when they change
-  useEffect(() => {
-    if (!isInitialLoad && selectedAssistant && selectedModel) {
-      const normalizedAssistant = sanitizeAssistant(selectedAssistant);
-      sessionStorage.setItem('selectedAssistant', normalizedAssistant);
-      sessionStorage.setItem('selectedModel', normalizeModelForAssistant(normalizedAssistant, selectedModel));
-    }
-  }, [selectedAssistant, selectedModel, isInitialLoad, sanitizeAssistant, normalizeModelForAssistant]);
-  
-  // Clear navigation flag on page unload
-  useEffect(() => {
-    const handleBeforeUnload = () => {
-      sessionStorage.removeItem('navigationFlag');
-    };
-    
-    window.addEventListener('beforeunload', handleBeforeUnload);
-    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-  }, []);
-  const [showAssistantDropdown, setShowAssistantDropdown] = useState(false);
-  const [showModelDropdown, setShowModelDropdown] = useState(false);
-  const [isCreatingProject, setIsCreatingProject] = useState(false);
-  const [uploadedImages, setUploadedImages] = useState<{ id: string; name: string; url: string; path: string; file?: File; isImage?: boolean }[]>([]);
-  const [isUploading, setIsUploading] = useState(false);
-  const [isDragOver, setIsDragOver] = useState(false);
-  const router = useRouter();
-  const prefetchTimers = useRef<Map<string, NodeJS.Timeout>>(new Map());
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const assistantDropdownRef = useRef<HTMLDivElement>(null);
-  const modelDropdownRef = useRef<HTMLDivElement>(null);
-
-  // Check CLI installation status
-  useEffect(() => {
-    const checkingStatus = ASSISTANT_OPTIONS.reduce<CLIStatus>((acc, cli) => {
+  // Every CLI starts in the "checking" state until the status snapshot arrives.
+  const [cliStatus, setCLIStatus] = useState<CLIStatus>(() =>
+    ASSISTANT_OPTIONS.reduce<CLIStatus>((acc, cli) => {
       acc[cli.id] = {
         installed: false,
         checking: true,
@@ -283,9 +183,81 @@ export default function HomePage() {
         configured: false,
       };
       return acc;
-    }, {});
-    setCLIStatus(checkingStatus);
+    }, {})
+  );
 
+  // Sync with Global Settings (until user overrides locally): derived during
+  // render instead of copied into state by an effect.
+  const { settings: globalSettings } = useGlobalSettings();
+  const globalAssistant = sanitizeAssistant(globalSettings?.default_cli);
+  const selectedAssistant: ActiveCliId = selectionOverride?.assistant ?? globalAssistant;
+  const selectedModel = selectionOverride?.model
+    ?? normalizeModelForAssistant(globalAssistant, globalSettings?.cli_settings?.[globalAssistant]?.model);
+  const selectedAssistantOption = ACTIVE_CLI_OPTIONS_MAP[selectedAssistant];
+
+  // Get available models based on current assistant
+  const availableModels = MODEL_OPTIONS_BY_ASSISTANT[selectedAssistant] || [];
+  
+  // Load org-wide plugin commands for the "Plugins" starter menu (best-effort).
+  useEffect(() => {
+    const controller = new AbortController();
+    fetch(`${API_BASE}/api/plugins/commands`, { signal: controller.signal })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => { if (!controller.signal.aborted && j?.success && Array.isArray(j.data)) setPluginCommands(j.data); })
+      .catch(() => {});
+    return () => { controller.abort(); };
+  }, []);
+
+  // Within one browser session, coming back to the home page restores the last
+  // assistant/model pick; a fresh load or a refresh starts from Global Settings
+  // (the flag is cleared on unload).
+  useEffect(() => {
+    if (!sessionStorage.getItem('navigationFlag')) {
+      sessionStorage.setItem('navigationFlag', 'true');
+      return;
+    }
+    const storedModelRaw = sessionStorage.getItem('selectedModel');
+    if (!storedModelRaw) return;
+    const storedAssistant = sanitizeAssistant(sessionStorage.getItem('selectedAssistant'));
+    let storedModel = normalizeModelForAssistant(storedAssistant, storedModelRaw);
+    // A remembered model that is no longer offered falls back to the default,
+    // so the picker never shows an unavailable option.
+    const avail = MODEL_OPTIONS_BY_ASSISTANT[storedAssistant] || [];
+    if (avail.length && !avail.some((m) => m.id === storedModel)) {
+      storedModel = getDefaultModelForCli(storedAssistant);
+    }
+    // eslint-disable-next-line @eslint-react/set-state-in-effect -- sessionStorage only exists after mount; the server renders the Global Settings default
+    setSelectionOverride({ assistant: storedAssistant, model: storedModel });
+  }, [sanitizeAssistant, normalizeModelForAssistant]);
+
+  useEffect(() => {
+    const clearNavigationFlag = () => sessionStorage.removeItem('navigationFlag');
+    window.addEventListener('beforeunload', clearNavigationFlag);
+    return () => window.removeEventListener('beforeunload', clearNavigationFlag);
+  }, []);
+
+  // Save selections to sessionStorage when they change
+  useEffect(() => {
+    if (selectionOverride) {
+      const normalizedAssistant = sanitizeAssistant(selectionOverride.assistant);
+      sessionStorage.setItem('selectedAssistant', normalizedAssistant);
+      sessionStorage.setItem('selectedModel', normalizeModelForAssistant(normalizedAssistant, selectionOverride.model));
+    }
+  }, [selectionOverride, sanitizeAssistant, normalizeModelForAssistant]);
+  const [showAssistantDropdown, setShowAssistantDropdown] = useState(false);
+  const [showModelDropdown, setShowModelDropdown] = useState(false);
+  const [isCreatingProject, setIsCreatingProject] = useState(false);
+  const [uploadedImages, setUploadedImages] = useState<{ id: string; name: string; url: string; path: string; file?: File; isImage?: boolean }[]>([]);
+  const [isUploading, setIsUploading] = useState(false);
+  const [isDragOver, setIsDragOver] = useState(false);
+  const router = useRouter();
+  const prefetchTimersRef = useRef<Map<string, NodeJS.Timeout>>(new Map());
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const assistantDropdownRef = useRef<HTMLDivElement>(null);
+  const modelDropdownRef = useRef<HTMLDivElement>(null);
+
+  // Check CLI installation status
+  useEffect(() => {
     fetchCliStatusSnapshot()
       .then((status) => setCLIStatus(status))
       .catch((error) => {
@@ -798,7 +770,7 @@ export default function HomePage() {
     };
     
     document.addEventListener('paste', handlePaste);
-    const timers = prefetchTimers.current;
+    const timers = prefetchTimersRef.current;
 
     // Cleanup prefetch timers
     return () => {
@@ -814,18 +786,13 @@ export default function HomePage() {
     if (!cliStatus[assistant]?.installed) return;
 
     const sanitized = sanitizeAssistant(assistant);
-    setUsingGlobalDefaults(false);
-    setIsInitialLoad(false);
-    setSelectedAssistant(sanitized);
-    setSelectedModel(getDefaultModelForCli(sanitized));
+    setSelectionOverride({ assistant: sanitized, model: getDefaultModelForCli(sanitized) });
 
     setShowAssistantDropdown(false);
   };
 
   const handleModelChange = (modelId: string) => {
-    setUsingGlobalDefaults(false);
-    setIsInitialLoad(false);
-    setSelectedModel(normalizeModelForAssistant(selectedAssistant, modelId));
+    setSelectionOverride({ assistant: selectedAssistant, model: normalizeModelForAssistant(selectedAssistant, modelId) });
     setShowModelDropdown(false);
   };
 

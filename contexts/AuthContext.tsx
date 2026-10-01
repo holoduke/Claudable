@@ -17,8 +17,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Authentication state is managed locally in components that need it
   
   return (
-    <AuthContext.Provider value={{}}>
+    <AuthContext value={{}}>
       {children}
-    </AuthContext.Provider>
+    </AuthContext>
   );
 }

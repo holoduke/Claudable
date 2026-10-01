@@ -1,5 +1,5 @@
 "use client";
-import { createContext, useCallback, useContext, useMemo, useState, useRef } from 'react';
+import { createContext, use, useCallback, useMemo, useState, useRef } from 'react';
 
 type ToastKind = 'success' | 'error' | 'info';
 interface Toast { id: number; kind: ToastKind; message: string }
@@ -16,11 +16,11 @@ const ToastContext = createContext<ToastApi | null>(null);
 /** Non-blocking toasts (replaces window.alert/prompt). Auto-dismiss, top-right. */
 export function ToastProvider({ children }: { children: React.ReactNode }) {
   const [toasts, setToasts] = useState<Toast[]>([]);
-  const seq = useRef(0);
+  const seqRef = useRef(0);
 
   const remove = useCallback((id: number) => setToasts((t) => t.filter((x) => x.id !== id)), []);
   const toast = useCallback((message: string, kind: ToastKind = 'info') => {
-    const id = ++seq.current;
+    const id = ++seqRef.current;
     setToasts((t) => [...t, { id, kind, message }]);
     setTimeout(() => remove(id), kind === 'error' ? 6000 : 3500);
   }, [remove]);
@@ -34,7 +34,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   );
 
   return (
-    <ToastContext.Provider value={api}>
+    <ToastContext value={api}>
       {children}
       <div className="fixed top-4 right-4 z-9999 flex flex-col gap-2 pointer-events-none" aria-live="polite" aria-atomic="true">
         {toasts.map((t) => (
@@ -61,13 +61,13 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
           </div>
         ))}
       </div>
-    </ToastContext.Provider>
+    </ToastContext>
   );
 }
 
 /** Never throws if used outside the provider — falls back to a no-op + console. */
 export function useToast(): ToastApi {
-  const ctx = useContext(ToastContext);
+  const ctx = use(ToastContext);
   if (ctx) return ctx;
   const noop = (m: string) => { if (typeof console !== 'undefined') console.warn('[toast]', m); };
   return { toast: noop, success: noop, error: noop, info: noop };

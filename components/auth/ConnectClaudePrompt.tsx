@@ -55,19 +55,19 @@ export default function ConnectClaudePrompt() {
   const [done, setDone] = useState(false);
 
   useEffect(() => {
-    let cancelled = false;
     try {
       if (localStorage.getItem(DISMISS_KEY) === '1') return;
     } catch { /* storage blocked — behave as not dismissed */ }
-    fetch(`${API_BASE}/api/claude-credentials`)
+    const controller = new AbortController();
+    fetch(`${API_BASE}/api/claude-credentials`, { signal: controller.signal })
       .then((r) => (r.ok ? r.json() : null))
       .then((j) => {
-        if (cancelled || !j?.success || !Array.isArray(j.data)) return;
+        if (controller.signal.aborted || !j?.success || !Array.isArray(j.data)) return;
         const hasOwn = j.data.some((c: { isMine?: boolean }) => c.isMine);
         if (!hasOwn) setOpen(true);
       })
-      .catch(() => { /* signed out / auth off — no nudge */ });
-    return () => { cancelled = true; };
+      .catch(() => { /* signed out / auth off / aborted — no nudge */ });
+    return () => { controller.abort(); };
   }, []);
 
   const dismiss = useCallback(() => {

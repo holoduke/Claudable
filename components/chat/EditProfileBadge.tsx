@@ -11,16 +11,16 @@ export default function EditProfileBadge({ projectId }: { projectId: string }) {
 
   useEffect(() => {
     if (!projectId) return;
-    let cancelled = false;
-    fetch(`${API_BASE}/api/projects/${projectId}/edit-profiles`)
+    const controller = new AbortController();
+    fetch(`${API_BASE}/api/projects/${projectId}/edit-profiles`, { signal: controller.signal })
       .then((r) => (r.ok ? r.json() : null))
       .then((j) => {
-        if (cancelled || !j?.success) return;
+        if (controller.signal.aborted || !j?.success) return;
         const p = j.data?.me?.profile as MyProfile | undefined;
         setProfile(p && p.id !== 'full' ? p : null);
       })
-      .catch(() => { /* badge is informational; the server enforces the profile */ });
-    return () => { cancelled = true; };
+      .catch(() => { /* aborted, or badge is informational; the server enforces the profile */ });
+    return () => controller.abort();
   }, [projectId]);
 
   if (!profile) return null;

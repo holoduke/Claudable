@@ -487,7 +487,7 @@ export default function ServiceConnectionModal({
                   </h4>
                   <ol className="text-xs text-gray-600 dark:text-gray-300 space-y-2">
                     {providerInfo.instructions.map((step, index) => (
-                      <li key={index} className="flex gap-2">
+                      <li key={step} className="flex gap-2">
                         <span className="shrink-0 w-5 h-5 bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-gray-50 rounded-full flex items-center justify-center text-xs font-medium">
                           {index + 1}
                         </span>

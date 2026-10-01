@@ -28,6 +28,18 @@ export interface UseProjectBranches {
   act: (path: 'git/branches' | 'git/checkout' | 'git/merge', body?: Record<string, unknown>) => Promise<any>;
 }
 
+/** Fetch the branch state. null = no files/repository yet; undefined = network
+ *  error (keep the last known state). */
+async function fetchBranches(projectId: string): Promise<ProjectBranchesState | null | undefined> {
+  try {
+    const res = await fetch(`${API_BASE}/api/projects/${projectId}/git/branches`, { cache: 'no-store' });
+    const json = await res.json().catch(() => null);
+    return res.ok && json?.success ? (json as ProjectBranchesState) : null;
+  } catch {
+    return undefined;
+  }
+}
+
 /**
  * The project's branches for the toolbar switcher and the publish panel. Loaded
  * on mount, on window focus and whenever `revision` changes (e.g. an agent turn
@@ -36,18 +48,15 @@ export interface UseProjectBranches {
  */
 export function useProjectBranches(projectId: string, revision: unknown): UseProjectBranches {
   const [data, setData] = useState<ProjectBranchesState | null>(null);
-  const seq = useRef(0);
+  const seqRef = useRef(0);
 
-  const refresh = useCallback(async () => {
-    const mine = ++seq.current;
-    try {
-      const res = await fetch(`${API_BASE}/api/projects/${projectId}/git/branches`, { cache: 'no-store' });
-      const json = await res.json().catch(() => null);
-      if (mine !== seq.current) return; // a newer refresh won
-      setData(res.ok && json?.success ? (json as ProjectBranchesState) : null);
-    } catch {
-      // network hiccup: keep the last known state
-    }
+  // Each load takes a sequence number; only the newest one may write `data`.
+  const refresh = useCallback((): Promise<void> => {
+    const mine = ++seqRef.current;
+    return fetchBranches(projectId).then((next) => {
+      if (next === undefined || mine !== seqRef.current) return; // network hiccup / a newer refresh won
+      setData(next);
+    });
   }, [projectId]);
 
   useEffect(() => {

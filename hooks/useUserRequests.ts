@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useState, useCallback, useEffect, useRef, useSyncExternalStore } from 'react';
 
 interface UseUserRequestsOptions {
   projectId: string;
@@ -9,10 +9,46 @@ interface ActiveRequestsResponse {
   activeCount: number;
 }
 
+type ActiveRequestsResult =
+  | { kind: 'missing' } // endpoint unavailable (404)
+  | { kind: 'ok'; data: ActiveRequestsResponse };
+
+/** Query active request status from DB. null = no-op (other status / network error). */
+async function fetchActiveRequests(projectId: string): Promise<ActiveRequestsResult | null> {
+  try {
+    const apiBase = process.env.NEXT_PUBLIC_API_BASE ?? '';
+    const response = await fetch(`${apiBase}/api/chat/${projectId}/requests/active`, {
+      cache: 'no-store',
+    });
+    if (response.status === 404) return { kind: 'missing' };
+    // Treat other statuses as no-op without logging noisy errors
+    if (!response.ok) return null;
+    const data: ActiveRequestsResponse = await response.json();
+    return { kind: 'ok', data };
+  } catch (error) {
+    // KEEP the previous busy state on a transient fetch error. Clearing it on
+    // one blip flipped busy→idle mid-turn, which fired the queued-message
+    // flusher and let sends bypass the queue → a concurrent second turn (or a
+    // 409). The next successful poll corrects the state either way.
+    if (process.env.NODE_ENV === 'development') {
+      console.warn('[UserRequests] Failed to check active requests (network issue):', error);
+    }
+    return null;
+  }
+}
+
+// Tab visibility as an external store. Server snapshot = visible (the old default).
+function subscribeVisibility(onChange: () => void) {
+  document.addEventListener('visibilitychange', onChange);
+  return () => document.removeEventListener('visibilitychange', onChange);
+}
+const getTabVisible = () => !document.hidden;
+const getServerTabVisible = () => true;
+
 export function useUserRequests({ projectId }: UseUserRequestsOptions) {
   const [hasActiveRequests, setHasActiveRequests] = useState(false);
   const [activeCount, setActiveCount] = useState(0);
-  const [isTabVisible, setIsTabVisible] = useState(true); // Default to true
+  const isTabVisible = useSyncExternalStore(subscribeVisibility, getTabVisible, getServerTabVisible);
 
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const previousActiveState = useRef(false);
@@ -42,72 +78,44 @@ export function useUserRequests({ projectId }: UseUserRequestsOptions) {
     }
   }, [setFromActiveSet]);
 
-  // Track tab visibility state
-  useEffect(() => {
-    // Execute only on client side
-    if (typeof document !== 'undefined') {
-      setIsTabVisible(!document.hidden);
-      
-      const handleVisibilityChange = () => {
-        setIsTabVisible(!document.hidden);
-      };
+  // Apply a polled active-requests result to state
+  const applyActiveRequestsResult = useCallback((result: ActiveRequestsResult | null) => {
+    if (!result) return;
 
-      document.addEventListener('visibilitychange', handleVisibilityChange);
-      return () => {
-        document.removeEventListener('visibilitychange', handleVisibilityChange);
-      };
+    if (result.kind === 'missing') {
+      if (previousActiveState.current) {
+        console.log('🔄 [UserRequests] Active requests endpoint unavailable; assuming no active requests.');
+      }
+      if (activeRequestIdsRef.current.size > 0) {
+        activeRequestIdsRef.current.clear();
+      }
+      setHasActiveRequests(false);
+      setActiveCount(0);
+      previousActiveState.current = false;
+      return;
+    }
+
+    const { data } = result;
+    if (!data.hasActiveRequests && activeRequestIdsRef.current.size > 0) {
+      activeRequestIdsRef.current.clear();
+    }
+    setHasActiveRequests(data.hasActiveRequests);
+    setActiveCount(data.activeCount);
+
+    // Log only when active state changes
+    if (data.hasActiveRequests !== previousActiveState.current) {
+      console.log(`🔄 [UserRequests] Active requests: ${data.hasActiveRequests} (count: ${data.activeCount})`);
+      previousActiveState.current = data.hasActiveRequests;
     }
   }, []);
 
   // Query active request status from DB
-  const checkActiveRequests = useCallback(async (options?: { force?: boolean }) => {
-    if (!options?.force && !isTabVisible) return; // Stop polling if tab is inactive unless forced
+  // (Promise chain rather than async/await so state is only set in a callback.)
+  const checkActiveRequests = useCallback((options?: { force?: boolean }): Promise<void> => {
+    if (!options?.force && !isTabVisible) return Promise.resolve(); // Stop polling if tab is inactive unless forced
 
-    try {
-      const apiBase = process.env.NEXT_PUBLIC_API_BASE ?? '';
-      const response = await fetch(`${apiBase}/api/chat/${projectId}/requests/active`, {
-        cache: 'no-store',
-      });
-      if (response.status === 404) {
-        if (previousActiveState.current) {
-          console.log('🔄 [UserRequests] Active requests endpoint unavailable; assuming no active requests.');
-        }
-        if (activeRequestIdsRef.current.size > 0) {
-          activeRequestIdsRef.current.clear();
-        }
-        setHasActiveRequests(false);
-        setActiveCount(0);
-        previousActiveState.current = false;
-        return;
-      }
-
-      if (response.ok) {
-        const data: ActiveRequestsResponse = await response.json();
-        if (!data.hasActiveRequests && activeRequestIdsRef.current.size > 0) {
-          activeRequestIdsRef.current.clear();
-        }
-        setHasActiveRequests(data.hasActiveRequests);
-        setActiveCount(data.activeCount);
-
-        // Log only when active state changes
-        if (data.hasActiveRequests !== previousActiveState.current) {
-          console.log(`🔄 [UserRequests] Active requests: ${data.hasActiveRequests} (count: ${data.activeCount})`);
-          previousActiveState.current = data.hasActiveRequests;
-        }
-      } else {
-        // Treat other statuses as no-op without logging noisy errors
-        return;
-      }
-    } catch (error) {
-      // KEEP the previous busy state on a transient fetch error. Clearing it on
-      // one blip flipped busy→idle mid-turn, which fired the queued-message
-      // flusher and let sends bypass the queue → a concurrent second turn (or a
-      // 409). The next successful poll corrects the state either way.
-      if (process.env.NODE_ENV === 'development') {
-        console.warn('[UserRequests] Failed to check active requests (network issue):', error);
-      }
-    }
-  }, [projectId, isTabVisible, setFromActiveSet]);
+    return fetchActiveRequests(projectId).then(applyActiveRequestsResult);
+  }, [projectId, isTabVisible, applyActiveRequestsResult]);
 
   // Adaptive polling configuration
   useEffect(() => {
@@ -149,11 +157,13 @@ export function useUserRequests({ projectId }: UseUserRequestsOptions) {
 
   // Clean up on component unmount
   useEffect(() => {
+    // The Set is mutated in place, never replaced, so capturing it is equivalent.
+    const activeRequestIds = activeRequestIdsRef.current;
     return () => {
       if (intervalRef.current) {
         clearInterval(intervalRef.current);
       }
-      activeRequestIdsRef.current.clear();
+      activeRequestIds.clear();
     };
   }, []);
 

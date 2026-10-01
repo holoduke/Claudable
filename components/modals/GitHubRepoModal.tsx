@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? '';
@@ -19,11 +19,11 @@ export default function GitHubRepoModal({
   projectName,
   onSuccess 
 }: GitHubRepoModalProps) {
-  const [repoName, setRepoName] = useState('');
+  // What the user typed; empty means "use the default derived from the project".
+  const [repoNameInput, setRepoNameInput] = useState('');
   const [description, setDescription] = useState('');
   const [isPrivate, setIsPrivate] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [nameError, setNameError] = useState('');
   const [isCheckingAvailability, setIsCheckingAvailability] = useState(false);
 
   const sanitizeRepoName = useCallback((name: string): string => {
@@ -45,12 +45,10 @@ export default function GitHubRepoModal({
       .substring(0, 100);
   }, []);
 
-  // Generate the random suggestion in an effect (not render) so the component
-  // stays pure — the displayed hint is stable and the click applies exactly it.
-  const [suggestedRepoName, setSuggestedRepoName] = useState('');
-  useEffect(() => {
-    setSuggestedRepoName(sanitizeRepoName(`${projectName || 'project'}-${Math.random().toString(36).substring(7)}`));
-  }, [projectName, sanitizeRepoName]);
+  // Random suffix generated once per mount (lazy initializer, not render) so the
+  // displayed hint is stable and the click applies exactly it.
+  const [suggestionSuffix] = useState(() => Math.random().toString(36).substring(7));
+  const suggestedRepoName = sanitizeRepoName(`${projectName || 'project'}-${suggestionSuffix}`);
 
   const validateRepoName = (name: string): string => {
     if (!name.trim()) {
@@ -115,61 +113,33 @@ export default function GitHubRepoModal({
     }
   };
 
-  // Initialize and set sanitized repo name when modal opens
-  useEffect(() => {
-    if (isOpen && !repoName) {
-      const sanitized = sanitizeRepoName(projectName || projectId || '');
-      setRepoName(sanitized);
-    }
-  }, [isOpen, projectName, projectId, repoName, sanitizeRepoName]);
+  // While open, an empty field falls back to the sanitized project name.
+  const repoName = repoNameInput || (isOpen ? sanitizeRepoName(projectName || projectId || '') : '');
 
-  // Validate repo name when it changes
-  useEffect(() => {
-    if (repoName) {
-      const basicError = validateRepoName(repoName);
-      if (basicError) {
-        setNameError(basicError);
-      } else {
-        // Check availability if basic validation passes
-        // Temporarily disable API check - allow modal to appear
-        setNameError(''); // Set no error if basic validation passes
-        /*
-        const timeoutId = setTimeout(async () => {
-          const availabilityError = await checkRepoAvailability(repoName);
-          setNameError(availabilityError);
-        }, 500); // Debounce API calls
-        */
-        
-        // return () => clearTimeout(timeoutId);
-      }
-    } else {
-      setNameError('Repository name is required');
-    }
-  }, [repoName]);
+  // Derived validation (validateRepoName('') already yields "required").
+  // The availability API check is temporarily disabled, see checkRepoAvailability.
+  const nameError = validateRepoName(repoName);
 
-  // Reset state when modal closes
-  useEffect(() => {
+  // Reset the form when the modal closes (adjusted during render, not in an effect).
+  const [wasOpen, setWasOpen] = useState(isOpen);
+  if (isOpen !== wasOpen) {
+    setWasOpen(isOpen);
     if (!isOpen) {
-      setRepoName('');
-      setNameError('');
+      setRepoNameInput('');
       setDescription('');
       setIsPrivate(false);
       setIsCheckingAvailability(false);
     }
-  }, [isOpen]);
+  }
 
   const handleRepoNameChange = (value: string) => {
-    setRepoName(value);
+    setRepoNameInput(value);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    const error = validateRepoName(repoName);
-    if (error) {
-      setNameError(error);
-      return;
-    }
+    if (nameError) return;
 
     setIsLoading(true);
     try {

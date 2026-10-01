@@ -83,16 +83,23 @@ function Avatar({ name, image }: { name: string; image: string | null }) {
 
 /** Render a comment body with its @-mentions highlighted. */
 export function MentionedBody({ body, mentions }: { body: string; mentions?: CommentMention[] }) {
-  const segments = splitBodyByMentions(body, mentions ?? []);
+  // Segments are contiguous slices of `body`, so each one's start offset is a
+  // unique, stable key.
+  let offset = 0;
+  const segments = splitBodyByMentions(body, mentions ?? []).map((seg) => {
+    const start = offset;
+    offset += seg.text.length;
+    return { ...seg, start };
+  });
   return (
     <>
-      {segments.map((seg, i) =>
+      {segments.map((seg) =>
         seg.type === 'mention' ? (
-          <span key={i} className="text-brand-500 font-medium bg-brand-500/8 rounded px-0.5">
+          <span key={seg.start} className="text-brand-500 font-medium bg-brand-500/8 rounded px-0.5">
             {seg.text}
           </span>
         ) : (
-          <span key={i}>{seg.text}</span>
+          <span key={seg.start}>{seg.text}</span>
         ),
       )}
     </>
@@ -115,41 +122,50 @@ export default function CommentsLayer({
   const [mentionQuery, setMentionQuery] = useState<{ start: number; query: string } | null>(null);
   const [mentionResults, setMentionResults] = useState<MentionCandidate[]>([]);
   const [mentionIndex, setMentionIndex] = useState(0);
-  const mentionFetchSeq = useRef(0);
+  const mentionFetchSeqRef = useRef(0);
 
   // Reset ONLY when a genuinely new comment is placed — key on the placement
   // identity (anchor + rel position), NOT the `compose` object, whose identity
   // churns as the pane resizes (live-positioned). Keying on the object wiped the
   // user's draft (and re-enabled submit mid-flight) on any resize. See review.
   const composeKey = compose ? `${compose.anchorSelector}|${compose.relX}|${compose.relY}` : '';
+  // State reset is adjusted during render when the key changes; the focus
+  // (a DOM side effect) stays in the effect below.
+  const [prevComposeKey, setPrevComposeKey] = useState('');
+  if (composeKey !== prevComposeKey) {
+    setPrevComposeKey(composeKey);
+    if (composeKey) {
+      setDraft('');
+      setSubmitError(null);
+      setSubmitting(false);
+      setDraftMentions([]);
+      setMentionQuery(null);
+      setMentionResults([]);
+    }
+  }
   useEffect(() => {
     if (!composeKey) return;
-    setDraft('');
-    setSubmitError(null);
-    setSubmitting(false);
-    setDraftMentions([]);
-    setMentionQuery(null);
-    setMentionResults([]);
     const t = setTimeout(() => composeRef.current?.focus(), 30);
     return () => clearTimeout(t);
   }, [composeKey]);
 
+  // No active @-token: drop any results (adjusted during render).
+  const mentionSearchActive = !!searchMentionUsers && !!mentionQuery;
+  if (!mentionSearchActive && mentionResults.length > 0) setMentionResults([]);
+
   // Debounced people search while an @-token is active at the caret.
   useEffect(() => {
-    if (!searchMentionUsers || !mentionQuery) {
-      setMentionResults([]);
-      return;
-    }
-    const seq = ++mentionFetchSeq.current;
+    if (!searchMentionUsers || !mentionQuery) return;
+    const seq = ++mentionFetchSeqRef.current;
     const t = setTimeout(async () => {
       try {
         const users = await searchMentionUsers(mentionQuery.query);
-        if (mentionFetchSeq.current === seq) {
+        if (mentionFetchSeqRef.current === seq) {
           setMentionResults(users.slice(0, 6));
           setMentionIndex(0);
         }
       } catch {
-        if (mentionFetchSeq.current === seq) setMentionResults([]);
+        if (mentionFetchSeqRef.current === seq) setMentionResults([]);
       }
     }, 150);
     return () => clearTimeout(t);
