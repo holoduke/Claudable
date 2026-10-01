@@ -120,7 +120,7 @@ export async function findAvailablePort(
     // hasn't bound yet wouldn't fail the TCP probe below, so two concurrent
     // starts could otherwise pick the same port — a cross-project preview leak).
     if (exclude?.has(port)) continue;
-    // eslint-disable-next-line no-await-in-loop
+     
     const available = await isPortAvailable(port);
     if (available) {
       return port;

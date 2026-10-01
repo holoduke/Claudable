@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-// eslint-disable-next-line @typescript-eslint/no-require-imports
+ 
 const { classifyChange, isAllowed, PROFILES } = require('./classify.cjs');
 
 const kinds = (path: string, before: string | null, after: string | null) => [...classifyChange(path, before, after)].sort();

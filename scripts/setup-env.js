@@ -156,7 +156,7 @@ async function findAvailablePort(rangeStart, rangeEnd, preferredPort) {
   );
 
   for (let port = normalizedPreferred; port <= rangeEnd; port += 1) {
-    // eslint-disable-next-line no-await-in-loop
+     
     const available = await isPortAvailable(port);
     if (available) {
       return port;
@@ -164,7 +164,7 @@ async function findAvailablePort(rangeStart, rangeEnd, preferredPort) {
   }
 
   for (let port = rangeStart; port < normalizedPreferred; port += 1) {
-    // eslint-disable-next-line no-await-in-loop
+     
     const available = await isPortAvailable(port);
     if (available) {
       return port;

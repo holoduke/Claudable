@@ -15,6 +15,9 @@ export default defineConfig([
     // and flag ~90 pre-existing call sites. Kept visible as warnings until
     // the hooks are refactored (tracked as follow-up, not part of the
     // dependency upgrade).
+    // Same file set as the config that registers the react-hooks plugin;
+    // without it these rules also hit .cjs files, where the plugin is unknown.
+    files: ['**/*.{js,jsx,mjs,ts,tsx,mts,cts}'],
     rules: {
       'react-hooks/set-state-in-effect': 'warn',
       'react-hooks/refs': 'warn',
