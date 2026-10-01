@@ -33,13 +33,13 @@ import { previewSlug } from './preview/routes';
 // ---------------------------------------------------------------------------
 
 const PROJECTS_DIR = process.env.PROJECTS_DIR || './data/projects';
-const PROJECTS_ROOT = path.isAbsolute(PROJECTS_DIR) ? PROJECTS_DIR : path.resolve(process.cwd(), PROJECTS_DIR);
+const PROJECTS_ROOT = path.isAbsolute(PROJECTS_DIR) ? PROJECTS_DIR : path.resolve(/* turbopackIgnore: true */ process.cwd(), PROJECTS_DIR);
 const DATA_ROOT = path.resolve(PROJECTS_ROOT, '..');
 const AGENT_HOMES_ROOT = path.resolve(process.cwd(), 'data', 'agent-homes'); // cli/claude.ts
 const CHECKPOINTS_ROOT = path.resolve(PROJECTS_ROOT, '..', 'checkpoints'); // checkpoints.ts
 const THUMBS_ROOT = path.isAbsolute(process.env.THUMBNAILS_DIR || '') // thumbnail.ts
   ? (process.env.THUMBNAILS_DIR as string)
-  : path.resolve(process.cwd(), process.env.THUMBNAILS_DIR || 'data/thumbnails');
+  : path.resolve(/* turbopackIgnore: true */ process.cwd(), process.env.THUMBNAILS_DIR || 'data/thumbnails');
 
 const PROJECT_ID_RE = /^[A-Za-z0-9_-]{1,64}$/;
 

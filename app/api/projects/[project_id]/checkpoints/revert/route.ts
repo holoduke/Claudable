@@ -17,7 +17,7 @@ import { createSuccessResponse, createErrorResponse, handleApiError } from '@/li
 export const runtime = 'nodejs';
 
 const PROJECTS_DIR = process.env.PROJECTS_DIR || './data/projects';
-const PROJECTS_DIR_ABSOLUTE = path.isAbsolute(PROJECTS_DIR) ? PROJECTS_DIR : path.resolve(process.cwd(), PROJECTS_DIR);
+const PROJECTS_DIR_ABSOLUTE = path.isAbsolute(PROJECTS_DIR) ? PROJECTS_DIR : path.resolve(/* turbopackIgnore: true */ process.cwd(), PROJECTS_DIR);
 
 interface RouteContext {
   params: Promise<{ project_id: string }>;
@@ -51,7 +51,7 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
 
     const projectPath = path.resolve(
       project.repoPath
-        ? (path.isAbsolute(project.repoPath) ? project.repoPath : path.resolve(process.cwd(), project.repoPath))
+        ? (path.isAbsolute(project.repoPath) ? project.repoPath : path.resolve(/* turbopackIgnore: true */ process.cwd(), project.repoPath))
         : path.join(PROJECTS_DIR_ABSOLUTE, project_id),
     );
     // Revert runs `git clean -fd` in projectPath — refuse if it isn't inside the

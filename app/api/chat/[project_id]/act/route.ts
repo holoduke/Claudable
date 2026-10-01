@@ -97,7 +97,7 @@ function coerceString(value: unknown): string | null {
 const PROJECTS_DIR = process.env.PROJECTS_DIR || './data/projects';
 const PROJECTS_DIR_ABSOLUTE = path.isAbsolute(PROJECTS_DIR)
   ? PROJECTS_DIR
-  : path.resolve(process.cwd(), PROJECTS_DIR);
+  : path.resolve(/* turbopackIgnore: true */ process.cwd(), PROJECTS_DIR);
 
 function resolveAssetsPath(projectId: string): string {
   return path.join(PROJECTS_DIR_ABSOLUTE, projectId, 'assets');
@@ -126,7 +126,7 @@ function ensureAbsoluteAssetPath(projectId: string, inputPath: string): string {
 
 function resolveProjectRoot(projectId: string, repoPath?: string | null): string {
   if (repoPath) {
-    return path.isAbsolute(repoPath) ? repoPath : path.resolve(process.cwd(), repoPath);
+    return path.isAbsolute(repoPath) ? repoPath : path.resolve(/* turbopackIgnore: true */ process.cwd(), repoPath);
   }
   return path.join(PROJECTS_DIR_ABSOLUTE, projectId);
 }
@@ -136,7 +136,7 @@ async function mirrorAssetToPublic(
   filename: string,
   sourcePath: string,
 ): Promise<{ publicPath: string | null; publicUrl: string | null }> {
-  const resolvedSourcePath = path.isAbsolute(sourcePath) ? sourcePath : path.resolve(process.cwd(), sourcePath);
+  const resolvedSourcePath = path.isAbsolute(sourcePath) ? sourcePath : path.resolve(/* turbopackIgnore: true */ process.cwd(), sourcePath);
   const hostUploadsDir = path.join(process.cwd(), 'public', 'uploads');
   let hostPublicPath: string | null = null;
 

@@ -227,7 +227,7 @@ async function isLikelyNextProject(dirPath: string): Promise<boolean> {
     'next.config.ts',
   ];
   for (const candidate of configCandidates) {
-    if (await fileExists(path.join(dirPath, candidate))) {
+    if (await fileExists(path.join(/* turbopackIgnore: true */ dirPath, candidate))) {
       return true;
     }
   }
@@ -239,7 +239,7 @@ async function isLikelyNextProject(dirPath: string): Promise<boolean> {
     path.join('src', 'pages'),
   ];
   for (const candidate of appDirCandidates) {
-    if (await directoryExists(path.join(dirPath, candidate))) {
+    if (await directoryExists(path.join(/* turbopackIgnore: true */ dirPath, candidate))) {
       return true;
     }
   }

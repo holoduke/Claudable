@@ -883,7 +883,7 @@ class PreviewManager {
       });
     }
 
-    const child = spawn(
+    const child = spawn(/* turbopackIgnore: true */ 
       command,
       args,
       {

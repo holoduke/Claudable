@@ -22,7 +22,7 @@ import { getProjectById } from '@/lib/services/project';
 const PROJECTS_DIR = process.env.PROJECTS_DIR || './data/projects';
 const PROJECTS_DIR_ABSOLUTE = path.isAbsolute(PROJECTS_DIR)
   ? PROJECTS_DIR
-  : path.resolve(process.cwd(), PROJECTS_DIR);
+  : path.resolve(/* turbopackIgnore: true */ process.cwd(), PROJECTS_DIR);
 
 export interface Skill {
   id: string; // on-disk directory name — the stable identifier used for enable/disable
@@ -51,7 +51,7 @@ async function projectBaseDir(projectId: string): Promise<string> {
   if (project.repoPath) {
     return path.isAbsolute(project.repoPath)
       ? project.repoPath
-      : path.resolve(process.cwd(), project.repoPath);
+      : path.resolve(/* turbopackIgnore: true */ process.cwd(), project.repoPath);
   }
   return path.join(PROJECTS_DIR_ABSOLUTE, projectId);
 }
@@ -359,7 +359,7 @@ export async function getSkill(projectId: string, name: string): Promise<Skill |
     path.join(root, DISABLED_SUBDIR, slug, 'SKILL.md'),
   ]) {
     try {
-      const raw = await fs.readFile(file, 'utf8');
+      const raw = await fs.readFile(/* turbopackIgnore: true */ file, 'utf8');
       const parsed = parseFrontmatter(raw);
       return {
         id: slug,

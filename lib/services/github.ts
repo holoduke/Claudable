@@ -193,9 +193,9 @@ export async function createRepository(options: CreateRepoOptions) {
 
 export function resolveProjectRepoPath(projectId: string, repoPath?: string | null) {
   if (repoPath) {
-    return path.isAbsolute(repoPath) ? repoPath : path.resolve(process.cwd(), repoPath);
+    return path.isAbsolute(repoPath) ? repoPath : path.resolve(/* turbopackIgnore: true */ process.cwd(), repoPath);
   }
-  return path.resolve(process.cwd(), process.env.PROJECTS_DIR || './data/projects', projectId);
+  return path.resolve(/* turbopackIgnore: true */ process.cwd(), process.env.PROJECTS_DIR || './data/projects', projectId);
 }
 
 export async function ensureProjectRepository(projectId: string, repoPath?: string | null) {

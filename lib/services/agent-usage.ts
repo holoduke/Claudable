@@ -40,7 +40,7 @@ const projectUsage = new Map<string, ProjectUsageState>();
 // the next turn): a small JSON file next to the data dir. Loaded once, written
 // on change. Best-effort — a read/write failure only means "no numbers yet".
 const RATE_LIMITS_FILE = path.join(
-  path.resolve(process.env.PROJECTS_DIR && path.isAbsolute(process.env.PROJECTS_DIR) ? process.env.PROJECTS_DIR : path.resolve(process.cwd(), process.env.PROJECTS_DIR || './data/projects'), '..'),
+  path.resolve(process.env.PROJECTS_DIR && path.isAbsolute(process.env.PROJECTS_DIR) ? process.env.PROJECTS_DIR : path.resolve(/* turbopackIgnore: true */ process.cwd(), process.env.PROJECTS_DIR || './data/projects'), '..'),
   '.claude-rate-limits.json',
 );
 function loadRateLimits(): AgentRateLimits {

@@ -36,7 +36,7 @@ function resolveRepoRoot(project: Project): string {
     project.repoPath || path.join('data', 'projects', project.id);
   const absolutePath = path.isAbsolute(repoPath)
     ? repoPath
-    : path.resolve(process.cwd(), repoPath);
+    : path.resolve(/* turbopackIgnore: true */ process.cwd(), repoPath);
   return absolutePath;
 }
 

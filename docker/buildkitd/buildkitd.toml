@@ -12,3 +12,8 @@
 
 [worker.containerd]
   enabled = false
+
+# No device injection (GPUs etc.) for preview builds — also keeps the startup
+# log free of "CDI setup error" warnings for the absent spec dirs.
+[cdi]
+  disabled = true

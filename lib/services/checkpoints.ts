@@ -21,7 +21,7 @@ import path from 'path';
 import { HARDENED_GIT_ARGS, gitEnv } from '@/lib/services/git';
 
 const PROJECTS_DIR = process.env.PROJECTS_DIR || './data/projects';
-const PROJECTS_DIR_ABSOLUTE = path.isAbsolute(PROJECTS_DIR) ? PROJECTS_DIR : path.resolve(process.cwd(), PROJECTS_DIR);
+const PROJECTS_DIR_ABSOLUTE = path.isAbsolute(PROJECTS_DIR) ? PROJECTS_DIR : path.resolve(/* turbopackIgnore: true */ process.cwd(), PROJECTS_DIR);
 const CHECKPOINTS_ROOT = path.resolve(PROJECTS_DIR_ABSOLUTE, '..', 'checkpoints');
 
 // Never snapshot deps/build output or the project's own git dir. Also never

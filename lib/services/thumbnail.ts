@@ -32,9 +32,18 @@ export function renderNetworkLockArgs(host: string, port: number | string): stri
 
 const execFileP = promisify(execFile);
 
+/** One line for a failed Chrome run: timeout/kill or exit code, never the full stderr dump. */
+export function chromeFailure(error: unknown): string {
+  const e = error as { killed?: boolean; signal?: string | null; code?: number | string; message?: string };
+  if (e?.killed) return `timed out (${e.signal ?? 'killed'})`;
+  const first = String(e?.message ?? error).split('\n')[0].replace(/^Command failed: \S+.*$/u, 'chrome exited');
+  return e?.code !== undefined ? `${first} (exit ${e.code})` : first;
+}
+
+
 const THUMBS_DIR = path.isAbsolute(process.env.THUMBNAILS_DIR || '')
   ? (process.env.THUMBNAILS_DIR as string)
-  : path.resolve(process.cwd(), process.env.THUMBNAILS_DIR || 'data/thumbnails');
+  : path.resolve(/* turbopackIgnore: true */ process.cwd(), process.env.THUMBNAILS_DIR || 'data/thumbnails');
 const CHROMIUM = process.env.CHROMIUM_PATH || 'chromium';
 
 function safeId(projectId: string): string {
@@ -138,6 +147,10 @@ export async function captureThumbnail(projectId: string): Promise<boolean> {
         // is ~40% lighter — still crisp for the small grid tiles (retina 3x).
         '--window-size=1024,576',
         '--virtual-time-budget=5000', // let the dev server render before the shot
+        // Pages that never go idle (WebGL/rAF animations) never exhaust the
+        // virtual-time budget; Chrome's own timeout still takes the shot.
+        '--timeout=15000',
+        '--log-level=3', // Chrome's dbus/GPU/audio chatter is not about the project
         ...(customerProject ? renderNetworkLockArgs(publishHost, status.port) : []),
         `--screenshot=${tmp}`,
         url,
@@ -161,7 +174,7 @@ export async function captureThumbnail(projectId: string): Promise<boolean> {
     await fs.rm(legacyThumbnailFile(projectId), { force: true }).catch(() => {});
     return true;
   } catch (error) {
-    console.error('[thumbnail] capture failed for', projectId, error);
+    console.error(`[thumbnail] capture failed for ${projectId}: ${chromeFailure(error)}`);
     await fs.rm(tmp, { force: true }).catch(() => {});
     return false;
   }

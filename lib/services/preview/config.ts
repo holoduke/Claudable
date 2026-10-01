@@ -112,9 +112,9 @@ export async function collectEnvOverrides(projectPath: string): Promise<EnvOverr
   const files = ['.env.local', '.env'];
 
   for (const fileName of files) {
-    const filePath = path.join(projectPath, fileName);
+    const filePath = path.join(/* turbopackIgnore: true */ projectPath, fileName);
     try {
-      const contents = await fs.readFile(filePath, 'utf8');
+      const contents = await fs.readFile(/* turbopackIgnore: true */ filePath, 'utf8');
       const lines = contents.split(/\r?\n/);
       let candidateUrl: string | null = null;
 
