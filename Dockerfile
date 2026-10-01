@@ -1,7 +1,7 @@
 # Claudable — self-hosted AI web builder, running the agent via `claude -p`
 # (Claude Code CLI / Agent SDK) with subscription auth (CLAUDE_CODE_OAUTH_TOKEN).
 # Node major: keep in step with node.major in lib/config/stack-versions.json.
-FROM node:26-bookworm-slim
+FROM node:26-trixie-slim
 
 # Tooling the agent needs at runtime: git (push), ripgrep (claude search), ca-certs.
 # The lib list is chrome-headless-shell's runtime deps (thumbnails + PDF export),
@@ -10,9 +10,9 @@ FROM node:26-bookworm-slim
 # ("cypress verify" needs Xvfb, and agents have no sudo to install it).
 RUN apt-get update \
   && apt-get install -y --no-install-recommends git ca-certificates ripgrep curl unzip fonts-liberation \
-     libnss3 libnspr4 libatk1.0-0 libatk-bridge2.0-0 libcups2 libdrm2 libxkbcommon0 \
-     libxcomposite1 libxdamage1 libxfixes3 libxrandr2 libgbm1 libasound2 libpango-1.0-0 libcairo2 \
-     libgtk2.0-0 libgtk-3-0 libnotify4 libxss1 libxtst6 xauth xvfb \
+     libnss3 libnspr4 libatk1.0-0t64 libatk-bridge2.0-0t64 libcups2t64 libdrm2 libxkbcommon0 \
+     libxcomposite1 libxdamage1 libxfixes3 libxrandr2 libgbm1 libasound2t64 libpango-1.0-0 libcairo2 \
+     libgtk2.0-0t64 libgtk-3-0t64 libnotify4 libxss1 libxtst6 xauth xvfb \
   && rm -rf /var/lib/apt/lists/*
 
 # PINNED headless browser (Chrome for Testing "chrome-headless-shell") for
@@ -37,7 +37,7 @@ ENV ELECTRON_EXTRA_LAUNCH_ARGS=--no-sandbox
 
 # Go toolchain — lets the preview build+run a project's Go backend (the `static`
 # import mode's backend sidecar). Pinned; copied from the official image.
-COPY --from=golang:1.27-bookworm /usr/local/go /usr/local/go
+COPY --from=golang:1.27-trixie /usr/local/go /usr/local/go
 ENV PATH="/usr/local/go/bin:${PATH}" \
     GOTOOLCHAIN=local \
     GOFLAGS=-buildvcs=false
@@ -49,11 +49,9 @@ ENV PATH="/usr/local/go/bin:${PATH}" \
 # template's composer.lock pins symfony/* v8.1, which requires php >=8.4.1, so
 # 8.3 fails composer install. Extensions are the Laravel + NewStory Filament set
 # (incl. pgsql for managed-Postgres migrations and imagick for the media
-# library). Via the sury repo (bookworm ships 8.2). The agent shares the project
+# library). Debian 13 (trixie) ships PHP 8.4 itself. The agent shares the project
 # dir with the preview, so artisan/migrations it runs are what the app serves.
-RUN curl -fsSL https://packages.sury.org/php/apt.gpg -o /etc/apt/trusted.gpg.d/sury-php.gpg \
-  && echo "deb https://packages.sury.org/php/ bookworm main" > /etc/apt/sources.list.d/sury-php.list \
-  && apt-get update \
+RUN apt-get update \
   && apt-get install -y --no-install-recommends \
      php8.4-cli php8.4-intl php8.4-sqlite3 php8.4-pgsql php8.4-mbstring php8.4-xml \
      php8.4-curl php8.4-zip php8.4-gd php8.4-bcmath php8.4-imagick \
@@ -88,11 +86,11 @@ USER node
 # Docker create the parent as root (which blocks the agent writing session-env).
 RUN mkdir -p /home/node/.claude
 
-# Install deps (cached on lockfile). --ignore-scripts skips the postinstall
-# env setup, so better-sqlite3 (Prisma driver adapter, native module) must be
-# rebuilt explicitly — prebuild-install fetches the prebuilt binding.
+# Install deps (cached on lockfile). --ignore-scripts skips the postinstall env
+# setup. better-sqlite3 (Prisma driver adapter) ships N-API prebuilds inside the
+# package since v13: nothing to download or compile, and no Node-version lock-in.
 COPY --chown=node:node package*.json ./
-RUN npm ci --ignore-scripts && npm rebuild better-sqlite3
+RUN npm ci --ignore-scripts
 
 # Prisma 7 reads the datasource from prisma.config.ts (not schema.prisma) and
 # resolves it eagerly, so build-time steps need a DATABASE_URL even though

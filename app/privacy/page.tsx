@@ -121,7 +121,7 @@ export default function PrivacyPage() {
           <Section title="7. Jouw rechten">
             <p>
               Je hebt recht op inzage, correctie, verwijdering, beperking en overdraagbaarheid van je gegevens en je kunt
-              bezwaar maken tegen verwerking. Mail naar <a className="underline" href="mailto:support@newstory.tf">support@newstory.tf</a>;
+              bezwaar maken tegen verwerking. Mail naar <a className="underline" href="mailto:support@newstory.tf">support@newstory.tf</a>{';'}
               wij reageren binnen een maand. Je kunt ook een klacht indienen bij de Autoriteit Persoonsgegevens.
             </p>
           </Section>
