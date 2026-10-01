@@ -135,7 +135,8 @@ export async function captureThumbnail(projectId: string): Promise<boolean> {
   try {
     // Shoot to a temp file and rename on success, so a failed/blank capture
     // never clobbers a good previous thumbnail.
-    await execFileP(
+    const lockArgs = customerProject ? renderNetworkLockArgs(publishHost, status.port) : [];
+    const shoot = (extra: string[], timeout: number) => execFileP(
       CHROMIUM,
       [
         '--headless=new',
@@ -151,12 +152,24 @@ export async function captureThumbnail(projectId: string): Promise<boolean> {
         // virtual-time budget; Chrome's own timeout still takes the shot.
         '--timeout=15000',
         '--log-level=3', // Chrome's dbus/GPU/audio chatter is not about the project
-        ...(customerProject ? renderNetworkLockArgs(publishHost, status.port) : []),
+        ...extra,
+        ...lockArgs,
         `--screenshot=${tmp}`,
         url,
       ],
-      { timeout: 30_000 },
+      { timeout },
     );
+    try {
+      // Software WebGL, explicitly: Chrome's automatic fallback to it is deprecated
+      // and hung about half the captures of a WebGL page (measured).
+      await shoot(['--enable-unsafe-swiftshader'], 40_000);
+    } catch (error) {
+      // Still stuck: shoot without WebGL (always ~1 s). A tile without its 3D
+      // background beats no tile at all.
+      console.warn(`[thumbnail] ${projectId}: full render failed (${chromeFailure(error)}); retrying without WebGL`);
+      await fs.rm(tmp, { force: true }).catch(() => {});
+      await shoot(['--disable-3d-apis'], 20_000);
+    }
     const st = await fs.stat(tmp);
     if (st.size === 0) throw new Error('empty screenshot');
     // Re-encode the PNG to WebP: dashboard tiles are ~300px, so 800px wide is
