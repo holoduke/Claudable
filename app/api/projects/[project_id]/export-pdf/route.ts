@@ -62,6 +62,7 @@ export async function GET(request: Request, { params }: RouteContext) {
           '--no-pdf-header-footer',
           '--virtual-time-budget=5000',
           '--timeout=20000', // pages that never go idle (WebGL/rAF) still print
+          '--enable-unsafe-swiftshader', // explicit software WebGL; the automatic fallback is deprecated and hangs
           '--log-level=3',
           ...((await isCustomerProject(project_id)) ? renderNetworkLockArgs(publishHost, status.port) : []),
           `--print-to-pdf=${tmp}`,
