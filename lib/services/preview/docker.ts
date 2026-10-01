@@ -196,7 +196,7 @@ export async function ensureSandboxNetwork(force = false): Promise<void> {
       '--opt', 'com.docker.network.bridge.enable_icc=false',
       name,
     ]);
-    // eslint-disable-next-line no-console
+     
     console.warn(
       created
         ? `[preview] recreated missing sandbox network '${name}' (${subnet}). ` +

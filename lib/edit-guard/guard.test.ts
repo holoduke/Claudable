@@ -3,9 +3,9 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import { spawnSync } from 'child_process';
-// eslint-disable-next-line @typescript-eslint/no-require-imports
+ 
 const { evaluateEdit, readTextOrNull } = require('./guard.cjs');
-// eslint-disable-next-line @typescript-eslint/no-require-imports
+ 
 const { PROFILES } = require('./classify.cjs');
 
 let root: string;

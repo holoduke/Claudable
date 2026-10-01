@@ -1,7 +1,7 @@
 # Claudable — self-hosted AI web builder, running the agent via `claude -p`
 # (Claude Code CLI / Agent SDK) with subscription auth (CLAUDE_CODE_OAUTH_TOKEN).
 # Node major: keep in step with node.major in lib/config/stack-versions.json.
-FROM node:24-bookworm-slim
+FROM node:26-bookworm-slim
 
 # Tooling the agent needs at runtime: git (push), ripgrep (claude search), ca-certs.
 # The lib list is chrome-headless-shell's runtime deps (thumbnails + PDF export),
@@ -103,9 +103,13 @@ RUN DATABASE_URL="file:../data/cc.db" npx prisma generate
 
 # Test gate: the whole suite must pass before an image is built (~10 s). A red
 # test fails the build, so `docker compose up` never runs and the current
-# version stays live. (`next build` below already type-checks.)
+# version stays live.
 COPY --chown=node:node . .
 RUN DATABASE_URL="file:/tmp/test.db" npx vitest run --reporter=dot
+# Type check with TypeScript 7 (the native compiler, `tsc` from @typescript/native).
+# next build skips its own check: it would use the TS 6 API package that
+# `typescript` aliases to for typescript-eslint (see package.json).
+RUN npx tsc --noEmit -p .
 
 # Build the Next.js app.
 RUN DATABASE_URL="file:../data/cc.db" npm run build
