@@ -65,7 +65,9 @@ services:
       # as a sibling of DATA_HOST_DIR.
       - GLOBAL_SKILLS_HOST_DIR=${GLOBAL_SKILLS_HOST_DIR:-}
       - DOCKER_HOST=tcp://127.0.0.1:2375
-      - DOCKER_BUILDKIT=0
+      # Preview backend images build on the rootless BuildKit below (RUN steps on
+      # the egress-locked sandbox net). Unset = legacy builder fallback.
+      - PREVIEW_BUILDKIT_HOST=${PREVIEW_BUILDKIT_HOST:-tcp://127.0.0.1:1234}
     volumes:
       # Persist SQLite DB + all generated project repos across rebuilds.
       - ./data:/app/data
@@ -92,6 +94,33 @@ services:
   # CLAUDABLE_BIND_ALLOW or with "..", privileged, host namespaces/network,
   # devices, unconfined seccomp/apparmor, caps beyond the DB set). Attach/exec
   # streams are untouched (no extra proxy in the path).
+  # Rootless BuildKit for preview backend builds (lib/services/preview/image-builder.ts).
+  # On the egress-locked sandbox network, so every RUN step of a project's
+  # Dockerfile gets the sandbox firewall: internet yes, host / private ranges /
+  # cloud metadata no (verified with probes). Rootless: build-step root maps to an
+  # unprivileged host uid; no --privileged, no capabilities. Ubuntu's userns
+  # restriction is lifted for THIS container only via the AppArmor profile
+  # docker/buildkitd/apparmor-claudable-buildkitd (loaded by deploy.sh). Reachable
+  # only on host loopback (like the socket proxy); the sandbox net has icc off, so
+  # agents/previews on it cannot reach it either.
+  buildkitd:
+    image: moby/buildkit:v0.33.1-rootless
+    container_name: claudable-buildkitd
+    restart: unless-stopped
+    command: ["--addr", "tcp://0.0.0.0:1234", "--config", "/home/user/.config/buildkit/buildkitd.toml"]
+    security_opt:
+      - seccomp=unconfined
+      - apparmor=claudable-buildkitd
+      - systempaths=unconfined
+    networks:
+      - sandbox
+    ports:
+      - "127.0.0.1:1234:1234"
+    volumes:
+      - buildkit-state:/home/user/.local/share/buildkit
+      - ./docker/buildkitd/buildkitd.toml:/home/user/.config/buildkit/buildkitd.toml:ro
+    mem_limit: 4g
+
   dockerproxy:
     image: tecnativa/docker-socket-proxy:v0.5.0
     container_name: claudable-dockerproxy
@@ -147,3 +176,12 @@ services:
       # haproxy.cfg from it at start; mounting the final file breaks boot.
       - ./docker/socket-proxy/haproxy.cfg.template:/usr/local/etc/haproxy/haproxy.cfg.template:ro
 
+networks:
+  # Created by Claudable / deploy.sh (bridge, fixed subnet, icc off) and
+  # egress-locked by the host firewall — never by compose.
+  sandbox:
+    name: ${PREVIEW_SANDBOX_NETWORK:-claudable-sandbox}
+    external: true
+
+volumes:
+  buildkit-state:

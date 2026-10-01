@@ -28,6 +28,32 @@ if ! flock -n 9; then
 fi
 cd /opt/claudable
 log(){ echo "$(date -u +%FT%TZ) $*"; }
+envval(){ grep -E "^$1=" .env 2>/dev/null | tail -1 | cut -d= -f2- | tr -d "\"'" || true; }
+
+# The rootless BuildKit service (preview backend builds) needs two things on the
+# host BEFORE `compose up` — which fails outright on a missing external network.
+# 1) The egress-locked sandbox network, created exactly like Claudable does
+#    (ensureSandboxNetwork): bridge, fixed subnet, inter-container traffic off.
+ensure_sandbox_net(){
+  local net subnet
+  net=$(envval PREVIEW_SANDBOX_NETWORK); [ -n "$net" ] || return 0
+  docker network inspect "$net" >/dev/null 2>&1 && return 0
+  subnet=$(envval PREVIEW_SANDBOX_SUBNET); subnet=${subnet:-172.31.99.0/24}
+  if docker network create --driver bridge --subnet "$subnet" --opt com.docker.network.bridge.enable_icc=false "$net" >/dev/null; then
+    log "WARN recreated missing sandbox network $net ($subnet); its egress lock is the host firewall (/opt/claudable-sandbox-heal.sh)"
+  else
+    log "WARN could not create sandbox network $net"
+  fi
+}
+# 2) The AppArmor profile that allows a user namespace for that container only.
+ensure_buildkit_apparmor(){
+  local src=docker/buildkitd/apparmor-claudable-buildkitd dst=/etc/apparmor.d/claudable-buildkitd
+  [ -f "$src" ] && [ -d /etc/apparmor.d ] || return 0
+  if ! cmp -s "$src" "$dst"; then
+    sudo -n install -m 0644 "$src" "$dst" || { log "WARN cannot install $dst (no sudo?)"; return 0; }
+  fi
+  sudo -n apparmor_parser -r "$dst" || log "WARN apparmor_parser failed for $dst"
+}
 while :; do
   rm -f "$PENDING"
   log "fetch+reset origin/main"
@@ -46,7 +72,14 @@ while :; do
     exit 1
   fi
   ls -1t "$BUILD_LOGS"/*.log 2>/dev/null | tail -n +11 | xargs -r rm -f
-  docker compose up -d --force-recreate --remove-orphans
+  ensure_sandbox_net
+  ensure_buildkit_apparmor
+  if ! docker compose up -d --force-recreate --remove-orphans; then
+    # Never leave Claudable down because of the build service: without it
+    # preview builds fall back to the legacy builder (image-builder.ts).
+    log "WARN compose up failed; starting claudable + dockerproxy without buildkitd"
+    docker compose up -d --force-recreate claudable dockerproxy
+  fi
   docker image prune -f >/dev/null 2>&1 || true
   log "deployed $HEAD; waiting for health"
   # The container's own healthcheck (not an HTTP 200 on / — with auth on, / is a

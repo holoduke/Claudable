@@ -1,4 +1,5 @@
 // Docker helpers: orphan sweep, per-project internal networks, isolated backend containers, mtime scan.
+import { buildInvocation, resetBuilderSelection, selectBuilder } from './image-builder';
 import { spawn } from 'child_process';
 import { writeFileSync, unlinkSync } from 'fs';
 import os from 'os';
@@ -299,11 +300,9 @@ export function toHostPath(p: string): string {
 
 /**
  * Drop docker's "legacy builder is deprecated" notice from a build log. The
- * legacy builder is DELIBERATE: backend builds run their RUN steps on the
- * egress-locked sandbox network (`--network <custom>`), which BuildKit does not
- * support. The notice says nothing about the project, so it only cluttered every
- * preview start. (When Docker removes the legacy builder this needs a new
- * isolation approach — that will surface as a build error, not be hidden.)
+ * legacy builder is only the FALLBACK when BuildKit (image-builder.ts) is not
+ * reachable; the notice says nothing about the project and would clutter every
+ * preview start in that case.
  */
 export function withoutLegacyBuilderNotice(log: (chunk: Buffer | string) => void): (chunk: Buffer | string) => void {
   const notice = /^\s*(DEPRECATED: The legacy builder is deprecated.*|BuildKit is currently disabled; enable it by removing the DOCKER_BUILDKIT=0|environment-variable\.)\s*$/u;
@@ -399,27 +398,38 @@ export async function runBackendContainer(
       throw new Error(`backend build refused: ${rel} is outside the project`);
     }
   }
-  log(Buffer.from(`[PreviewManager] [backend] building image ${name} from ${c.dockerfile}…`));
-  // RUN steps execute project-controlled commands: build on the egress-locked
-  // sandbox network, never on the default bridge (which reaches the host's
-  // services and private ranges).
+  // RUN steps execute project-controlled commands: they must run on the
+  // egress-locked sandbox network (see image-builder.ts for both builders).
+  const builder = await selectBuilder();
+  log(Buffer.from(`[PreviewManager] [backend] building image ${name} from ${c.dockerfile} (${builder.mode === 'buildkit' ? 'BuildKit, sandbox network' : `legacy builder: ${builder.reason}`})…`));
   const buildNet = process.env.PREVIEW_SANDBOX_NETWORK?.trim();
   const buildLog = withoutLegacyBuilderNotice(log);
-  const buildFlags = [...(buildNet ? ['--network', buildNet] : []), '-t', name];
   const narrow = (await hasGnuTar()) ? await narrowBuildContext(projectPath, c) : null;
-  if (narrow) {
-    // Only the paths the Dockerfile COPYs (see build-context.ts) — same image, a
-    // fraction of the upload. Paths go to tar as argv, never through a shell.
-    log(Buffer.from(`[PreviewManager] [backend] build context narrowed to: ${narrow.paths.join(', ')}`));
-    // Owner normalised to root like the docker CLI's own context tar — otherwise the
-    // COPY cache keys (and the resulting image) differ from a full-context build.
-    const tar = spawn('tar', ['-cf', '-', '--owner=0', '--group=0', '--numeric-owner', '-C', narrow.contextDir, '--', ...narrow.paths], { stdio: ['ignore', 'pipe', 'pipe'] });
-    const tarDone = new Promise<number>((res) => { tar.on('close', (code) => res(code ?? 1)); tar.on('error', () => res(1)); });
-    tar.stderr?.on('data', log);
-    await appendCommandLogs('docker', ['build', ...buildFlags, '-f', narrow.dockerfile, '-'], projectPath, dockerEnv, buildLog, undefined, tar.stdout!);
-    if ((await tarDone) !== 0) throw new Error('backend build context could not be packed');
-  } else {
-    await appendCommandLogs('docker', ['build', ...buildFlags, '-f', c.dockerfile, c.context || '.'], projectPath, dockerEnv, buildLog);
+  const spec = narrow
+    ? { tag: name, dockerfile: narrow.dockerfile, context: '-', sandboxNet: buildNet }
+    : { tag: name, dockerfile: c.dockerfile, context: c.context || '.', sandboxNet: buildNet };
+  const { args: buildArgs, env: buildEnv } = buildInvocation(builder.mode, spec);
+  const env = { ...dockerEnv, ...buildEnv };
+  try {
+    if (narrow) {
+      // Only the paths the Dockerfile COPYs (see build-context.ts) — same image, a
+      // fraction of the upload. Paths go to tar as argv, never through a shell.
+      log(Buffer.from(`[PreviewManager] [backend] build context narrowed to: ${narrow.paths.join(', ')}`));
+      // Owner normalised to root like the docker CLI's own context tar — otherwise the
+      // COPY cache keys (and the resulting image) differ from a full-context build.
+      const tar = spawn('tar', ['-cf', '-', '--owner=0', '--group=0', '--numeric-owner', '-C', narrow.contextDir, '--', ...narrow.paths], { stdio: ['ignore', 'pipe', 'pipe'] });
+      const tarDone = new Promise<number>((res) => { tar.on('close', (code) => res(code ?? 1)); tar.on('error', () => res(1)); });
+      tar.stderr?.on('data', log);
+      await appendCommandLogs('docker', buildArgs, projectPath, env, buildLog, undefined, tar.stdout!);
+      if ((await tarDone) !== 0) throw new Error('backend build context could not be packed');
+    } else {
+      await appendCommandLogs('docker', buildArgs, projectPath, env, buildLog);
+    }
+  } catch (error) {
+    // A project's own build error must surface as-is (no silent rebuild on the
+    // other builder); just re-probe the builder before the next build.
+    if (builder.mode === 'buildkit') resetBuilderSelection();
+    throw error;
   }
 
   // Clear any stale container from a previous start (ignore "no such container").

@@ -66,6 +66,17 @@ RUN curl -fsSL https://download.docker.com/linux/static/stable/x86_64/docker-29.
     | tar -xz -C /usr/local/bin --strip-components=1 docker/docker \
   && docker --version
 
+# buildx plugin — preview backend images build on the rootless BuildKit service
+# (remote builder on the sandbox network, see lib/services/preview/image-builder.ts).
+# Pinned + checksum-verified.
+ARG BUILDX_VERSION=0.37.2
+ARG BUILDX_SHA256=982ca20490b45ed1ec8d99795974d3d874a358f75938c9c237305010e6b7e548
+RUN mkdir -p /usr/local/lib/docker/cli-plugins \
+  && curl -fsSL "https://github.com/docker/buildx/releases/download/v${BUILDX_VERSION}/buildx-v${BUILDX_VERSION}.linux-amd64" -o /usr/local/lib/docker/cli-plugins/docker-buildx \
+  && echo "${BUILDX_SHA256}  /usr/local/lib/docker/cli-plugins/docker-buildx" | sha256sum -c - \
+  && chmod 0755 /usr/local/lib/docker/cli-plugins/docker-buildx \
+  && docker buildx version
+
 # Claude Code CLI on PATH so the Agent SDK can spawn `claude` headless.
 # PINNED (like CHROME_HEADLESS_VERSION above): reproducible builds + a stable,
 # audited CLI for the security controls that depend on its flags (notably

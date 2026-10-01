@@ -1,0 +1,14 @@
+# Rootless BuildKit for preview backend builds (compose service `buildkitd`).
+# Only the OCI worker runs (no containerd socket in this container).
+[worker.oci]
+  enabled = true
+  gc = true
+  # Build cache caps — the box also holds every preview's images and data.
+  reservedSpace = "1GB"
+  maxUsedSpace = "8GB"
+  minFreeSpace = "20GB"
+  # Several projects can start at once; don't let builds starve the box.
+  max-parallelism = 4
+
+[worker.containerd]
+  enabled = false

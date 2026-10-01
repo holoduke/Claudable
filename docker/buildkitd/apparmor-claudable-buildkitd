@@ -1,0 +1,14 @@
+# Claudable: rootless BuildKit (compose service `buildkitd`). Ubuntu restricts
+# unprivileged user namespaces (kernel.apparmor_restrict_unprivileged_userns=1);
+# rootless BuildKit needs one to sandbox build steps WITHOUT root or --privileged.
+# This profile grants exactly that, only to containers started with
+# --security-opt apparmor=claudable-buildkitd. Everything else stays restricted.
+# Installed + loaded by deploy.sh (/etc/apparmor.d/claudable-buildkitd).
+abi <abi/4.0>,
+include <tunables/global>
+
+profile claudable-buildkitd flags=(unconfined) {
+  userns,
+
+  include if exists <local/claudable-buildkitd>
+}
