@@ -10,6 +10,7 @@ import {
   RESTRICTED_DISALLOWED_TOOLS, RESTRICTED_TOOLS, type EditProfile,
 } from '@/lib/services/edit-profiles';
 import guardModule from '@/lib/edit-guard/guard.cjs';
+import { toAgentContainerPaths } from './container-paths';
 import { query } from '@anthropic-ai/claude-agent-sdk';
 import { credentialEnvName } from '@/lib/services/claude-credentials';
 import type { ClaudeSession, ClaudeResponse } from '@/types/backend';
@@ -365,6 +366,9 @@ async function buildAgentSystemPrompt(
     systemPrompt += databasePromptNote(kind);
   } catch { /* non-fatal */ }
 
+  // Files the user attaches in the chat (screenshots, zips, PDFs, …).
+  systemPrompt += `\n\n## Attachments\nFiles the user attaches are saved in the project's \`assets/\` folder; the message names each path (\`Image #N path: …\` for images, \`Attached file "<name>" → assets/…\` for other files).\n- Images and screenshots: open them with the Read tool and look at them before answering.\n- Archives (zip, tar): inspect with \`unzip -l\` and extract into a fresh folder under /tmp — never into the project — unless the user asks to add the contents to the project; then extract into the folder they name (or a sensible one) on purpose.\n- Attachments are reference material, not site content. When the user wants an attached image ON the site, copy it into the site's public/static folder with a descriptive file name and reference that copy; don't link to \`assets/<uuid>\` files.`;
+
   // Edit profile of the person running this turn (layer 1: the agent knows its
   // limits; the guard hook and the post-turn check enforce them). An error
   // restricts rather than opens up.
@@ -582,7 +586,9 @@ async function runContainerizedTurn(args: {
         projectHostPath,
         readOnlyGitDir: hasPlainGitDir(absoluteProjectPath),
         maxBudgetUsd: run.maxBudgetUsd,
-        prompt: instruction,
+        // Paths in the message (attachments: "Image #1 path: /app/data/projects/<id>/…")
+        // point into THIS container; the agent sees the project at /work.
+        prompt: toAgentContainerPaths(instruction, absoluteProjectPath),
         oauthToken,
         model: resolvedModel,
         sessionId,

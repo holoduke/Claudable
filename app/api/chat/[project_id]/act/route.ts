@@ -131,49 +131,6 @@ function resolveProjectRoot(projectId: string, repoPath?: string | null): string
   return path.join(PROJECTS_DIR_ABSOLUTE, projectId);
 }
 
-async function mirrorAssetToPublic(
-  projectRoot: string,
-  filename: string,
-  sourcePath: string,
-): Promise<{ publicPath: string | null; publicUrl: string | null }> {
-  const resolvedSourcePath = path.isAbsolute(sourcePath) ? sourcePath : path.resolve(/* turbopackIgnore: true */ process.cwd(), sourcePath);
-  const hostUploadsDir = path.join(process.cwd(), 'public', 'uploads');
-  let hostPublicPath: string | null = null;
-
-  try {
-    await fs.mkdir(hostUploadsDir, { recursive: true });
-    const destinationPath = path.join(hostUploadsDir, filename);
-    try {
-      await fs.access(destinationPath);
-    } catch {
-      await fs.copyFile(resolvedSourcePath, destinationPath);
-    }
-    hostPublicPath = destinationPath;
-  } catch (error) {
-    console.warn('[API] Failed to mirror asset into application public/uploads:', error);
-  }
-
-  try {
-    const uploadsDir = path.join(projectRoot, 'public', 'uploads');
-    await fs.mkdir(uploadsDir, { recursive: true });
-    const destinationPath = path.join(uploadsDir, filename);
-    try {
-      await fs.access(destinationPath);
-    } catch {
-      await fs.copyFile(resolvedSourcePath, destinationPath);
-    }
-    return {
-      publicPath: hostPublicPath ?? destinationPath,
-      publicUrl: hostPublicPath ? `/uploads/${filename}` : null,
-    };
-  } catch (error) {
-    console.warn('[API] Failed to mirror asset into project public/uploads:', error);
-    if (hostPublicPath) {
-      return { publicPath: hostPublicPath, publicUrl: `/uploads/${filename}` };
-    }
-    return { publicPath: null, publicUrl: null };
-  }
-}
 
 function inferExtensionFromMime(mime?: string): string {
   if (!mime) return '.png';
@@ -201,12 +158,7 @@ async function materializeBase64Image(
   await fs.mkdir(assetsDir, { recursive: true });
   const absolutePath = path.join(assetsDir, filename);
   await fs.writeFile(absolutePath, buffer);
-  const mirror = await mirrorAssetToPublic(projectRoot, filename, absolutePath);
-  return {
-    absolutePath,
-    filename,
-    publicUrl: mirror.publicUrl,
-  };
+  return { absolutePath, filename, publicUrl: null };
 }
 
 type RawImageAttachment = Record<string, unknown>;
@@ -247,11 +199,7 @@ async function normalizeImageAttachment(
     try {
       await fs.stat(pathValue);
       const filename = path.basename(pathValue);
-      let effectivePublicUrl = providedPublicUrl;
-      if (!effectivePublicUrl) {
-        const mirror = await mirrorAssetToPublic(projectRoot, filename, pathValue);
-        effectivePublicUrl = mirror.publicUrl ?? undefined;
-      }
+      const effectivePublicUrl = providedPublicUrl;
       return {
         name,
         path: pathValue,

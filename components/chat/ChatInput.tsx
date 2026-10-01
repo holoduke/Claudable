@@ -381,7 +381,7 @@ export default function ChatInput({
         if (!isImage) {
           setUploadProgress({ name: file.name, pct: 0 });
           const r = await uploadWithProgress(file);
-          const ref = `Attached file "${file.name}" → ${r.path} (read/unzip it from the project).`;
+          const ref = `Attached file "${file.name}" → ${r.path}`;
           setMessage((prev) => (prev.trim() ? `${prev.trimEnd()}\n${ref}` : ref));
           continue;
         }
