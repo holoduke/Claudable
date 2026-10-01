@@ -1,7 +1,11 @@
 "use client";
-import { useEffect, useState } from 'react';
+import { useState, useSyncExternalStore } from 'react';
 import { THEMES, DEFAULT_THEME_ID, getStoredThemeId, applyTheme } from '@/lib/themes';
 import { useT } from '@/contexts/I18nContext';
+
+// localStorage has no same-tab change event; the value is only re-read on render.
+const subscribeNoop = () => () => {};
+const getServerThemeId = (): string | null => null;
 
 /** The theme button: a direct toggle that cycles through all themes on click
  *  (no menu). Shows the active theme's swatch; the tooltip names the current
@@ -9,13 +13,13 @@ import { useT } from '@/contexts/I18nContext';
  *  no-flash init in layout applies the same key before paint. */
 export default function PaletteToggle({ className = '' }: { className?: string }) {
   const t = useT();
-  const [active, setActive] = useState(DEFAULT_THEME_ID);
-  const [mounted, setMounted] = useState(false);
-
-  useEffect(() => {
-    setMounted(true);
-    setActive(getStoredThemeId());
-  }, []);
+  // The stored theme lives in localStorage, which the server can't read: the
+  // server snapshot (null) renders the neutral icon, then the client snapshot
+  // takes over right after hydration — no mismatch, no setState-in-effect.
+  const storedId = useSyncExternalStore(subscribeNoop, getStoredThemeId, getServerThemeId);
+  const mounted = storedId !== null;
+  const [picked, setPicked] = useState<string | null>(null);
+  const active = picked ?? storedId ?? DEFAULT_THEME_ID;
 
   const activeIndex = Math.max(0, THEMES.findIndex((theme) => theme.id === active));
   const activeTheme = THEMES[activeIndex];
@@ -23,7 +27,7 @@ export default function PaletteToggle({ className = '' }: { className?: string }
 
   const cycle = () => {
     applyTheme(nextTheme.id);
-    setActive(nextTheme.id);
+    setPicked(nextTheme.id);
   };
 
   const label = `${t('theme.pick')}: ${t(activeTheme.nameKey)} → ${t(nextTheme.nameKey)}`;

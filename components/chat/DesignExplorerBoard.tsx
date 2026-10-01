@@ -115,16 +115,35 @@ export default function DesignExplorerBoard({ projectId, onApply, busy, active }
     if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
   }, [canvas, refreshCanvas]);
 
+  // Frame ids whose HTML fetch is in flight (replaces the old '' placeholder in
+  // `html`, so no state is set synchronously inside the effect).
+  const htmlInflightRef = useRef(new Set<string>());
+  // Aborts outstanding HTML fetches on unmount only: the fetch effect re-runs on
+  // every `html` change, so a per-run abort would cancel sibling fetches.
+  const htmlAbortRef = useRef<AbortController | null>(null);
+  useEffect(() => {
+    const controller = new AbortController();
+    htmlAbortRef.current = controller;
+    return () => controller.abort();
+  }, []);
+
   // Fetch mockup HTML for ready frames we haven't loaded yet.
   useEffect(() => {
     if (!canvas) return;
+    const inflight = htmlInflightRef.current;
+    const signal = htmlAbortRef.current?.signal;
     for (const f of canvas.frames) {
-      if (f.status === 'ready' && f.hasHtml && html[f.id] === undefined) {
-        setHtml((h) => ({ ...h, [f.id]: '' }));
-        fetch(`${API_BASE}/api/projects/${projectId}/design-explorer/frames/${f.id}/html`, { credentials: 'include' })
+      if (f.status === 'ready' && f.hasHtml && html[f.id] === undefined && !inflight.has(f.id)) {
+        inflight.add(f.id);
+        // eslint-disable-next-line @eslint-react/web-api-no-leaked-fetch -- aborted via the unmount-scoped htmlAbortRef; a per-run abort would cancel sibling fetches on every html update
+        fetch(`${API_BASE}/api/projects/${projectId}/design-explorer/frames/${f.id}/html`, { credentials: 'include', signal })
           .then((r) => (r.ok ? r.text() : Promise.reject()))
-          .then((text) => setHtml((h) => ({ ...h, [f.id]: text })))
-          .catch(() => setHtml((h) => { const c = { ...h }; delete c[f.id]; return c; }));
+          .then((text) => { inflight.delete(f.id); setHtml((h) => ({ ...h, [f.id]: text })); })
+          .catch(() => {
+            inflight.delete(f.id);
+            if (signal?.aborted) return;
+            setHtml((h) => { const c = { ...h }; delete c[f.id]; return c; });
+          });
       }
     }
   }, [canvas, html, projectId]);

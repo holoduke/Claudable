@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState, useRef, useCallback, useMemo, type ChangeEvent, type KeyboardEvent, type UIEvent } from 'react';
+import { useEffect, useState, useRef, useCallback, useMemo, type ChangeEvent, type KeyboardEvent, type UIEvent, useEffectEvent, useLayoutEffect } from 'react';
 import { AnimatePresence } from 'framer-motion';
 import { MotionDiv, MotionH3, MotionP, MotionButton } from '@/lib/motion';
 import { useRouter, useSearchParams, useParams } from 'next/navigation';
@@ -127,6 +127,30 @@ const buildModelOptions = (statuses: Record<string, CliStatusSnapshot>): ModelOp
     cli: option.cli,
   }));
 
+/** Static availability snapshot: every active CLI is available with its known models. */
+const buildCliStatusSnapshot = (): Record<string, CliStatusSnapshot> => {
+  const snapshot: Record<string, CliStatusSnapshot> = {};
+  ACTIVE_CLI_IDS.forEach(id => {
+    const models = ACTIVE_CLI_MODEL_OPTIONS[id]?.map(model => model.id) ?? [];
+    snapshot[id] = {
+      available: true,
+      configured: true,
+      models,
+    };
+  });
+  return snapshot;
+};
+
+/** Content-based React keys for a list of (possibly repeated) text lines. */
+const withOccurrenceKeys = (lines: string[]): { key: string; line: string }[] => {
+  const seen = new Map<string, number>();
+  return lines.map((line) => {
+    const n = (seen.get(line) ?? 0) + 1;
+    seen.set(line, n);
+    return { key: `${n}:${line}`, line };
+  });
+};
+
 export default function ChatPage() {
   const params = useParams<{ project_id: string }>();
   const projectId = params?.project_id ?? '';
@@ -170,8 +194,8 @@ export default function ChatPage() {
   const [saveError, setSaveError] = useState<string | null>(null);
   const [selectedFile, setSelectedFile] = useState<string>('');
   const [currentPath, setCurrentPath] = useState<string>('.');
-  const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set(['']));
-  const [folderContents, setFolderContents] = useState<Map<string, Entry[]>>(new Map());
+  const [expandedFolders, setExpandedFolders] = useState<Set<string>>(() => new Set(['']));
+  const [folderContents, setFolderContents] = useState<Map<string, Entry[]>>(() => new Map());
   const [prompt, setPrompt] = useState('');
 
   // Ref to store add/remove message handlers from ChatLog
@@ -184,7 +208,7 @@ export default function ChatPage() {
   const pendingRequestsRef = useRef<Set<string>>(new Set());
 
   // Stable message handlers to prevent reassignment issues
-  const stableMessageHandlers = useRef<{
+  const stableMessageHandlersRef = useRef<{
     add: (message: any) => void;
     remove: (messageId: string) => void;
   } | null>(null);
@@ -300,22 +324,30 @@ export default function ChatPage() {
   // no project settings for them (the settings APIs refuse them as well).
   const [customerViewer, setCustomerViewer] = useState(false);
   useEffect(() => {
-    let cancelled = false;
-    fetch(`${API_BASE}/api/projects/${projectId}/credits`)
+    const controller = new AbortController();
+    fetch(`${API_BASE}/api/projects/${projectId}/credits`, { signal: controller.signal })
       .then((r) => (r.ok ? r.json() : null))
-      .then((j) => { if (!cancelled) setCustomerViewer(!!j?.data?.enabled && !j?.data?.viewerIsStaff); })
+      .then((j) => { if (!controller.signal.aborted) setCustomerViewer(!!j?.data?.enabled && !j?.data?.viewerIsStaff); })
       .catch(() => {});
-    return () => { cancelled = true; };
+    return () => controller.abort();
   }, [projectId]);
   // The MCP OAuth callback redirects back here with ?mcp_auth=success|error.
   // Surface the result and open the MCP tab so the user sees "authenticated".
+  // The modal state is adjusted during render (React "adjust state on prop
+  // change" pattern); the toast + URL cleanup are side effects and stay below.
+  const [mcpAuthSeenParams, setMcpAuthSeenParams] = useState<typeof searchParams | undefined>(undefined);
+  if (mcpAuthSeenParams !== searchParams) {
+    setMcpAuthSeenParams(searchParams);
+    if (searchParams?.get('mcp_auth') === 'success') {
+      setSettingsInitialTab('mcp');
+      setShowGlobalSettings(true);
+    }
+  }
   useEffect(() => {
     const result = searchParams?.get('mcp_auth');
     if (!result) return;
     if (result === 'success') {
       toast.success('MCP server authenticated.');
-      setSettingsInitialTab('mcp');
-      setShowGlobalSettings(true);
     } else {
       toast.error(`MCP authentication failed${searchParams?.get('mcp_auth_msg') ? `: ${searchParams.get('mcp_auth_msg')}` : ''}`);
     }
@@ -324,8 +356,7 @@ export default function ChatPage() {
     url.searchParams.delete('mcp_auth');
     url.searchParams.delete('mcp_auth_msg');
     window.history.replaceState({}, '', url.toString());
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchParams]);
+  }, [searchParams, toast]);
   const [uploadedImages, setUploadedImages] = useState<{name: string; url: string; base64?: string; path?: string}[]>([]);
   const [isInitializing, setIsInitializing] = useState(true);
   // Initialize states with default values, will be loaded from localStorage in useEffect
@@ -353,6 +384,7 @@ export default function ChatPage() {
   useEffect(() => {
     const saved = Number(localStorage.getItem(CHAT_WIDTH_KEY));
     if (saved >= CHAT_WIDTH_MIN && saved <= CHAT_WIDTH_MAX) {
+      // eslint-disable-next-line @eslint-react/set-state-in-effect -- localStorage is client-only; reading it during render/lazy init would cause an SSR hydration mismatch
       setChatWidthPct(saved);
       chatWidthRef.current = saved;
     }
@@ -432,7 +464,7 @@ export default function ChatPage() {
   // Live build/start log lines, streamed into the loading panel so the wait is
   // informative (installing deps → compiling → starting server) not opaque.
   const [previewLogs, setPreviewLogs] = useState<string[]>([]);
-  const [cliStatuses, setCliStatuses] = useState<Record<string, CliStatusSnapshot>>({});
+  const [cliStatuses, setCliStatuses] = useState<Record<string, CliStatusSnapshot>>(buildCliStatusSnapshot);
   const [conversationId, setConversationId] = useState<string>(() => {
     if (typeof window !== 'undefined' && window.crypto?.randomUUID) {
       return window.crypto.randomUUID();
@@ -440,7 +472,7 @@ export default function ChatPage() {
     return '';
   });
   const [preferredCli, setPreferredCli] = useState<ActiveCliId>(DEFAULT_ACTIVE_CLI);
-  const [selectedModel, setSelectedModel] = useState<string>(getDefaultModelForCli(DEFAULT_ACTIVE_CLI));
+  const [selectedModel, setSelectedModel] = useState<string>(() => getDefaultModelForCli(DEFAULT_ACTIVE_CLI));
   const [usingGlobalDefaults, setUsingGlobalDefaults] = useState<boolean>(true);
   const [thinkingMode, setThinkingMode] = useState<'off' | 'auto' | 'forced'>('auto');
   const [isUpdatingModel, setIsUpdatingModel] = useState<boolean>(false);
@@ -465,6 +497,7 @@ export default function ChatPage() {
 
   const updatePreferredCli = useCallback((cli: string) => {
     const sanitized = sanitizeCli(cli);
+    // eslint-disable-next-line @eslint-react/set-state-in-effect -- also invoked from the one-shot ?cli= URL effect and the global-settings sync effect; both must write sessionStorage too, so they cannot move into render
     setPreferredCli(sanitized);
     if (typeof window !== 'undefined') {
       sessionStorage.setItem('selectedAssistant', sanitized);
@@ -474,6 +507,7 @@ export default function ChatPage() {
   const updateSelectedModel = useCallback((model: string, cliOverride?: string) => {
     const effectiveCli = cliOverride ? sanitizeCli(cliOverride) : preferredCli;
     const sanitized = sanitizeModel(effectiveCli, model);
+    // eslint-disable-next-line @eslint-react/set-state-in-effect -- also invoked from the one-shot ?model= URL effect and the global-settings sync effect; both must write sessionStorage too, so they cannot move into render
     setSelectedModel(sanitized);
     if (typeof window !== 'undefined') {
       sessionStorage.setItem('selectedModel', sanitized);
@@ -642,7 +676,7 @@ export default function ChatPage() {
 
   // /help — local, ephemeral message listing the built-in commands.
   const showCommandHelp = useCallback(() => {
-    const handlers = stableMessageHandlers.current ?? messageHandlersRef.current;
+    const handlers = stableMessageHandlersRef.current ?? messageHandlersRef.current;
     handlers?.add({
       id: `local-help-${Date.now()}`,
       projectId,
@@ -780,16 +814,7 @@ export default function ChatPage() {
   }, [searchParams, sendInitialPrompt, preferredCli]);
 
 const loadCliStatuses = useCallback(() => {
-  const snapshot: Record<string, CliStatusSnapshot> = {};
-  ACTIVE_CLI_IDS.forEach(id => {
-    const models = ACTIVE_CLI_MODEL_OPTIONS[id]?.map(model => model.id) ?? [];
-    snapshot[id] = {
-      available: true,
-      configured: true,
-      models,
-    };
-  });
-  setCliStatuses(snapshot);
+  setCliStatuses(buildCliStatusSnapshot());
 }, []);
 
 const persistProjectPreferences = useCallback(
@@ -894,10 +919,6 @@ const persistProjectPreferences = useCallback(
     },
     [projectId, preferredCli, selectedModel, conversationId, loadCliStatuses, persistProjectPreferences, updatePreferredCli, updateSelectedModel, toast]
   );
-
-  useEffect(() => {
-    loadCliStatuses();
-  }, [loadCliStatuses]);
 
   const handleCliChange = useCallback(
     async (cliId: string) => {
@@ -1017,18 +1038,16 @@ const persistProjectPreferences = useCallback(
 
   // Load the server's git provider config once (drives Gitea-vs-GitHub publish UI).
   useEffect(() => {
-    let cancelled = false;
-    fetch(`${API_BASE}/api/git/provider`)
+    const controller = new AbortController();
+    fetch(`${API_BASE}/api/git/provider`, { signal: controller.signal })
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => {
-        if (cancelled || !d) return;
+        if (controller.signal.aborted || !d) return;
         if (typeof d.provider === 'string') setGitProvider(d.provider);
         if (typeof d.deployDomain === 'string') setGitDeployDomain(d.deployDomain);
       })
       .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
+    return () => controller.abort();
   }, []);
 
   const isGitea = gitProvider === 'gitea';
@@ -1077,11 +1096,11 @@ const persistProjectPreferences = useCallback(
   // run is still in progress.
   useEffect(() => {
     if (!showPublishPanel || !isGitea || !githubConnected) return;
-    let cancelled = false;
-    fetch(`${API_BASE}/api/projects/${projectId}/deploy/status`, { cache: 'no-store' })
+    const controller = new AbortController();
+    fetch(`${API_BASE}/api/projects/${projectId}/deploy/status`, { cache: 'no-store', signal: controller.signal })
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => {
-        if (cancelled || !d?.found) return;
+        if (controller.signal.aborted || !d?.found) return;
         setDeployRun({ state: d.state, runNumber: d.runNumber, url: d.url, title: d.title, sha: d.sha, updatedAt: d.updatedAt });
         if (d.state === 'success') {
           // Only record the live URL — do NOT mark 'ready'. Marking ready here
@@ -1096,7 +1115,7 @@ const persistProjectPreferences = useCallback(
         // failure/cancelled on open: leave idle so the user can just re-publish.
       })
       .catch(() => {});
-    return () => { cancelled = true; };
+    return () => controller.abort();
     // giteaPollRef/setDeployRun/setPublishedUrl are stable (ref + useState setters from useDeployPolling).
   }, [showPublishPanel, isGitea, githubConnected, projectId, startGiteaDeployPolling, giteaPollRef, setDeployRun, setPublishedUrl]);
 
@@ -1150,7 +1169,9 @@ const persistProjectPreferences = useCallback(
 
       // Heuristic fallback messages for the install phase (before the dev-server
       // process registers, its logs aren't queryable yet).
+      // eslint-disable-next-line @eslint-react/set-state-in-effect -- false positive: runs in a timer after an await inside start(), never synchronously in the auto-start effect
       const t1 = setTimeout(() => setPreviewInitializationMessage('Installing dependencies…'), 3000);
+      // eslint-disable-next-line @eslint-react/set-state-in-effect -- false positive: runs in a timer after an await inside start(), never synchronously in the auto-start effect
       const t2 = setTimeout(() => setPreviewInitializationMessage('Building your application…'), 9000);
 
       // Live progress: poll the preview status and surface the REAL latest
@@ -1185,6 +1206,7 @@ const persistProjectPreferences = useCallback(
         setPreviewInitializationMessage('Failed to start preview');
         // Don't let the auto-start effect immediately retry in a tight loop.
         previewStartFailedRef.current = true;
+        // eslint-disable-next-line @eslint-react/set-state-in-effect -- false positive: runs in a timer after an await inside start(), never synchronously in the auto-start effect
         setTimeout(() => setIsStartingPreview(false), 2000);
         return;
       }
@@ -1200,6 +1222,7 @@ const persistProjectPreferences = useCallback(
       console.error('Error starting preview:', error);
       setPreviewInitializationMessage('An error occurred');
       previewStartFailedRef.current = true;
+      // eslint-disable-next-line @eslint-react/set-state-in-effect -- false positive: runs in a timer after an await inside start(), never synchronously in the auto-start effect
       setTimeout(() => setIsStartingPreview(false), 2000);
     }
   }, [projectId]);
@@ -1256,11 +1279,36 @@ const persistProjectPreferences = useCallback(
     } catch { /* iframe not ready */ }
   }, [previewUrl]);
 
-  // Toggle the preview into/out of click-to-select edit mode.
+  // Edit + comment modes are mutually exclusive; leaving a mode resets its
+  // transient state. Adjusted during render on each mode transition (React's
+  // "adjust state when a value changes" pattern) instead of in an effect.
+  const [prevEditMode, setPrevEditMode] = useState(editMode);
+  if (prevEditMode !== editMode) {
+    setPrevEditMode(editMode);
+    if (editMode) setCommentMode(false);
+    else { setSelectedEl(null); setStyleEdits({}); setTextEdit(null); }
+  }
+  const [prevCommentMode, setPrevCommentMode] = useState(commentMode);
+  if (prevCommentMode !== commentMode) {
+    setPrevCommentMode(commentMode);
+    if (commentMode) setEditMode(false);
+    else { setComposeAnchor(null); setActivePinId(null); setShowCommentsList(false); }
+  }
+
+  // Toggle the preview into/out of click-to-select edit mode. When edit mode ends
+  // because comment mode just turned on, the editor 'exit' goes out AFTER the
+  // comments 'enter' (posted by the comment-mode effect later in this commit) —
+  // the order the preview bridge has always received.
+  const postEditModeChange = useEffectEvent((on: boolean) => {
+    const msg = { type: on ? 'enter' : 'exit' };
+    if (!on && commentMode) {
+      queueMicrotask(() => postToPreview(msg));
+      return;
+    }
+    postToPreview(msg);
+  });
   useEffect(() => {
-    postToPreview({ type: editMode ? 'enter' : 'exit' });
-    if (editMode) setCommentMode(false); // edit + comment modes are mutually exclusive
-    if (!editMode) { setSelectedEl(null); setStyleEdits({}); setTextEdit(null); }
+    postEditModeChange(editMode);
   }, [editMode, postToPreview]);
 
   // Receive the selected element from the preview editor bridge.
@@ -1319,8 +1367,7 @@ const persistProjectPreferences = useCallback(
     } finally {
       setPersistingEdit(false);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedEl, styleEdits, textEdit]);
+  }, [selectedEl, styleEdits, textEdit, hasActiveRequests]);
 
   // --- Comments (pinned review annotations, Claudable-only) -----------------
   const postComments = useCallback((msg: Record<string, unknown>) => {
@@ -1346,6 +1393,20 @@ const persistProjectPreferences = useCallback(
     } catch { /* ignore */ }
   }, [projectId]);
 
+  // Navigate to specific route in iframe
+  const navigateToRoute = useCallback((route: string) => {
+    if (previewUrl && iframeRef.current) {
+      const baseUrl = previewUrl.split('?')[0]; // Remove any query params
+      // Ensure route starts with /
+      const normalizedRoute = route.startsWith('/') ? route : `/${route}`;
+      const newUrl = `${baseUrl}${normalizedRoute}`;
+      setPreviewReady(false); // the new page's plugin hasn't reported yet
+      setBridgeAbsent(false);
+      iframeRef.current.src = newUrl;
+      setCurrentRoute(normalizedRoute);
+    }
+  }, [previewUrl]);
+
   // Jump to a comment: switch route if needed (the preview reloads and its pins
   // reload), then scroll to + highlight the anchor. Same-route jumps are instant.
   const goToComment = useCallback((c: CommentPin & { route: string }) => {
@@ -1359,29 +1420,37 @@ const persistProjectPreferences = useCallback(
       setActivePinId(c.id);
       postComments({ type: 'scrollTo', anchorSelector: c.anchorSelector });
     }
-  }, [commentMode, postComments]);
+  }, [commentMode, postComments, navigateToRoute]);
 
   // Enter/exit comment mode (mutually exclusive with edit mode).
+  // (The state side of entering/leaving comment mode is adjusted during render
+  // next to the edit-mode transition above.)
   useEffect(() => {
     postComments({ type: commentMode ? 'enter' : 'exit' });
-    if (commentMode) { setEditMode(false); loadComments(currentRouteRef.current || '/'); }
+    if (commentMode) { loadComments(currentRouteRef.current || '/'); }
     else {
-      setComposeAnchor(null); setActivePinId(null); setShowCommentsList(false);
       // Wipe the in-iframe pin dots — otherwise they linger with pointer-events
       // and swallow clicks while browsing / get selected in edit mode (B6).
       postComments({ type: 'renderPins', pins: [] });
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [commentMode, postComments]);
+  }, [commentMode, postComments, loadComments]);
 
   // Reload the pin set when the previewed route changes while commenting.
+  // Stale pins/positions are cleared during render so the old route's dots
+  // don't flash on the new page; route changes also clear preview errors
+  // (they get re-reported if still present).
+  const [prevRoute, setPrevRoute] = useState(currentRoute);
+  if (prevRoute !== currentRoute) {
+    setPrevRoute(currentRoute);
+    setPreviewErrors([]);
+    if (commentMode) { setActivePinId(null); setComposeAnchor(null); setComments([]); setPinPositions({}); }
+  }
   useEffect(() => {
-    if (!commentMode) return;
-    // Clear stale pins/positions so the old route's dots don't flash on the new page.
-    setActivePinId(null); setComposeAnchor(null); setComments([]); setPinPositions({});
+    // commentModeRef (not commentMode) so toggling the mode doesn't re-fire this:
+    // the comment-mode effect above already loads on enter.
+    if (!commentModeRef.current) return;
     loadComments(currentRoute || '/');
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentRoute]);
+  }, [currentRoute, loadComments]);
 
   // Push the current pins to the in-iframe bridge whenever they change OR once
   // the (re)loaded preview reports ready — so pins land even after a navigation.
@@ -1441,9 +1510,13 @@ const persistProjectPreferences = useCallback(
     window.addEventListener('message', onMsg);
     return () => window.removeEventListener('message', onMsg);
   }, [previewUrl]);
-  // Clear on route change or when a new turn starts (errors get re-reported if still present).
-  useEffect(() => { setPreviewErrors([]); }, [currentRoute]);
-  useEffect(() => { if (hasActiveRequests) setPreviewErrors([]); }, [hasActiveRequests]);
+  // Clear when a new turn starts (errors get re-reported if still present). The
+  // route-change clear lives with the route transition above.
+  const [prevHasActiveRequests, setPrevHasActiveRequests] = useState(hasActiveRequests);
+  if (prevHasActiveRequests !== hasActiveRequests) {
+    setPrevHasActiveRequests(hasActiveRequests);
+    if (hasActiveRequests) setPreviewErrors([]);
+  }
 
   const fixPreviewErrors = useCallback(() => {
     if (!previewErrors.length) return;
@@ -1471,7 +1544,7 @@ const persistProjectPreferences = useCallback(
     } catch {
       return [];
     }
-  }, []);
+  }, [projectId]);
 
   const submitNewComment = useCallback(async (body: string, mentions: { id: string; name: string }[]): Promise<boolean> => {
     if (!composeAnchor) return false;
@@ -1544,11 +1617,12 @@ const persistProjectPreferences = useCallback(
       : { w: currentDevice.w!, h: currentDevice.h! };
   const ddW = deviceDims?.w ?? 0;
   const ddH = deviceDims?.h ?? 0;
-  useEffect(() => {
+  useLayoutEffect(() => {
     // Re-run on previewUrl change: the observed element only mounts once the
     // preview is up, so without previewUrl in deps the observer would never attach.
     const el = deviceViewportRef.current;
     if (!el) return;
+    /* eslint-disable @eslint-react/set-state-in-effect -- measuring the DOM before paint is what a layout effect is for */
     const compute = () => {
       const w = el.clientWidth, h = el.clientHeight;
       setDeviceViewport({ w, h });
@@ -1557,6 +1631,9 @@ const persistProjectPreferences = useCallback(
       const s = Math.min(1, (w - pad) / ddW, (h - pad) / ddH);
       setDeviceScale(s > 0 ? s : 1);
     };
+    /* eslint-enable @eslint-react/set-state-in-effect */
+    // Measure before paint (layout effect): ResizeObserver's first callback only
+    // arrives a frame later, which would show one frame at the old scale.
     compute();
     const ro = new ResizeObserver(compute);
     ro.observe(el);
@@ -1610,28 +1687,14 @@ const persistProjectPreferences = useCallback(
     };
   }, [previewUrl, projectId, start]);
 
-  // Navigate to specific route in iframe
-  const navigateToRoute = (route: string) => {
-    if (previewUrl && iframeRef.current) {
-      const baseUrl = previewUrl.split('?')[0]; // Remove any query params
-      // Ensure route starts with /
-      const normalizedRoute = route.startsWith('/') ? route : `/${route}`;
-      const newUrl = `${baseUrl}${normalizedRoute}`;
-      setPreviewReady(false); // the new page's plugin hasn't reported yet
-      setBridgeAbsent(false);
-      iframeRef.current.src = newUrl;
-      setCurrentRoute(normalizedRoute);
-    }
-  };
-
   const refreshPreviewRef = useRef<() => void>(() => {});
 
   // Reachability poll: gentle cadence while healthy, faster while down; on the
   // down→up transition reload the iframe (it is showing Traefik's error page).
+  if ((!previewUrl || !showPreview) && previewDown) setPreviewDown(false);
   useEffect(() => {
     if (!previewUrl || !showPreview) {
       previewDownRef.current = false;
-      setPreviewDown(false);
       return;
     }
     let cancelled = false;
@@ -1687,9 +1750,11 @@ const persistProjectPreferences = useCallback(
   // server is actually down, the reachability poll flips previewDown and shows
   // the restarting overlay (and reloads on recovery) instead.
   useEffect(() => {
+    // eslint-disable-next-line @eslint-react/set-state-in-effect -- resets the latch for a new URL; must stay in sync with the sessionStorage read below
     if (!previewUrl) { setPreviewLoaded(false); return; }
     let seen = false;
     try { seen = sessionStorage.getItem(`previewLoaded:${previewUrl}`) === '1'; } catch { /* private mode */ }
+    // eslint-disable-next-line @eslint-react/set-state-in-effect -- sessionStorage is a browser-only external store; reading it during render is impure (and unavailable during SSR)
     setPreviewLoaded(seen);
   }, [previewUrl]);
 
@@ -1699,13 +1764,14 @@ const persistProjectPreferences = useCallback(
   // Traefik 502 page (dev server still down → previewDown) doesn't count as
   // loaded. Latch it so subsequent per-reload previewReady resets don't re-open
   // the overlay.
+  const previewRendered = previewReady || (bridgeAbsent && !previewDown);
+  if (previewRendered && !previewLoaded) setPreviewLoaded(true);
   useEffect(() => {
-    if (previewReady || (bridgeAbsent && !previewDown)) {
-      setPreviewLoaded(true);
+    if (previewRendered) {
       // Remember this URL rendered, so a later refresh skips the cold-start overlay.
       try { if (previewUrl) sessionStorage.setItem(`previewLoaded:${previewUrl}`, '1'); } catch { /* private mode */ }
     }
-  }, [previewReady, bridgeAbsent, previewDown, previewUrl]);
+  }, [previewRendered, previewUrl]);
 
   // Auto-retry the iframe while it hasn't confirmed a load. This is the missing
   // piece for NEW apps: the first load hits a not-ready subdomain/dev server and
@@ -1729,14 +1795,13 @@ const persistProjectPreferences = useCallback(
 
   // Show the "building" overlay only after a short grace, so a warm preview that
   // loads immediately doesn't flash it.
+  const coldStartSuppressed = !previewUrl || !showPreview || previewLoaded || editMode || commentMode;
+  if (coldStartSuppressed && showColdStart) setShowColdStart(false);
   useEffect(() => {
-    if (!previewUrl || !showPreview || previewLoaded || editMode || commentMode) {
-      setShowColdStart(false);
-      return;
-    }
+    if (coldStartSuppressed) return;
     const t = setTimeout(() => setShowColdStart(true), 1200);
     return () => clearTimeout(t);
-  }, [previewUrl, showPreview, previewLoaded, editMode, commentMode]);
+  }, [coldStartSuppressed]);
 
   const refreshPreview = useCallback(() => {
     if (!previewUrl || !iframeRef.current) {
@@ -2463,11 +2528,11 @@ const persistProjectPreferences = useCallback(
 
   // Initialize stable handlers once
   useEffect(() => {
-    stableMessageHandlers.current = createStableMessageHandlers();
+    stableMessageHandlersRef.current = createStableMessageHandlers();
     const optimisticMessages = optimisticMessagesRef.current;
 
     return () => {
-      stableMessageHandlers.current = null;
+      stableMessageHandlersRef.current = null;
       optimisticMessages.clear();
     };
   }, [createStableMessageHandlers]);
@@ -2656,8 +2721,8 @@ const persistProjectPreferences = useCallback(
         };
 
         // Use stable handlers instead of direct messageHandlersRef to prevent reassignment issues
-        if (stableMessageHandlers.current) {
-          stableMessageHandlers.current.add(optimisticUserMessage);
+        if (stableMessageHandlersRef.current) {
+          stableMessageHandlersRef.current.add(optimisticUserMessage);
         } else if (messageHandlersRef.current) {
           // Fallback to direct handlers if stable handlers aren't ready yet
           messageHandlersRef.current.add(optimisticUserMessage);
@@ -2684,8 +2749,8 @@ const persistProjectPreferences = useCallback(
           console.error('API Error:', errorText);
 
           if (tempUserMessageId) {
-            if (stableMessageHandlers.current) {
-              stableMessageHandlers.current.remove(tempUserMessageId);
+            if (stableMessageHandlersRef.current) {
+              stableMessageHandlersRef.current.remove(tempUserMessageId);
             } else if (messageHandlersRef.current) {
               messageHandlersRef.current.remove(tempUserMessageId);
             }
@@ -2705,8 +2770,8 @@ const persistProjectPreferences = useCallback(
         clearTimeout(timeoutId);
         if (fetchError.name === 'AbortError') {
           if (tempUserMessageId) {
-            if (stableMessageHandlers.current) {
-              stableMessageHandlers.current.remove(tempUserMessageId);
+            if (stableMessageHandlersRef.current) {
+              stableMessageHandlersRef.current.remove(tempUserMessageId);
             } else if (messageHandlersRef.current) {
               messageHandlersRef.current.remove(tempUserMessageId);
             }
@@ -2764,8 +2829,8 @@ const persistProjectPreferences = useCallback(
       console.error('Act execution error:', error);
 
       if (tempUserMessageId) {
-        if (stableMessageHandlers.current) {
-          stableMessageHandlers.current.remove(tempUserMessageId);
+        if (stableMessageHandlersRef.current) {
+          stableMessageHandlersRef.current.remove(tempUserMessageId);
         } else if (messageHandlersRef.current) {
           messageHandlersRef.current.remove(tempUserMessageId);
         }
@@ -2843,21 +2908,23 @@ const persistProjectPreferences = useCallback(
       const storedTaskComplete = localStorage.getItem(`project_${projectId}_taskComplete`);
       
       if (storedHasInitialPrompt !== null) {
+        // eslint-disable-next-line @eslint-react/set-state-in-effect -- localStorage is client-only; reading it during render would cause an SSR hydration mismatch
         setHasInitialPrompt(storedHasInitialPrompt === 'true');
       }
       if (storedTaskComplete !== null) {
+        // eslint-disable-next-line @eslint-react/set-state-in-effect -- localStorage is client-only; reading it during render would cause an SSR hydration mismatch
         setAgentWorkComplete(storedTaskComplete === 'true');
       }
     }
   }, [projectId]);
 
   // NEW: Auto control preview server based on active request status
-  const previousActiveState = useRef(false);
+  const previousActiveStateRef = useRef(false);
   
   useEffect(() => {
     if (!hasActiveRequests && !previewUrl && !isStartingPreview && !previewStartFailedRef.current
         && !userStoppedPreviewRef.current) {
-      if (!previousActiveState.current) {
+      if (!previousActiveStateRef.current) {
       } else {
       }
       start();
@@ -2869,7 +2936,7 @@ const persistProjectPreferences = useCallback(
     if (hasActiveRequests) {
       previewStartFailedRef.current = false;
     }
-    previousActiveState.current = hasActiveRequests;
+    previousActiveStateRef.current = hasActiveRequests;
   }, [hasActiveRequests, previewUrl, isStartingPreview, start]);
 
   // Poll for file changes in code view
@@ -3161,8 +3228,8 @@ const persistProjectPreferences = useCallback(
                     messageHandlersRef.current = handlers;
 
                     // Also update stable handlers if they exist
-                    if (stableMessageHandlers.current) {
-                      // Note: stableMessageHandlers.current already has its own add/remove logic
+                    if (stableMessageHandlersRef.current) {
+                      // Note: stableMessageHandlersRef.current already has its own add/remove logic
                       // We don't replace it completely, just keep the reference to handlers
                     }
                   }}
@@ -4010,8 +4077,8 @@ const persistProjectPreferences = useCallback(
                         </div>
                         {previewLogs.length > 0 && (
                           <div className="mt-6 mx-auto w-full max-w-lg text-left bg-gray-900/90 border border-gray-800 rounded-lg p-3 max-h-44 overflow-y-auto font-mono text-[11px] leading-relaxed text-gray-300 shadow-inner">
-                            {previewLogs.map((l, i) => (
-                              <div key={i} className="whitespace-pre-wrap break-all opacity-90">{l}</div>
+                            {withOccurrenceKeys(previewLogs).map(({ key, line: l }) => (
+                              <div key={key} className="whitespace-pre-wrap break-all opacity-90">{l}</div>
                             ))}
                           </div>
                         )}

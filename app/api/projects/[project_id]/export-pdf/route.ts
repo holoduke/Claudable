@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { isCustomerProject } from '@/lib/services/tenant-policy';
 import { renderNetworkLockArgs } from '@/lib/services/thumbnail';
 import { execFile } from 'child_process';
+import { chromeFailure } from '@/lib/services/thumbnail';
 import { promisify } from 'util';
 import { randomUUID } from 'crypto';
 import fs from 'fs/promises';
@@ -60,6 +61,8 @@ export async function GET(request: Request, { params }: RouteContext) {
           '--disable-dev-shm-usage',
           '--no-pdf-header-footer',
           '--virtual-time-budget=5000',
+          '--timeout=20000', // pages that never go idle (WebGL/rAF) still print
+          '--log-level=3',
           ...((await isCustomerProject(project_id)) ? renderNetworkLockArgs(publishHost, status.port) : []),
           `--print-to-pdf=${tmp}`,
           url,
@@ -82,12 +85,14 @@ export async function GET(request: Request, { params }: RouteContext) {
       await fs.rm(tmp, { force: true }).catch(() => {});
     }
   } catch (error) {
-    console.error('[API] PDF export failed:', error);
+    console.error(`[API] PDF export failed: ${chromeFailure(error)}`);
     return NextResponse.json(
       {
         success: false,
         error: 'pdf_export_failed',
-        message: error instanceof Error ? error.message : 'Unknown error',
+        // Never the raw Chrome error: it holds the command line (internal preview
+        // address) and a stderr dump.
+        message: 'The page could not be turned into a PDF. Make sure the preview is running and try again.',
       },
       { status: 500 },
     );

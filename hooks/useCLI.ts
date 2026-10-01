@@ -58,67 +58,76 @@ export async function fetchCliStatusSnapshot(): Promise<CLIStatus> {
   }
 }
 
+function parsePreference(payload: unknown): CLIPreference {
+  const data = payload as Record<string, unknown> | null | undefined;
+
+  const preferredRaw =
+    typeof data?.preferredCli === 'string'
+      ? data.preferredCli
+      : typeof data?.preferred_cli === 'string'
+      ? data.preferred_cli
+      : DEFAULT_ACTIVE_CLI;
+
+  const preferredCli = sanitizeActiveCli(preferredRaw, DEFAULT_ACTIVE_CLI);
+
+  const fallbackEnabled =
+    typeof data?.fallbackEnabled === 'boolean'
+      ? data.fallbackEnabled
+      : typeof data?.fallback_enabled === 'boolean'
+      ? data.fallback_enabled
+      : false;
+
+  const rawModel =
+    typeof data?.selectedModel === 'string'
+      ? data.selectedModel
+      : typeof data?.selected_model === 'string'
+      ? data.selected_model
+      : undefined;
+  const normalizedModel = normalizeModelForCli(preferredCli, rawModel, preferredCli);
+
+  return {
+    preferredCli,
+    fallbackEnabled,
+    selectedModel: normalizedModel || getDefaultModelForCli(preferredCli),
+  };
+}
+
+/** Load a project's CLI preference; falls back to the defaults on failure.
+ *  Resolves null when aborted. */
+async function fetchProjectPreference(projectId: string, signal?: AbortSignal): Promise<CLIPreference | null> {
+  try {
+    const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? '';
+    const response = await fetch(`${API_BASE}/api/projects/${projectId}`, { signal });
+    if (!response.ok) {
+      throw new Error('Failed to load project preferences');
+    }
+
+    const payload = await response.json();
+    const project = payload?.data ?? payload ?? {};
+    return signal?.aborted ? null : parsePreference(project);
+  } catch (error) {
+    if (signal?.aborted) return null;
+    console.error('Failed to load CLI preference:', error);
+    return {
+      preferredCli: DEFAULT_ACTIVE_CLI,
+      fallbackEnabled: false,
+      selectedModel: getDefaultModelForCli(DEFAULT_ACTIVE_CLI),
+    };
+  }
+}
+
 export function useCLI({ projectId }: UseCLIOptions) {
   const [cliOptions, setCLIOptions] = useState<CLIOption[]>(() => CLI_OPTIONS.map((option) => ({ ...option })));
   const [preference, setPreference] = useState<CLIPreference | null>(null);
   const [statuses, setStatuses] = useState<CLIStatus>(() => createCliStatusFallback());
-  const [isLoading, setIsLoading] = useState(false);
-
-  const parsePreference = useCallback((payload: unknown): CLIPreference => {
-    const data = payload as Record<string, unknown> | null | undefined;
-
-    const preferredRaw =
-      typeof data?.preferredCli === 'string'
-        ? data.preferredCli
-        : typeof data?.preferred_cli === 'string'
-        ? data.preferred_cli
-        : DEFAULT_ACTIVE_CLI;
-
-    const preferredCli = sanitizeActiveCli(preferredRaw, DEFAULT_ACTIVE_CLI);
-
-    const fallbackEnabled =
-      typeof data?.fallbackEnabled === 'boolean'
-        ? data.fallbackEnabled
-        : typeof data?.fallback_enabled === 'boolean'
-        ? data.fallback_enabled
-        : false;
-
-    const rawModel =
-      typeof data?.selectedModel === 'string'
-        ? data.selectedModel
-        : typeof data?.selected_model === 'string'
-        ? data.selected_model
-        : undefined;
-    const normalizedModel = normalizeModelForCli(preferredCli, rawModel, preferredCli);
-
-    return {
-      preferredCli,
-      fallbackEnabled,
-      selectedModel: normalizedModel || getDefaultModelForCli(preferredCli),
-    };
-  }, []);
+  // Starts true: the mount effect immediately loads the statuses.
+  const [isLoading, setIsLoading] = useState(true);
 
   // Load CLI preference
   const loadPreference = useCallback(async () => {
-    try {
-      const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? '';
-      const response = await fetch(`${API_BASE}/api/projects/${projectId}`);
-      if (!response.ok) {
-        throw new Error('Failed to load project preferences');
-      }
-
-      const payload = await response.json();
-    const project = payload?.data ?? payload ?? {};
-    setPreference(parsePreference(project));
-  } catch (error) {
-    console.error('Failed to load CLI preference:', error);
-    setPreference({
-      preferredCli: DEFAULT_ACTIVE_CLI,
-      fallbackEnabled: false,
-      selectedModel: getDefaultModelForCli(DEFAULT_ACTIVE_CLI),
-    });
-  }
-}, [projectId, parsePreference]);
+    const next = await fetchProjectPreference(projectId);
+    if (next) setPreference(next);
+  }, [projectId]);
 
   const applyStatusToState = useCallback((status: CLIStatus) => {
     setStatuses(status);
@@ -194,6 +203,7 @@ export function useCLI({ projectId }: UseCLIOptions) {
   }, [projectId]);
 
   // Update model preference
+  const currentPreferredCli = preference?.preferredCli;
   const updateModelPreference = useCallback(async (modelId: string) => {
     try {
       const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? '';
@@ -209,7 +219,7 @@ export function useCLI({ projectId }: UseCLIOptions) {
       const project = payload?.data ?? payload ?? {};
 
       const cliForNormalization = sanitizeActiveCli(
-        project.preferredCli ?? project.preferred_cli ?? preference?.preferredCli ?? DEFAULT_ACTIVE_CLI,
+        project.preferredCli ?? project.preferred_cli ?? currentPreferredCli ?? DEFAULT_ACTIVE_CLI,
         DEFAULT_ACTIVE_CLI
       );
       const normalized = normalizeModelForCli(
@@ -229,14 +239,22 @@ export function useCLI({ projectId }: UseCLIOptions) {
       console.error('Failed to update model preference:', error);
       throw error;
     }
-  }, [projectId, preference?.preferredCli]);
+  }, [projectId, currentPreferredCli]);
 
 
-  // Load on mount
+  // Load on mount (and when the project changes). isLoading already starts
+  // true, and state is only set from the promise callbacks.
   useEffect(() => {
-    loadPreference();
-    loadStatuses();
-  }, [loadPreference, loadStatuses]);
+    const controller = new AbortController();
+    void fetchProjectPreference(projectId, controller.signal).then((next) => {
+      if (next) setPreference(next);
+    });
+    void fetchCliStatusSnapshot().then((status) => {
+      applyStatusToState(status);
+      setIsLoading(false);
+    });
+    return () => controller.abort();
+  }, [projectId, applyStatusToState]);
 
   return {
     cliOptions,

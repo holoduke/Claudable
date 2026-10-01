@@ -105,8 +105,11 @@ export default function SupabaseModal({ isOpen, onClose, projectId, projectName,
     }
   }, []);
 
-  // Reset state when modal opens
-  useEffect(() => {
+  // Reset the form when the modal opens (or the project name changes while
+  // open) — adjusted during render instead of in an effect.
+  const [resetFor, setResetFor] = useState<{ isOpen: boolean; projectName: string } | null>(null);
+  if (!resetFor || resetFor.isOpen !== isOpen || resetFor.projectName !== projectName) {
+    setResetFor({ isOpen, projectName });
     if (isOpen) {
       setStep('configure');
       setOrganizations([]);
@@ -116,6 +119,12 @@ export default function SupabaseModal({ isOpen, onClose, projectId, projectName,
       setDbPassword(generateSecurePassword());
       setError('');
       setCreatedProject(null);
+    }
+  }
+
+  // Load the organizations whenever the form was reset above.
+  useEffect(() => {
+    if (isOpen) {
       fetchOrganizations();
     }
   }, [isOpen, projectName, fetchOrganizations]);

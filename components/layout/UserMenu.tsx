@@ -18,12 +18,12 @@ export default function UserMenu() {
   const wrapRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    let cancelled = false;
-    fetch(`${API_BASE}/api/users/me`)
+    const controller = new AbortController();
+    fetch(`${API_BASE}/api/users/me`, { signal: controller.signal })
       .then((r) => (r.ok ? r.json() : null))
-      .then((j) => { if (!cancelled) setMe((j?.data as any) ?? null); })
+      .then((j) => { if (!controller.signal.aborted) setMe((j?.data as any) ?? null); })
       .catch(() => {});
-    return () => { cancelled = true; };
+    return () => { controller.abort(); };
   }, [settingsOpen]);
 
   // Close the menu on outside click / Escape.

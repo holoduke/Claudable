@@ -428,7 +428,7 @@ async function runContainerizedTurn(args: {
 
     const absoluteProjectPath = path.isAbsolute(projectPath)
       ? path.resolve(projectPath)
-      : path.resolve(process.cwd(), projectPath);
+      : path.resolve(/* turbopackIgnore: true */ process.cwd(), projectPath);
     const projectHostPath = agentHostPath(absoluteProjectPath);
 
     // Persistent per-project HOME so the CLI's session transcripts (~/.claude)
@@ -919,7 +919,7 @@ export async function executeClaude(
     // Convert to absolute path
     const absoluteProjectPath = path.isAbsolute(projectPath)
       ? path.resolve(projectPath)
-      : path.resolve(process.cwd(), projectPath);
+      : path.resolve(/* turbopackIgnore: true */ process.cwd(), projectPath);
 
     // Stack prompt + model identity + tool/database guidance — shared with the
     // containerized path so both agents get IDENTICAL instructions.
@@ -955,7 +955,7 @@ export async function executeClaude(
     }
 
     // Security: Verify project path is within allowed directory
-    const allowedBasePath = path.resolve(process.cwd(), process.env.PROJECTS_DIR || './data/projects');
+    const allowedBasePath = path.resolve(/* turbopackIgnore: true */ process.cwd(), process.env.PROJECTS_DIR || './data/projects');
     const relativeToBase = path.relative(allowedBasePath, absoluteProjectPath);
     const isWithinBase =
       !relativeToBase.startsWith('..') && !path.isAbsolute(relativeToBase);

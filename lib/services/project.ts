@@ -11,7 +11,7 @@ import { normalizeModelId, getDefaultModelForCli } from '@/lib/constants/cliMode
 const PROJECTS_DIR = process.env.PROJECTS_DIR || './data/projects';
 const PROJECTS_DIR_ABSOLUTE = path.isAbsolute(PROJECTS_DIR)
   ? PROJECTS_DIR
-  : path.resolve(process.cwd(), PROJECTS_DIR);
+  : path.resolve(/* turbopackIgnore: true */ process.cwd(), PROJECTS_DIR);
 
 /**
  * Retrieve all projects

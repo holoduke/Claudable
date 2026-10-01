@@ -47,9 +47,9 @@ export async function ensurePreviewRouteReporter(projectPath: string, projectId:
 
     const nuxtConfig = await readTextInside(projectPath, path.join(projectPath, 'nuxt.config.ts'));
     const appDirMarkers = await Promise.all(['app/app.vue', 'app/pages', 'app/layouts'].map((m) =>
-      fs.access(path.join(projectPath, m)).then(() => m, () => null)));
+      fs.access(path.join(/* turbopackIgnore: true */ projectPath, m)).then(() => m, () => null)));
     const rel = previewPluginRelPath(nuxtConfig, appDirMarkers.some(Boolean));
-    const pluginPath = path.join(projectPath, rel);
+    const pluginPath = path.join(/* turbopackIgnore: true */ projectPath, rel);
     if (rel !== LEGACY_PLUGIN_REL) {
       await ensureDirInside(projectPath, path.dirname(pluginPath));
       // A copy we wrote to the root plugins/ before is not loaded under app/ —

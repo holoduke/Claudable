@@ -25,23 +25,33 @@ export default function ThinkingSection({
     // Split by double asterisks for emphasis
     const parts = text.split(/\*\*(.*?)\*\*/g);
     
+    // Keys are character offsets into the split text: unique and stable for a
+    // given content string (each part/line advances the offset by length + 1).
+    let partOffset = 0;
     return parts.map((part, index) => {
+      const partStart = partOffset;
+      partOffset += part.length + 1;
       // Odd indices are the emphasized text
       if (index % 2 === 1) {
         return (
-          <span key={index} className="font-medium text-gray-600 dark:text-gray-300 ">
+          <span key={`e${partStart}`} className="font-medium text-gray-600 dark:text-gray-300 ">
             {part}
           </span>
         );
       }
       
       // Format regular text with proper line breaks
-      return part.split('\n').map((line, lineIndex) => (
-        <React.Fragment key={`${index}-${lineIndex}`}>
-          {lineIndex > 0 && <br />}
-          {line}
-        </React.Fragment>
-      ));
+      let lineOffset = partStart;
+      return part.split('\n').map((line, lineIndex) => {
+        const lineStart = lineOffset;
+        lineOffset += line.length + 1;
+        return (
+          <React.Fragment key={`t${partStart}-${lineStart}`}>
+            {lineIndex > 0 && <br />}
+            {line}
+          </React.Fragment>
+        );
+      });
     });
   };
 

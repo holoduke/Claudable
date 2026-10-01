@@ -37,7 +37,7 @@ import type { PluginMarketplace } from '@prisma/client';
 const PLUGINS_DIR = process.env.PLUGINS_DIR || './data/agent-plugins';
 export const PLUGINS_DIR_ABSOLUTE = path.isAbsolute(PLUGINS_DIR)
   ? PLUGINS_DIR
-  : path.resolve(process.cwd(), PLUGINS_DIR);
+  : path.resolve(/* turbopackIgnore: true */ process.cwd(), PLUGINS_DIR);
 
 // Path the shared plugins dir is mounted at, read-only, inside each agent
 // container. Plugin dirs passed to `--plugin-dir` are built from this.
@@ -345,7 +345,7 @@ export function pluginHostDir(marketplaceName: string, subpath: string | null, s
 const PROJECTS_DIR = process.env.PROJECTS_DIR || './data/projects';
 const PROJECTS_DIR_ABSOLUTE = path.isAbsolute(PROJECTS_DIR)
   ? PROJECTS_DIR
-  : path.resolve(process.cwd(), PROJECTS_DIR);
+  : path.resolve(/* turbopackIgnore: true */ process.cwd(), PROJECTS_DIR);
 
 // <project>/.claude/.plugins-state.json — { disabled: ["<marketplace>/<plugin>"] }.
 // Mirrors the skills state file: org-enabled is the default, this only records

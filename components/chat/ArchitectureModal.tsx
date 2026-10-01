@@ -32,17 +32,28 @@ export default function ArchitectureModal({
   const [containers, setContainers] = useState<Container[]>([]);
   const [loading, setLoading] = useState(false);
 
+  // Reset to a fresh loading state whenever the modal (re)opens or the
+  // project changes - adjusted during render instead of inside the effect.
+  const loadKey = open && projectId ? projectId : null;
+  const [prevLoadKey, setPrevLoadKey] = useState<string | null>(null);
+  if (loadKey !== prevLoadKey) {
+    setPrevLoadKey(loadKey);
+    if (loadKey) {
+      setContainers([]);
+      setLoading(true);
+    }
+  }
+
   useEffect(() => {
     if (!open || !projectId) return;
-    let cancelled = false;
-    setContainers([]);
-    setLoading(true);
-    fetch(`${API_BASE}/api/projects/${projectId}/containers`)
+    const controller = new AbortController();
+    const signal = controller.signal;
+    fetch(`${API_BASE}/api/projects/${projectId}/containers`, { signal: controller.signal })
       .then((r) => (r.ok ? r.json() : null))
-      .then((j) => { if (!cancelled) setContainers((j?.data?.containers ?? j?.containers ?? []) as Container[]); })
-      .catch(() => {})
-      .finally(() => !cancelled && setLoading(false));
-    return () => { cancelled = true; };
+      .then((j) => { if (!signal.aborted) setContainers((j?.data?.containers ?? j?.containers ?? []) as Container[]); })
+      .catch(() => { /* aborted or network error: keep the empty list */ })
+      .finally(() => { if (!signal.aborted) setLoading(false); });
+    return () => controller.abort();
   }, [open, projectId]);
 
   useEffect(() => {

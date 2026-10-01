@@ -30,9 +30,9 @@ export async function realPathInside(root: string, target: string): Promise<stri
 export async function readFileInside(root: string, target: string): Promise<Buffer | null> {
   const real = await realPathInside(root, target);
   if (!real) return null;
-  const stat = await fs.stat(real).catch(() => null);
+  const stat = await fs.stat(/* turbopackIgnore: true */ real).catch(() => null);
   if (!stat?.isFile()) return null;
-  return fs.readFile(real);
+  return fs.readFile(/* turbopackIgnore: true */ real);
 }
 
 /**
@@ -45,8 +45,8 @@ export async function writeFileInside(root: string, target: string, data: Uint8A
   await fs.mkdir(parent, { recursive: true });
   const realParent = await realPathInside(root, parent);
   if (!realParent) throw new Error('Refusing to write outside the project directory');
-  const destination = path.join(realParent, path.basename(target));
-  const handle = await fs.open(
+  const destination = path.join(/* turbopackIgnore: true */ realParent, path.basename(target));
+  const handle = await fs.open(/* turbopackIgnore: true */ 
     destination,
     fsConstants.O_WRONLY | fsConstants.O_CREAT | fsConstants.O_TRUNC | fsConstants.O_NOFOLLOW,
     0o644,
@@ -109,8 +109,8 @@ export function readTextInsideSync(root: string, target: string): string {
     return '';
   }
   const real = realPathInsideSync(root, target);
-  if (!real || !fsSync.statSync(real).isFile()) throw new Error('Refusing to read a file outside the project');
-  return fsSync.readFileSync(real, 'utf8');
+  if (!real || !fsSync.statSync(/* turbopackIgnore: true */ real).isFile()) throw new Error('Refusing to read a file outside the project');
+  return fsSync.readFileSync(/* turbopackIgnore: true */ real, 'utf8');
 }
 
 export function writeFileInsideSync(root: string, target: string, data: string): void {
@@ -118,8 +118,8 @@ export function writeFileInsideSync(root: string, target: string, data: string):
   fsSync.mkdirSync(parent, { recursive: true });
   const realParent = realPathInsideSync(root, parent);
   if (!realParent) throw new Error('Refusing to write outside the project directory');
-  const fd = fsSync.openSync(
-    path.join(realParent, path.basename(target)),
+  const fd = fsSync.openSync(/* turbopackIgnore: true */ 
+    path.join(/* turbopackIgnore: true */ realParent, path.basename(target)),
     fsConstants.O_WRONLY | fsConstants.O_CREAT | fsConstants.O_TRUNC | fsConstants.O_NOFOLLOW,
     0o644,
   );

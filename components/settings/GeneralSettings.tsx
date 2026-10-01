@@ -30,16 +30,22 @@ export function GeneralSettings({
   const [isSaving, setIsSaving] = useState(false);
   const [status, setStatus] = useState<StatusMessage>(null);
 
-  useEffect(() => {
+  // Reset the form when the props change (adjusting state during render rather
+  // than in an effect — https://react.dev/learn/you-might-not-need-an-effect).
+  const [prevProjectName, setPrevProjectName] = useState(projectName);
+  if (projectName !== prevProjectName) {
+    setPrevProjectName(projectName);
     setName(projectName);
     setOriginalName(projectName);
-  }, [projectName]);
+  }
 
-  useEffect(() => {
+  const [prevProjectDescription, setPrevProjectDescription] = useState(projectDescription);
+  if (projectDescription !== prevProjectDescription) {
     const nextDescription = projectDescription ?? '';
+    setPrevProjectDescription(projectDescription);
     setDescription(nextDescription);
     setOriginalDescription(nextDescription);
-  }, [projectDescription]);
+  }
 
   useEffect(() => {
     if (status?.type === 'success') {

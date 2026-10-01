@@ -357,9 +357,9 @@ export default function CodeExplorer({
                   aria-hidden="true"
                 >
                   <div className="text-[13px] font-mono text-gray-500 dark:text-gray-400 leading-[19px]">
-                    {(editedContent || '').split('\n').map((_, index) => (
-                      <div key={index} className="text-right pr-2">
-                        {index + 1}
+                    {Array.from({ length: (editedContent || '').split('\n').length }, (_, i) => i + 1).map((lineNo) => (
+                      <div key={lineNo} className="text-right pr-2">
+                        {lineNo}
                       </div>
                     ))}
                   </div>
@@ -372,8 +372,10 @@ export default function CodeExplorer({
                     className="absolute inset-0 m-0 p-4 overflow-hidden text-[13px] leading-[19px] font-mono text-gray-800 dark:text-gray-100 whitespace-pre pointer-events-none"
                     style={{ fontFamily: "'Fira Code', 'Consolas', 'Monaco', monospace" }}
                   >
+                    {/* highlightedCode is highlight.js output or escapeHtml(code) (built in app/[project_id]/chat/page.tsx), so it carries no raw user markup. */}
                     <code
                       className={`language-${getFileLanguage(selectedFile)}`}
+                      // eslint-disable-next-line @eslint-react/dom-no-dangerously-set-innerhtml -- highlight.js / escapeHtml output, escaped upstream
                       dangerouslySetInnerHTML={{ __html: highlightedCode }}
                     />
                     <span className="block h-full min-h-px" />

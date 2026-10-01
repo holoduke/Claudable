@@ -87,7 +87,7 @@ export function ServiceSettings({ projectId, projectName }: ServiceSettingsProps
   // Once the user edits the field, stop overwriting it with the server value on
   // reload (Sync/connect-modal close call loadServiceConnections) — otherwise
   // their unsaved typing silently reverts.
-  const branchDirty = useRef(false);
+  const branchDirtyRef = useRef(false);
   const [branchSaving, setBranchSaving] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [gitStatusMessage, setGitStatusMessage] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null);
@@ -95,7 +95,7 @@ export function ServiceSettings({ projectId, projectName }: ServiceSettingsProps
   // is dirty-tracked like the branch so a reload can't wipe in-progress typing.
   const [autoSync, setAutoSync] = useState(false);
   const [autoSyncMinutes, setAutoSyncMinutes] = useState(5);
-  const autoSyncMinutesDirty = useRef(false);
+  const autoSyncMinutesDirtyRef = useRef(false);
   const [autoSyncSaving, setAutoSyncSaving] = useState(false);
 
   const getProviderIcon = (provider: string) => {
@@ -150,12 +150,12 @@ export function ServiceSettings({ projectId, projectName }: ServiceSettingsProps
       }));
 
       const github = connections.find(conn => conn.provider === 'github');
-      if (github && !branchDirty.current) {
+      if (github && !branchDirtyRef.current) {
         setBranchInput(github.service_data?.branch || github.service_data?.default_branch || 'main');
       }
       if (github) {
         setAutoSync(github.service_data?.auto_sync === true);
-        if (!autoSyncMinutesDirty.current) {
+        if (!autoSyncMinutesDirtyRef.current) {
           setAutoSyncMinutes(Number(github.service_data?.auto_sync_interval_minutes) || 5);
         }
       }
@@ -178,7 +178,7 @@ export function ServiceSettings({ projectId, projectName }: ServiceSettingsProps
         throw new Error(body.message || 'Failed to save branch');
       }
       setGitStatusMessage({ kind: 'ok', text: `Operating branch set to "${body.branch}"` });
-      branchDirty.current = false; // saved value is now canonical again
+      branchDirtyRef.current = false; // saved value is now canonical again
       loadServiceConnections();
     } catch (error) {
       setGitStatusMessage({ kind: 'error', text: error instanceof Error ? error.message : 'Failed to save branch' });
@@ -229,7 +229,7 @@ export function ServiceSettings({ projectId, projectName }: ServiceSettingsProps
       if (!res.ok) throw new Error(body.message || 'Failed to update auto-sync');
       setAutoSync(body.auto_sync === true);
       setAutoSyncMinutes(Number(body.auto_sync_interval_minutes) || nextMinutes);
-      autoSyncMinutesDirty.current = false;
+      autoSyncMinutesDirtyRef.current = false;
       setGitStatusMessage({
         kind: 'ok',
         text: body.auto_sync
@@ -377,7 +377,7 @@ export function ServiceSettings({ projectId, projectName }: ServiceSettingsProps
                                 <span className="shrink-0">Branch:</span>
                                 <input
                                   value={branchInput}
-                                  onChange={(e) => { branchDirty.current = true; setBranchInput(e.target.value); }}
+                                  onChange={(e) => { branchDirtyRef.current = true; setBranchInput(e.target.value); }}
                                   spellCheck={false}
                                   className="w-36 px-2 py-1 text-sm font-mono rounded-lg border border-gray-300 dark:border-white/12 bg-white dark:bg-white/6 text-gray-800 dark:text-gray-100 focus:outline-hidden focus:ring-1 focus:ring-brand-500"
                                 />
@@ -421,13 +421,13 @@ export function ServiceSettings({ projectId, projectName }: ServiceSettingsProps
                                       max={1440}
                                       value={autoSyncMinutes}
                                       disabled={autoSyncSaving}
-                                      onChange={(e) => { autoSyncMinutesDirty.current = true; setAutoSyncMinutes(Number(e.target.value)); }}
+                                      onChange={(e) => { autoSyncMinutesDirtyRef.current = true; setAutoSyncMinutes(Number(e.target.value)); }}
                                       className="w-16 px-2 py-1 text-sm font-mono rounded-lg border border-gray-300 dark:border-white/12 bg-white dark:bg-white/6 text-gray-800 dark:text-gray-100 focus:outline-hidden focus:ring-1 focus:ring-brand-500"
                                     />
                                     <span className="text-gray-500 dark:text-gray-400">min</span>
                                     <button
                                       onClick={() => saveAutoSync(true, Math.min(1440, Math.max(1, Math.round(autoSyncMinutes) || 5)))}
-                                      disabled={autoSyncSaving || !autoSyncMinutesDirty.current}
+                                      disabled={autoSyncSaving || !autoSyncMinutesDirtyRef.current}
                                       className="px-3 py-1 text-xs rounded-lg border border-gray-300 dark:border-white/12 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-white/6 disabled:opacity-40 disabled:cursor-not-allowed"
                                     >
                                       {autoSyncSaving ? 'Saving…' : 'Save'}

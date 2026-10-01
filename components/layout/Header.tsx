@@ -29,6 +29,9 @@ export default function Header() {
             {projectId && (
               <button
                 onClick={() => {
+                  // Full reload on purpose: the home page restores the session's last
+                  // assistant/model pick only after a load (see app/page.tsx).
+                  // eslint-disable-next-line @next/next/no-location-assign-relative-destination -- deliberate full reload
                   window.location.href = '/';
                 }}
                 className="flex items-center justify-center w-8 h-8 text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full transition-colors"

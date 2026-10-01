@@ -79,20 +79,26 @@ export default function DesignImportModal({
   }, []);
 
   // Load the remote design list once when the modal opens.
+  // Mark the list as loading as soon as the modal opens (adjusted during render).
+  const [wasOpen, setWasOpen] = useState(false);
+  if (isOpen !== wasOpen) {
+    setWasOpen(isOpen);
+    if (isOpen) setRemoteLoading(true);
+  }
+
   useEffect(() => {
     if (!isOpen) return;
-    let cancelled = false;
-    setRemoteLoading(true);
-    fetch(`${API_BASE}/api/design-remote/projects`)
+    const controller = new AbortController();
+    fetch(`${API_BASE}/api/design-remote/projects`, { signal: controller.signal })
       .then((r) => (r.ok ? r.json() : null))
       .then((j) => {
-        if (cancelled || !j?.success) return;
+        if (controller.signal.aborted || !j?.success) return;
         setRemoteEnabled(!!j.data?.enabled);
         setRemoteProjects(Array.isArray(j.data?.projects) ? j.data.projects : []);
       })
-      .catch(() => {})
-      .finally(() => { if (!cancelled) setRemoteLoading(false); });
-    return () => { cancelled = true; };
+      .catch(() => { /* aborted or offline: remote list stays hidden */ })
+      .finally(() => { if (!controller.signal.aborted) setRemoteLoading(false); });
+    return () => controller.abort();
   }, [isOpen]);
 
   // Import a claude.ai/design project directly (server fetches + stages it).

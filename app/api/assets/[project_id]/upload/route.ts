@@ -17,7 +17,7 @@ interface RouteContext {
 const PROJECTS_DIR = process.env.PROJECTS_DIR || './data/projects';
 const PROJECTS_DIR_ABSOLUTE = path.isAbsolute(PROJECTS_DIR)
   ? PROJECTS_DIR
-  : path.resolve(process.cwd(), PROJECTS_DIR);
+  : path.resolve(/* turbopackIgnore: true */ process.cwd(), PROJECTS_DIR);
 
 const MAX_UPLOAD_BYTES = Number(process.env.MAX_UPLOAD_BYTES || 5 * 1024 * 1024 * 1024);
 // Customer projects: a smaller per-file cap and a storage quota for the whole
@@ -107,7 +107,7 @@ async function finalizeAsset(
     }
     try {
       const projectRoot = project.repoPath
-        ? (path.isAbsolute(project.repoPath) ? project.repoPath : path.resolve(process.cwd(), project.repoPath))
+        ? (path.isAbsolute(project.repoPath) ? project.repoPath : path.resolve(/* turbopackIgnore: true */ process.cwd(), project.repoPath))
         : path.join(PROJECTS_DIR_ABSOLUTE, projectId);
       const uploadsDir = path.join(projectRoot, 'public', 'uploads');
       await fs.mkdir(uploadsDir, { recursive: true });

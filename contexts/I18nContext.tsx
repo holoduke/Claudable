@@ -6,7 +6,7 @@
  * language, else English) and exposes t(key, vars). Missing keys fall back to
  * English, then to the key itself, so partially-migrated screens never crash.
  */
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import React, { createContext, use, useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import { MESSAGES, LOCALES, DEFAULT_LOCALE, isLocale, type Locale } from '@/lib/i18n/config';
 import type { MessageKey } from '@/lib/i18n/messages/en';
 
@@ -22,27 +22,36 @@ interface I18nContextValue {
   locales: typeof LOCALES;
 }
 
-const I18nCtx = createContext<I18nContextValue | null>(null);
+const I18nContext = createContext<I18nContextValue | null>(null);
+
+/** Local guess: localStorage, else the browser language (client-only). */
+function readLocalLocale(): Locale | null {
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY);
+    if (isLocale(stored)) return stored;
+    const nav = (navigator.language || '').slice(0, 2).toLowerCase();
+    if (isLocale(nav)) return nav;
+  } catch { /* no storage (SSR / privacy mode) */ }
+  return null;
+}
+// Read once per render; localStorage has no same-tab change event to subscribe to.
+const subscribeNoop = () => () => {};
+const readServerLocale = (): Locale | null => null;
 
 export default function I18nProvider({ children }: { children: React.ReactNode }) {
-  const [locale, setLocaleState] = useState<Locale>(DEFAULT_LOCALE);
-
-  // Resolve the initial locale on mount (client-only — avoids SSR hydration
-  // mismatch by starting from the default and correcting after mount).
+  // Resolve the locale without an SSR hydration mismatch: the server snapshot
+  // (null → DEFAULT_LOCALE) is used for the server render and hydration, then
+  // React re-renders with the client snapshot. An explicit choice (setLocale or
+  // the account preference) overrides the local guess.
   // Priority: the signed-in user's saved locale > localStorage > browser lang.
   // The user's account setting wins so a language chosen on one device follows
   // them everywhere; localStorage gives an instant answer before the fetch.
-  useEffect(() => {
-    try {
-      const stored = localStorage.getItem(STORAGE_KEY);
-      if (isLocale(stored)) setLocaleState(stored);
-      else {
-        const nav = (navigator.language || '').slice(0, 2).toLowerCase();
-        if (isLocale(nav)) setLocaleState(nav);
-      }
-    } catch { /* no storage (SSR / privacy mode) */ }
+  const localLocale = useSyncExternalStore(subscribeNoop, readLocalLocale, readServerLocale);
+  const [chosenLocale, setChosenLocale] = useState<Locale | null>(null);
+  const locale: Locale = chosenLocale ?? localLocale ?? DEFAULT_LOCALE;
 
-    // Then reconcile with the account preference (authoritative when present).
+  // Reconcile with the account preference (authoritative when present).
+  useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
@@ -51,7 +60,7 @@ export default function I18nProvider({ children }: { children: React.ReactNode }
         const json = await res.json();
         const accountLocale = json?.data?.locale;
         if (!cancelled && isLocale(accountLocale)) {
-          setLocaleState(accountLocale);
+          setChosenLocale(accountLocale);
           try { localStorage.setItem(STORAGE_KEY, accountLocale); } catch { /* noop */ }
         }
       } catch { /* not signed in / offline → keep the local guess */ }
@@ -64,7 +73,7 @@ export default function I18nProvider({ children }: { children: React.ReactNode }
   }, [locale]);
 
   const setLocale = useCallback((l: Locale) => {
-    setLocaleState(l);
+    setChosenLocale(l);
     try { localStorage.setItem(STORAGE_KEY, l); } catch { /* noop */ }
     // Persist to the signed-in user's account (best-effort; a guest just keeps
     // the localStorage value). 401/anon responses are fine to ignore.
@@ -88,11 +97,11 @@ export default function I18nProvider({ children }: { children: React.ReactNode }
   }, [locale]);
 
   const value = useMemo(() => ({ locale, setLocale, t, locales: LOCALES }), [locale, setLocale, t]);
-  return <I18nCtx.Provider value={value}>{children}</I18nCtx.Provider>;
+  return <I18nContext value={value}>{children}</I18nContext>;
 }
 
 export function useI18n(): I18nContextValue {
-  const ctx = useContext(I18nCtx);
+  const ctx = use(I18nContext);
   if (!ctx) throw new Error('useI18n must be used within I18nProvider');
   return ctx;
 }

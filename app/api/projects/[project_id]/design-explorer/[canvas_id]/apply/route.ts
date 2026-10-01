@@ -45,8 +45,8 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
     const project = await getProjectById(project_id);
     if (!project) return createErrorResponse('not_found', 'Project not found', 404);
     const projectPath = project.repoPath
-      ? (path.isAbsolute(project.repoPath) ? project.repoPath : path.resolve(process.cwd(), project.repoPath))
-      : path.resolve(process.cwd(), PROJECTS_DIR, project_id);
+      ? (path.isAbsolute(project.repoPath) ? project.repoPath : path.resolve(/* turbopackIgnore: true */ process.cwd(), project.repoPath))
+      : path.resolve(/* turbopackIgnore: true */ process.cwd(), PROJECTS_DIR, project_id);
 
     const { suggestedPrompt } = await stageFrameForPort(projectPath, frameId);
     return createSuccessResponse({ suggestedPrompt });

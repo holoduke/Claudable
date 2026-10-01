@@ -241,19 +241,19 @@ export default function GlobalSettings({ isOpen, onClose, initialTab = 'account'
   // If a non-admin somehow lands on the Users tab, fall back to General — but
   // only once we actually know who the user is, so an initialTab='users' isn't
   // wrongly redirected during the brief window before /api/users/me resolves.
-  useEffect(() => {
-    // The shared-mcp guard also waits on authConfigLoaded: canManageOrg depends
-    // on authOff, which loads from a SEPARATE fetch than the user. Without this,
-    // a single-tenant (auth-off) user opening initialTab='shared-mcp' gets bounced
-    // to General if /api/users/me resolves before /api/auth/config.
-    if (
-      (userLoaded && !isAdmin && (activeTab === 'users' || activeTab === 'orgs' || activeTab === 'system')) ||
-      (userLoaded && authConfigLoaded && !canManageOrg && (activeTab === 'shared-mcp' || activeTab === 'plugins' || activeTab === 'ai-agents')) ||
-      (userLoaded && !currentUser && !authOff && (activeTab === 'account' || activeTab === 'claude' || activeTab === 'my-org'))
-    ) {
-      setActiveTab(currentUser ? 'account' : 'about');
-    }
-  }, [userLoaded, authConfigLoaded, activeTab, isAdmin, canManageOrg]);
+  // The shared-mcp guard also waits on authConfigLoaded: canManageOrg depends
+  // on authOff, which loads from a SEPARATE fetch than the user. Without this,
+  // a single-tenant (auth-off) user opening initialTab='shared-mcp' gets bounced
+  // to General if /api/users/me resolves before /api/auth/config.
+  // Adjusted during render (not in an effect) so the forbidden tab never
+  // commits; the fallback tabs never match a condition, so this converges.
+  if (
+    (userLoaded && !isAdmin && (activeTab === 'users' || activeTab === 'orgs' || activeTab === 'system')) ||
+    (userLoaded && authConfigLoaded && !canManageOrg && (activeTab === 'shared-mcp' || activeTab === 'plugins' || activeTab === 'ai-agents')) ||
+    (userLoaded && !currentUser && !authOff && (activeTab === 'account' || activeTab === 'claude' || activeTab === 'my-org'))
+  ) {
+    setActiveTab(currentUser ? 'account' : 'about');
+  }
 
   const saveGlobalSettings = async () => {
     setIsLoading(true);

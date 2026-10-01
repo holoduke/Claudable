@@ -54,18 +54,31 @@ export default function ProjectAccessSettings({ projectId }: Props) {
     return () => document.removeEventListener('mousedown', onClick);
   }, []);
 
-  // Debounced org-user search.
+  // Debounced org-user search. The spinner flips on during render whenever the
+  // search inputs change (instead of a synchronous setState in the effect).
+  const visibility = access?.visibility;
+  const members = access?.members;
+  const [searchInputs, setSearchInputs] = useState({ query, visibility, members, projectId });
+  if (
+    searchInputs.query !== query ||
+    searchInputs.visibility !== visibility ||
+    searchInputs.members !== members ||
+    searchInputs.projectId !== projectId
+  ) {
+    setSearchInputs({ query, visibility, members, projectId });
+    if (visibility === 'restricted') setSearching(true);
+  }
+
   useEffect(() => {
-    if (access?.visibility !== 'restricted') return;
+    if (visibility !== 'restricted') return;
     const q = query.trim();
     let cancelled = false;
-    setSearching(true);
     const t = setTimeout(async () => {
       try {
         const res = await fetch(`${API_BASE}/api/users/search?q=${encodeURIComponent(q)}&project=${encodeURIComponent(projectId)}`);
         const json = await res.json().catch(() => ({}));
         if (cancelled) return;
-        const memberIds = new Set((access?.members ?? []).map((m) => m.id));
+        const memberIds = new Set((members ?? []).map((m) => m.id));
         setResults(((json.data as Member[]) ?? []).filter((u) => !memberIds.has(u.id)));
         setOpen(true);
       } catch {
@@ -75,7 +88,7 @@ export default function ProjectAccessSettings({ projectId }: Props) {
       }
     }, 250);
     return () => { cancelled = true; clearTimeout(t); };
-  }, [query, access?.visibility, access?.members]);
+  }, [query, visibility, members, projectId]);
 
   const setVisibility = async (visibility: 'org' | 'restricted') => {
     setBusy(true);

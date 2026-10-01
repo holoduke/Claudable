@@ -109,34 +109,34 @@ export default function ChatInput({
   const [skillActiveIdx, setSkillActiveIdx] = useState(0);
   useEffect(() => {
     if (!projectId) return;
-    let cancelled = false;
-    fetch(`${API_BASE}/api/projects/${projectId}/skills`)
+    const controller = new AbortController();
+    fetch(`${API_BASE}/api/projects/${projectId}/skills`, { signal: controller.signal })
       .then((r) => (r.ok ? r.json() : null))
       .then((j) => {
-        if (cancelled || !j?.success) return;
+        if (controller.signal.aborted || !j?.success) return;
         const all = [...(j.data?.project ?? []), ...(j.data?.global ?? [])] as any[];
         const list = all
           .filter((s) => String(s.enabled) !== 'False' && s.enabled !== false)
           .map((s) => ({ name: String(s.name), description: String(s.description ?? ''), scope: String(s.scope ?? 'project') }));
         setSkills(list);
       })
-      .catch(() => {});
-    return () => { cancelled = true; };
+      .catch(() => { /* aborted or offline: autocomplete just lacks these entries */ });
+    return () => controller.abort();
   }, [projectId]);
 
   useEffect(() => {
     if (!projectId) return;
-    let cancelled = false;
-    fetch(`${API_BASE}/api/projects/${projectId}/plugins/commands`)
+    const controller = new AbortController();
+    fetch(`${API_BASE}/api/projects/${projectId}/plugins/commands`, { signal: controller.signal })
       .then((r) => (r.ok ? r.json() : null))
       .then((j) => {
-        if (cancelled || !j?.success || !Array.isArray(j.data)) return;
+        if (controller.signal.aborted || !j?.success || !Array.isArray(j.data)) return;
         setPluginCmds(j.data.map((c: { invocation: string; description?: string }) => ({
           name: String(c.invocation), description: String(c.description ?? ''), scope: 'plugin',
         })));
       })
-      .catch(() => {});
-    return () => { cancelled = true; };
+      .catch(() => { /* aborted or offline: autocomplete just lacks these entries */ });
+    return () => controller.abort();
   }, [projectId]);
 
   // The menu opens only while the whole message is a bare "/token" (a command
@@ -157,13 +157,16 @@ export default function ChatInput({
   }, [skills, pluginCmds, skillQuery, builtinCommands]);
   const [dismissedQuery, setDismissedQuery] = useState<string | null>(null);
   const skillMenuOpen = skillQuery !== null && skillMatches.length > 0 && skillQuery !== dismissedQuery;
-  useEffect(() => { setSkillActiveIdx(0); }, [skillQuery]);
+  // Reset the highlighted entry whenever the query changes (adjusted during render).
+  const [prevSkillQuery, setPrevSkillQuery] = useState<string | null>(skillQuery);
+  if (skillQuery !== prevSkillQuery) {
+    setPrevSkillQuery(skillQuery);
+    setSkillActiveIdx(0);
+  }
   // A dismissal (Escape / running a command) only holds while the query is
   // unchanged. Without this, running "/mcp" once suppressed the menu for every
   // future "/mcp" — typing it showed nothing until Enter.
-  useEffect(() => {
-    if (skillQuery !== dismissedQuery && dismissedQuery !== null) setDismissedQuery(null);
-  }, [skillQuery, dismissedQuery]);
+  if (skillQuery !== dismissedQuery && dismissedQuery !== null) setDismissedQuery(null);
 
   const chooseSkill = (option: SkillOption) => {
     // Built-in commands (/mcp, /usage, /help, /clear, /compact) run IMMEDIATELY on
@@ -329,18 +332,9 @@ export default function ChatInput({
     if (restoreDraft.images && restoreDraft.images.length > 0) {
       setUploadedImages((cur) => [...cur, ...restoreDraft.images!]);
     }
-    setTimeout(() => { textareaRef.current?.focus(); adjustTextareaHeight(); }, 0);
+    const focusTimer = setTimeout(() => { textareaRef.current?.focus(); adjustTextareaHeight(); }, 0);
+    return () => clearTimeout(focusTimer);
   }, [restoreDraft]);
-
-  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-
-    const files = e.target.files;
-    if (!files) {
-      return;
-    }
-
-    await handleFiles(files);
-  };
 
   const removeImage = (id: string) => {
     setUploadedImages(prev => {
@@ -429,6 +423,16 @@ export default function ChatInput({
       }
     }
   }, [projectId, supportsImageUpload, preferredCli, maxUploadMb, uploadWithProgress, toast]);
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+
+    const files = e.target.files;
+    if (!files) {
+      return;
+    }
+
+    await handleFiles(files);
+  };
 
   useEffect(() => {
     adjustTextareaHeight();

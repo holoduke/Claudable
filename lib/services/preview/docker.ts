@@ -348,9 +348,9 @@ export async function narrowBuildContext(
     // tar follows symlinked PARENT dirs (docker's own context walk never does): every
     // parent must resolve inside the context, or a `backend -> /etc` link would pack
     // host files. The leaf itself is stored as-is (a symlink stays a symlink).
-    const realContext = await fs.realpath(contextDir);
+    const realContext = await fs.realpath(/* turbopackIgnore: true */ contextDir);
     const parentInside = async (rel: string) => {
-      const parent = path.dirname(path.join(contextDir, rel));
+      const parent = path.dirname(path.join(/* turbopackIgnore: true */ contextDir, rel));
       const real = await fs.realpath(parent).catch(() => null);
       return real !== null && (real === realContext || real.startsWith(realContext + path.sep));
     };
@@ -358,7 +358,7 @@ export async function narrowBuildContext(
     const present: string[] = [];
     for (const p of paths) {
       if (!(await parentInside(p))) return null;
-      if (await fs.lstat(path.join(contextDir, p)).then(() => true, () => false)) present.push(p);
+      if (await fs.lstat(path.join(/* turbopackIgnore: true */ contextDir, p)).then(() => true, () => false)) present.push(p);
     }
     // The Dockerfile must be in the tar once: skip it when a listed dir already holds it.
     const covered = present.some((p) => p === dockerfile || dockerfile.startsWith(p + '/'));
@@ -454,7 +454,7 @@ export async function runBackendContainer(
     // (air / node --watch / uvicorn --reload) hot-reloads on the agent's edits,
     // and run as uid 1000 to match the host files (writable for node_modules /
     // air-tmp) — non-root. Falls back to a full rebuild-on-restart if omitted.
-    const hostSrc = toHostPath(path.join(projectPath, c.watchDir || 'backend'));
+    const hostSrc = toHostPath(path.join(/* turbopackIgnore: true */ projectPath, c.watchDir || 'backend'));
     runArgs.push('--user', '1000:1000', '-v', `${hostSrc}:/app`, '-w', '/app');
   }
   // Egress-locked sandbox network: reaches the public internet (for the app's own

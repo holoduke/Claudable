@@ -16,7 +16,7 @@ import path from 'path';
 import { appendCommandLogs } from './process-utils';
 
 const PROJECTS_DIR = process.env.PROJECTS_DIR || './data/projects';
-const PROJECTS_ROOT = path.isAbsolute(PROJECTS_DIR) ? PROJECTS_DIR : path.resolve(process.cwd(), PROJECTS_DIR);
+const PROJECTS_ROOT = path.isAbsolute(PROJECTS_DIR) ? PROJECTS_DIR : path.resolve(/* turbopackIgnore: true */ process.cwd(), PROJECTS_DIR);
 const DATA_ROOT = path.resolve(PROJECTS_ROOT, '..');
 const LOCK_CACHE_DIR = path.join(DATA_ROOT, '.lock-cache');
 const REGISTRY = 'https://registry.npmjs.org/';
@@ -97,7 +97,7 @@ async function exists(p: string): Promise<boolean> {
 export async function seedLockfile(projectPath: string, log?: (msg: string) => void): Promise<boolean> {
   try {
     if (await exists(path.join(projectPath, 'package-lock.json'))) return false;
-    for (const f of OTHER_LOCKFILES) if (await exists(path.join(projectPath, f))) return false;
+    for (const f of OTHER_LOCKFILES) if (await exists(path.join(/* turbopackIgnore: true */ projectPath, f))) return false;
     if (await exists(path.join(projectPath, 'node_modules'))) return false;
     const pkg = await readJson(path.join(projectPath, 'package.json'));
     if (!pkg) return false;

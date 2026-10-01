@@ -26,17 +26,24 @@ export default function DesignPickerModal({ isOpen, selectedId, onClose, onSelec
   const [catalog, setCatalog] = useState<DesignEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState('');
+  const [wasOpen, setWasOpen] = useState(isOpen);
+
+  // Show the loading state again every time the modal (re)opens — adjusted
+  // during render instead of in the effect below.
+  if (isOpen !== wasOpen) {
+    setWasOpen(isOpen);
+    if (isOpen) setLoading(true);
+  }
 
   useEffect(() => {
     if (!isOpen) return;
-    let cancelled = false;
-    setLoading(true);
-    fetch(`${API_BASE}/api/design-skills`)
+    const controller = new AbortController();
+    fetch(`${API_BASE}/api/design-skills`, { signal: controller.signal })
       .then((r) => r.json())
-      .then((j) => { if (!cancelled && j.success) setCatalog(j.data as DesignEntry[]); })
+      .then((j) => { if (!controller.signal.aborted && j.success) setCatalog(j.data as DesignEntry[]); })
       .catch(() => {})
-      .finally(() => { if (!cancelled) setLoading(false); });
-    return () => { cancelled = true; };
+      .finally(() => { if (!controller.signal.aborted) setLoading(false); });
+    return () => { controller.abort(); };
   }, [isOpen]);
 
   const filtered = useMemo(() => {
