@@ -41,18 +41,24 @@
     "zod": "^4.6.5"
   },
   "devDependencies": {
+    "@eslint-react/eslint-plugin": "^5.23.3",
+    "@next/eslint-plugin-next": "^16.3.8",
     "@tailwindcss/postcss": "^4.3.3",
     "@types/node": "^26.6.3",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "@typescript/native": "npm:typescript@^7.0.2",
     "dotenv": "^18.0.3",
-    "eslint": "^9.39.5",
-    "eslint-config-next": "^16.3.6",
+    "eslint": "^10.11.0",
+    "eslint-plugin-import-x": "^4.17.1",
+    "eslint-plugin-jsx-a11y-x": "^0.2.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "globals": "^17.13.0",
     "postcss": "^8.5.28",
     "prisma": "^7.10.0",
     "tailwindcss": "^4.3.3",
     "typescript": "npm:@typescript/typescript6@^6.0.2",
+    "typescript-eslint": "^8.71.0",
     "vitest": "^5.0.1"
   },
   "engines": {
@@ -77,6 +83,7 @@
   },
   "overrides": {
     "mysql2": "^3.24.4",
-    "deepmerge-ts": "^8.0.2"
+    "deepmerge-ts": "^8.0.2",
+    "better-sqlite3": "^13.0.3"
   }
 }
