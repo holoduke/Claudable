@@ -1,6 +1,7 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from 'react';
 import ProjectEditProfilesSettings from './ProjectEditProfilesSettings';
+import { apiErrorMessage } from '@/lib/client/api-error';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? '';
 
@@ -31,10 +32,10 @@ export default function ProjectAccessSettings({ projectId }: Props) {
       const res = await fetch(`${API_BASE}/api/projects/${projectId}/access`);
       const json = await res.json().catch(() => ({}));
       if (res.status === 401 || res.status === 403) {
-        setDenied(json.message || 'You do not have permission to manage this project.');
+        setDenied(apiErrorMessage(json, 'You do not have permission to manage this project.'));
         return;
       }
-      if (!res.ok || !json.success) throw new Error(json.message || 'Failed to load access');
+      if (!res.ok || !json.success) throw new Error(apiErrorMessage(json, 'Failed to load access'));
       setAccess(json.data as AccessState);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load access');
@@ -100,7 +101,7 @@ export default function ProjectAccessSettings({ projectId }: Props) {
         body: JSON.stringify({ visibility }),
       });
       const json = await res.json().catch(() => ({}));
-      if (!res.ok || !json.success) throw new Error(json.message || 'Failed to update');
+      if (!res.ok || !json.success) throw new Error(apiErrorMessage(json, 'Failed to update'));
       setAccess(json.data as AccessState);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to update');
@@ -122,7 +123,7 @@ export default function ProjectAccessSettings({ projectId }: Props) {
         body: JSON.stringify({ userId }),
       });
       const json = await res.json().catch(() => ({}));
-      if (!res.ok || !json.success) throw new Error(json.message || 'Failed to add');
+      if (!res.ok || !json.success) throw new Error(apiErrorMessage(json, 'Failed to add'));
       setAccess(json.data as AccessState);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to add');
@@ -139,7 +140,7 @@ export default function ProjectAccessSettings({ projectId }: Props) {
         method: 'DELETE',
       });
       const json = await res.json().catch(() => ({}));
-      if (!res.ok || !json.success) throw new Error(json.message || 'Failed to remove');
+      if (!res.ok || !json.success) throw new Error(apiErrorMessage(json, 'Failed to remove'));
       setAccess(json.data as AccessState);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to remove');
@@ -158,7 +159,7 @@ export default function ProjectAccessSettings({ projectId }: Props) {
         body: JSON.stringify({ role }),
       });
       const json = await res.json().catch(() => ({}));
-      if (!res.ok || !json.success) throw new Error(json.message || 'Failed to update role');
+      if (!res.ok || !json.success) throw new Error(apiErrorMessage(json, 'Failed to update role'));
       setAccess(json.data as AccessState);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to update role');

@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { BACKEND_STACKS } from '@/lib/config/backend-stacks';
 import { CONTAINER_TEMPLATES } from '@/lib/config/container-templates';
+import { responseErrorMessage } from '@/lib/client/api-error';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? '';
 
@@ -70,10 +71,7 @@ export default function ContainersSettings({ projectId }: { projectId: string })
   }, [projectId]);
 
   // Surface the API's error text (so a failed add/action isn't silent).
-  const errText = async (r: Response): Promise<string> => {
-    try { const j = await r.json(); return j?.error || j?.message || `Request failed (${r.status})`; }
-    catch { return `Request failed (${r.status})`; }
-  };
+  const errText = (r: Response): Promise<string> => responseErrorMessage(r);
 
   // Returns true on success. On failure sets `error` and leaves the caller's UI
   // (menu / form input) untouched so the user can see what went wrong and retry.

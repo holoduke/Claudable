@@ -1,3 +1,4 @@
+import { isAgentRunActive } from '@/lib/services/cli/run-registry';
 import { NextResponse } from 'next/server';
 import { denyUnlessProjectAccess } from '@/lib/auth/gate';
 import { getActiveRequests } from '@/lib/services/user-requests';
@@ -12,7 +13,10 @@ export async function GET(_request: Request, { params }: RouteContext) {
     const _gate = await denyUnlessProjectAccess(project_id);
     if (_gate) return _gate;
     const summary = await getActiveRequests(project_id);
-    return NextResponse.json(summary);
+    // agentRunning: the same in-memory run slot the publish route refuses on, so
+    // the Publish button and the server agree (hasActiveRequests also counts
+    // queued/pending rows and can lag behind a finished turn).
+    return NextResponse.json({ ...summary, agentRunning: isAgentRunActive(project_id) });
   } catch (error) {
     console.error('[API] Failed to get active requests:', error);
     return NextResponse.json(

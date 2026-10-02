@@ -12,6 +12,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useI18n } from '@/contexts/I18nContext';
 import OrgCreditsPanel from './OrgCreditsPanel';
 import { DATE_LOCALE } from '@/lib/i18n/config';
+import { apiErrorMessage } from '@/lib/client/api-error';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? '';
 
@@ -116,7 +117,7 @@ function OrgPanel({ org, currentUserId, onToast }: { org: MyOrg; currentUserId: 
         fetch(`${API_BASE}/api/orgs/${org.id}/invites`),
       ]);
       const mJson = await mRes.json();
-      if (!mRes.ok || !mJson.success) throw new Error(mJson.message || t('org.loadMembersFailed'));
+      if (!mRes.ok || !mJson.success) throw new Error(apiErrorMessage(mJson, t('org.loadMembersFailed')));
       setMembers(mJson.data as OrgMemberRow[]);
       const iJson = await iRes.json().catch(() => null);
       setInvites(iRes.ok && iJson?.success ? (iJson.data as InviteRow[]) : []);
@@ -144,7 +145,7 @@ function OrgPanel({ org, currentUserId, onToast }: { org: MyOrg; currentUserId: 
     try {
       const res = await fetch(`${API_BASE}${url}`, { headers: { 'Content-Type': 'application/json' }, ...init });
       const json = await res.json();
-      if (!res.ok || !json.success) throw new Error(json.message || t('common.actionFailed'));
+      if (!res.ok || !json.success) throw new Error(apiErrorMessage(json, t('common.actionFailed')));
       if (okMessage) onToast(okMessage, 'success');
       await load({ silent: true });
       return true;
@@ -164,7 +165,7 @@ function OrgPanel({ org, currentUserId, onToast }: { org: MyOrg; currentUserId: 
         body: JSON.stringify({ label: credLabel, token: credToken }),
       });
       const json = await res.json();
-      if (!res.ok || !json.success) throw new Error(json.message || t('common.actionFailed'));
+      if (!res.ok || !json.success) throw new Error(apiErrorMessage(json, t('common.actionFailed')));
       onToast(t('org.credential.saved', { org: org.name }), 'success');
       setCredLabel(''); setCredToken('');
       await loadCred();
@@ -179,7 +180,7 @@ function OrgPanel({ org, currentUserId, onToast }: { org: MyOrg; currentUserId: 
     try {
       const res = await fetch(`${API_BASE}/api/orgs/${org.id}/claude-credential`, { method: 'DELETE' });
       const json = await res.json();
-      if (!res.ok || !json.success) throw new Error(json.message || t('common.actionFailed'));
+      if (!res.ok || !json.success) throw new Error(apiErrorMessage(json, t('common.actionFailed')));
       onToast(t('org.credential.removed'), 'success');
       await loadCred();
     } catch (err) {
@@ -195,7 +196,7 @@ function OrgPanel({ org, currentUserId, onToast }: { org: MyOrg; currentUserId: 
         body: JSON.stringify({ email, role }),
       });
       const json = await res.json();
-      if (!res.ok || !json.success) throw new Error(json.message || t('common.actionFailed'));
+      if (!res.ok || !json.success) throw new Error(apiErrorMessage(json, t('common.actionFailed')));
       const addr = email.trim();
       onToast(json.data?.invited
         ? (json.data?.emailSent ? t('org.toast.invited', { email: addr }) : t('org.toast.invitedNoMail', { email: addr }))

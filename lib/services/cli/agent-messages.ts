@@ -317,8 +317,36 @@ export const handleToolPlaceholderMessage = async (
   return true;
 };
 
-/** What processMessage recognized (callers key follow-up bookkeeping off this). */
-export type AgentMessageKind = 'init' | 'assistant' | 'result' | null;
+/**
+ * What processMessage recognized (callers key follow-up bookkeeping off this).
+ * 'result' = the turn finished successfully (request marked completed +
+ * 'completed' published); 'result_error' = the turn ended with a non-success
+ * subtype — NOTHING is marked/published, the caller must fail the turn.
+ */
+export type AgentMessageKind = 'init' | 'assistant' | 'result' | 'result_error' | null;
+
+/** Only an explicit 'success' subtype is a finished turn (a usage-policy
+ *  refusal also reports 'success'); error_during_execution, error_max_turns, …
+ *  are failures. */
+export function isSuccessfulResult(message: { subtype?: unknown }): boolean {
+  return message.subtype === 'success';
+}
+
+/** Whether an assistant message's content is real agent output (text, thinking
+ *  or a tool call) — i.e. the turn got far enough that it may have edited files
+ *  and must not be silently re-run. */
+export function assistantContentHasOutput(content: unknown): boolean {
+  if (typeof content === 'string') return content.trim().length > 0;
+  if (!Array.isArray(content)) return false;
+  return content.some((block) => {
+    if (!block || typeof block !== 'object') return false;
+    const b = block as { type?: unknown; text?: unknown; thinking?: unknown };
+    if (b.type === 'tool_use') return true;
+    if (b.type === 'text') return typeof b.text === 'string' && b.text.trim().length > 0;
+    if (b.type === 'thinking') return typeof b.thinking === 'string' && b.thinking.trim().length > 0;
+    return false;
+  });
+}
 
 export interface AgentMessageProcessorContext {
   projectId: string;
@@ -342,6 +370,10 @@ export function createAgentMessageProcessor(ctx: AgentMessageProcessorContext) {
   const placeholderHistory = new Map<string, Set<string>>();
   const persistedToolMessageSignatures = new Set<string>();
   const completedStreamSessions = new Set<string>();
+  // Turn-level facts the executors need to decide between "retry in a fresh
+  // session" (failed before any output) and "surface the failure".
+  let producedOutput = false;
+  let failedSubtype: string | undefined;
 
   const markPlaceholderHandled = (sessionKey: string, placeholder: string): boolean => {
     const normalized = placeholder.trim();
@@ -412,6 +444,7 @@ export function createAgentMessageProcessor(ctx: AgentMessageProcessorContext) {
       // BEFORE the stream-dedupe early-return: the in-process path handles the
       // content via stream events, but the usage only rides the whole message.
       recordAssistantUsage(projectId, assistantMessage?.usage, assistantMessage?.model);
+      if (assistantContentHasOutput(assistantMessage?.content)) producedOutput = true;
 
       if (completedStreamSessions.has(sessionKey)) {
         completedStreamSessions.delete(sessionKey);
@@ -554,6 +587,13 @@ export function createAgentMessageProcessor(ctx: AgentMessageProcessorContext) {
           console.error('[ClaudeService] Failed to book run cost:', error);
         }
       }
+      // A non-success subtype (error_during_execution, error_max_turns, …) is a
+      // FAILED turn: don't mark it completed or announce 'completed' — the
+      // executor turns it into a user-facing failure (and a terminal 'failed').
+      if (!isSuccessfulResult(message)) {
+        failedSubtype = typeof message.subtype === 'string' ? message.subtype : 'unknown';
+        return 'result_error';
+      }
       // Commit the terminal DB status BEFORE announcing completion. The client's
       // busy→idle edge auto-sends the next queued message on this 'completed'
       // event; if we published first, that POST's DB backstop check could still
@@ -568,6 +608,10 @@ export function createAgentMessageProcessor(ctx: AgentMessageProcessorContext) {
 
   return {
     processMessage,
+    /** The turn emitted assistant text/thinking or a tool call. */
+    hasProducedOutput: () => producedOutput,
+    /** The subtype of a non-success `result`, if the turn ended with one. */
+    failedResultSubtype: () => failedSubtype,
     markPlaceholderHandled,
     persistedToolMessageSignatures,
     completedStreamSessions,

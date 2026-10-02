@@ -3,6 +3,7 @@
  * Skills are auto-loaded by the agent (settingSources: ['project','user']).
  */
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { apiErrorMessage, responseErrorMessage } from '@/lib/client/api-error';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? '';
 
@@ -154,7 +155,7 @@ export function SkillsSettings({ projectId }: SkillsSettingsProps) {
       });
       const json = await res.json();
       if (!res.ok || json?.success === false) {
-        setError(json?.error || 'Failed to save skill');
+        setError(apiErrorMessage(json, 'Failed to save skill'));
         return;
       }
       resetForm();
@@ -173,8 +174,7 @@ export function SkillsSettings({ projectId }: SkillsSettingsProps) {
         method: 'DELETE',
       });
       if (!r.ok) {
-        const msg = await r.json().then((j) => j?.error || j?.message).catch(() => null);
-        setError(msg || `Failed to delete skill (${r.status})`);
+        setError(await responseErrorMessage(r, `Failed to delete skill (${r.status})`));
         return;
       }
       if (editing === skillName) resetForm();

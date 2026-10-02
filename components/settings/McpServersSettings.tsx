@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useCallback, useEffect, useState } from 'react';
+import { apiErrorMessage, responseErrorMessage } from '@/lib/client/api-error';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? '';
 
@@ -75,7 +76,7 @@ export default function McpServersSettings({ projectId }: Props) {
         setCatalog(Array.isArray(d) ? [] : d.catalog ?? []);
         setAccountConnectors(Array.isArray(d) ? false : !!d.accountConnectors);
         setShared(Array.isArray(d) ? [] : d.shared ?? []);
-      } else setError(json?.error || 'Failed to load MCP servers');
+      } else setError(apiErrorMessage(json, 'Failed to load MCP servers'));
     } catch {
       setError('Failed to load MCP servers');
     } finally {
@@ -103,7 +104,7 @@ export default function McpServersSettings({ projectId }: Props) {
         }),
       });
       const json = await res.json();
-      if (!res.ok || !json?.success) throw new Error(json?.error || `Failed to add ${entry.label}`);
+      if (!res.ok || !json?.success) throw new Error(apiErrorMessage(json, `Failed to add ${entry.label}`));
       await load();
     } catch (e) {
       setError(e instanceof Error ? e.message : `Failed to add ${entry.label}`);
@@ -117,17 +118,32 @@ export default function McpServersSettings({ projectId }: Props) {
     try {
       const res = await fetch(`${API_BASE}/api/projects/${projectId}/mcp-servers/${s.id}/oauth/start`, { method: 'POST' });
       const json = await res.json();
-      if (!res.ok || !json?.success || !json.data?.authUrl) throw new Error(json?.error || 'Could not start authentication');
+      if (!res.ok || !json?.success || !json.data?.authUrl) throw new Error(apiErrorMessage(json, 'Could not start authentication'));
       window.location.assign(json.data.authUrl); // redirect to the provider's consent screen
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Authentication failed to start');
     }
   };
 
-  const disconnect = async (s: McpServerView) => {
-    await fetch(`${API_BASE}/api/projects/${projectId}/mcp-servers/${s.id}/oauth/disconnect`, { method: 'POST' });
+  // Run a mutation, surface the server's error text on failure, and always
+  // reload so the list shows the real (server) state afterwards.
+  const mutate = async (url: string, init: RequestInit, fallback: string) => {
+    setError(null);
+    try {
+      const res = await fetch(url, init);
+      if (!res.ok) setError(await responseErrorMessage(res, fallback));
+    } catch {
+      setError(`${fallback} (network error).`);
+    }
     await load();
   };
+
+  const disconnect = (s: McpServerView) =>
+    mutate(
+      `${API_BASE}/api/projects/${projectId}/mcp-servers/${s.id}/oauth/disconnect`,
+      { method: 'POST' },
+      `Could not disconnect ${s.label || s.name}`,
+    );
 
   const submit = async () => {
     setSaving(true);
@@ -156,7 +172,7 @@ export default function McpServersSettings({ projectId }: Props) {
         body: JSON.stringify(body),
       });
       const json = await res.json();
-      if (!res.ok || !json?.success) throw new Error(json?.error || 'Failed to add server');
+      if (!res.ok || !json?.success) throw new Error(apiErrorMessage(json, 'Failed to add server'));
       setForm({ ...EMPTY_FORM });
       setAdding(false);
       await load();
@@ -167,18 +183,24 @@ export default function McpServersSettings({ projectId }: Props) {
     }
   };
 
-  const toggle = async (s: McpServerView) => {
-    await fetch(`${API_BASE}/api/projects/${projectId}/mcp-servers/${s.id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ enabled: !s.enabled }),
-    });
-    await load();
-  };
+  const toggle = (s: McpServerView) =>
+    mutate(
+      `${API_BASE}/api/projects/${projectId}/mcp-servers/${s.id}`,
+      {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled: !s.enabled }),
+      },
+      `Could not ${s.enabled ? 'disable' : 'enable'} ${s.label || s.name}`,
+    );
 
   const remove = async (s: McpServerView) => {
-    await fetch(`${API_BASE}/api/projects/${projectId}/mcp-servers/${s.id}`, { method: 'DELETE' });
-    await load();
+    if (!window.confirm(`Remove the MCP server "${s.label || s.name}" from this project?`)) return;
+    await mutate(
+      `${API_BASE}/api/projects/${projectId}/mcp-servers/${s.id}`,
+      { method: 'DELETE' },
+      `Could not remove ${s.label || s.name}`,
+    );
   };
 
   return (

@@ -23,10 +23,13 @@ export async function POST(_request: Request, { params }: RouteContext) {
     });
   } catch (error) {
     console.error('[API] Failed to push to GitHub:', error);
-    const status = error instanceof Error && 'status' in error ? (error as any).status ?? 500 : 500;
+    const rawStatus = error instanceof Error && 'status' in error ? (error as { status?: unknown }).status : undefined;
+    const status = typeof rawStatus === 'number' && rawStatus >= 400 && rawStatus < 600 ? rawStatus : 500;
     return NextResponse.json(
       {
         success: false,
+        // e.g. 409 while an agent turn is still editing the project (see
+        // pushProjectToGitHub) — the client shows `message` to the user.
         error: 'Failed to push to GitHub',
         message: error instanceof Error ? error.message : 'Unknown error',
       },

@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { addedToOrgEmail, inviteEmail, mailEnabled, sendMail } from './mail';
+import { nl } from '@/lib/i18n/messages/nl';
 
 const ENV = { ...process.env };
 
@@ -70,6 +71,14 @@ describe('templates', () => {
     expect(m.text).toContain('admin@newstory.nl');
     expect(m.html).toContain('https://claudable.example.test/login');
     expect(m.html).not.toContain('<script');
+  });
+
+  it('invitation quotes exactly the Dutch e-mail-code button label of the login page', () => {
+    const m = inviteEmail({ to: 'x@y.nl', orgName: 'Acme', role: 'lid', expiresAt: new Date() });
+    const label = nl['login.emailCode.open'];
+    expect(label).toBe('Inloggen met e-mailcode');
+    expect(m.text).toContain(`("${label}")`);
+    expect(m.html).toContain(`&ldquo;${label}&rdquo;`);
   });
 
   it('escapes HTML in user-controlled fields', () => {

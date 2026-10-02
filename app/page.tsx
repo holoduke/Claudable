@@ -20,6 +20,7 @@ import { getDefaultModelForCli, getModelDisplayName } from '@/lib/constants/cliM
 import Image from 'next/image';
 import { Image as ImageIcon, Palette, Layers, Server, Database, Sparkles, Search, Building2 } from 'lucide-react';
 import BrandWordmark from '@/components/ui/BrandWordmark';
+import { apiErrorMessage, deriveProjectName } from '@/lib/utils/home-helpers';
 import type { Project as ProjectSummary } from '@/types/project';
 import { fetchCliStatusSnapshot, createCliStatusFallback } from '@/hooks/useCLI';
 import type { CLIStatus } from '@/types/cli';
@@ -78,6 +79,9 @@ export default function HomePage() {
   const t = useT();
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
   const [projectsLoaded, setProjectsLoaded] = useState(false);
+  // A failed list load must not look like an empty account ("create your first
+  // project") — it gets its own error state with a retry.
+  const [projectsError, setProjectsError] = useState(false);
   // Bumped after background thumbnail refreshes; cache-busts the tile images.
   const [thumbsVersion, setThumbsVersion] = useState(0);
   const [showCreate, setShowCreate] = useState(false);
@@ -352,14 +356,14 @@ export default function HomePage() {
       const r = await fetchAPI(`${API_BASE}/api/projects`);
       if (!r.ok) {
         console.warn('Failed to load projects: HTTP', r.status);
-        setProjects([]);
+        setProjectsError(true);
         return;
       }
 
       const payload = await r.json();
       if (payload?.success === false) {
         console.error('Failed to load projects:', payload?.error || payload?.message);
-        setProjects([]);
+        setProjectsError(true);
         return;
       }
 
@@ -384,6 +388,7 @@ export default function HomePage() {
       });
 
       setProjects(sortedProjects);
+      setProjectsError(false);
 
       // Refresh thumbnails for projects whose preview is RUNNING right now
       // (the server no-ops instantly for stopped previews and never overwrites
@@ -404,7 +409,7 @@ export default function HomePage() {
       })();
     } catch (error) {
       console.warn('Failed to load projects:', error);
-      setProjects([]);
+      setProjectsError(true);
     } finally {
       setProjectsLoaded(true);
     }
@@ -460,16 +465,16 @@ export default function HomePage() {
       const response = await fetchAPI(`${API_BASE}/api/projects/${deleteModal.project.id}`, { method: 'DELETE' });
       
       if (response.ok) {
-        showToast('Project deleted successfully', 'success');
+        showToast(t('home.deleted'), 'success');
         await load();
         closeDeleteModal();
       } else {
-        const errorData = await response.json().catch(() => ({ detail: 'Failed to delete project' }));
-        showToast(errorData.detail || 'Failed to delete project', 'error');
+        const errorData = await response.json().catch(() => null);
+        showToast(apiErrorMessage(errorData, t('home.deleteFailed')), 'error');
       }
     } catch (error) {
       console.warn('Failed to delete project:', error);
-      showToast('Failed to delete project. Please try again.', 'error');
+      showToast(t('home.deleteFailedRetry'), 'error');
     } finally {
       setIsDeleting(false);
     }
@@ -484,16 +489,16 @@ export default function HomePage() {
       });
       
       if (response.ok) {
-        showToast('Project updated successfully', 'success');
+        showToast(t('home.updated'), 'success');
         await load();
         setEditingProject(null);
       } else {
-        const errorData = await response.json().catch(() => ({ detail: 'Failed to update project' }));
-        showToast(errorData.detail || 'Failed to update project', 'error');
+        const errorData = await response.json().catch(() => null);
+        showToast(apiErrorMessage(errorData, t('home.updateFailed')), 'error');
       }
     } catch (error) {
       console.warn('Failed to update project:', error);
-      showToast('Failed to update project. Please try again.', 'error');
+      showToast(t('home.updateFailedRetry'), 'error');
     }
   }
 
@@ -595,7 +600,7 @@ export default function HomePage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           project_id: projectId,
-          name: prompt.slice(0, 50) + (prompt.length > 50 ? '...' : ''),
+          name: deriveProjectName(prompt, uploadedImages.map((f) => f.name), t('home.untitledProject')),
           initialPrompt: prompt.trim(),
           preferredCli: selectedAssistant,
           selectedModel,
@@ -611,7 +616,7 @@ export default function HomePage() {
       if (!response.ok) {
         const errorData = await response.json().catch(() => null);
         console.error('Failed to create project:', errorData);
-        showToast('Failed to create project', 'error');
+        showToast(apiErrorMessage(errorData, t('home.createFailed')), 'error');
         setIsCreatingProject(false);
         return;
       }
@@ -621,7 +626,7 @@ export default function HomePage() {
       const createdProjectId: string | undefined = projectData?.id ?? projectId;
       if (!createdProjectId) {
         console.error('Create project response missing id:', payload);
-        showToast('Failed to create project (invalid response)', 'error');
+        showToast(t('home.createFailed'), 'error');
         setIsCreatingProject(false);
         return;
       }
@@ -722,7 +727,7 @@ export default function HomePage() {
       
     } catch (error) {
       console.error('Failed to create project:', error);
-      showToast('Failed to create project', 'error');
+      showToast(t('home.createFailed'), 'error');
     } finally {
       setIsCreatingProject(false);
     }
@@ -1553,7 +1558,23 @@ export default function HomePage() {
             </form>
             )}
             
-            {projects.length === 0 && projectsLoaded && (
+            {projectsError && projectsLoaded && (
+              <div className="mt-12 w-full max-w-3xl mx-auto">
+                <div role="alert" className="rounded-2xl border border-red-200 dark:border-red-500/25 bg-white dark:bg-white/3 px-6 py-10 flex flex-col items-center text-center">
+                  <h3 className="text-base font-semibold text-gray-900 dark:text-gray-50">{t('home.loadErrorTitle')}</h3>
+                  <p className="mt-2 text-sm text-gray-500 dark:text-gray-400 max-w-md">{t('home.loadErrorBody')}</p>
+                  <button
+                    type="button"
+                    onClick={() => { void load(); }}
+                    className="mt-5 px-4 py-2 text-sm font-medium rounded-lg bg-brand-500 hover:bg-brand-600 text-white"
+                  >
+                    {t('common.retry')}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {projects.length === 0 && projectsLoaded && !projectsError && (
               <div className="mt-12 w-full max-w-3xl mx-auto">
                 <div className="rounded-2xl border border-gray-200 dark:border-white/8 bg-white dark:bg-white/3 px-6 py-12 flex flex-col items-center text-center">
                   <div className="w-12 h-12 rounded-xl bg-brand-500/10 text-brand-500 flex items-center justify-center mb-4">

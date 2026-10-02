@@ -4,6 +4,7 @@ import { signOutAction } from '@/app/actions/auth';
 import { useI18n } from '@/contexts/I18nContext';
 import type { MyOrg } from './MyOrgSettings';
 import ApiTokensSection from './ApiTokensSection';
+import { apiErrorMessage } from '@/lib/client/api-error';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? '';
 
@@ -47,7 +48,7 @@ export default function MyAccountSettings({ user, onToast, onChanged }: MyAccoun
       });
       if (!res.ok) {
         const j = await res.json().catch(() => null);
-        throw new Error(j?.error?.message || j?.message || `HTTP ${res.status}`);
+        throw new Error(apiErrorMessage(j, `HTTP ${res.status}`));
       }
       setItops(next);
       onChanged?.();

@@ -3,6 +3,7 @@
  * Manage environment variables
  */
 import React, { useState, useEffect, useCallback } from 'react';
+import { responseErrorMessage } from '@/lib/client/api-error';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? '';
 
@@ -10,20 +11,17 @@ interface EnvironmentVariable {
   key: string;
   value: string;
   isSecret?: boolean;
+  /** 'file' = only in the project's .env (written by the agent/import), not yet managed here. */
+  source?: 'db' | 'file';
 }
 
 interface EnvironmentSettingsProps {
   projectId: string;
 }
 
-/** Read the API's error text; fall back to the status code. */
-async function errText(response: Response): Promise<string> {
-  try {
-    const j = await response.json();
-    return j?.error || j?.message || `Request failed (${response.status})`;
-  } catch {
-    return `Request failed (${response.status})`;
-  }
+/** Read the API's human error text; fall back to the status code. */
+function errText(response: Response): Promise<string> {
+  return responseErrorMessage(response);
 }
 
 export function EnvironmentSettings({ projectId }: EnvironmentSettingsProps) {
@@ -53,10 +51,11 @@ export function EnvironmentSettings({ projectId }: EnvironmentSettingsProps) {
       // API rows use snake_case (is_secret) — map to the UI shape so secrets
       // stay masked after a reload.
       const rows = Array.isArray(data) ? data : [];
-      setVariables(rows.map((r: { key: string; value: string; is_secret?: boolean; isSecret?: boolean }) => ({
+      setVariables(rows.map((r: { key: string; value: string; is_secret?: boolean; isSecret?: boolean; source?: string }) => ({
         key: r.key,
         value: r.value,
         isSecret: Boolean(r.is_secret ?? r.isSecret),
+        source: r.source === 'file' ? 'file' : 'db',
       })));
     } catch (err) {
       console.error('Failed to load environment variables:', err);
@@ -91,7 +90,11 @@ export function EnvironmentSettings({ projectId }: EnvironmentSettingsProps) {
         setError(await errText(response));
         return;
       }
-      setVariables([...variables, { key: newKey, value: newValue, isSecret }]);
+      // A key that already existed only in .env is now managed here — replace its row.
+      setVariables([
+        ...variables.filter((v) => v.key !== newKey),
+        { key: newKey, value: newValue, isSecret, source: 'db' },
+      ]);
       setNewKey('');
       setNewValue('');
       setIsSecret(false);
@@ -120,7 +123,8 @@ export function EnvironmentSettings({ projectId }: EnvironmentSettingsProps) {
         return;
       }
       const updated = [...variables];
-      updated[index] = { ...variable, value: editValue };
+      // Saving a file-only key adopts it into Project Settings.
+      updated[index] = { ...variable, value: editValue, source: 'db' };
       setVariables(updated);
       setEditingIndex(null);
     } catch (err) {
@@ -160,6 +164,11 @@ export function EnvironmentSettings({ projectId }: EnvironmentSettingsProps) {
         <h3 className="text-lg font-medium text-gray-900 dark:text-gray-50 mb-4">
           Environment Variables
         </h3>
+
+        <p className="mb-4 text-xs text-gray-500 dark:text-gray-400">
+          Variables are written to the project&apos;s <code className="font-mono">.env</code>. Keys marked
+          &ldquo;from .env&rdquo; were added by the agent or an import; editing one brings it under Project Settings.
+        </p>
 
         {error && (
           <div className="mb-4 flex items-start justify-between gap-3 text-xs text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg px-3 py-2">
@@ -221,6 +230,14 @@ export function EnvironmentSettings({ projectId }: EnvironmentSettingsProps) {
                     <span className="flex-1 font-mono text-sm text-gray-600 dark:text-gray-300 ">
                       {variable.isSecret ? '••••••••' : variable.value}
                     </span>
+                    {variable.source === 'file' && (
+                      <span
+                        className="text-xs px-2 py-1 bg-gray-200 dark:bg-white/8 text-gray-600 dark:text-gray-300 rounded-sm whitespace-nowrap"
+                        title="Only present in the project's .env file (written by the agent or an import)"
+                      >
+                        from .env
+                      </span>
+                    )}
                     {variable.isSecret && (
                       <span className="text-xs px-2 py-1 bg-yellow-100 text-yellow-700 rounded-sm">
                         Secret

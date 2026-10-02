@@ -19,7 +19,7 @@ import { serializeMessage, createRealtimeMessage } from '@/lib/serializers/chat'
 import { getProjectById } from '../project';
 import { syncProjectSkills, hasDisabledSkills } from '../skills';
 import { pluginsHostDir, resolveEnabledPluginDirs } from '../plugins';
-import { isTechnicalNoise, toUserFacingAgentError } from './agent-error';
+import { AgentResumeRetryableError, describeFailedResultSubtype, isTechnicalNoise, toUserFacingAgentError } from './agent-error';
 import { CLAUDE_SYSTEM_PROMPT } from './prompts/claude-system-prompt';
 import { NEXT_SYSTEM_PROMPT } from './prompts/next-system-prompt';
 import { ANGULAR_SYSTEM_PROMPT } from './prompts/angular-system-prompt';
@@ -400,6 +400,8 @@ async function runContainerizedTurn(args: {
   modelLabel: string;
   sessionId?: string;
   requestId?: string;
+  /** Extended-thinking mode — mapped onto CLI env/flags in buildAgentContainerArgs. */
+  thinkingMode?: ThinkingMode;
   itopsEnabled: boolean;
   /** Who triggered the run — gates private-credential use (see resolveProjectClaudeToken). */
   requesterUserId?: string;
@@ -415,6 +417,9 @@ async function runContainerizedTurn(args: {
   await args.safeMarkRunning();
 
   let mcp: Awaited<ReturnType<typeof prepareAgentMcpTurnConfig>> = null;
+  // Hoisted so the failure path can tell "failed before any output" (safe to
+  // retry in a fresh session) from "failed mid-edit" (must be surfaced).
+  let processor: ReturnType<typeof createAgentMessageProcessor> | null = null;
   try {
     const project = await getProjectById(projectId);
     if (!project) {
@@ -515,13 +520,14 @@ async function runContainerizedTurn(args: {
       homeLocalPath,
     });
 
-    const processor = createAgentMessageProcessor({
+    const turnProcessor = createAgentMessageProcessor({
       projectId,
       requestId,
       publishStatus: args.publishStatus,
       markCompleted: args.safeMarkCompleted,
       billing: run.billing,
     });
+    processor = turnProcessor;
 
     // stream-json events arrive on stdout; chain handling onto a queue so
     // messages persist + publish strictly in order. Capture the final result's
@@ -536,7 +542,7 @@ async function runContainerizedTurn(args: {
         resultSubtype = (e as { subtype?: string }).subtype;
       }
       queue = queue
-        .then(() => processor.processMessage(e as Parameters<typeof processor.processMessage>[0]))
+        .then(() => turnProcessor.processMessage(e as Parameters<typeof turnProcessor.processMessage>[0]))
         .then((kind) => {
           if (kind === 'result') sawResult = true;
         })
@@ -592,6 +598,7 @@ async function runContainerizedTurn(args: {
         oauthToken,
         model: resolvedModel,
         sessionId,
+        thinkingMode: args.thinkingMode,
         sandboxNet: defaultAgentSandboxNet(),
         projectNet,
         systemPrompt,
@@ -658,18 +665,21 @@ async function runContainerizedTurn(args: {
     // Success = the CLI reported a `result` with subtype 'success' (this covers a
     // usage-policy refusal, which still "succeeds" at producing its message). A
     // nonzero exit, a non-success subtype (e.g. 'error_during_execution' from a
-    // stale --resume), or no result at all is a REAL failure → throw so
-    // applyChanges can retry with a fresh session and the user isn't left with a
-    // silent dead turn.
+    // stale --resume), or no result at all is a REAL failure → throw. The catch
+    // below either hands it to applyChanges for a fresh-session retry (resume
+    // failed before any output) or surfaces it and marks the request failed.
     const turnSucceeded = resultSubtype === 'success';
     if (resultSubtype === 'error_max_budget_usd') {
       throw new AgentTurnNonRetryableError(BUDGET_STOPPED_MESSAGE);
     }
     if (!turnSucceeded) {
-      throw new Error(
-        result.error?.trim() ||
-        (resultSubtype ? `Agent turn failed (${resultSubtype}).` : `Agent container exited with code ${result.code}.`),
-      );
+      // A non-success `result` gets a friendly explanation (the raw stderr tail
+      // is logged); no result at all falls back to the stderr / exit code.
+      if (resultSubtype) {
+        if (result.error?.trim()) console.error('[ClaudeContainer] stderr tail:', result.error.trim());
+        throw new Error(describeFailedResultSubtype(resultSubtype));
+      }
+      throw new Error(result.error?.trim() || `Agent container exited with code ${result.code}.`);
     }
 
     // The CLI's final `result` event already published completed + marked the
@@ -685,10 +695,13 @@ async function runContainerizedTurn(args: {
     // even on a resume attempt, and tell applyChanges not to retry.
     const nonRetryable = error instanceof AgentRunRefusedError || error instanceof AgentTurnNonRetryableError;
 
-    // When this attempt will be retried (e.g. a failed session resume), stay
-    // silent so the user doesn't see a spurious error — just rethrow.
-    if (args.suppressUserError && !nonRetryable) {
-      throw new Error(errorMessage);
+    // A resumed turn that failed BEFORE any assistant/tool output (stale session,
+    // CLI refused to resume) is retried once in a fresh session by applyChanges:
+    // stay silent so the user doesn't see a spurious error. Once the agent has
+    // produced output it may have edited files — re-running the whole
+    // instruction would duplicate work, so surface the failure instead.
+    if (args.suppressUserError && !nonRetryable && !processor?.hasProducedOutput()) {
+      throw new AgentResumeRetryableError(errorMessage);
     }
 
     // The raw error can be a stderr tail full of stack frames (e.g. a failed
@@ -851,6 +864,7 @@ export async function executeClaude(
       modelLabel,
       sessionId,
       requestId,
+      thinkingMode: options.thinkingMode,
       itopsEnabled: options.requesterItopsEnabled === true,
       requesterUserId: options.requesterUserId,
       suppressUserError: options.suppressUserError === true,
@@ -1279,6 +1293,14 @@ export async function executeClaude(
       }
     }
 
+    // The stream ended normally but the turn's `result` was an error subtype
+    // (error_during_execution, error_max_turns, …): that is a failed turn, not
+    // a completed one.
+    const failedSubtype = processor.failedResultSubtype();
+    if (failedSubtype) {
+      throw new Error(describeFailedResultSubtype(failedSubtype));
+    }
+
     console.log('[ClaudeService] Streaming completed');
     await safeMarkCompleted();
     if (!emittedCompletedStatus) {
@@ -1325,8 +1347,13 @@ export async function executeClaude(
     console.error(`[ClaudeService] Failed to execute Claude:`, error);
 
     let errorMessage = 'Unknown error';
+    const failedResultSubtype = processor.failedResultSubtype();
 
-    if (error instanceof Error) {
+    if (failedResultSubtype) {
+      // The SDK reported a non-success result (it may also have thrown a bare
+      // "process exited with code 1" after it): explain the subtype instead.
+      errorMessage = describeFailedResultSubtype(failedResultSubtype);
+    } else if (error instanceof Error) {
       errorMessage = error.message;
 
       // Detect Claude Code CLI not installed
@@ -1372,10 +1399,11 @@ export async function executeClaude(
       }
     }
 
-    // When this attempt will be retried (e.g. a failed session resume), stay
-    // silent so the user doesn't see a spurious error — just rethrow.
-    if (options.suppressUserError) {
-      throw new Error(errorMessage);
+    // A resumed turn that failed before producing any output is retried once in
+    // a fresh session by applyChanges — stay silent. After output, surface it
+    // (re-running the instruction would redo edits the agent already made).
+    if (options.suppressUserError && !processor.hasProducedOutput()) {
+      throw new AgentResumeRetryableError(errorMessage);
     }
 
     await safeMarkFailed(errorMessage);
@@ -1427,11 +1455,32 @@ export async function executeClaude(
  * wrong for the others — a Filament project would be told to build Nuxt on a
  * Laravel repo and (correctly) refuse.
  */
-function buildInitialBuildPrompt(
+export function buildInitialBuildPrompt(
   templateType: string | null | undefined,
   initialPrompt: string,
 ): string {
+  // A slash command (e.g. "/filament:new-project …" from the home plugin menu)
+  // must reach Claude Code verbatim as the FIRST token, or it isn't run as a
+  // command. The stack's system prompt still applies.
+  if (initialPrompt.trimStart().startsWith('/')) {
+    return initialPrompt.trim();
+  }
+  if (templateType === 'document') {
+    return `
+Create the HTML document described below:
+${initialPrompt}
+
+Write it into index.html in the project root as ONE self-contained file with inline <style> — no framework, no npm, no build step. Keep it print-first: preserve the @page (A4) rule and the @media print block, lay the content out across .page sections, and avoid JavaScript-dependent content and external CDNs (the PDF export renders offline).
+`.trim();
+  }
   switch (stackKind(templateType)) {
+    case 'static':
+      return `
+Implement the following in this existing project:
+${initialPrompt}
+
+Read the project first to learn its actual stack and conventions, then make the change in place. Do NOT introduce a framework, bundler or package manager the project does not already use.
+`.trim();
     case 'laravel':
       return `
 Extend the NewStory Filament CMS (Laravel + Filament) that is ALREADY scaffolded in this project under src/. Implement the following:
@@ -1492,6 +1541,12 @@ export async function initializeNextJsProject(
  * @param sessionId - Session ID
  * @param requestId - (Optional) User request tracking ID
  */
+/** applyChanges' retry rule: a resumed turn is re-run in a fresh session only
+ *  when it failed before producing any output. Exported for tests. */
+export function shouldRetryInFreshSession(sessionId: string | undefined, error: unknown): boolean {
+  return Boolean(sessionId) && error instanceof AgentResumeRetryableError;
+}
+
 export async function applyChanges(
   projectId: string,
   projectPath: string,
@@ -1516,8 +1571,11 @@ export async function applyChanges(
   } catch (error) {
     // Resuming a corrupt/incompatible session can fail immediately (exit code 1 /
     // error_during_execution). Recover by retrying once with a fresh session —
-    // unless the turn ended for a reason a retry cannot fix (budget, no key).
-    if (sessionId && !(error instanceof AgentTurnNonRetryableError)) {
+    // but ONLY when the resumed attempt failed before producing any assistant/
+    // tool output (executeClaude signals that with AgentResumeRetryableError).
+    // Any other failure was already surfaced + marked failed: don't re-run an
+    // instruction the agent may already have partly applied.
+    if (shouldRetryInFreshSession(sessionId, error)) {
       console.warn('[ClaudeService] Resume failed; retrying with a fresh session:', error instanceof Error ? error.message : error);
       await executeClaude(projectId, projectPath, instruction, model, undefined, requestId, {
         thinkingMode,

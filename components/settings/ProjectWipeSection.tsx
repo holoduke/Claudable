@@ -4,6 +4,7 @@
  */
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { apiErrorMessage } from '@/lib/client/api-error';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? '';
 
@@ -43,7 +44,7 @@ export function ProjectWipeSection({ projectId }: { projectId: string }) {
     try {
       const res = await fetch(`${API_BASE}/api/projects/${encodeURIComponent(projectId)}/wipe`);
       const json = await res.json().catch(() => null);
-      if (!res.ok || !json?.success) throw new Error(json?.message || json?.error || 'Could not load what would be deleted.');
+      if (!res.ok || !json?.success) throw new Error(apiErrorMessage(json, 'Could not load what would be deleted.'));
       setPlan(json.data as WipePlan);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not load what would be deleted.');
@@ -63,7 +64,7 @@ export function ProjectWipeSection({ projectId }: { projectId: string }) {
         body: JSON.stringify({ confirmName: confirm, deleteDatabase, deleteRemoteRepo }),
       });
       const json = await res.json().catch(() => null);
-      if (!res.ok || !json?.success) throw new Error(json?.message || json?.error || 'Wipe failed.');
+      if (!res.ok || !json?.success) throw new Error(apiErrorMessage(json, 'Wipe failed.'));
       setResult(json.data as WipeResult);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Wipe failed.');

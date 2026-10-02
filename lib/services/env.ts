@@ -6,21 +6,14 @@ import { encrypt, decrypt } from '@/lib/crypto';
 import type { EnvVar } from '@prisma/client';
 import type { Project } from '@/types/backend';
 import { getProjectById } from '@/lib/services/project';
+import { mergeEnvView, parseEnvFile, patchEnvContents, type EnvPatch, type EnvVarRecord } from '@/lib/services/env-file';
+
+export type { EnvVarRecord } from '@/lib/services/env-file';
 
 const PROJECTS_DIR = process.env.PROJECTS_DIR || './data/projects';
 const PROJECTS_DIR_ABSOLUTE = path.isAbsolute(PROJECTS_DIR)
   ? PROJECTS_DIR
   : path.resolve(/* turbopackIgnore: true */ process.cwd(), PROJECTS_DIR);
-
-export interface EnvVarRecord {
-  id: string;
-  key: string;
-  value: string;
-  scope: string;
-  var_type: string;
-  is_secret: boolean;
-  description?: string | null;
-}
 
 interface CreateEnvVarInput {
   key: string;
@@ -61,6 +54,61 @@ function mapEnvVar(model: EnvVar): EnvVarRecord {
   };
 }
 
+async function readEnvFile(project: Project): Promise<string> {
+  try {
+    return await fs.readFile(envFilePath(project), 'utf8');
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return '';
+    throw error;
+  }
+}
+
+// Read-patch-write of .env must not interleave between two requests for the
+// same project (single Node server → an in-process chained-promise lock).
+const envFileLocks = new Map<string, Promise<unknown>>();
+
+async function withEnvFileLock<T>(projectId: string, fn: () => Promise<T>): Promise<T> {
+  const prev = envFileLocks.get(projectId) ?? Promise.resolve();
+  const run = prev.catch(() => {}).then(fn);
+  envFileLocks.set(projectId, run);
+  try {
+    return await run;
+  } finally {
+    if (envFileLocks.get(projectId) === run) envFileLocks.delete(projectId);
+  }
+}
+
+/**
+ * Patch the project's .env: only the keys in `patch` change; every other line
+ * (keys the agent/import wrote, comments, blank lines) is preserved.
+ */
+async function patchProjectEnvFile(project: Project, patch: EnvPatch): Promise<void> {
+  await withEnvFileLock(project.id, async () => {
+    const repoEnvPath = envFilePath(project);
+    const current = await readEnvFile(project);
+    const next = patchEnvContents(current, patch);
+    if (next === current) return;
+    await fs.mkdir(path.dirname(repoEnvPath), { recursive: true });
+    await fs.writeFile(repoEnvPath, next, 'utf8');
+  });
+}
+
+async function readFileVars(project: Project): Promise<Record<string, string>> {
+  return parseEnvFile(await readEnvFile(project));
+}
+
+/**
+ * The Settings → Envs view: DB rows plus keys that only exist in the project's
+ * .env (source: 'file'), so variables the agent/import wrote are visible and
+ * editable instead of silently invisible.
+ */
+export async function listEnvVarsForSettings(projectId: string): Promise<EnvVarRecord[]> {
+  const project = await ensureProject(projectId);
+  const [dbRows, fileVars] = await Promise.all([listEnvVars(projectId), readFileVars(project)]);
+  return mergeEnvView(dbRows, fileVars);
+}
+
+/** DB-stored env vars only (what previews/deploys inject). */
 export async function listEnvVars(projectId: string): Promise<EnvVarRecord[]> {
   const records = await prisma.envVar.findMany({
     where: { projectId },
@@ -81,7 +129,7 @@ export async function createEnvVar(
   projectId: string,
   input: CreateEnvVarInput,
 ): Promise<EnvVarRecord> {
-  await ensureProject(projectId);
+  const project = await ensureProject(projectId);
   try {
     const created = await prisma.envVar.create({
       data: {
@@ -95,7 +143,7 @@ export async function createEnvVar(
       },
     });
 
-    await syncDbToEnvFile(projectId);
+    await patchProjectEnvFile(project, { set: { [input.key]: input.value } });
     return mapEnvVar(created);
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
@@ -110,110 +158,72 @@ export async function updateEnvVar(
   key: string,
   value: string,
 ): Promise<boolean> {
-  await ensureProject(projectId);
-  try {
+  const project = await ensureProject(projectId);
+  const existing = await prisma.envVar.findUnique({
+    where: { projectId_key: { projectId, key } },
+  });
+  if (existing) {
     await prisma.envVar.update({
-      where: {
-        projectId_key: {
-          projectId,
-          key,
-        },
-      },
-      data: {
+      where: { projectId_key: { projectId, key } },
+      data: { valueEncrypted: encrypt(value) },
+    });
+  } else {
+    // A key that only lives in .env (agent/import wrote it): editing it in
+    // Settings adopts it into the DB. Unknown keys stay a 404.
+    const fileVars = await readFileVars(project);
+    if (!Object.prototype.hasOwnProperty.call(fileVars, key)) return false;
+    await prisma.envVar.upsert({
+      where: { projectId_key: { projectId, key } },
+      update: { valueEncrypted: encrypt(value) },
+      create: {
+        projectId,
+        key,
         valueEncrypted: encrypt(value),
+        scope: 'runtime',
+        varType: 'string',
+        isSecret: true,
+        description: 'Imported from .env',
       },
     });
-
-    await syncDbToEnvFile(projectId);
-    return true;
-  } catch (error) {
-    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2025') {
-      return false;
-    }
-    throw error;
   }
+
+  await patchProjectEnvFile(project, { set: { [key]: value } });
+  return true;
 }
 
 export async function deleteEnvVar(projectId: string, key: string): Promise<boolean> {
-  await ensureProject(projectId);
-  try {
-    await prisma.envVar.delete({
-      where: {
-        projectId_key: {
-          projectId,
-          key,
-        },
-      },
-    });
-
-    await syncDbToEnvFile(projectId);
-    return true;
-  } catch (error) {
-    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2025') {
-      return false;
-    }
-    throw error;
-  }
+  const project = await ensureProject(projectId);
+  const { count } = await prisma.envVar.deleteMany({ where: { projectId, key } });
+  const inFile = Object.prototype.hasOwnProperty.call(await readFileVars(project), key);
+  if (count === 0 && !inFile) return false;
+  if (inFile) await patchProjectEnvFile(project, { remove: [key] });
+  return true;
 }
 
+/**
+ * Write every DB-managed var into the project's .env. Merge, not overwrite:
+ * DB values win for DB keys, while keys that exist only in the file (written by
+ * the agent or an import), comments and blank lines are preserved.
+ */
 export async function syncDbToEnvFile(projectId: string): Promise<number> {
   const project = await ensureProject(projectId);
-  const repoEnvPath = envFilePath(project);
 
   const envVars = await prisma.envVar.findMany({
     where: { projectId },
     orderBy: { key: 'asc' },
   });
 
-  const entries = envVars.reduce<{ key: string; value: string }[]>((acc, envVar) => {
+  const set: Record<string, string> = {};
+  for (const envVar of envVars) {
     try {
-      acc.push({ key: envVar.key, value: decrypt(envVar.valueEncrypted) });
+      set[envVar.key] = decrypt(envVar.valueEncrypted);
     } catch (error) {
       console.warn(`[EnvService] Failed to decrypt env var ${envVar.key}:`, error);
     }
-    return acc;
-  }, []);
-
-  const header =
-    '# Environment Variables\n# This file is automatically synchronized with Project Settings\n\n';
-
-  const contents =
-    header +
-    entries
-      .map(({ key, value }) => {
-        if (value === undefined || value === null) {
-          return `${key}=`;
-        }
-        if (/[ \t#"$']/u.test(value)) {
-          return `${key}="${value.replace(/"/g, '\\"')}"`;
-        }
-        return `${key}=${value}`;
-      })
-      .join('\n') +
-    (entries.length > 0 ? '\n' : '');
-
-  await fs.mkdir(path.dirname(repoEnvPath), { recursive: true });
-  await fs.writeFile(repoEnvPath, contents, 'utf8');
-
-  return entries.length;
-}
-
-function parseEnvFile(contents: string): Record<string, string> {
-  const result: Record<string, string> = {};
-  const lines = contents.split(/\r?\n/);
-  for (const raw of lines) {
-    const line = raw.trim();
-    if (!line || line.startsWith('#')) continue;
-    const match = line.match(/^([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$/);
-    if (!match) continue;
-    const [, key, rawValue] = match;
-    let value = rawValue;
-    if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
-      value = value.slice(1, -1);
-    }
-    result[key] = value;
   }
-  return result;
+
+  await patchProjectEnvFile(project, { set });
+  return Object.keys(set).length;
 }
 
 export async function syncEnvFileToDb(projectId: string): Promise<number> {
@@ -348,6 +358,7 @@ export async function upsertEnvVar(
   projectId: string,
   input: CreateEnvVarInput,
 ): Promise<EnvVarRecord> {
+  const project = await ensureProject(projectId);
   const updated = await prisma.envVar.upsert({
     where: {
       projectId_key: {
@@ -373,6 +384,6 @@ export async function upsertEnvVar(
     },
   });
 
-  await syncDbToEnvFile(projectId);
+  await patchProjectEnvFile(project, { set: { [input.key]: input.value } });
   return mapEnvVar(updated);
 }

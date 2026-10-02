@@ -44,6 +44,8 @@ import { useDeployPolling } from '@/hooks/useDeployPolling';
 import { useProjectBranches } from '@/hooks/useProjectBranches';
 import { useGlobalSettings } from '@/contexts/GlobalSettingsContext';
 import { getDefaultModelForCli, getModelDisplayName } from '@/lib/constants/cliModels';
+import { normalizePreviewRoute } from '@/lib/utils/preview-route';
+import { readSendError, isHardBusyError, queueRetryDelayMs } from '@/lib/utils/send-error';
 import {
   ACTIVE_CLI_BRAND_COLORS,
   ACTIVE_CLI_IDS,
@@ -233,6 +235,12 @@ export default function ChatPage() {
   // fire the queued messages — instead they return to the input box. Consumed by
   // the queue-flush effect on the busy->idle edge the interrupt causes.
   const interruptedRef = useRef(false);
+  // Queued-message flush pacing (see sendQueuedMessage).
+  const queueRetryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const queueRetryAttemptRef = useRef(0);
+  const queueFlushInFlightRef = useRef(false);
+  const queuedMessagesRef = useRef<Array<{ message: string; images: any[] }>>([]);
+  const sendQueuedMessageRef = useRef<(next: { message: string; images: any[] }) => void>(() => {});
   const [isSseFallbackActive, setIsSseFallbackActive] = useState(false);
   const [showPreview, setShowPreview] = useState(true);
   // Design Explorer board (a third view alongside Preview/Code).
@@ -558,6 +566,65 @@ export default function ChatPage() {
     return () => clearTimeout(t);
   }, [isRunning, projectId]);
 
+  // Send one queued message (already removed from the queue). A "busy" 409 puts
+  // it back at the front and retries after a backoff timer — never straight
+  // away, or the idle edge produced by the failed send itself would hot-loop.
+  // Any other failure hands the text back to the composer instead of dropping it.
+  const sendQueuedMessage = useCallback((next: { message: string; images: any[] }) => {
+    queueFlushInFlightRef.current = true;
+    void Promise.resolve(runActRef.current?.(next.message, next.images)).then((res) => {
+      queueFlushInFlightRef.current = false;
+      if (!res || res.ok) { queueRetryAttemptRef.current = 0; return; }
+      if (res.busy) {
+        setQueuedMessages((q) => [next, ...q]);
+        const delay = queueRetryDelayMs(queueRetryAttemptRef.current);
+        queueRetryAttemptRef.current += 1;
+        if (queueRetryTimerRef.current) clearTimeout(queueRetryTimerRef.current);
+        queueRetryTimerRef.current = setTimeout(() => {
+          queueRetryTimerRef.current = null;
+          // Still busy → the next busy→idle edge flushes it instead.
+          if (prevBusyRef.current || queueFlushInFlightRef.current) return;
+          const head = queuedMessagesRef.current[0];
+          if (!head) return;
+          setQueuedMessages((q) => q.slice(1));
+          sendQueuedMessageRef.current(head);
+        }, delay);
+        return;
+      }
+      queueRetryAttemptRef.current = 0;
+      draftRestoreNonceRef.current += 1;
+      setDraftRestore({ text: next.message, images: next.images || [], nonce: draftRestoreNonceRef.current });
+    }, () => {
+      // runAct handles its own errors; this only guards an unexpected rejection.
+      queueFlushInFlightRef.current = false;
+      draftRestoreNonceRef.current += 1;
+      setDraftRestore({ text: next.message, images: next.images || [], nonce: draftRestoreNonceRef.current });
+    });
+  }, []);
+  useEffect(() => {
+    sendQueuedMessageRef.current = sendQueuedMessage;
+    queuedMessagesRef.current = queuedMessages;
+  }, [sendQueuedMessage, queuedMessages]);
+  useEffect(() => () => { if (queueRetryTimerRef.current) clearTimeout(queueRetryTimerRef.current); }, []);
+
+  // The queue belongs to ONE project: switching projects drops it and any pending
+  // busy-retry, so a message typed for project A can never be sent into project B.
+  const [queueProjectId, setQueueProjectId] = useState(projectId);
+  if (queueProjectId !== projectId) {
+    setQueueProjectId(projectId);
+    setQueuedMessages([]);
+  }
+  useEffect(() => {
+    queueRetryAttemptRef.current = 0;
+    queuedMessagesRef.current = [];
+    return () => {
+      if (queueRetryTimerRef.current) {
+        clearTimeout(queueRetryTimerRef.current);
+        queueRetryTimerRef.current = null;
+      }
+    };
+  }, [projectId]);
+
   // Queue handling on the busy -> idle edge, matching the Claude CLI:
   //  - turn finished NATURALLY -> auto-send the next queued message (one per turn);
   //  - turn was INTERRUPTED (Stop/Esc) -> do NOT fire the queue; return the queued
@@ -568,6 +635,8 @@ export default function ChatPage() {
     if (prevBusyRef.current && !busy) {
       if (interruptedRef.current) {
         interruptedRef.current = false;
+        if (queueRetryTimerRef.current) { clearTimeout(queueRetryTimerRef.current); queueRetryTimerRef.current = null; }
+        queueRetryAttemptRef.current = 0;
         if (queuedMessages.length > 0) {
           const text = queuedMessages.map((q) => q.message).join('\n\n');
           const imgs = queuedMessages.flatMap((q) => q.images || []);
@@ -576,21 +645,16 @@ export default function ChatPage() {
           setDraftRestore({ text, images: imgs, nonce: draftRestoreNonceRef.current });
           setQueuedMessages([]);
         }
-      } else if (queuedMessages.length > 0) {
+      } else if (queuedMessages.length > 0 && !queueRetryTimerRef.current && !queueFlushInFlightRef.current) {
+        // Skipped while a busy-backoff timer is pending (it flushes itself) or
+        // while a queued send is still in flight (its own idle edge lands here).
         const next = queuedMessages[0];
         setQueuedMessages((q) => q.slice(1));
-        void Promise.resolve(runActRef.current?.(next.message, next.images)).then((res) => {
-          // If the send lost a race (another tab/turn grabbed the slot → 409) or
-          // failed, put the message back at the FRONT so the next idle edge retries
-          // it instead of silently dropping it.
-          if (res && !res.ok && res.busy) {
-            setQueuedMessages((q) => [next, ...q]);
-          }
-        });
+        sendQueuedMessage(next);
       }
     }
     prevBusyRef.current = busy;
-  }, [isRunning, hasActiveRequests, queuedMessages]);
+  }, [isRunning, hasActiveRequests, queuedMessages, sendQueuedMessage]);
 
   // Inline project rename (header). Commit on Enter/blur, Escape cancels; the
   // savingNameRef guards the Enter→blur double-fire (blur fires when the input
@@ -1238,7 +1302,9 @@ const persistProjectPreferences = useCallback(
       if (event.origin !== previewOrigin) return;
       const data = event.data as { source?: string; path?: string } | null;
       if (data && data.source === 'claudable-preview' && typeof data.path === 'string') {
-        setCurrentRoute(data.path.startsWith('/') ? data.path : `/${data.path}`);
+        // Pathname only — an older plugin still reports the query (e.g. our own
+        // ?_ts= refresh cache-buster), which would split comments per reload.
+        setCurrentRoute(normalizePreviewRoute(data.path));
         // The plugin has reported in → the (re)loaded page is ready. Flipping this
         // re-fires the renderPins + pending-scroll effects with a live listener,
         // so navigating to a comment shows/scrolls to it on the FIRST click.
@@ -2745,8 +2811,10 @@ const persistProjectPreferences = useCallback(
         clearTimeout(timeoutId);
 
         if (!r.ok) {
-          const errorText = await r.text();
-          console.error('API Error:', errorText);
+          // The server's own reason (JSON `message`, then `error`), not just
+          // "403 Forbidden" — e.g. an edit-profile restriction or a project wipe.
+          const errorMessage = await readSendError(r);
+          console.error('API Error:', r.status, errorMessage);
 
           if (tempUserMessageId) {
             if (stableMessageHandlersRef.current) {
@@ -2760,10 +2828,11 @@ const persistProjectPreferences = useCallback(
           // or a queue flush that beat this one). Signal 'busy' so a queue-flush
           // caller can re-queue instead of dropping the message; stay quiet on the
           // toast for that case since it's transient and self-healing.
-          if (r.status === 409) {
+          // A 409 because the project is being deleted is permanent, not "busy".
+          if (r.status === 409 && !isHardBusyError(errorMessage)) {
             return { ok: false, busy: true };
           }
-          toast.error(`Failed to send message: ${r.status} ${r.statusText}`);
+          toast.error(`Failed to send message: ${errorMessage}`);
           return { ok: false, busy: false };
         }
       } catch (fetchError: any) {

@@ -6,6 +6,7 @@
 import { prisma } from '@/lib/db/client';
 import type { Comment, User } from '@prisma/client';
 import { parseMentionsJson, sanitizeMentions, type CommentMention } from '@/lib/utils/mentions';
+import { normalizePreviewRoute } from '@/lib/utils/preview-route';
 
 type CommentWithAuthor = Comment & { author: Pick<User, 'id' | 'name' | 'email' | 'image'> | null };
 
@@ -13,7 +14,7 @@ function serializeComment(c: CommentWithAuthor) {
   const name = c.authorName || c.author?.name || (c.author?.email ? c.author.email.split('@')[0] : null) || 'Anonymous';
   return {
     id: c.id,
-    route: c.route,
+    route: normalizePreviewRoute(c.route),
     anchorSelector: c.anchorSelector,
     relX: c.relX,
     relY: c.relY,
@@ -50,8 +51,16 @@ async function resolveMentions(raw: unknown, projectId: string): Promise<Comment
 }
 
 export async function listComments(projectId: string, route?: string) {
+  // Routes are stored canonical (pathname only), so a client that still sends
+  // e.g. "/about?_ts=…" (old preview plugin, cache-busted reload) finds its pins.
+  // Rows filed under a polluted route before normalisation existed are matched
+  // too (same pathname + query/hash suffix).
+  const r = route ? normalizePreviewRoute(route) : null;
   const rows = await prisma.comment.findMany({
-    where: { projectId, ...(route ? { route } : {}) },
+    where: {
+      projectId,
+      ...(r ? { OR: [{ route: r }, { route: { startsWith: `${r}?` } }, { route: { startsWith: `${r}#` } }] } : {}),
+    },
     orderBy: { createdAt: 'asc' },
     include: { author: { select: { id: true, name: true, email: true, image: true } } },
   });
@@ -76,7 +85,7 @@ export async function createComment(input: {
   const created = await prisma.comment.create({
     data: {
       projectId: input.projectId,
-      route: input.route,
+      route: normalizePreviewRoute(input.route),
       anchorSelector: input.anchorSelector,
       relX: input.relX,
       relY: input.relY,

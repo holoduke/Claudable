@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useCallback, useEffect, useState } from 'react';
+import { apiErrorMessage } from '@/lib/client/api-error';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? '';
 
@@ -29,7 +30,7 @@ export function ProjectPluginSettings({ projectId }: { projectId: string }) {
       const res = await fetch(`${API_BASE}/api/projects/${projectId}/plugins`);
       const json = await res.json();
       if (res.ok && json?.success) setPlugins(Array.isArray(json.data) ? json.data : []);
-      else setError(json?.error || 'Failed to load plugins');
+      else setError(apiErrorMessage(json, 'Failed to load plugins'));
     } catch {
       setError('Failed to load plugins');
     } finally {
@@ -40,14 +41,27 @@ export function ProjectPluginSettings({ projectId }: { projectId: string }) {
   useEffect(() => { void load(); }, [load]);
 
   const toggle = async (p: EffectivePlugin, enabled: boolean) => {
-    // Optimistic; reconcile from the server response.
-    setPlugins((prev) => prev.map((x) => (x.marketplace === p.marketplace && x.name === p.name ? { ...x, enabled } : x)));
-    const res = await fetch(`${API_BASE}/api/projects/${projectId}/plugins`, {
-      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ marketplace: p.marketplace, plugin: p.name, enabled }),
-    });
-    const json = await res.json().catch(() => null);
-    if (res.ok && json?.success && Array.isArray(json.data)) setPlugins(json.data);
+    const setEnabled = (value: boolean) =>
+      setPlugins((prev) => prev.map((x) => (x.marketplace === p.marketplace && x.name === p.name ? { ...x, enabled: value } : x)));
+    // Optimistic; reconcile from the server response, revert on failure.
+    setEnabled(enabled);
+    setError(null);
+    try {
+      const res = await fetch(`${API_BASE}/api/projects/${projectId}/plugins`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ marketplace: p.marketplace, plugin: p.name, enabled }),
+      });
+      const json = await res.json().catch(() => null);
+      if (res.ok && json?.success) {
+        if (Array.isArray(json.data)) setPlugins(json.data);
+        return;
+      }
+      setEnabled(p.enabled);
+      setError(apiErrorMessage(json, `Could not ${enabled ? 'enable' : 'disable'} ${p.name}`));
+    } catch {
+      setEnabled(p.enabled);
+      setError(`Could not ${enabled ? 'enable' : 'disable'} ${p.name} (network error).`);
+    }
   };
 
   return (

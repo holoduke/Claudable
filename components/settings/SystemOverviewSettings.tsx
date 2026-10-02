@@ -1,5 +1,6 @@
 "use client";
 import { useCallback, useEffect, useState } from 'react';
+import { apiErrorMessage } from '@/lib/client/api-error';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? '';
 
@@ -52,7 +53,7 @@ export default function SystemOverviewSettings() {
     try {
       const r = await fetch(`${API_BASE}/api/system/overview`, { cache: 'no-store' });
       const j = await r.json();
-      if (!r.ok) { setError(j?.error || 'Failed to load'); setData(null); }
+      if (!r.ok) { setError(apiErrorMessage(j, 'Failed to load')); setData(null); }
       else setData((j?.data ?? j) as Overview);
     } catch { setError('Failed to load'); } finally { setLoading(false); }
   }, []);

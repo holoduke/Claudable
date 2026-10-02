@@ -1,5 +1,6 @@
 "use client";
 import { useCallback, useEffect, useState } from 'react';
+import { apiErrorMessage } from '@/lib/client/api-error';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? '';
 
@@ -32,7 +33,7 @@ export default function ProjectClaudeSettings({ projectId }: Props) {
       const res = await fetch(`${API_BASE}/api/projects/${projectId}/claude-credential`);
       const json = await res.json().catch(() => ({}));
       if (res.status === 401 || res.status === 403) {
-        setDenied(json.message || 'You need write access to this project to change this.');
+        setDenied(apiErrorMessage(json, 'You need write access to this project to change this.'));
         return;
       }
       if (json.success) {
@@ -61,7 +62,7 @@ export default function ProjectClaudeSettings({ projectId }: Props) {
         body: JSON.stringify({ credentialId: credId }),
       });
       const json = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(json.message || 'The change was not saved.');
+      if (!res.ok) throw new Error(apiErrorMessage(json, 'The change was not saved.'));
       setCredentialId(credId);
       // Switching away from a non-selectable (private) assignment: it no longer
       // applies — clearing it stops the "currently runs on X (private)" note

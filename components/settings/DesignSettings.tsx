@@ -1,5 +1,6 @@
 "use client";
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { apiErrorMessage } from '@/lib/client/api-error';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? '';
 
@@ -62,7 +63,7 @@ export default function DesignSettings({ projectId }: Props) {
         body: JSON.stringify({ id }),
       });
       const json = await res.json();
-      if (!res.ok || !json.success) throw new Error(json.message || 'Failed to apply design');
+      if (!res.ok || !json.success) throw new Error(apiErrorMessage(json, 'Failed to apply design'));
       setActiveId(json.data?.activeId ?? null);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to apply design');

@@ -3,7 +3,8 @@
  * First-open nudge: a signed-in user without a connected Claude account gets a
  * dismissible popup explaining how to connect their own `claude setup-token`.
  * Their agent runs then automatically bill their own subscription (see
- * resolveProjectClaudeToken). Dismissal is remembered per browser; the Claude
+ * resolveProjectClaudeToken). Only shown when GET /api/claude-credentials says
+ * `mayUseOwnToken` (customers whose org forbids own tokens never see it). Dismissal is remembered per browser; the Claude
  * tab in Settings remains available any time.
  */
 import { useCallback, useEffect, useState } from 'react';
@@ -63,6 +64,9 @@ export default function ConnectClaudePrompt() {
       .then((r) => (r.ok ? r.json() : null))
       .then((j) => {
         if (controller.signal.aborted || !j?.success || !Array.isArray(j.data)) return;
+        // Only nudge users who are ALLOWED to connect their own account (a
+        // customer org may forbid it — the POST would then be refused).
+        if (j.mayUseOwnToken !== true) return;
         const hasOwn = j.data.some((c: { isMine?: boolean }) => c.isMine);
         if (!hasOwn) setOpen(true);
       })
