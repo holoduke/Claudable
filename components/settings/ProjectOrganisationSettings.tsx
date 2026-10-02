@@ -6,6 +6,7 @@
  */
 import { useCallback, useEffect, useState } from 'react';
 import { useI18n } from '@/contexts/I18nContext';
+import { apiErrorMessage } from '@/lib/client/api-error';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? '';
 
@@ -41,7 +42,7 @@ export default function ProjectOrganisationSettings({ projectId }: { projectId: 
         method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ orgId: next }),
       });
       const json = await res.json();
-      if (!res.ok || !json.success) throw new Error(json.message || t('projectOrg.moveFailed'));
+      if (!res.ok || !json.success) throw new Error(apiErrorMessage(json, t('projectOrg.moveFailed')));
       setOrgId(next);
       setMsg({ text: t('projectOrg.moved', { name }), kind: 'ok' });
     } catch (e) {

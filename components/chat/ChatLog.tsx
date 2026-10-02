@@ -10,6 +10,7 @@ import { toChatMessage, normalizeChatContent } from '@/lib/serializers/client/ch
 import { toRelativePath } from '@/lib/utils/path';
 import { useToast } from '@/components/ui/Toast';
 import { useT } from '@/contexts/I18nContext';
+import { extractErrorMessage } from '@/lib/utils/send-error';
 
 import { type ToolAction, normalizeAction, inferActionFromToolName, pickFirstString, extractPathFromInput } from '@/lib/services/cli/tool-metadata';
 import {
@@ -912,7 +913,14 @@ export default function ChatLog({ projectId, onSessionStatusChange, onProjectSta
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sha }),
       });
       if (res.ok) onReverted?.();
-      else toast.error('Revert failed. The checkpoint may no longer be available.');
+      else {
+        // Surface the server's reason (edit-profile 403, busy 409, …); only a
+        // reason-less failure gets the generic "checkpoint gone" hint.
+        const body = await res.text().catch(() => '');
+        const reason = extractErrorMessage(body, res.status, res.statusText);
+        const generic = reason === extractErrorMessage('', res.status, res.statusText);
+        toast.error(generic ? 'Revert failed. The checkpoint may no longer be available.' : `Revert failed: ${reason}`);
+      }
     } catch {
       toast.error('Revert failed.');
     } finally {

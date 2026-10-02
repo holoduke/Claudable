@@ -1,6 +1,7 @@
 "use client";
 import { use, useCallback, useEffect, useRef, useState, useSyncExternalStore, useLayoutEffect } from 'react';
 import CommentsLayer, { type CommentPin, type ComposeAnchor } from '@/components/chat/CommentsLayer';
+import { normalizePreviewRoute } from '@/lib/utils/preview-route';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? '';
 
@@ -14,6 +15,9 @@ const readSavedGuestName = (): string | null => {
   try { return localStorage.getItem(GUEST_NAME_KEY) || null; } catch { return null; }
 };
 const noSavedGuestNameOnServer = (): string | null => null;
+// Readiness poll: every 2.5s for up to ~3 minutes (a cold start incl. install).
+const READY_POLL_MS = 2500;
+const READY_POLL_MAX_TRIES = 72;
 
 /** Public stakeholder-review page: live preview + leave pinned comments as a guest. */
 export default function SharePage({ params }: { params: Promise<{ token: string }> }) {
@@ -35,6 +39,11 @@ export default function SharePage({ params }: { params: Promise<{ token: string 
   const [viewport, setViewport] = useState({ w: 0, h: 0 });
   const [previewLoaded, setPreviewLoaded] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
+  // Server-side confirmation that the dev server answers (GET /api/share/:token/ready).
+  // Until then the iframe isn't mounted at all: it would only show the proxy's
+  // "Bad Gateway" page, and its onLoad must not count as "loaded".
+  const [serverReady, setServerReady] = useState(false);
+  const [readyTimedOut, setReadyTimedOut] = useState(false);
   // Comment mode ON = clicks place comments (links intercepted); OFF = browse
   // the site normally (links/buttons work). Existing comment pins stay visible
   // and clickable in both modes.
@@ -107,7 +116,7 @@ export default function SharePage({ params }: { params: Promise<{ token: string 
         setPreviewLoaded(true); // hides the "starting…" overlay + stops retrying
         post({ type: commentModeRef.current ? 'enter' : 'exit' }); // respect the toggle
         post({ type: 'renderPins', activeId: activeIdRef.current, pins: commentsRef.current.map((c) => ({ id: c.id, index: c.index, anchorSelector: c.anchorSelector, relX: c.relX, relY: c.relY, resolved: c.resolved })) });
-        setRoute(d.path.startsWith('/') ? d.path : `/${d.path}`);
+        setRoute(normalizePreviewRoute(d.path)); // pathname only (older plugins send the query)
       } else if (d?.source === 'claudable-comments') {
         if (d.type === 'placed') { setActiveId(null); setCompose({ anchorSelector: d.anchorSelector, relX: d.relX, relY: d.relY, x: d.x, y: d.y }); }
         else if (d.type === 'pinPositions') { const m: Record<string, { x: number | null; y: number | null }> = {}; (d.positions || []).forEach((p: any) => { m[p.id] = { x: p.x, y: p.y }; }); setPositions(m); }
@@ -125,10 +134,33 @@ export default function SharePage({ params }: { params: Promise<{ token: string 
     post({ type: commentMode ? 'enter' : 'exit' });
   }, [commentMode, info?.previewUrl, nameConfirmed, previewLoaded, post]);
   // The share endpoint returns immediately and warms the dev server in the
-  // background, so the first iframe load can hit a not-yet-ready (502) preview.
-  // Reload it every few seconds until the plugin reports ready, then stop.
+  // background. Poll the token-gated readiness probe until the dev server
+  // actually answers; only then mount the iframe.
   useEffect(() => {
-    if (!nameConfirmed || !info?.previewUrl || previewLoaded) return;
+    if (!info?.previewUrl || serverReady) return;
+    let cancelled = false;
+    let tries = 0;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const poll = async () => {
+      tries += 1;
+      try {
+        const res = await fetch(`${API_BASE}/api/share/${token}/ready`, { cache: 'no-store' });
+        const j = await res.json().catch(() => null);
+        if (cancelled) return;
+        if (res.status === 404) { setError(j?.message || 'Invalid or revoked link'); return; }
+        if (j?.success && j.data?.ready === true) { setServerReady(true); return; }
+      } catch { /* network blip — keep polling */ }
+      if (cancelled) return;
+      if (tries >= READY_POLL_MAX_TRIES) { setReadyTimedOut(true); return; }
+      timer = setTimeout(() => { void poll(); }, READY_POLL_MS);
+    };
+    void poll();
+    return () => { cancelled = true; if (timer) clearTimeout(timer); };
+  }, [info?.previewUrl, serverReady, token]);
+  // Once the server is up, reload the iframe every few seconds until the plugin
+  // reports ready (or the onLoad fallback fires), then stop.
+  useEffect(() => {
+    if (!nameConfirmed || !info?.previewUrl || !serverReady || previewLoaded) return;
     let tries = 0;
     const id = setInterval(() => {
       tries += 1;
@@ -136,7 +168,7 @@ export default function SharePage({ params }: { params: Promise<{ token: string 
       setReloadKey((k) => k + 1);
     }, 3500);
     return () => clearInterval(id);
-  }, [nameConfirmed, info?.previewUrl, previewLoaded]);
+  }, [nameConfirmed, info?.previewUrl, serverReady, previewLoaded]);
   // Reload pins on route change; drop the open thread/composer first
   // (adjusted during render rather than in the effect).
   const [pinsResetFor, setPinsResetFor] = useState<{ route: string; nameConfirmed: boolean } | null>(null);
@@ -223,7 +255,7 @@ export default function SharePage({ params }: { params: Promise<{ token: string 
         <span className="ml-auto text-xs text-gray-500 dark:text-gray-400">You: {guestName}</span>
       </div>
       <div ref={paneRef} className="relative flex-1 min-h-0">
-        {info.previewUrl ? (
+        {info.previewUrl && serverReady ? (
           <iframe
             key={reloadKey}
             ref={iframeRef}
@@ -233,17 +265,25 @@ export default function SharePage({ params }: { params: Promise<{ token: string 
               // Fallback: on stacks without the injected plugin (Next/Angular) the
               // claudable-preview handshake never arrives. Dismiss the overlay a
               // moment after the iframe loads so it can't cover a working app
-              // forever (comment mode just won't arm on those stacks).
+              // forever (comment mode just won't arm on those stacks). Safe: the
+              // iframe only mounts once the readiness probe saw the server up,
+              // so this load is the app, not the proxy's 502 page.
               setTimeout(() => setPreviewLoaded(true), 1500);
             }}
           />
-        ) : (
+        ) : !info.previewUrl ? (
           <div className="h-full flex items-center justify-center text-gray-400 dark:text-gray-500">Preview is starting… refresh in a moment.</div>
-        )}
+        ) : null}
         {info.previewUrl && !previewLoaded && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-gray-50 dark:bg-gray-900/95 text-gray-500 dark:text-gray-400 z-40 pointer-events-none">
-            <svg className="animate-spin text-brand-500" width="26" height="26" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" className="opacity-20" /><path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" strokeWidth="4" strokeLinecap="round" /></svg>
-            <p className="text-sm">Starting the preview… this can take up to a minute on first open.</p>
+            {readyTimedOut ? (
+              <p className="text-sm">The preview didn’t start. Refresh this page to try again.</p>
+            ) : (
+              <>
+                <svg className="animate-spin text-brand-500" width="26" height="26" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" className="opacity-20" /><path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" strokeWidth="4" strokeLinecap="round" /></svg>
+                <p className="text-sm">Starting the preview… this can take up to a minute on first open.</p>
+              </>
+            )}
           </div>
         )}
         <CommentsLayer

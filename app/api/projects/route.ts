@@ -15,7 +15,7 @@ import { accessibleProjectIds } from '@/lib/services/project-access';
 import { orgIdsFor, orgAllowsProjectCreation } from '@/lib/services/org-access';
 import { isValidStack } from '@/lib/config/stacks';
 import { isValidBackend } from '@/lib/config/backend-stacks';
-import { isValidDatabase } from '@/lib/config/databases';
+import { getDatabaseOption, isValidDatabase } from '@/lib/config/databases';
 import { prisma } from '@/lib/db/client';
 import path from 'path';
 
@@ -133,6 +133,16 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Refuse a database this server can't provision BEFORE creating anything
+    // (MySQL exists only as a per-project container — no host fallback).
+    const databaseId = typeof body.databaseId === 'string' ? body.databaseId : (typeof body.database_id === 'string' ? body.database_id : '');
+    if (isValidDatabase(databaseId)) {
+      const { databaseAvailable } = await import('@/lib/services/project-database-provision');
+      if (!(await databaseAvailable(databaseId))) {
+        return createErrorResponse('database_unavailable', `${getDatabaseOption(databaseId)?.name ?? databaseId} is not available on this server (it needs managed containers). Pick another database.`, 400);
+      }
+    }
+
     const project = await createProject(input);
 
     // Optionally seed the project with a chosen design skill. Done after
@@ -165,7 +175,6 @@ export async function POST(request: NextRequest) {
     // JSON (no schema change); the backend is scaffolded into the repo now, and
     // the preview runs it as its own isolated service.
     const backendId = typeof body.backendId === 'string' ? body.backendId : (typeof body.backend_id === 'string' ? body.backend_id : '');
-    const databaseId = typeof body.databaseId === 'string' ? body.databaseId : (typeof body.database_id === 'string' ? body.database_id : '');
     if (isValidBackend(backendId) || isValidDatabase(databaseId)) {
       try {
         const prev = project.settings ? JSON.parse(project.settings) : {};
@@ -180,18 +189,13 @@ export async function POST(request: NextRequest) {
           const { scaffoldBackend } = await import('@/lib/utils/scaffold-backend');
           await scaffoldBackend(path.resolve(project.repoPath), backendId);
         }
-        // Postgres: a PER-PROJECT CONTAINER database (own container on the project's
-        // internal net, reachable only by this project) when isolation is available;
-        // otherwise the legacy Coolify host DB.
-        if (databaseId === 'postgres') {
+        // Postgres / MySQL: a PER-PROJECT CONTAINER database (own container on the
+        // project's internal net, reachable only by this project) when isolation is
+        // available; Postgres otherwise falls back to the legacy Coolify host DB.
+        if (isValidDatabase(databaseId)) {
           try {
-            const { managedContainersEnabled, ensurePostgresService } = await import('@/lib/services/managed-containers');
-            if (managedContainersEnabled()) {
-              await ensurePostgresService(project.id);
-            } else {
-              const { provisionPostgres } = await import('@/lib/services/database');
-              await provisionPostgres(project.id);
-            }
+            const { provisionProjectDatabase } = await import('@/lib/services/project-database-provision');
+            await provisionProjectDatabase(project.id, databaseId);
           } catch (e) { console.error('[API] database provisioning failed:', e); }
         }
         await prisma.project.update({ where: { id: project.id }, data: { settings: JSON.stringify(nextSettings) } });

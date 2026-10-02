@@ -5,6 +5,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { validateProjectName } from '@/lib/utils';
 import { ProjectWipeSection } from './ProjectWipeSection';
+import { apiErrorMessage } from '@/lib/client/api-error';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? '';
 
@@ -99,12 +100,10 @@ export function GeneralSettings({
       }
 
       if (!response.ok) {
-        const message =
-          payload?.error ||
-          payload?.message ||
-          payload?.detail ||
-          'Failed to update project settings.';
-        throw new Error(message);
+        throw new Error(apiErrorMessage(
+          payload,
+          typeof payload?.detail === 'string' && payload.detail ? payload.detail : 'Failed to update project settings.',
+        ));
       }
 
       const updated = payload?.data ?? payload ?? {};

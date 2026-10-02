@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isTechnicalNoise, toUserFacingAgentError } from './agent-error';
+import { describeFailedResultSubtype, isTechnicalNoise, toUserFacingAgentError } from './agent-error';
 
 // The exact (truncated) stderr tail that reached production chat on
 // 2026-07-08 when the agent container's CLI entrypoint went missing.
@@ -57,5 +57,41 @@ describe('toUserFacingAgentError', () => {
   it('falls back to a generic message for empty input', () => {
     expect(toUserFacingAgentError('')).toContain('(ref: agent-internal-error)');
     expect(toUserFacingAgentError(undefined)).toContain('(ref: agent-internal-error)');
+  });
+});
+
+describe('docker daemon errors', () => {
+  const daemonErrors = [
+    'docker: Error response from daemon: network claudable-sandbox not found.',
+    'Error response from daemon: Conflict. The container name "/claudable-agent-x" is already in use',
+    'Cannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the docker daemon running?',
+    "docker: invalid reference format.\nSee 'docker run --help'.",
+  ];
+
+  it.each(daemonErrors)('treats %j as technical noise', (raw) => {
+    expect(isTechnicalNoise(raw)).toBe(true);
+  });
+
+  it.each(daemonErrors)('maps %j to the agent-start-failed message', (raw) => {
+    const result = toUserFacingAgentError(raw);
+    expect(result).toContain('(ref: agent-start-failed)');
+    expect(result).not.toContain('daemon');
+  });
+
+  it('does not flag ordinary prose that mentions docker', () => {
+    expect(isTechnicalNoise('I updated the docker-compose file for you.')).toBe(false);
+  });
+});
+
+describe('describeFailedResultSubtype', () => {
+  it('gives a continue hint for max turns', () => {
+    expect(describeFailedResultSubtype('error_max_turns')).toContain('continue');
+  });
+  it('explains an execution error without raw subtype noise', () => {
+    expect(describeFailedResultSubtype('error_during_execution')).not.toContain('error_during_execution');
+  });
+  it('falls back for unknown or missing subtypes', () => {
+    expect(describeFailedResultSubtype('error_weird')).toContain('error_weird');
+    expect(describeFailedResultSubtype(undefined)).toContain('did not finish');
   });
 });

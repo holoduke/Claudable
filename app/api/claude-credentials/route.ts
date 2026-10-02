@@ -1,9 +1,10 @@
 /**
  * The current user's Claude credentials.
- *   GET  /api/claude-credentials  -> [{ id, label, shareable, ... }]  (no token)
+ *   GET  /api/claude-credentials  -> data: [{ id, label, shareable, ... }] (no token),
+ *                                    plus top-level mayUseOwnToken: boolean
  *   POST /api/claude-credentials  -> { token, label?, shareable? }  add one
  */
-import { NextRequest } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { getSessionUser } from '@/lib/auth/session';
 import { mayUseOwnToken } from '@/lib/services/tenant-policy';
 import { listMyCredentials, listOrgCredentials, saveCredential } from '@/lib/services/claude-credentials';
@@ -21,7 +22,10 @@ export async function GET() {
       me.role === 'admin'
         ? await listOrgCredentials(me.orgId, me.id)
         : await listMyCredentials(me.id);
-    return createSuccessResponse(creds);
+    // `data` stays the credential array (existing clients); `mayUseOwnToken`
+    // tells the UI whether connecting an own account is allowed at all, so a
+    // customer whose org forbids it isn't nudged into a POST that gets a 403.
+    return NextResponse.json({ success: true, data: creds, mayUseOwnToken: await mayUseOwnToken(me) });
   } catch (error) {
     return handleApiError(error, 'API', 'Failed to list Claude credentials');
   }

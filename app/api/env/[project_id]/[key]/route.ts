@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { denyUnlessProjectAccess } from '@/lib/auth/gate';
 import { updateEnvVar, deleteEnvVar } from '@/lib/services/env';
+import { isValidEnvKey } from '@/lib/services/env-file';
 
 interface RouteContext {
   params: Promise<{ project_id: string; key: string }>;
@@ -11,6 +12,9 @@ export async function PUT(request: NextRequest, { params }: RouteContext) {
     const { project_id, key } = await params;
     const _gate = await denyUnlessProjectAccess(project_id, { manage: true });
     if (_gate) return _gate;
+    if (!isValidEnvKey(key)) {
+      return NextResponse.json({ success: false, error: 'invalid_key', message: 'Invalid environment variable name' }, { status: 400 });
+    }
     const body = (await request.json().catch(() => null)) ?? {};
     if (typeof body?.value !== 'string') {
       return NextResponse.json(
@@ -49,6 +53,9 @@ export async function DELETE(_request: NextRequest, { params }: RouteContext) {
     const { project_id, key } = await params;
     const _gate = await denyUnlessProjectAccess(project_id, { manage: true });
     if (_gate) return _gate;
+    if (!isValidEnvKey(key)) {
+      return NextResponse.json({ success: false, error: 'invalid_key', message: 'Invalid environment variable name' }, { status: 400 });
+    }
     const deleted = await deleteEnvVar(project_id, key);
     if (!deleted) {
       return NextResponse.json(

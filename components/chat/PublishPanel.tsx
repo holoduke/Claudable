@@ -2,7 +2,7 @@
 import { FaRocket } from 'react-icons/fa';
 import { formatTimeAgo } from '@/lib/utils/format';
 import type { DeployRun, DeployRunJob, DeploymentStatus } from '@/hooks/useDeployPolling';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useToast } from '@/components/ui/Toast';
 import { useT } from '@/contexts/I18nContext';
 
@@ -68,6 +68,59 @@ function DeployJobList({ jobs, tone }: { jobs?: DeployRunJob[]; tone: 'blue' | '
 }
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? '';
+const AGENT_BUSY_POLL_MS = 3000;
+const AGENT_BUSY_NOTE = 'The agent is still working on this project. Publishing now would deploy a half-finished change — wait until it is done (or stop it).';
+
+/** The push route refused (busy agent, missing repo, git failure): its message is meant for the user. */
+class PushRejectedError extends Error {
+  constructor(message: string, readonly status: number) {
+    super(message);
+    this.name = 'PushRejectedError';
+  }
+}
+
+/** Turn a failed push response into a PushRejectedError carrying the server's message. */
+async function pushRejection(res: Response): Promise<PushRejectedError> {
+  const text = await res.text().catch(() => '');
+  let message = '';
+  try {
+    const body = JSON.parse(text) as { message?: unknown; error?: unknown };
+    message = typeof body.message === 'string' ? body.message : typeof body.error === 'string' ? body.error : '';
+  } catch {
+    message = text.trim().slice(0, 300);
+  }
+  return new PushRejectedError(message || `Publish failed (HTTP ${res.status})`, res.status);
+}
+
+/**
+ * Whether an agent turn is running for the project, polled while the panel is
+ * open. A failed poll keeps the last known value — the server-side 409 is the
+ * real gate, this only spares the user a doomed click.
+ */
+function useAgentBusy(projectId: string): [boolean, (busy: boolean) => void] {
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    const poll = async () => {
+      try {
+        const res = await fetch(`${API_BASE}/api/chat/${projectId}/requests/active`, { cache: 'no-store' });
+        if (!res.ok) return;
+        const body = (await res.json()) as { agentRunning?: unknown };
+        // Same rule as the server's push guard: only a turn that holds the run slot.
+        if (!cancelled) setBusy(body.agentRunning === true);
+      } catch {
+        /* keep the last known state */
+      }
+    };
+    void poll();
+    const timer = setInterval(() => void poll(), AGENT_BUSY_POLL_MS);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [projectId]);
+  return [busy, setBusy];
+}
 
 interface PublishPanelProps {
   projectId: string;
@@ -94,6 +147,8 @@ interface PublishPanelProps {
   baseBranch?: string | null;
   /** Merge the current branch into the base branch (and follow the deploy). */
   onMergeBranch?: () => Promise<void>;
+  /** The parent already knows an agent turn is running (combined with the panel's own poll). */
+  agentBusy?: boolean;
 }
 
 /**
@@ -124,9 +179,21 @@ export default function PublishPanel({
   branch = null,
   baseBranch = null,
   onMergeBranch,
+  agentBusy: agentBusyProp = false,
 }: PublishPanelProps) {
   const toast = useToast();
   const t = useT();
+  const [polledAgentBusy, setPolledAgentBusy] = useAgentBusy(projectId);
+  const agentBusy = agentBusyProp || polledAgentBusy;
+  /** Show a push failure: the server's own message when it gave one. */
+  const reportPushFailure = (e: unknown, fallback: string) => {
+    if (e instanceof PushRejectedError) {
+      if (e.status === 409) setPolledAgentBusy(true);
+      toast.error(e.message);
+    } else {
+      toast.error(fallback);
+    }
+  };
   // On a non-base branch Publish only pushes the branch: nothing deploys until
   // the branch is merged into the base branch.
   const branchMode = !!branch && !!baseBranch && branch !== baseBranch;
@@ -136,12 +203,13 @@ export default function PublishPanel({
     try {
       setPublishLoading(true);
       const res = await fetch(`${API_BASE}/api/projects/${projectId}/github/push`, { method: 'POST' });
+      if (!res.ok) throw await pushRejection(res);
       const body = await res.json().catch(() => ({}));
-      if (!res.ok || body?.success === false) throw new Error(body?.message || 'Publish failed');
+      if (body?.success === false) throw new PushRejectedError(body?.message || 'Publish failed', res.status);
       setBranchPushed(true);
       toast.success(t('publish.branchPushed', { branch: branch ?? '' }));
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Publish failed');
+      reportPushFailure(e, e instanceof Error && e.message ? e.message : 'Publish failed');
     } finally {
       setPublishLoading(false);
     }
@@ -179,7 +247,7 @@ export default function PublishPanel({
               )}
               {onMergeBranch && (
                 <button
-                  disabled={merging || publishLoading || deploymentStatus === 'deploying'}
+                  disabled={merging || publishLoading || agentBusy || deploymentStatus === 'deploying'}
                   onClick={() => void mergeNow()}
                   className="mt-3 w-full px-3 py-2 rounded-lg border border-violet-300 dark:border-violet-800 text-sm font-medium text-violet-800 dark:text-violet-200 hover:bg-violet-100 dark:hover:bg-violet-900/50 disabled:opacity-50"
                 >
@@ -297,8 +365,14 @@ export default function PublishPanel({
             </div>
           ) : null}
 
+          {agentBusy && (
+            <div role="status" className="p-3 rounded-xl border border-amber-200 bg-amber-50 dark:border-amber-900 dark:bg-amber-950/40 text-sm text-amber-800 dark:text-amber-200">
+              {AGENT_BUSY_NOTE}
+            </div>
+          )}
+
           <button
-            disabled={publishLoading || deploymentStatus === 'deploying' || !githubConnected || (!isGitea && !vercelConnected)}
+            disabled={agentBusy || publishLoading || deploymentStatus === 'deploying' || !githubConnected || (!isGitea && !vercelConnected)}
             onClick={async () => {
               if (branchMode) { await publishBranch(); return; }
               // Self-hosted Gitea flow: push to the Gitea repo; the Actions
@@ -317,7 +391,7 @@ export default function PublishPanel({
                   } catch {}
                   const pushRes = await fetch(`${API_BASE}/api/projects/${projectId}/github/push`, { method: 'POST' });
                   if (!pushRes.ok) {
-                    throw new Error(await pushRes.text());
+                    throw await pushRejection(pushRes);
                   }
                   const pushBody = await pushRes.json().catch(() => ({}));
                   const url = githubRepoName && gitDeployDomain
@@ -353,7 +427,7 @@ export default function PublishPanel({
                   }
                 } catch (e) {
                   console.error('🚀 Gitea publish failed:', e);
-                  toast.error('Publish failed. Make sure the project is connected to Gitea in Settings → Services.');
+                  reportPushFailure(e, 'Publish failed. Make sure the project is connected to Gitea in Settings → Services.');
                   setDeploymentStatus('idle');
                   setPublishLoading(false);
                 }
@@ -366,9 +440,9 @@ export default function PublishPanel({
                 try {
                   const pushRes = await fetch(`${API_BASE}/api/projects/${projectId}/github/push`, { method: 'POST' });
                   if (!pushRes.ok) {
-                    const err = await pushRes.text();
-                    console.error('🚀 GitHub push failed:', err);
-                    throw new Error(err);
+                    const err = await pushRejection(pushRes);
+                    console.error('🚀 GitHub push failed:', err.message);
+                    throw err;
                   }
                 } catch (e) {
                   console.error('🚀 GitHub push step failed', e);
@@ -401,21 +475,22 @@ export default function PublishPanel({
                 }
               } catch (e) {
                 console.error('🚀 Publish failed:', e);
-                toast.error('Publish failed. Check Settings and tokens.');
+                reportPushFailure(e, 'Publish failed. Check Settings and tokens.');
                 setDeploymentStatus('idle');
                 setPublishLoading(false);
-                setTimeout(() => onClose(), 1000);
+                // Keep the panel open for a busy agent so the explanation stays visible.
+                if (!(e instanceof PushRejectedError && e.status === 409)) setTimeout(() => onClose(), 1000);
               } finally {
                 loadDeployStatus();
               }
             }}
             className={`w-full px-4 py-3 rounded-xl font-medium text-white transition ${
-              publishLoading || deploymentStatus === 'deploying' || !githubConnected || (!isGitea && !vercelConnected)
+              agentBusy || publishLoading || deploymentStatus === 'deploying' || !githubConnected || (!isGitea && !vercelConnected)
                 ? 'bg-gray-400 cursor-not-allowed'
                 : 'bg-brand-500 hover:bg-brand-600'
             }`}
           >
-            {publishLoading ? 'Publishing…' : deploymentStatus === 'deploying' ? 'Deploying…' : (!githubConnected || (!isGitea && !vercelConnected)) ? 'Connect Services First' : branchMode ? t('publish.branchTitle', { branch: branch ?? '' }) : (publishedUrl ? 'Update' : 'Publish')}
+            {publishLoading ? 'Publishing…' : agentBusy && deploymentStatus !== 'deploying' ? 'Agent is working…' : deploymentStatus === 'deploying' ? 'Deploying…' : (!githubConnected || (!isGitea && !vercelConnected)) ? 'Connect Services First' : branchMode ? t('publish.branchTitle', { branch: branch ?? '' }) : (publishedUrl ? 'Update' : 'Publish')}
           </button>
         </div>
       </div>

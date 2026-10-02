@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { denyUnlessProjectAccess } from '@/lib/auth/gate';
-import { listEnvVars, createEnvVar } from '@/lib/services/env';
+import { isValidEnvKey } from '@/lib/services/env-file';
+import { listEnvVarsForSettings, createEnvVar } from '@/lib/services/env';
 
 interface RouteContext {
   params: Promise<{ project_id: string }>;
@@ -11,7 +12,8 @@ export async function GET(_request: NextRequest, { params }: RouteContext) {
     const { project_id } = await params;
     const _gate = await denyUnlessProjectAccess(project_id, { manage: true });
     if (_gate) return _gate;
-    const envVars = await listEnvVars(project_id);
+    // Includes keys that only exist in the project's .env (source: 'file').
+    const envVars = await listEnvVarsForSettings(project_id);
     return NextResponse.json(envVars);
   } catch (error) {
     console.error('[Env API] Failed to fetch env vars:', error);
@@ -35,6 +37,16 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
     if (!body?.key || typeof body.key !== 'string') {
       return NextResponse.json(
         { success: false, error: 'key is required' },
+        { status: 400 },
+      );
+    }
+    if (!isValidEnvKey(body.key)) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'invalid_key',
+          message: 'Key may only contain letters, digits, "_", "." and "-", and must not start with a digit',
+        },
         { status: 400 },
       );
     }

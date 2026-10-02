@@ -9,6 +9,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useI18n } from '@/contexts/I18nContext';
 import OrgCreditsPanel from './OrgCreditsPanel';
 import { DATE_LOCALE } from '@/lib/i18n/config';
+import { apiErrorMessage } from '@/lib/client/api-error';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? '';
 
@@ -87,7 +88,7 @@ export default function OrgsSettings({ onToast }: OrgsSettingsProps) {
     try {
       const res = await fetch(`${API_BASE}/api/orgs`);
       const json = await res.json();
-      if (!res.ok || !json.success) throw new Error(json.message || t('orgs.loadFailed'));
+      if (!res.ok || !json.success) throw new Error(apiErrorMessage(json, t('orgs.loadFailed')));
       setOrgs(json.data as Org[]);
     } catch (err) {
       onToast(err instanceof Error ? err.message : t('orgs.loadFailed'), 'error');
@@ -106,7 +107,7 @@ export default function OrgsSettings({ onToast }: OrgsSettingsProps) {
         fetch(`${API_BASE}/api/orgs/${orgId}/invites`),
       ]);
       const json = await res.json();
-      if (!res.ok || !json.success) throw new Error(json.message || t('org.loadMembersFailed'));
+      if (!res.ok || !json.success) throw new Error(apiErrorMessage(json, t('org.loadMembersFailed')));
       setMembers(json.data as OrgMemberRow[]);
       const iJson = await iRes.json().catch(() => null);
       setInvites(iRes.ok && iJson?.success ? (iJson.data as InviteRow[]) : []);
@@ -143,7 +144,7 @@ export default function OrgsSettings({ onToast }: OrgsSettingsProps) {
         ...init,
       });
       const json = await res.json();
-      if (!res.ok || !json.success) throw new Error(json.message || t('common.actionFailed'));
+      if (!res.ok || !json.success) throw new Error(apiErrorMessage(json, t('common.actionFailed')));
       if (okMessage) onToast(okMessage, 'success');
       await after?.();
       await load({ silent: true });
@@ -214,7 +215,7 @@ export default function OrgsSettings({ onToast }: OrgsSettingsProps) {
         body: JSON.stringify({ email: memberEmail, role: memberRole }),
       });
       const json = await res.json();
-      if (!res.ok || !json.success) throw new Error(json.message || t('common.actionFailed'));
+      if (!res.ok || !json.success) throw new Error(apiErrorMessage(json, t('common.actionFailed')));
       const addr = memberEmail.trim();
       onToast(json.data?.invited
         ? (json.data?.emailSent ? t('org.toast.invited', { email: addr }) : t('org.toast.invitedNoMail', { email: addr }))

@@ -1,6 +1,7 @@
 "use client";
 import { useCallback, useEffect, useState } from 'react';
 import { useI18n } from '@/contexts/I18nContext';
+import { apiErrorMessage } from '@/lib/client/api-error';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? '';
 
@@ -45,7 +46,7 @@ export default function UsersSettings({ currentUserId, onToast }: UsersSettingsP
     try {
       const res = await fetch(`${API_BASE}/api/users`);
       const json = await res.json();
-      if (!res.ok || !json.success) throw new Error(json.message || 'Failed to load users');
+      if (!res.ok || !json.success) throw new Error(apiErrorMessage(json, 'Failed to load users'));
       setUsers(json.data as ManagedUser[]);
     } catch (err) {
       onToast(err instanceof Error ? err.message : 'Failed to load users', 'error');
@@ -66,7 +67,7 @@ export default function UsersSettings({ currentUserId, onToast }: UsersSettingsP
         body: JSON.stringify(payload),
       });
       const json = await res.json();
-      if (!res.ok || !json.success) throw new Error(json.message || 'Update failed');
+      if (!res.ok || !json.success) throw new Error(apiErrorMessage(json, 'Update failed'));
       await load();
     } catch (err) {
       onToast(err instanceof Error ? err.message : 'Update failed', 'error');
@@ -80,7 +81,7 @@ export default function UsersSettings({ currentUserId, onToast }: UsersSettingsP
     try {
       const res = await fetch(`${API_BASE}/api/users/${id}`, { method: 'DELETE' });
       const json = await res.json();
-      if (!res.ok || !json.success) throw new Error(json.message || 'Delete failed');
+      if (!res.ok || !json.success) throw new Error(apiErrorMessage(json, 'Delete failed'));
       onToast(`Removed ${email}`, 'success');
       await load();
     } catch (err) {

@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react';
 import { useI18n } from '@/contexts/I18nContext';
 import { DATE_LOCALE } from '@/lib/i18n/config';
+import { apiErrorMessage } from '@/lib/client/api-error';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? '';
 
@@ -29,7 +30,7 @@ export default function ApiTokensSection({ onToast }: ApiTokensSectionProps) {
   const fetchTokens = async (): Promise<ApiToken[]> => {
     const res = await fetch(`${API_BASE}/api/users/me/api-tokens`);
     const body = await res.json();
-    if (!res.ok || !body.success) throw new Error(body.message || body.error || res.statusText);
+    if (!res.ok || !body.success) throw new Error(apiErrorMessage(body, res.statusText));
     return body.data as ApiToken[];
   };
 
@@ -60,7 +61,7 @@ export default function ApiTokensSection({ onToast }: ApiTokensSectionProps) {
         body: JSON.stringify({ name: name.trim() }),
       });
       const body = await res.json();
-      if (!res.ok || !body.success) throw new Error(body.message || body.error || res.statusText);
+      if (!res.ok || !body.success) throw new Error(apiErrorMessage(body, res.statusText));
       setFresh(body.data.token);
       setName('');
       onToast?.(t('account.apiTokens.created'), 'success');
@@ -77,7 +78,7 @@ export default function ApiTokensSection({ onToast }: ApiTokensSectionProps) {
     try {
       const res = await fetch(`${API_BASE}/api/users/me/api-tokens/${encodeURIComponent(id)}`, { method: 'DELETE' });
       const body = await res.json();
-      if (!res.ok || !body.success) throw new Error(body.message || body.error || res.statusText);
+      if (!res.ok || !body.success) throw new Error(apiErrorMessage(body, res.statusText));
       onToast?.(t('account.apiTokens.revoked'), 'success');
       await load();
     } catch (e) {

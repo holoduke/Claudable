@@ -12,6 +12,7 @@ import type { GitProviderConfig } from '@/lib/services/git-provider';
 import { injectDeployScaffolding } from '@/lib/services/scaffold-deploy';
 import { getDatabaseUrl } from '@/lib/services/database';
 import { stackKind } from '@/lib/config/stacks';
+import { isAgentRunActive } from '@/lib/services/cli/run-registry';
 import type { GitHubUserInfo, CreateRepoOptions, GitHubRepositoryInfo } from '@/types/shared';
 
 export class GitHubError extends Error {
@@ -553,8 +554,23 @@ function publishedPathsChange(repoPath: string, url: string, target: string, bas
   return pathsDifferingFrom(repoPath, '4b825dc642cb6eb9a060e54bf8d69288fbee4904'); // vs the empty tree: every tracked file
 }
 
+export const PUBLISH_WHILE_AGENT_BUSY_MESSAGE =
+  'The agent is still working on this project. Wait until it is done (or stop it), then publish — ' +
+  'otherwise a half-finished change would be deployed.';
+
+/** Publishing commits the WHOLE working tree (`git add -A`) — refuse while an
+ *  agent turn is editing it, same gate as branch switch/merge. */
+function assertNoAgentTurn(projectId: string): void {
+  if (isAgentRunActive(projectId)) throw new GitHubError(PUBLISH_WHILE_AGENT_BUSY_MESSAGE, 409);
+}
+
 export async function pushProjectToGitHub(projectId: string): Promise<boolean> {
-  return withGitLock(projectId, () => pushProjectToGitHubImpl(projectId));
+  assertNoAgentTurn(projectId);
+  return withGitLock(projectId, () => {
+    // Re-check under the lock: a turn may have started while we waited for it.
+    assertNoAgentTurn(projectId);
+    return pushProjectToGitHubImpl(projectId);
+  });
 }
 
 async function pushProjectToGitHubImpl(projectId: string): Promise<boolean> {

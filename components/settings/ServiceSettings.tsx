@@ -8,6 +8,7 @@ import VercelProjectModal from '@/components/modals/VercelProjectModal';
 import SupabaseModal from '@/components/modals/SupabaseModal';
 import ServiceConnectionModal from '@/components/modals/ServiceConnectionModal';
 import { isIntegrationVisible } from '@/lib/config/integrations';
+import { apiErrorMessage, responseErrorMessage } from '@/lib/client/api-error';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? '';
 
@@ -49,6 +50,9 @@ export function ServiceSettings({ projectId, projectName }: ServiceSettingsProps
     supabase: null,
     vercel: null
   });
+  // Only admins may add provider tokens (POST /api/tokens). Others get a hint instead.
+  const [canManageTokens, setCanManageTokens] = useState(false);
+  const [serviceError, setServiceError] = useState<string | null>(null);
   const [services, setServices] = useState<Service[]>([
     {
       id: 'github',
@@ -175,7 +179,7 @@ export function ServiceSettings({ projectId, projectName }: ServiceSettingsProps
       });
       const body = await res.json().catch(() => ({}));
       if (!res.ok) {
-        throw new Error(body.message || 'Failed to save branch');
+        throw new Error(apiErrorMessage(body, 'Failed to save branch'));
       }
       setGitStatusMessage({ kind: 'ok', text: `Operating branch set to "${body.branch}"` });
       branchDirtyRef.current = false; // saved value is now canonical again
@@ -194,7 +198,7 @@ export function ServiceSettings({ projectId, projectName }: ServiceSettingsProps
       const res = await fetch(`${API_BASE}/api/projects/${projectId}/github/pull`, { method: 'POST' });
       const body = await res.json().catch(() => ({}));
       if (!res.ok) {
-        throw new Error(body.message || 'Sync failed');
+        throw new Error(apiErrorMessage(body, 'Sync failed'));
       }
       if (body.preview_error) {
         // Sync succeeded but the preview couldn't come back up — surface it as
@@ -226,7 +230,7 @@ export function ServiceSettings({ projectId, projectName }: ServiceSettingsProps
         body: JSON.stringify({ auto_sync: nextEnabled, auto_sync_interval_minutes: nextMinutes }),
       });
       const body = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(body.message || 'Failed to update auto-sync');
+      if (!res.ok) throw new Error(apiErrorMessage(body, 'Failed to update auto-sync'));
       setAutoSync(body.auto_sync === true);
       setAutoSyncMinutes(Number(body.auto_sync_interval_minutes) || nextMinutes);
       autoSyncMinutesDirtyRef.current = false;
@@ -243,16 +247,27 @@ export function ServiceSettings({ projectId, projectName }: ServiceSettingsProps
     }
   };
 
-  // Check if tokens exist for all services. Each probe fails independently —
-  // one transient error must not mark ALL providers "Token needed".
+  // Which provider tokens exist. Uses the project-scoped status endpoint (any
+  // project writer; booleans only) — the admin-only /api/tokens/:provider made
+  // every non-admin see "Token needed". On failure leave the status unknown
+  // (null) rather than claiming tokens are missing.
   const checkTokens = useCallback(async () => {
-    const probe = (provider: string) =>
-      fetch(`${API_BASE}/api/tokens/${provider}`).then(r => r.ok).catch(() => false);
-    const [github, supabase, vercel] = await Promise.all([
-      probe('github'), probe('supabase'), probe('vercel'),
-    ]);
-    setTokenStatus({ github, supabase, vercel });
-  }, []);
+    try {
+      const res = await fetch(`${API_BASE}/api/projects/${projectId}/services/token-status`);
+      if (!res.ok) {
+        setServiceError(await responseErrorMessage(res, 'Could not check service tokens'));
+        setTokenStatus({ github: null, supabase: null, vercel: null });
+        return;
+      }
+      const body = await res.json();
+      const configured = (p: 'github' | 'supabase' | 'vercel') => body?.providers?.[p]?.configured === true;
+      setTokenStatus({ github: configured('github'), supabase: configured('supabase'), vercel: configured('vercel') });
+      setCanManageTokens(body?.can_manage_tokens === true);
+    } catch (error) {
+      console.error('Failed to check service tokens:', error);
+      setServiceError('Could not check service tokens (network error).');
+    }
+  }, [projectId]);
 
   // Load connections and check tokens on mount
   useEffect(() => {
@@ -277,7 +292,7 @@ export function ServiceSettings({ projectId, projectName }: ServiceSettingsProps
     }
     
     // For other services, show placeholder
-    alert(`${serviceId} integration not implemented yet.`);
+    setServiceError(`${serviceId} integration is not implemented yet.`);
   };
 
   const handleGitHubModalSuccess = () => {
@@ -298,23 +313,32 @@ export function ServiceSettings({ projectId, projectName }: ServiceSettingsProps
     window.dispatchEvent(new CustomEvent('services-updated'));
   };
 
-  const handleDisconnect = async (serviceId: string) => {
-    if (!confirm(`Disconnect from ${serviceId}?`)) return;
-    
+  // The DELETE route removes a connection ROW by id (scoped to this project),
+  // so send the connection's id — not the provider name, which never matched.
+  const handleDisconnect = async (service: Service) => {
+    const connectionId = service.connection?.id;
+    if (!connectionId) {
+      setServiceError(`No ${service.name} connection found to disconnect.`);
+      return;
+    }
+    if (!confirm(`Disconnect from ${service.name}?`)) return;
+
     setIsLoading(true);
+    setServiceError(null);
     try {
-      const response = await fetch(`${API_BASE}/api/projects/${projectId}/services/${serviceId}`, {
-        method: 'DELETE'
-      });
-      
-      if (response.ok) {
-        loadServiceConnections(); // Reload connections
-      } else {
-        alert(`Failed to disconnect from ${serviceId}`);
+      const response = await fetch(
+        `${API_BASE}/api/projects/${projectId}/services/${encodeURIComponent(connectionId)}`,
+        { method: 'DELETE' },
+      );
+      if (!response.ok) {
+        setServiceError(await responseErrorMessage(response, `Failed to disconnect from ${service.name}`));
+        return;
       }
+      await loadServiceConnections();
+      window.dispatchEvent(new CustomEvent('services-updated'));
     } catch (error) {
-      console.error(`Error disconnecting from ${serviceId}:`, error);
-      alert(`Failed to disconnect from ${serviceId}`);
+      console.error(`Error disconnecting from ${service.id}:`, error);
+      setServiceError(`Failed to disconnect from ${service.name} (network error).`);
     } finally {
       setIsLoading(false);
     }
@@ -326,6 +350,13 @@ export function ServiceSettings({ projectId, projectName }: ServiceSettingsProps
         <h3 className="text-lg font-medium text-gray-900 dark:text-gray-50 mb-4">
           Service Integrations
         </h3>
+
+        {serviceError && (
+          <div className="mb-4 flex items-start justify-between gap-3 text-xs text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg px-3 py-2">
+            <span className="wrap-break-word min-w-0">{serviceError}</span>
+            <button onClick={() => setServiceError(null)} className="shrink-0 hover:text-red-800 dark:hover:text-red-300" aria-label="Dismiss">✕</button>
+          </div>
+        )}
 
         <div className="space-y-4">
           {services.map(service => (
@@ -474,12 +505,16 @@ export function ServiceSettings({ projectId, projectName }: ServiceSettingsProps
                   <div className="flex items-center gap-2 sm:shrink-0 w-full sm:w-auto sm:justify-end">
                     {service.connected ? (
                       <button
-                        onClick={() => handleDisconnect(service.id)}
+                        onClick={() => handleDisconnect(service)}
                         className="px-4 py-2 text-sm rounded-xl text-red-600 hover:text-red-700 border border-transparent hover:border-red-200 hover:bg-red-50 transition whitespace-nowrap w-full sm:w-auto"
                         disabled={isLoading}
                       >
                         Disconnect
                       </button>
+                    ) : tokenStatus[service.id as keyof typeof tokenStatus] === false && !canManageTokens ? (
+                      <span className="text-xs text-amber-700 dark:text-amber-300 sm:text-right sm:max-w-56">
+                        Ask an admin to configure the {service.name} token
+                      </span>
                     ) : tokenStatus[service.id as keyof typeof tokenStatus] === false ? (
                       <button
                         onClick={() => setTokenSetupProvider(service.id as 'github' | 'supabase' | 'vercel')}

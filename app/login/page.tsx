@@ -3,6 +3,7 @@ import GoogleSignInButton from '@/components/auth/GoogleSignInButton';
 import EmailCodeSignIn from '@/components/auth/EmailCodeSignIn';
 import SpotlightCard from '@/components/auth/SpotlightCard';
 import BrandWordmark from '@/components/ui/BrandWordmark';
+import LoginText, { LoginErrorText } from '@/components/auth/LoginText';
 
 export const dynamic = 'force-dynamic';
 
@@ -86,9 +87,11 @@ export default async function LoginPage({
           className="mt-9 w-full p-7"
           style={{ animation: 'loginFadeUp .8s ease-out both', animationDelay: '.26s' }}
         >
-          <h1 className="text-[17px] font-semibold tracking-tight text-white/95">Welcome back</h1>
+          <h1 className="text-[17px] font-semibold tracking-tight text-white/95">
+            <LoginText k="login.welcome" />
+          </h1>
           <p className="mt-1.5 text-[13px] leading-relaxed text-white/40">
-            Sign in with your Google account, or with a code sent to your e-mail.
+            <LoginText k="login.subtitle" />
           </p>
 
           {error && (
@@ -97,9 +100,7 @@ export default async function LoginPage({
                 <path d="M12 8v5m0 3h.01M10.3 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.7 3.86a2 2 0 0 0-3.42 0Z" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
               <span>
-                {error === 'AccessDenied'
-                  ? "This account isn't authorized for Claudable. Ask an owner or admin of your organisation to invite you (invitations expire after 14 days)."
-                  : 'Sign-in failed. Please try again.'}
+                <LoginErrorText error={error} />
               </span>
             </div>
           )}
@@ -120,7 +121,7 @@ export default async function LoginPage({
               <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" aria-hidden>
                 <path d="M12 2 4 5v6c0 5 3.4 8.5 8 11 4.6-2.5 8-6 8-11V5l-8-3Z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
               </svg>
-              <span>Access restricted to your organization</span>
+              <span><LoginText k="login.restricted" /></span>
             </div>
           </div>
         </SpotlightCard>
@@ -129,7 +130,7 @@ export default async function LoginPage({
           className="mt-8 text-[11px] uppercase tracking-[0.28em] text-white/20"
           style={{ animation: 'loginFadeUp 1s ease-out both', animationDelay: '.4s' }}
         >
-          Self-hosted · Powered by Claude · <a href="/privacy" className="underline decoration-white/20 hover:text-white/50 normal-case tracking-normal">Privacy</a>
+          <LoginText k="login.footer" /> · <a href="/privacy" className="underline decoration-white/20 hover:text-white/50 normal-case tracking-normal"><LoginText k="login.privacy" /></a>
         </p>
       </main>
     </div>

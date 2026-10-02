@@ -1,5 +1,6 @@
 "use client";
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { apiErrorMessage } from '@/lib/client/api-error';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? '';
 
@@ -53,7 +54,7 @@ export default function ProjectEditProfilesSettings({ projectId }: { projectId: 
     try {
       const res = await fetch(`${API_BASE}/api/projects/${projectId}/edit-profiles`);
       const json = await res.json().catch(() => ({}));
-      if (!res.ok || !json.success) throw new Error(json.message || 'Failed to load edit profiles');
+      if (!res.ok || !json.success) throw new Error(apiErrorMessage(json, 'Failed to load edit profiles'));
       setCanManage(Boolean(json.data.canManage));
       apply(json.data);
     } catch (err) {
@@ -107,7 +108,7 @@ export default function ProjectEditProfilesSettings({ projectId }: { projectId: 
         body: JSON.stringify(draft),
       });
       const json = await res.json().catch(() => ({}));
-      if (!res.ok || !json.success) throw new Error(json.message || 'Failed to save');
+      if (!res.ok || !json.success) throw new Error(apiErrorMessage(json, 'Failed to save'));
       apply(json.data);
       setNotice('Saved — applies from the next chat message.');
     } catch (err) {

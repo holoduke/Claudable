@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { denyUnlessProjectAccess } from '@/lib/auth/gate';
+import { isValidEnvKey } from '@/lib/services/env-file';
 import { upsertEnvVar } from '@/lib/services/env';
 
 interface RouteContext {
@@ -15,6 +16,16 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
     if (!body?.key || typeof body.key !== 'string') {
       return NextResponse.json(
         { success: false, error: 'key is required' },
+        { status: 400 },
+      );
+    }
+    if (!isValidEnvKey(body.key)) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'invalid_key',
+          message: 'Key may only contain letters, digits, "_", "." and "-", and must not start with a digit',
+        },
         { status: 400 },
       );
     }

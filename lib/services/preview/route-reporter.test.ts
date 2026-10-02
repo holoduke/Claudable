@@ -59,3 +59,23 @@ describe('ensureDirInside', async () => {
     expect(fs.readdirSync(outside)).toEqual([]);
   });
 });
+
+describe('route reporting', () => {
+  it('reports only the pathname (no query/hash such as the ?_ts= cache-buster)', async () => {
+    const dir = fs.mkdtempSync(path.join(ROOT, 's-'));
+    fs.writeFileSync(path.join(dir, 'nuxt.config.ts'), 'export default defineNuxtConfig({})');
+    await ensurePreviewRouteReporter(dir, 's');
+    const src = fs.readFileSync(path.join(dir, 'plugins', 'claudable-preview.client.ts'), 'utf8');
+    expect(src).not.toContain('fullPath');
+    expect(src).toContain('postRoute(to.path)');
+    expect(src).toContain('.split(/[?#]/)[0]');
+  });
+  it('rewrites an existing (older) plugin on every run so updates reach existing projects', async () => {
+    const dir = fs.mkdtempSync(path.join(ROOT, 't-'));
+    fs.writeFileSync(path.join(dir, 'nuxt.config.ts'), 'export default defineNuxtConfig({})');
+    fs.mkdirSync(path.join(dir, 'plugins'));
+    fs.writeFileSync(path.join(dir, 'plugins', 'claudable-preview.client.ts'), '// Auto-added by Claudable (old) postRoute(to.fullPath)');
+    await ensurePreviewRouteReporter(dir, 't');
+    expect(fs.readFileSync(path.join(dir, 'plugins', 'claudable-preview.client.ts'), 'utf8')).not.toContain('fullPath');
+  });
+});

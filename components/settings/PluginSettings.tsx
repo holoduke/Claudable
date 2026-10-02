@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useCallback, useEffect, useState } from 'react';
+import { apiErrorMessage, responseErrorMessage } from '@/lib/client/api-error';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? '';
 
@@ -49,7 +50,7 @@ export default function PluginSettings() {
       const res = await fetch(`${API_BASE}/api/plugins/marketplaces`);
       const json = await res.json();
       if (res.ok && json?.success) setMarkets(Array.isArray(json.data) ? json.data : []);
-      else setError(json?.error || 'Failed to load plugin marketplaces');
+      else setError(apiErrorMessage(json, 'Failed to load plugin marketplaces'));
     } catch {
       setError('Failed to load plugin marketplaces');
     } finally {
@@ -79,7 +80,7 @@ export default function PluginSettings() {
         }),
       });
       const json = await res.json();
-      if (!res.ok || !json?.success) { setError(json?.error || 'Failed to add marketplace'); return; }
+      if (!res.ok || !json?.success) { setError(apiErrorMessage(json, 'Failed to add marketplace')); return; }
       setForm({ ...EMPTY_FORM });
       setAdding(false);
       await load();
@@ -99,7 +100,7 @@ export default function PluginSettings() {
       const res = await fetch(`${API_BASE}/api/plugins/marketplaces/${id}/sync`, { method: 'POST' });
       const json = await res.json();
       if (res.ok && json?.success) patchMarket(id, json.data);
-      else setError(json?.error || 'Sync failed');
+      else setError(apiErrorMessage(json, 'Sync failed'));
     } catch {
       setError('Sync failed');
     } finally {
@@ -113,6 +114,7 @@ export default function PluginSettings() {
     });
     const json = await res.json().catch(() => null);
     if (res.ok && json?.success) patchMarket(id, json.data);
+    else setError(apiErrorMessage(json, `Could not ${enabled ? 'enable' : 'disable'} the marketplace`));
   };
 
   const togglePlugin = async (id: string, plugin: string, enabled: boolean) => {
@@ -121,6 +123,7 @@ export default function PluginSettings() {
     });
     const json = await res.json().catch(() => null);
     if (res.ok && json?.success) patchMarket(id, json.data);
+    else setError(apiErrorMessage(json, `Could not ${enabled ? 'enable' : 'disable'} ${plugin}`));
   };
 
   const removeMarket = async (id: string) => {
@@ -128,6 +131,7 @@ export default function PluginSettings() {
     const res = await fetch(`${API_BASE}/api/plugins/marketplaces/${id}`, { method: 'DELETE' });
     setBusyId(null);
     if (res.ok) setMarkets((prev) => prev.filter((m) => m.id !== id));
+    else setError(await responseErrorMessage(res, 'Could not remove the marketplace'));
   };
 
   return (
@@ -204,6 +208,7 @@ export default function PluginSettings() {
                       });
                       const json = await res.json().catch(() => null);
                       if (res.ok && json?.success) { patchMarket(m.id, json.data); void syncMarket(m.id); }
+                      else setError(apiErrorMessage(json, 'Could not update the marketplace'));
                     }} />
                     Include the plugins&apos; bundled MCP servers (only if they run on linux/amd64 — re-syncs)
                   </label>

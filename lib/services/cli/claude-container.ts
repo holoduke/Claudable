@@ -36,6 +36,7 @@ export interface ContainerTurnOptions {
   oauthToken: string;                   // CLAUDE_CODE_OAUTH_TOKEN (never persisted)
   model?: string;
   sessionId?: string;                   // resume a prior turn
+  thinkingMode?: AgentThinkingMode;     // extended thinking (off / auto / forced) — see thinkingCliArgs
   image?: string;                       // agent image (has the claude CLI)
   sandboxNet?: string;                  // egress-locked network name (primary; internet for the API)
   projectNet?: string;                  // the project's internal net (reach db/cache by alias) — attached at RUN
@@ -62,6 +63,31 @@ export interface ContainerTurnOptions {
    *  runAgentTurnContainerized; the inline `-e` fallback exists only for direct
    *  callers of buildAgentContainerArgs. */
   envFilePath?: string;
+}
+
+/** Mirrors claude.ts' ThinkingMode (kept local to avoid an import cycle). */
+export type AgentThinkingMode = 'off' | 'auto' | 'forced';
+
+/**
+ * Map a thinking mode onto what the `claude` CLI supports, mirroring the SDK
+ * path's buildThinkingOptions:
+ *  - 'off'    → `--effort low`
+ *  - 'forced' → `--effort high` (adaptive thinking with high effort)
+ *  - 'auto' / unset → nothing: the CLI's default adaptive behaviour, unchanged.
+ * Measured on the production CLI (2.1.286, Opus 5.5, adaptive thinking): neither
+ * MAX_THINKING_TOKENS=0 nor the `alwaysThinkingEnabled: false` setting stops the
+ * model from thinking; `--effort low` does (0 thinking blocks, short answer).
+ */
+export function thinkingCliArgs(mode: AgentThinkingMode | undefined): { dockerEnv: string[]; cliFlags: string[] } {
+  switch (mode) {
+    case 'off':
+      return { dockerEnv: [], cliFlags: ['--effort', 'low'] };
+    case 'forced':
+      return { dockerEnv: [], cliFlags: ['--effort', 'high'] };
+    case 'auto':
+    default:
+      return { dockerEnv: [], cliFlags: [] };
+  }
 }
 
 // The globally installed Claude Code CLI (Dockerfile: npm install -g
@@ -130,6 +156,8 @@ export function buildAgentContainerArgs(o: ContainerTurnOptions): string[] {
   if (!o.envFilePath) {
     for (const [k, v] of Object.entries(o.env ?? {})) args.push('-e', `${k}=${v}`);
   }
+  const thinking = thinkingCliArgs(o.thinkingMode);
+  args.push(...thinking.dockerEnv);
   // Attach BOTH networks at creation (docker 20.10+): the sandbox net for egress
   // to the Anthropic API (PRIMARY), and the project's internal net so `db`/`cache`
   // aliases resolve from the FIRST command — no post-spawn attach race.
@@ -149,6 +177,7 @@ export function buildAgentContainerArgs(o: ContainerTurnOptions): string[] {
     '--permission-mode', 'bypassPermissions');
   if (o.model) args.push('--model', o.model);
   if (o.sessionId) args.push('--resume', o.sessionId);
+  args.push(...thinking.cliFlags);
   if (o.mcpConfigPath) args.push('--mcp-config', o.mcpConfigPath);
   if (o.strictMcpConfig) args.push('--strict-mcp-config');
   // Restrict the built-in tool surface when set (e.g. design generation only

@@ -84,11 +84,13 @@ export default defineNuxtPlugin(() => {
   const post = (msg) => { try { window.parent.postMessage(msg, target); } catch {} };
 
   // --- route reporter: keep the preview URL bar in sync with in-app navigation ---
-  const postRoute = (p) => post({ source: 'claudable-preview', path: p });
+  // Pathname ONLY: Claudable scopes review comments by route, and a query or
+  // hash (e.g. its own ?_ts= cache-buster on refresh) must not split them.
+  const postRoute = (p) => post({ source: 'claudable-preview', path: String(p || '/').split(/[?#]/)[0] || '/' });
   try {
     const router = useRouter();
-    postRoute(router.currentRoute.value.fullPath);
-    router.afterEach((to) => postRoute(to.fullPath));
+    postRoute(router.currentRoute.value.path);
+    router.afterEach((to) => postRoute(to.path));
   } catch {}
 
   // --- visual editor bridge: click-to-select + live CSS/text editing ----------

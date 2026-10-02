@@ -16,6 +16,15 @@
  * originating action on a mail error.
  */
 
+import { nl } from '@/lib/i18n/messages/nl';
+
+/**
+ * The mails are Dutch; the login-page button they point at is labelled from the
+ * same catalog (login.emailCode.open in nl), so the quoted label always matches
+ * what a Dutch browser shows on /login.
+ */
+export const LOGIN_EMAIL_CODE_LABEL_NL = nl['login.emailCode.open'];
+
 export interface MailMessage {
   to: string;
   subject: string;
@@ -121,7 +130,7 @@ export function inviteEmail(input: {
   const text = [
     `Je bent${by} uitgenodigd voor de organisatie "${input.orgName}" in Claudable, als ${role}.`,
     '',
-    `Accepteren doe je door in te loggen met je Google-account voor ${input.to}, of met een inlogcode die we naar dit adres mailen ("Inloggen met e-mailcode"):`,
+    `Accepteren doe je door in te loggen met je Google-account voor ${input.to}, of met een inlogcode die we naar dit adres mailen ("${LOGIN_EMAIL_CODE_LABEL_NL}"):`,
     url,
     '',
     `De uitnodiging is geldig tot ${until}. Je ziet daarna alleen de projecten van ${input.orgName}.`,
@@ -129,7 +138,7 @@ export function inviteEmail(input: {
   const html = layout(
     `Uitnodiging voor ${input.orgName}`,
     `<p style="margin:0 0 12px">Je bent${esc(by)} uitgenodigd voor de organisatie <strong>${esc(input.orgName)}</strong> in Claudable, als <strong>${esc(role)}</strong>.</p>
-     <p style="margin:0 0 12px">Accepteren doe je door in te loggen met je Google-account voor <strong>${esc(input.to)}</strong>, of met een inlogcode die we naar dit adres mailen (&ldquo;Inloggen met e-mailcode&rdquo;).</p>
+     <p style="margin:0 0 12px">Accepteren doe je door in te loggen met je Google-account voor <strong>${esc(input.to)}</strong>, of met een inlogcode die we naar dit adres mailen (&ldquo;${esc(LOGIN_EMAIL_CODE_LABEL_NL)}&rdquo;).</p>
      <p style="margin:0;color:#5a6772">Geldig tot ${esc(until)}. Daarna zie je alleen de projecten van ${esc(input.orgName)}.</p>`,
     { label: 'Inloggen en accepteren', url },
   );

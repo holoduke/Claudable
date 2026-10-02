@@ -1,6 +1,7 @@
 "use client";
 import { useCallback, useEffect, useState } from 'react';
 import { useI18n } from '@/contexts/I18nContext';
+import { apiErrorMessage } from '@/lib/client/api-error';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? '';
 
@@ -94,7 +95,7 @@ export default function ClaudeAccountSettings({ onToast }: Props) {
         body: JSON.stringify({ label: label.trim(), token: token.trim(), shareable }),
       });
       const json = await res.json();
-      if (!res.ok || !json.success) throw new Error(json.message || 'Failed to save');
+      if (!res.ok || !json.success) throw new Error(apiErrorMessage(json, 'Failed to save'));
       setLabel(''); setToken(''); setShareable(false);
       onToast('Claude account connected', 'success');
       await load();

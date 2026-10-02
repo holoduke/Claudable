@@ -1,6 +1,7 @@
 "use client";
 import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { responseErrorMessage } from '@/lib/client/api-error';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? '';
 
@@ -31,6 +32,8 @@ export default function ServiceConnectionModal({
   const [token, setToken] = useState('');
   const [savedToken, setSavedToken] = useState<ServiceToken | null>(null);
   const [showTokenInput, setShowTokenInput] = useState(false);
+  // Inline result/error line (replaces alert()s that dumped raw JSON).
+  const [notice, setNotice] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null);
 
   const loadSavedToken = useCallback(async () => {
     try {
@@ -56,11 +59,12 @@ export default function ServiceConnectionModal({
 
   const handleSaveToken = async () => {
     if (!token.trim()) {
-      alert('Please enter a valid token');
+      setNotice({ kind: 'error', text: 'Please enter a valid token' });
       return;
     }
-    
+
     setIsLoading(true);
+    setNotice(null);
     try {
       const response = await fetch(`${API_BASE}/api/tokens`, {
         method: 'POST',
@@ -73,19 +77,24 @@ export default function ServiceConnectionModal({
       });
       
       if (response.ok) {
-        const savedTokenData = await response.json();
-        setSavedToken(savedTokenData);
+        // POST /api/tokens answers { success, data: record }.
+        const body = await response.json().catch(() => null);
+        const record = body && typeof body === 'object' && 'data' in body ? body.data : body;
+        if (record?.id) {
+          // Never keep the plaintext token around in client state.
+          setSavedToken({ ...record, token: '' });
+        } else {
+          await loadSavedToken();
+        }
         setToken('');
         setShowTokenInput(false);
-        // Use a more elegant notification instead of alert
-        console.log('Token saved successfully!');
+        setNotice({ kind: 'ok', text: 'Token saved.' });
       } else {
-        const error = await response.text();
-        alert(`Failed to save token: ${error}`);
+        setNotice({ kind: 'error', text: await responseErrorMessage(response, 'Failed to save token') });
       }
     } catch (error) {
       console.error('Failed to save token:', error);
-      alert('Failed to save token. Please try again.');
+      setNotice({ kind: 'error', text: 'Failed to save token (network error). Please try again.' });
     } finally {
       setIsLoading(false);
     }
@@ -97,20 +106,21 @@ export default function ServiceConnectionModal({
     }
     
     setIsLoading(true);
+    setNotice(null);
     try {
       const response = await fetch(`${API_BASE}/api/tokens/${savedToken.id}`, {
         method: 'DELETE'
       });
-      
+
       if (response.ok) {
         setSavedToken(null);
-        alert('Token deleted successfully!');
+        setNotice({ kind: 'ok', text: 'Token deleted.' });
       } else {
-        alert('Failed to delete token');
+        setNotice({ kind: 'error', text: await responseErrorMessage(response, 'Failed to delete token') });
       }
     } catch (error) {
       console.error('Failed to delete token:', error);
-      alert('Failed to delete token. Please try again.');
+      setNotice({ kind: 'error', text: 'Failed to delete token (network error). Please try again.' });
     } finally {
       setIsLoading(false);
     }
@@ -135,15 +145,14 @@ export default function ServiceConnectionModal({
         
         if (response.ok) {
           const data = await response.json();
-          alert(`Repository created: ${data.html_url}`);
+          setNotice({ kind: 'ok', text: `Repository created: ${data.html_url}` });
         } else {
-          const error = await response.text();
-          alert(`Failed to create repository: ${error}`);
+          setNotice({ kind: 'error', text: await responseErrorMessage(response, 'Failed to create repository') });
         }
       }
     } catch (error) {
       console.error('GitHub action failed:', error);
-      alert('GitHub action failed. Please check your token.');
+      setNotice({ kind: 'error', text: 'GitHub action failed. Please check your token.' });
     } finally {
       setActionLoading(false);
     }
@@ -172,15 +181,14 @@ export default function ServiceConnectionModal({
         
         if (response.ok) {
           const data = await response.json();
-          alert(`Supabase project created: ${data.name}`);
+          setNotice({ kind: 'ok', text: `Supabase project created: ${data.name}` });
         } else {
-          const error = await response.text();
-          alert(`Failed to create project: ${error}`);
+          setNotice({ kind: 'error', text: await responseErrorMessage(response, 'Failed to create project') });
         }
       }
     } catch (error) {
       console.error('Supabase action failed:', error);
-      alert('Supabase action failed. Please check your token.');
+      setNotice({ kind: 'error', text: 'Supabase action failed. Please check your token.' });
     } finally {
       setActionLoading(false);
     }
@@ -202,18 +210,17 @@ export default function ServiceConnectionModal({
           const status = data.status ?? 'queued';
           if (deploymentUrl) {
             const formatted = deploymentUrl.startsWith('http') ? deploymentUrl : `https://${deploymentUrl}`;
-            alert(`Deployment ${status}.\nURL: ${formatted}`);
+            setNotice({ kind: 'ok', text: `Deployment ${status}. URL: ${formatted}` });
           } else {
-            alert(`Deployment ${status}.`);
+            setNotice({ kind: 'ok', text: `Deployment ${status}.` });
           }
         } else {
-          const error = await response.text();
-          alert(`Failed to deploy: ${error}`);
+          setNotice({ kind: 'error', text: await responseErrorMessage(response, 'Failed to deploy') });
         }
       }
     } catch (error) {
       console.error('Vercel action failed:', error);
-      alert('Vercel action failed. Please check your token.');
+      setNotice({ kind: 'error', text: 'Vercel action failed. Please check your token.' });
     } finally {
       setActionLoading(false);
     }
@@ -346,6 +353,19 @@ export default function ServiceConnectionModal({
 
           {/* Content */}
           <div className="p-6 space-y-6">
+            {notice && (
+              <div
+                role={notice.kind === 'error' ? 'alert' : 'status'}
+                className={`flex items-start justify-between gap-3 text-xs rounded-lg px-3 py-2 border ${
+                  notice.kind === 'error'
+                    ? 'text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800'
+                    : 'text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800'
+                }`}
+              >
+                <span className="wrap-break-word min-w-0">{notice.text}</span>
+                <button onClick={() => setNotice(null)} className="shrink-0 opacity-70 hover:opacity-100" aria-label="Dismiss">✕</button>
+              </div>
+            )}
             {savedToken ? (
               // Token is saved - show connection status and actions
               <div className="space-y-4">

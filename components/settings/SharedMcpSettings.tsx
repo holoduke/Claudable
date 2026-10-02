@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useCallback, useEffect, useState } from 'react';
+import { apiErrorMessage, responseErrorMessage } from '@/lib/client/api-error';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? '';
 
@@ -49,7 +50,7 @@ export default function SharedMcpSettings() {
       const res = await fetch(`${API_BASE}/api/shared-mcp-servers`);
       const json = await res.json();
       if (res.ok && json?.success) setServers(Array.isArray(json.data) ? json.data : []);
-      else setError(json?.error || 'Failed to load shared MCP servers');
+      else setError(apiErrorMessage(json, 'Failed to load shared MCP servers'));
     } catch {
       setError('Failed to load shared MCP servers');
     } finally {
@@ -83,7 +84,7 @@ export default function SharedMcpSettings() {
         body: JSON.stringify(body),
       });
       const json = await res.json();
-      if (!res.ok || !json?.success) throw new Error(json?.error || 'Failed to add server');
+      if (!res.ok || !json?.success) throw new Error(apiErrorMessage(json, 'Failed to add server'));
       setForm({ ...EMPTY_FORM });
       setAdding(false);
       await load();
@@ -94,18 +95,32 @@ export default function SharedMcpSettings() {
     }
   };
 
-  const toggle = async (s: SharedMcpView) => {
-    await fetch(`${API_BASE}/api/shared-mcp-servers/${s.id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ enabled: !s.enabled }),
-    });
+  // Run a mutation, show the server's error text on failure, then reload.
+  const mutate = async (url: string, init: RequestInit, fallback: string) => {
+    setError(null);
+    try {
+      const res = await fetch(url, init);
+      if (!res.ok) setError(await responseErrorMessage(res, fallback));
+    } catch {
+      setError(`${fallback} (network error).`);
+    }
     await load();
   };
 
+  const toggle = (s: SharedMcpView) =>
+    mutate(
+      `${API_BASE}/api/shared-mcp-servers/${s.id}`,
+      {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled: !s.enabled }),
+      },
+      `Could not ${s.enabled ? 'disable' : 'enable'} ${s.label}`,
+    );
+
   const remove = async (s: SharedMcpView) => {
-    await fetch(`${API_BASE}/api/shared-mcp-servers/${s.id}`, { method: 'DELETE' });
-    await load();
+    if (!window.confirm(`Remove the shared MCP server "${s.label}" for every project?`)) return;
+    await mutate(`${API_BASE}/api/shared-mcp-servers/${s.id}`, { method: 'DELETE' }, `Could not remove ${s.label}`);
   };
 
   return (

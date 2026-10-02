@@ -17,6 +17,11 @@ const NOISE_PATTERNS: RegExp[] = [
   /requireStack/,
   /^\s*at\s+.+\(.+:\d+:\d+\)\s*$/m, // stack frames ("    at fn (file:1:2)")
   /^\s*Error: spawn\b/m,
+  // Docker daemon / client failures while starting the agent container
+  // (e.g. "docker: Error response from daemon: network … not found").
+  /Error response from daemon/i,
+  /Cannot connect to the Docker daemon/i,
+  /^\s*docker:/im,
 ];
 
 /** True when the text is a stack trace / Node internals dump rather than a
@@ -29,7 +34,9 @@ export function isTechnicalNoise(text: string): boolean {
  *  matching raw error. */
 function classifyCause(text: string): string {
   if (/MODULE_NOT_FOUND|Cannot find module/.test(text)) return 'agent-component-missing';
-  if (/spawn|ENOENT/.test(text)) return 'agent-start-failed';
+  if (/spawn|ENOENT|Error response from daemon|Cannot connect to the Docker daemon|^\s*docker:/im.test(text)) {
+    return 'agent-start-failed';
+  }
   if (/heap out of memory|ENOMEM|OOM/i.test(text)) return 'agent-out-of-memory';
   return 'agent-internal-error';
 }
@@ -49,4 +56,36 @@ export function toUserFacingAgentError(raw: string | null | undefined): string {
   if (!message) return `${GENERIC_MESSAGE} (ref: agent-internal-error).`;
   if (!isTechnicalNoise(message)) return message;
   return `${GENERIC_MESSAGE} (ref: ${classifyCause(message)}).`;
+}
+
+/**
+ * Raised when a resumed turn failed BEFORE producing any assistant/tool output
+ * (stale or missing session, CLI refused to resume, container never started):
+ * the request row is left non-terminal on purpose, and the caller retries the
+ * instruction once in a fresh session. Any other failure is surfaced to the
+ * user directly and must NOT be retried — the agent may already have edited.
+ */
+export class AgentResumeRetryableError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'AgentResumeRetryableError';
+  }
+}
+
+/** Friendly chat text for a CLI/SDK `result` event whose subtype is not 'success'. */
+export function describeFailedResultSubtype(subtype: string | undefined): string {
+  switch (subtype) {
+    case 'error_max_turns':
+      return 'The agent stopped because it reached the maximum number of steps for one turn. ' +
+        'Its changes so far are kept — send "continue" to let it pick up where it left off.';
+    case 'error_max_budget_usd':
+      return 'The agent stopped because this run reached its spending limit.';
+    case 'error_during_execution':
+      return 'The agent run failed while it was working. Changes made before the failure are kept — ' +
+        'check the preview, then send your message again (or "continue") to finish.';
+    default:
+      return subtype
+        ? `The agent run did not finish successfully (${subtype}). Please try again.`
+        : 'The agent run did not finish successfully. Please try again.';
+  }
 }

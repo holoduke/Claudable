@@ -9,6 +9,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { useI18n } from '@/contexts/I18nContext';
 import { DATE_LOCALE } from '@/lib/i18n/config';
+import { apiErrorMessage } from '@/lib/client/api-error';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? '';
 
@@ -50,7 +51,7 @@ export default function OrgCreditsPanel({ orgId, onToast }: Props) {
     try {
       const res = await fetch(`${API_BASE}/api/orgs/${orgId}/credits?month=${month}`);
       const json = await res.json().catch(() => null);
-      if (!res.ok || !json?.success) throw new Error(json?.message || t('common.actionFailed'));
+      if (!res.ok || !json?.success) throw new Error(apiErrorMessage(json, t('common.actionFailed')));
       const next = json.data as CreditsData;
       setData(next);
       setBudgetInput(next.status.budgetCents === null ? '' : String(next.status.budgetCents / 100));
@@ -78,7 +79,7 @@ export default function OrgCreditsPanel({ orgId, onToast }: Props) {
         body: JSON.stringify({ monthlyBudgetEur: value, creditMarginPercent: margin }),
       });
       const json = await res.json().catch(() => null);
-      if (!res.ok || !json?.success) throw new Error(json?.message || t('common.actionFailed'));
+      if (!res.ok || !json?.success) throw new Error(apiErrorMessage(json, t('common.actionFailed')));
       onToast(t('credits.saved'), 'success');
       await load();
     } catch (err) {
