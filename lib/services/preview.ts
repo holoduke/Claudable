@@ -50,6 +50,7 @@ import {
 } from './preview/scaffold';
 import { writeArchitectureSummary } from './preview/architecture';
 import { readPreviewConfig, resolvePreviewBounds, substVars } from './preview/config';
+import { adoptionNeedsBridgeRestart, bridgeEnabledFor } from './preview/bridge-assets';
 import { enforcePreviewConfigPolicy } from './preview/config-policy';
 import { isCustomerProject, TenantPolicyError } from './tenant-policy';
 import {
@@ -177,6 +178,32 @@ class PreviewManager {
     setTimeout(() => { void this.backgroundWarmups(); }, 30_000).unref?.();
   }
 
+  private async needsBridgeRestart(projectId: string, container: string): Promise<boolean> {
+    try {
+      const project = await prisma.project.findUnique({ where: { id: projectId }, select: { repoPath: true } });
+      const projectPath = project?.repoPath ? path.resolve(project.repoPath) : path.join(process.cwd(), 'projects', projectId);
+      const cfg = await readPreviewConfig(projectPath).catch(() => null);
+      const hasNuxtPlugin = await fs.access(path.join(/* turbopackIgnore: true */ projectPath, 'nuxt.config.ts')).then(() => true, () => false);
+      const mounts = await new Promise<string[]>((resolve) => {
+        let out = '';
+        const p = spawn('docker', ['inspect', '-f', '{{range .Mounts}}{{.Destination}}\n{{end}}', container], { env: process.env, stdio: ['ignore', 'pipe', 'ignore'] });
+        p.stdout?.on('data', (d) => { out += d; });
+        p.on('close', () => resolve(out.split('\n').map((l) => l.trim()).filter(Boolean)));
+        p.on('error', () => resolve([]));
+      });
+      return adoptionNeedsBridgeRestart({
+        enabled: bridgeEnabledFor(cfg),
+        hasNuxtPlugin,
+        customImage: Boolean(cfg?.frontend?.image),
+        containerMounts: mounts,
+      });
+    } catch (e) {
+      // Can't tell: adopt as before rather than killing a working preview.
+      console.warn(`[PreviewManager] bridge check failed for ${projectId}:`, e);
+      return false;
+    }
+  }
+
   /** Re-register running preview containers after a restart. Returns projectId → container. */
   private async adoptRunningPreviews(): Promise<Map<string, string>> {
     const adopted = new Map<string, string>();
@@ -202,6 +229,12 @@ class PreviewManager {
       if (ports.length !== 1) continue;
       const port = ports[0];
       if (!(await containerServesPort(r.name, port))) continue;
+      // Started before the preview bridge (or without it): don't adopt — the
+      // orphan sweep stops it and the next open starts it WITH the bridge.
+      if (await this.needsBridgeRestart(projectId, r.name)) {
+        console.log(`[PreviewManager] ${projectId}: running preview lacks the preview bridge; restarting it on next open`);
+        continue;
+      }
       const alive = await fetch(`http://${probeHost}:${port}/`, { method: 'HEAD', signal: AbortSignal.timeout(3000) })
         .then(() => true, () => false);
       if (!alive) continue;

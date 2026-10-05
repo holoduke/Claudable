@@ -12,7 +12,7 @@ process.env.PROJECTS_DIR = path.join(ROOT, 'data', 'projects');
 afterAll(() => fs.rmSync(ROOT, { recursive: true, force: true }));
 
 const {
-  BRIDGE_MOUNT, PHP_CONF_D_TARGET, bridgeDirFor, bridgeEnabledFor, bridgeGloballyEnabled, containerBridgeMode,
+  BRIDGE_MOUNT, PHP_CONF_D_TARGET, adoptionNeedsBridgeRestart, bridgeDirFor, bridgeEnabledFor, bridgeGloballyEnabled, containerBridgeMode,
   containerBridgePlan, prepareContainerBridge, prepareStaticBridge, writeBridgeAssets,
 } = await import('./bridge-assets');
 const { BRIDGE_CONTAINER_PORT } = await import('./bridge-proxy');
@@ -163,5 +163,19 @@ describe.skipIf(!hasPhp)('inject.php (php -S)', () => {
     } finally {
       srv.kill();
     }
+  });
+});
+
+describe('adoptionNeedsBridgeRestart', () => {
+  const base = { enabled: true, hasNuxtPlugin: false, customImage: false, containerMounts: ['/app'] };
+  it('restarts a non-Nuxt preview that was started without the bridge mount', () => {
+    expect(adoptionNeedsBridgeRestart(base)).toBe(true);
+  });
+  it('adopts when the mount is there, for Nuxt, custom images, or when the bridge is off', () => {
+    expect(adoptionNeedsBridgeRestart({ ...base, containerMounts: ['/app', '/opt/claudable-bridge'] })).toBe(false);
+    expect(adoptionNeedsBridgeRestart({ ...base, containerMounts: ['/opt/claudable-bridge/php'] })).toBe(false);
+    expect(adoptionNeedsBridgeRestart({ ...base, hasNuxtPlugin: true })).toBe(false);
+    expect(adoptionNeedsBridgeRestart({ ...base, customImage: true })).toBe(false);
+    expect(adoptionNeedsBridgeRestart({ ...base, enabled: false })).toBe(false);
   });
 });

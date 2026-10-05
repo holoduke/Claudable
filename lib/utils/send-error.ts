@@ -2,23 +2,21 @@
  * Helpers for surfacing chat-send failures (POST /api/chat/:id/act) to the user
  * and for pacing queued-message retries when the server reports "busy".
  */
+import { apiErrorMessage } from '@/lib/client/api-error';
 
 /**
- * The human-readable reason from an API error body: `message`, then `error`,
- * then the HTTP status line. Non-JSON bodies fall back to the status line.
+ * The human-readable reason from an API error body (see apiErrorMessage: a
+ * `message`, else a sentence-like `error`), falling back to the HTTP status
+ * line. Non-JSON bodies and bare machine codes fall back too.
  */
 export function extractErrorMessage(bodyText: string, status: number, statusText: string): string {
   const fallback = `${status}${statusText ? ` ${statusText}` : ''}`;
   if (!bodyText) return fallback;
   try {
-    const j: unknown = JSON.parse(bodyText);
-    if (j && typeof j === 'object') {
-      const { message, error } = j as { message?: unknown; error?: unknown };
-      if (typeof message === 'string' && message.trim()) return message.trim();
-      if (typeof error === 'string' && error.trim()) return error.trim();
-    }
-  } catch { /* not JSON */ }
-  return fallback;
+    return apiErrorMessage(JSON.parse(bodyText), fallback);
+  } catch {
+    return fallback; // not JSON
+  }
 }
 
 /** Read a failed Response's body and return {@link extractErrorMessage}. */
