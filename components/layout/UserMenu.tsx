@@ -3,6 +3,8 @@ import { useEffect, useRef, useState } from 'react';
 import GlobalSettings from '@/components/settings/GlobalSettings';
 import { signOutAction } from '@/app/actions/auth';
 import { useI18n } from '@/contexts/I18nContext';
+import { usePathname } from 'next/navigation';
+import { buildLoginUrl, fetchAuthEnabled } from '@/lib/client/session-guard';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? '';
 
@@ -15,13 +17,24 @@ export default function UserMenu() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [me, setMe] = useState<{ email?: string; name?: string | null; image?: string | null; role?: string } | null>(null);
+  // True once /api/users/me answered without a user while the auth gate is on:
+  // a signed-out visitor (e.g. on /privacy) gets a sign-in link, not the app
+  // menu with "Sign out".
+  const [signedOut, setSignedOut] = useState(false);
+  const pathname = usePathname() ?? '/';
   const wrapRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const controller = new AbortController();
     fetch(`${API_BASE}/api/users/me`, { signal: controller.signal })
       .then((r) => (r.ok ? r.json() : null))
-      .then((j) => { if (!controller.signal.aborted) setMe((j?.data as any) ?? null); })
+      .then(async (j) => {
+        if (controller.signal.aborted) return;
+        const user = (j?.data as any) ?? null;
+        setMe(user);
+        const out = !user && (await fetchAuthEnabled());
+        if (!controller.signal.aborted) setSignedOut(out);
+      })
       .catch(() => {});
     return () => { controller.abort(); };
   }, [settingsOpen]);
@@ -38,9 +51,21 @@ export default function UserMenu() {
 
   const initial = (me?.name || me?.email || '?').trim().charAt(0).toUpperCase();
 
+  if (signedOut) {
+    return (
+      <a
+        href={buildLoginUrl(pathname)}
+        className="inline-flex items-center h-9 px-3 rounded-full text-sm font-medium bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-100 hover:bg-gray-200 dark:hover:bg-gray-700 ring-1 ring-gray-200 dark:ring-gray-700 transition-colors"
+      >
+        {t('home.header.signIn')}
+      </a>
+    );
+  }
+
   return (
     <div ref={wrapRef} className="relative">
       <button
+        type="button"
         onClick={() => setMenuOpen((v) => !v)}
         title={t('menu.myAccount')}
         aria-label={t('menu.myAccount')}
@@ -79,6 +104,7 @@ export default function UserMenu() {
             </select>
           </div>
           <button
+            type="button"
             role="menuitem"
             onClick={() => { setMenuOpen(false); setSettingsOpen(true); }}
             className="w-full text-left px-3 py-2 text-sm rounded-lg text-gray-800 dark:text-gray-100 hover:bg-gray-50 dark:hover:bg-white/5"

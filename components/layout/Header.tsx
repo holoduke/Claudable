@@ -4,8 +4,11 @@ import ProjectSettings from '@/components/settings/ProjectSettings';
 import UserMenu from '@/components/layout/UserMenu';
 import { usePathname } from 'next/navigation';
 import BrandWordmark from '@/components/ui/BrandWordmark';
+import { useT } from '@/contexts/I18nContext';
+import { isPublicPage } from '@/lib/client/session-guard';
 
 export default function Header() {
+  const t = useT();
   const [globalSettingsOpen, setGlobalSettingsOpen] = useState(false);
   const pathname = usePathname() ?? '';
 
@@ -19,6 +22,9 @@ export default function Header() {
   if (isChatPage || isMainPage) {
     return null;
   }
+  // Public pages (e.g. /privacy) can be opened signed out: no app settings
+  // there; the user menu itself shows a sign-in link for signed-out visitors.
+  const isPublic = isPublicPage(pathname);
 
   return (
     <header className="bg-white/90 dark:bg-[#0c0a09]/90 backdrop-blur-xl border-b border-gray-200 dark:border-white/8 sticky top-0 z-40">
@@ -35,9 +41,10 @@ export default function Header() {
                   window.location.href = '/';
                 }}
                 className="flex items-center justify-center w-8 h-8 text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full transition-colors"
-                title="Back to projects"
+                title={t('home.header.back')}
+                aria-label={t('home.header.back')}
               >
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <svg aria-hidden width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                   <path d="M19 12H5M12 19l-7-7 7-7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>
               </button>
@@ -49,12 +56,14 @@ export default function Header() {
           </div>
           <div className="flex items-center gap-3">
             {/* Global settings */}
+            {!isPublic && (
             <button
               className="flex items-center justify-center w-10 h-10 text-gray-600 dark:text-gray-300 hover:text-gray-800 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-all duration-200"
               onClick={() => setGlobalSettingsOpen(true)}
-              title="Global Settings"
+              title={t('home.header.globalSettings')}
+              aria-label={t('home.header.globalSettings')}
             >
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <svg aria-hidden width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <path
                   d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"
                   stroke="currentColor"
@@ -65,6 +74,7 @@ export default function Header() {
                 <circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
             </button>
+            )}
             {/* My account (it-ops self-enable for admins, user management) */}
             <UserMenu />
           </div>
@@ -72,13 +82,15 @@ export default function Header() {
       </div>
 
       {/* Global Settings Modal */}
-      <ProjectSettings
-        isOpen={globalSettingsOpen}
-        onClose={() => setGlobalSettingsOpen(false)}
-        projectId="global-settings"
-        projectName="Global Settings"
-        initialTab="ai-assistant"
-      />
+      {!isPublic && (
+        <ProjectSettings
+          isOpen={globalSettingsOpen}
+          onClose={() => setGlobalSettingsOpen(false)}
+          projectId="global-settings"
+          projectName={t('home.header.globalSettings')}
+          initialTab="ai-assistant"
+        />
+      )}
     </header>
   );
 }

@@ -2,6 +2,7 @@
 import { useMemo, useState } from 'react';
 import type { CommentPin } from './CommentsLayer';
 import { MentionedBody } from './CommentsLayer';
+import { useT } from '@/contexts/I18nContext';
 
 interface Props {
   comments: (CommentPin & { route: string })[];
@@ -11,17 +12,18 @@ interface Props {
   onClose: () => void;
 }
 
-function timeAgo(iso: string): string {
+function timeAgo(iso: string, t: ReturnType<typeof useT>): string {
   const s = Math.max(0, (Date.now() - new Date(iso).getTime()) / 1000);
-  if (s < 60) return 'just now';
-  if (s < 3600) return `${Math.floor(s / 60)}m`;
-  if (s < 86400) return `${Math.floor(s / 3600)}h`;
-  return `${Math.floor(s / 86400)}d`;
+  if (s < 60) return t('chat.comments.justNow');
+  if (s < 3600) return t('chat.comments.minutesShort', { n: Math.floor(s / 60) });
+  if (s < 86400) return t('chat.comments.hoursShort', { n: Math.floor(s / 3600) });
+  return t('chat.comments.daysShort', { n: Math.floor(s / 86400) });
 }
 
 /** Left-pane overview of every comment across the site, grouped by route.
  *  Clicking one asks the parent to jump the preview there and scroll to it. */
 export default function CommentsListPanel({ comments, currentRoute, activeId, onSelect, onClose }: Props) {
+  const t = useT();
   const [filter, setFilter] = useState<'all' | 'open' | 'resolved'>('all');
   const groups = useMemo(() => {
     const byRoute = new Map<string, (CommentPin & { route: string })[]>();
@@ -51,20 +53,21 @@ export default function CommentsListPanel({ comments, currentRoute, activeId, on
     <div className="h-full flex flex-col bg-white dark:bg-[#0c0a09]">
       <div className="border-b border-gray-200 dark:border-white/8 p-4 h-[73px] flex items-center justify-between shrink-0">
         <div>
-          <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-50">Comments</h2>
-          <p className="text-xs text-gray-500 dark:text-gray-400">{comments.length} total · {open} open</p>
+          <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-50">{t('chat.comments.list.title')}</h2>
+          <p className="text-xs text-gray-500 dark:text-gray-400">{t('chat.comments.list.summary', { total: comments.length, open })}</p>
         </div>
-        <button onClick={onClose} title="Close list" className="w-8 h-8 flex items-center justify-center text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-white/6 rounded-full">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+        <button onClick={onClose} title={t('chat.comments.list.close')} aria-label={t('chat.comments.list.close')} className="w-8 h-8 flex items-center justify-center text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-white/6 rounded-full">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
         </button>
       </div>
 
       {comments.length > 0 && (
         <div className="flex items-center gap-1.5 px-4 py-2 border-b border-gray-100 dark:border-white/8 shrink-0">
-          {([['all', `All ${comments.length}`], ['open', `Open ${open}`], ['resolved', `Resolved ${resolved}`]] as const).map(([key, label]) => (
+          {([['all', t('chat.comments.list.filterAll', { count: comments.length })], ['open', t('chat.comments.list.filterOpen', { count: open })], ['resolved', t('chat.comments.list.filterResolved', { count: resolved })]] as const).map(([key, label]) => (
             <button
               key={key}
               onClick={() => setFilter(key)}
+              aria-pressed={filter === key}
               className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${
                 filter === key ? 'bg-brand-500 text-white border-brand-500' : 'bg-white dark:bg-white/6 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-white/8 hover:bg-gray-50 dark:hover:bg-white/6'
               }`}
@@ -79,11 +82,11 @@ export default function CommentsListPanel({ comments, currentRoute, activeId, on
             <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" className="mb-2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2Z" /></svg>
             {comments.length === 0 ? (
               <>
-                <p className="text-sm">No comments yet.</p>
-                <p className="text-xs mt-1">Click anywhere on the preview to add one.</p>
+                <p className="text-sm">{t('chat.comments.list.empty')}</p>
+                <p className="text-xs mt-1">{t('chat.comments.list.emptyHint')}</p>
               </>
             ) : (
-              <p className="text-sm">No {filter} comments.</p>
+              <p className="text-sm">{filter === 'resolved' ? t('chat.comments.list.noResolved') : t('chat.comments.list.noOpen')}</p>
             )}
           </div>
         ) : (
@@ -91,7 +94,7 @@ export default function CommentsListPanel({ comments, currentRoute, activeId, on
             <div key={g.route}>
               <div className="sticky top-0 z-10 bg-gray-50 dark:bg-white/3 backdrop-blur-sm px-4 py-1.5 text-[11px] font-medium text-gray-500 dark:text-gray-400 border-b border-gray-100 dark:border-white/8 flex items-center gap-2">
                 <span className="truncate">{g.route}</span>
-                {g.route === (currentRoute || '/') && <span className="text-[9px] uppercase tracking-wide text-brand-500 bg-brand-500/10 px-1.5 py-0.5 rounded-sm">current</span>}
+                {g.route === (currentRoute || '/') && <span className="text-[9px] uppercase tracking-wide text-brand-500 bg-brand-500/10 px-1.5 py-0.5 rounded-sm">{t('chat.comments.list.current')}</span>}
                 <span className="ml-auto text-gray-400 dark:text-gray-500">{g.items.length}</span>
               </div>
               {g.items.map((c) => (
@@ -103,9 +106,9 @@ export default function CommentsListPanel({ comments, currentRoute, activeId, on
                   <span className={`shrink-0 w-6 h-6 rounded-full text-[11px] font-semibold flex items-center justify-center ${c.resolved ? 'bg-gray-100 dark:bg-white/6 text-gray-400 dark:text-gray-500' : 'bg-brand-500 text-white'}`}>{c.index}</span>
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
-                      <span className="text-xs font-medium text-gray-800 dark:text-gray-100 truncate">{c.authorName || 'Anonymous'}</span>
-                      <span className="text-[11px] text-gray-400 dark:text-gray-500 shrink-0">{timeAgo(c.createdAt)}</span>
-                      {c.resolved && <span className="text-[9px] uppercase tracking-wide text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded-sm shrink-0">resolved</span>}
+                      <span className="text-xs font-medium text-gray-800 dark:text-gray-100 truncate">{c.authorName || t('chat.comments.list.anonymous')}</span>
+                      <span className="text-[11px] text-gray-400 dark:text-gray-500 shrink-0">{timeAgo(c.createdAt, t)}</span>
+                      {c.resolved && <span className="text-[9px] uppercase tracking-wide text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded-sm shrink-0">{t('chat.comments.list.resolved')}</span>}
                     </div>
                     <p className={`text-sm mt-0.5 line-clamp-2 wrap-break-word ${c.resolved ? 'text-gray-400 dark:text-gray-500 line-through' : 'text-gray-700 dark:text-gray-200'}`}><MentionedBody body={c.body} mentions={c.mentions} /></p>
                   </div>

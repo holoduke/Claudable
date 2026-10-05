@@ -18,9 +18,56 @@ import fs from 'fs/promises';
 import path from 'path';
 import { unzipSync } from 'fflate';
 import { shouldKeep, commonRootPrefix, screenName } from '@/lib/utils/design-keep';
-import { readTextInside, writeFileInside } from '@/lib/utils/safe-fs';
+import { readTextInside, realPathInside, writeFileInside } from '@/lib/utils/safe-fs';
 
 const DEST_DIRNAME = 'design-reference';
+
+/** Largest design zip we import (the browser pre-filters, so the upload is usually far smaller). */
+export const MAX_DESIGN_UPLOAD_BYTES = 600 * 1024 * 1024;
+
+export type DesignImportErrorCode = 'unreadable' | 'not_design_export' | 'invalid_upload' | 'upload_missing' | 'too_large';
+
+/** A failure the import UI can explain in the viewer's language (via `code`). */
+export class DesignImportError extends Error {
+  constructor(readonly code: DesignImportErrorCode, message: string, readonly params: Record<string, number> = {}) {
+    super(message);
+    this.name = 'DesignImportError';
+  }
+}
+
+// A chunked upload finalizes as assets/<uuid><ext> (see /api/assets/:id/upload).
+const STAGED_UPLOAD_RE = /^assets\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.zip$/u;
+
+export function tooLargeError(sizeBytes: number): DesignImportError {
+  const size = Math.ceil(sizeBytes / 1024 / 1024);
+  const limit = MAX_DESIGN_UPLOAD_BYTES / 1024 / 1024;
+  return new DesignImportError('too_large', `Zip is too large (${size} MB). Limit is ${limit} MB.`, { size, limit });
+}
+
+/**
+ * Read a design zip that arrived through the CHUNKED asset upload (a single
+ * request body is capped at ~10MB by the proxies, so large exports can't be
+ * posted in one go). `uploadPath` is the upload's "assets/<uuid>.zip"; it must
+ * resolve — symlinks included — to a regular file inside `<projectDir>/assets`
+ * (that folder is agent-writable). Returns the bytes and the absolute path so
+ * the caller can delete the staged zip after the import.
+ */
+export async function readStagedDesignUpload(projectDir: string, uploadPath: unknown): Promise<{ bytes: Uint8Array; absolutePath: string }> {
+  if (typeof uploadPath !== 'string' || !STAGED_UPLOAD_RE.test(uploadPath)) {
+    throw new DesignImportError('invalid_upload', 'Invalid upload reference.');
+  }
+  const assetsDir = path.join(projectDir, 'assets');
+  const target = path.join(projectDir, uploadPath);
+  const lst = await fs.lstat(target).catch(() => null);
+  const real = lst && !lst.isSymbolicLink() ? await realPathInside(assetsDir, target) : null;
+  const stat = real ? await fs.stat(real).catch(() => null) : null;
+  if (!real || !stat?.isFile()) throw new DesignImportError('upload_missing', 'The uploaded file was not found — upload it again.');
+  if (stat.size > MAX_DESIGN_UPLOAD_BYTES) {
+    await fs.rm(real, { force: true }).catch(() => {});
+    throw tooLargeError(stat.size);
+  }
+  return { bytes: new Uint8Array(await fs.readFile(real)), absolutePath: real };
+}
 
 export interface DesignImportManifest {
   /** Directory (relative to project root) the design was staged into. */
@@ -62,14 +109,16 @@ export async function extractDesignImport(
       },
     });
   } catch (error) {
-    throw new Error(
+    throw new DesignImportError(
+      'unreadable',
       `Could not read the zip archive: ${error instanceof Error ? error.message : 'unknown error'}`
     );
   }
 
   const dcEntries = Object.keys(files).filter((n) => n.toLowerCase().endsWith('.dc.html'));
   if (dcEntries.length === 0) {
-    throw new Error(
+    throw new DesignImportError(
+      'not_design_export',
       "This doesn't look like a Claude Design export — no .dc.html screens were found in the zip."
     );
   }

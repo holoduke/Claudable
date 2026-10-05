@@ -23,12 +23,35 @@ import { prisma } from '@/lib/db/client';
 import { decrypt } from '@/lib/crypto';
 import { resolveProjectClaudeToken, resolvePersonalClaudeToken } from '@/lib/services/claude-credentials';
 import { isInternalUser, projectTenant } from '@/lib/services/tenant-policy';
-import { getBudgetStatus, getCreditMarginPercent } from '@/lib/services/org-budget';
+import { getBudgetStatus, getCreditMarginPercent, isBudgetExhausted } from '@/lib/services/org-budget';
 import { eurCentsToUsd } from '@/lib/services/fx';
+import { DEFAULT_LOCALE, type Locale } from '@/lib/i18n/config';
+import { formatServerDate, serverT, type ServerMessageKey } from '@/lib/services/server-i18n';
+
+export type AgentRunRefusalCode = 'no_org_credential' | 'budget_exhausted';
+
+/** Placeholders of a refusal message; dates are ISO so each viewer formats them in their own language. */
+export interface AgentRunRefusalParams {
+  resetsAt?: string;
+}
+
+/** The i18n key per refusal code ({date} = the formatted resetsAt). */
+export const REFUSAL_MESSAGE_KEYS: Record<AgentRunRefusalCode, ServerMessageKey> = {
+  no_org_credential: 'server.refusal.noOrgCredential',
+  budget_exhausted: 'server.refusal.budgetExhausted',
+};
+
+/** A refusal as a human sentence in `locale`. */
+export function describeRunRefusal(code: AgentRunRefusalCode, params: AgentRunRefusalParams, locale: Locale = DEFAULT_LOCALE): string {
+  const date = params.resetsAt ? formatServerDate(params.resetsAt, locale) : '';
+  return serverT(locale, REFUSAL_MESSAGE_KEYS[code], { date });
+}
 
 export class AgentRunRefusedError extends Error {
-  constructor(message: string, readonly code: 'no_org_credential' | 'budget_exhausted') {
-    super(message);
+  constructor(readonly code: AgentRunRefusalCode, readonly params: AgentRunRefusalParams = {}) {
+    // The default-language text lands in the chat log when a run is refused
+    // mid-flight; the act route refuses up front in the viewer's language.
+    super(describeRunRefusal(code, params));
     this.name = 'AgentRunRefusedError';
   }
 }
@@ -64,12 +87,40 @@ export interface AgentRunCredential {
   billing?: RunBilling;
 }
 
-// Below this remaining amount a run cannot do meaningful work: refuse instead of
-// starting one that stops after a single call.
-const MIN_RUN_BUDGET_CENTS = 5;
+interface CustomerRunContext {
+  orgId: string;
+  org: { allowOwnToken: boolean; claudeCredential: { id: string; token: string } | null } | null;
+  requester: { id: string; role: string } | null;
+  staff: boolean;
+}
 
-function formatResetDate(iso: string): string {
-  return new Date(iso).toLocaleDateString('nl-NL', { day: 'numeric', month: 'long', timeZone: 'UTC' });
+async function customerRunContext(orgId: string, requesterUserId?: string | null): Promise<CustomerRunContext> {
+  const org = await prisma.organization.findUnique({
+    where: { id: orgId },
+    select: { allowOwnToken: true, claudeCredential: { select: { id: true, token: true } } },
+  });
+  const requester = requesterUserId
+    ? await prisma.user.findUnique({ where: { id: requesterUserId }, select: { id: true, role: true } })
+    : null;
+  const staff = !!requester && (await isInternalUser(requester));
+  return { orgId, org, requester, staff };
+}
+
+/** The requester's own Claude token when the org allows it and they connected one (customers only). */
+async function ownTokenFor(ctx: CustomerRunContext): Promise<string | null> {
+  if (ctx.staff || !ctx.requester || !ctx.org?.allowOwnToken) return null;
+  return (await resolvePersonalClaudeToken(ctx.requester.id)) || null;
+}
+
+/**
+ * Whether `userId`'s runs in this project go on their OWN Claude account — then
+ * the organisation budget does not apply to them (the credits meter says so).
+ */
+export async function runsOnOwnToken(projectId: string, userId?: string | null): Promise<boolean> {
+  if (!userId) return false;
+  const tenant = await projectTenant(projectId);
+  if (!tenant.isCustomer || !tenant.orgId) return false;
+  return !!(await ownTokenFor(await customerRunContext(tenant.orgId, userId)));
 }
 
 export async function resolveAgentRun(projectId: string, requesterUserId?: string): Promise<AgentRunCredential> {
@@ -81,18 +132,10 @@ export async function resolveAgentRun(projectId: string, requesterUserId?: strin
     return { token };
   }
 
-  const org = await prisma.organization.findUnique({
-    where: { id: tenant.orgId },
-    select: { allowOwnToken: true, claudeCredential: { select: { id: true, token: true } } },
-  });
-  const requester = requesterUserId
-    ? await prisma.user.findUnique({ where: { id: requesterUserId }, select: { id: true, role: true } })
-    : null;
-  const staff = !!requester && (await isInternalUser(requester));
-  if (!staff && requester && org?.allowOwnToken) {
-    const own = await resolvePersonalClaudeToken(requester.id);
-    if (own) return { token: own, billing: { orgId: tenant.orgId, projectId, userId: requester.id, ownToken: true } };
-  }
+  const ctx = await customerRunContext(tenant.orgId, requesterUserId);
+  const { org, requester, staff } = ctx;
+  const own = await ownTokenFor(ctx);
+  if (own && requester) return { token: own, billing: { orgId: tenant.orgId, projectId, userId: requester.id, ownToken: true } };
 
   let token = '';
   try {
@@ -100,12 +143,7 @@ export async function resolveAgentRun(projectId: string, requesterUserId?: strin
   } catch {
     token = '';
   }
-  if (!token) {
-    throw new AgentRunRefusedError(
-      'This organisation has no Anthropic API key configured yet. Ask New Story to set one up.',
-      'no_org_credential',
-    );
-  }
+  if (!token) throw new AgentRunRefusedError('no_org_credential');
   if (org?.claudeCredential) {
     prisma.claudeCredential.update({ where: { id: org.claudeCredential.id }, data: { lastUsedAt: new Date() } }).catch(() => {});
   }
@@ -117,13 +155,35 @@ export async function resolveAgentRun(projectId: string, requesterUserId?: strin
   const status = await getBudgetStatus(tenant.orgId);
   const billing: RunBilling = { orgId: tenant.orgId, projectId, userId: requesterUserId ?? null };
   if (status.remainingCents === null) return { token, billing };
-  if (status.remainingCents < MIN_RUN_BUDGET_CENTS) {
-    throw new AgentRunRefusedError(
-      `The monthly budget for this organisation is used up. It resets on ${formatResetDate(status.resetsAt)}.`,
-      'budget_exhausted',
-    );
+  // Same rule as the credits meter's "used up" banner (org-budget.isBudgetExhausted).
+  if (isBudgetExhausted(status.remainingCents)) {
+    throw new AgentRunRefusedError('budget_exhausted', { resetsAt: status.resetsAt });
   }
   // The budget is in billed euros (cost + margin); the CLI cap is raw token cost.
   const margin = await getCreditMarginPercent(tenant.orgId);
   return { token, billing, maxBudgetUsd: await eurCentsToUsd(status.remainingCents / (1 + margin / 100)) };
+}
+
+export interface AgentRunRefusal {
+  code: AgentRunRefusalCode;
+  params: AgentRunRefusalParams;
+  messageKey: ServerMessageKey;
+}
+
+/**
+ * Pre-flight for the act route: would this run be refused (no org key, budget
+ * used up)? Lets the route answer immediately with a translatable refusal
+ * instead of starting a turn that fails in the chat log. Any other resolution
+ * problem is left to the run itself (it reports it in the chat as before).
+ */
+export async function checkAgentRunAllowed(projectId: string, requesterUserId?: string): Promise<AgentRunRefusal | null> {
+  try {
+    await resolveAgentRun(projectId, requesterUserId);
+    return null;
+  } catch (error) {
+    if (error instanceof AgentRunRefusedError) {
+      return { code: error.code, params: error.params, messageKey: REFUSAL_MESSAGE_KEYS[error.code] };
+    }
+    return null;
+  }
 }

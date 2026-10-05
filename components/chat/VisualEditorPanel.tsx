@@ -1,5 +1,7 @@
 "use client";
-import { useMemo } from 'react';
+import { useId, useMemo } from 'react';
+import { useI18n } from '@/contexts/I18nContext';
+import type { MessageKey } from '@/lib/i18n/messages/en';
 
 export interface SelectedElement {
   selector: string;
@@ -25,37 +27,38 @@ interface VisualEditorPanelProps {
   busy?: boolean;
 }
 
-// Grouped, curated CSS controls. `kind` picks the input widget.
-const GROUPS: { title: string; fields: { prop: string; label: string; kind: 'text' | 'color' | 'select'; options?: string[] }[] }[] = [
+// Grouped, curated CSS controls. `kind` picks the input widget. `title` and
+// `label` are i18n keys (chat.visual.*).
+const GROUPS: { title: MessageKey; fields: { prop: string; label: MessageKey; kind: 'text' | 'color' | 'select'; options?: string[] }[] }[] = [
   {
-    title: 'Typography',
+    title: 'chat.visual.group.typography',
     fields: [
-      { prop: 'color', label: 'Text color', kind: 'color' },
-      { prop: 'fontSize', label: 'Font size', kind: 'text' },
-      { prop: 'fontWeight', label: 'Font weight', kind: 'text' },
-      { prop: 'lineHeight', label: 'Line height', kind: 'text' },
-      { prop: 'letterSpacing', label: 'Letter spacing', kind: 'text' },
-      { prop: 'textAlign', label: 'Text align', kind: 'select', options: ['left', 'center', 'right', 'justify'] },
+      { prop: 'color', label: 'chat.visual.field.color', kind: 'color' },
+      { prop: 'fontSize', label: 'chat.visual.field.fontSize', kind: 'text' },
+      { prop: 'fontWeight', label: 'chat.visual.field.fontWeight', kind: 'text' },
+      { prop: 'lineHeight', label: 'chat.visual.field.lineHeight', kind: 'text' },
+      { prop: 'letterSpacing', label: 'chat.visual.field.letterSpacing', kind: 'text' },
+      { prop: 'textAlign', label: 'chat.visual.field.textAlign', kind: 'select', options: ['left', 'center', 'right', 'justify'] },
     ],
   },
   {
-    title: 'Background & border',
+    title: 'chat.visual.group.background',
     fields: [
-      { prop: 'backgroundColor', label: 'Background', kind: 'color' },
-      { prop: 'borderRadius', label: 'Radius', kind: 'text' },
-      { prop: 'borderWidth', label: 'Border width', kind: 'text' },
-      { prop: 'borderColor', label: 'Border color', kind: 'color' },
+      { prop: 'backgroundColor', label: 'chat.visual.field.backgroundColor', kind: 'color' },
+      { prop: 'borderRadius', label: 'chat.visual.field.borderRadius', kind: 'text' },
+      { prop: 'borderWidth', label: 'chat.visual.field.borderWidth', kind: 'text' },
+      { prop: 'borderColor', label: 'chat.visual.field.borderColor', kind: 'color' },
     ],
   },
   {
-    title: 'Spacing & size',
+    title: 'chat.visual.group.spacing',
     fields: [
-      { prop: 'padding', label: 'Padding', kind: 'text' },
-      { prop: 'margin', label: 'Margin', kind: 'text' },
-      { prop: 'width', label: 'Width', kind: 'text' },
-      { prop: 'height', label: 'Height', kind: 'text' },
-      { prop: 'display', label: 'Display', kind: 'select', options: ['block', 'inline', 'inline-block', 'flex', 'grid', 'none'] },
-      { prop: 'opacity', label: 'Opacity', kind: 'text' },
+      { prop: 'padding', label: 'chat.visual.field.padding', kind: 'text' },
+      { prop: 'margin', label: 'chat.visual.field.margin', kind: 'text' },
+      { prop: 'width', label: 'chat.visual.field.width', kind: 'text' },
+      { prop: 'height', label: 'chat.visual.field.height', kind: 'text' },
+      { prop: 'display', label: 'chat.visual.field.display', kind: 'select', options: ['block', 'inline', 'inline-block', 'flex', 'grid', 'none'] },
+      { prop: 'opacity', label: 'chat.visual.field.opacity', kind: 'text' },
     ],
   },
 ];
@@ -74,6 +77,9 @@ function toHex(value: string | undefined): string {
 export default function VisualEditorPanel({
   element, edits, textEdit, onApplyStyle, onApplyText, onPersist, onClose, persisting, busy = false,
 }: VisualEditorPanelProps) {
+  const { t } = useI18n();
+  const baseId = useId();
+  const fieldId = (prop: string) => `${baseId}-${prop}`;
   const val = (prop: string) => (prop in edits ? edits[prop] : element?.styles[prop] ?? '');
   const dirtyCount = useMemo(
     () => Object.keys(edits).length + (textEdit !== null ? 1 : 0),
@@ -85,16 +91,16 @@ export default function VisualEditorPanel({
       <div className="flex items-center justify-between px-4 h-[73px] border-b border-gray-200 dark:border-white/8">
         <div className="flex items-center gap-2">
           <span className="inline-block w-2 h-2 rounded-full bg-brand-500" />
-          <span className="font-semibold text-gray-900 dark:text-gray-50">Visual editor</span>
+          <span className="font-semibold text-gray-900 dark:text-gray-50">{t('chat.visual.title')}</span>
         </div>
-        <button onClick={onClose} className="text-sm text-gray-500 dark:text-gray-400 hover:text-gray-800 px-2 py-1 rounded-sm hover:bg-gray-100 dark:hover:bg-white/6">Done</button>
+        <button onClick={onClose} className="text-sm text-gray-500 dark:text-gray-400 hover:text-gray-800 px-2 py-1 rounded-sm hover:bg-gray-100 dark:hover:bg-white/6">{t('chat.visual.done')}</button>
       </div>
 
       {!element ? (
         <div className="flex-1 flex flex-col items-center justify-center text-center px-6 text-gray-500 dark:text-gray-400">
           <div className="text-4xl mb-3">🎯</div>
-          <p className="font-medium text-gray-700 dark:text-gray-200">Click any element in the preview</p>
-          <p className="text-sm mt-1">Then tweak its text, colors, spacing and more — changes apply live.</p>
+          <p className="font-medium text-gray-700 dark:text-gray-200">{t('chat.visual.emptyTitle')}</p>
+          <p className="text-sm mt-1">{t('chat.visual.emptyBody')}</p>
         </div>
       ) : (
         <div className="flex-1 overflow-y-auto">
@@ -113,8 +119,9 @@ export default function VisualEditorPanel({
           {/* Text content */}
           {element.editableText && (
             <div className="px-4 py-3 border-b border-gray-100 dark:border-white/8">
-              <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Text</label>
+              <label htmlFor={fieldId('text')} className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">{t('chat.visual.text')}</label>
               <textarea
+                id={fieldId('text')}
                 value={textEdit !== null ? textEdit : element.text}
                 onChange={(e) => onApplyText(e.target.value)}
                 rows={2}
@@ -126,13 +133,14 @@ export default function VisualEditorPanel({
           {/* Style groups */}
           {GROUPS.map((g) => (
             <div key={g.title} className="px-4 py-3 border-b border-gray-100 dark:border-white/8">
-              <div className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-2">{g.title}</div>
+              <div className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-2">{t(g.title)}</div>
               <div className="grid grid-cols-2 gap-2">
                 {g.fields.map((f) => (
                   <div key={f.prop} className="flex flex-col gap-1">
-                    <label className="text-[11px] text-gray-400 dark:text-gray-500">{f.label}</label>
+                    <label htmlFor={fieldId(f.prop)} className="text-[11px] text-gray-400 dark:text-gray-500">{t(f.label)}</label>
                     {f.kind === 'select' ? (
                       <select
+                        id={fieldId(f.prop)}
                         value={val(f.prop)}
                         onChange={(e) => onApplyStyle(f.prop, e.target.value)}
                         className="text-xs border border-gray-200 dark:border-white/8 rounded-sm px-1.5 py-1 bg-white dark:bg-white/6 focus:outline-hidden focus:ring-1 focus:ring-brand-500/40"
@@ -144,11 +152,13 @@ export default function VisualEditorPanel({
                       <div className="flex items-center gap-1">
                         <input
                           type="color"
+                          aria-label={t('chat.visual.colorPicker', { label: t(f.label) })}
                           value={toHex(val(f.prop))}
                           onChange={(e) => onApplyStyle(f.prop, e.target.value)}
                           className="w-7 h-7 rounded-sm border border-gray-200 dark:border-white/8 p-0 cursor-pointer shrink-0"
                         />
                         <input
+                          id={fieldId(f.prop)}
                           type="text"
                           value={val(f.prop)}
                           onChange={(e) => onApplyStyle(f.prop, e.target.value)}
@@ -157,6 +167,7 @@ export default function VisualEditorPanel({
                       </div>
                     ) : (
                       <input
+                        id={fieldId(f.prop)}
                         type="text"
                         value={val(f.prop)}
                         onChange={(e) => onApplyStyle(f.prop, e.target.value)}
@@ -176,13 +187,13 @@ export default function VisualEditorPanel({
         <button
           onClick={onPersist}
           disabled={!element || dirtyCount === 0 || persisting || busy}
-          title={busy ? 'The agent is busy — apply once it finishes' : undefined}
+          title={busy ? t('chat.visual.busyTitle') : undefined}
           className="w-full h-9 rounded-lg bg-brand-500 text-white text-sm font-medium hover:bg-brand-600 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
         >
-          {busy ? 'Agent busy…' : persisting ? 'Applying…' : dirtyCount === 0 ? 'No changes yet' : `Apply ${dirtyCount} change${dirtyCount > 1 ? 's' : ''} to code`}
+          {busy ? t('chat.visual.busy') : persisting ? t('chat.visual.applying') : dirtyCount === 0 ? t('chat.visual.noChanges') : t(dirtyCount > 1 ? 'chat.visual.apply.other' : 'chat.visual.apply.one', { count: dirtyCount })}
         </button>
         <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-2 text-center">
-          Live changes are preview-only until applied to code (via the agent).
+          {t('chat.visual.hint')}
         </p>
       </div>
     </div>

@@ -73,7 +73,10 @@ export default function ApiTokensSection({ onToast }: ApiTokensSectionProps) {
     }
   };
 
-  const revoke = async (id: string) => {
+  const revoke = async (tk: ApiToken) => {
+    // Revoking breaks every script/bot using the token, immediately — confirm first.
+    if (!window.confirm(t('settings.tokens.confirmRevoke', { name: tk.name }))) return;
+    const id = tk.id;
     setBusy(true);
     try {
       const res = await fetch(`${API_BASE}/api/users/me/api-tokens/${encodeURIComponent(id)}`, { method: 'DELETE' });
@@ -134,7 +137,7 @@ export default function ApiTokensSection({ onToast }: ApiTokensSectionProps) {
               </div>
               <button
                 type="button"
-                onClick={() => revoke(tk.id)}
+                onClick={() => revoke(tk)}
                 disabled={busy}
                 className="shrink-0 rounded-lg px-3 py-1 text-xs font-medium border border-gray-200 dark:border-white/8 text-red-600 hover:bg-red-50 dark:hover:bg-red-500/10 disabled:opacity-50"
               >

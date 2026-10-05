@@ -2,6 +2,7 @@ import React, { useId, useState } from 'react';
 import { motion } from 'framer-motion';
 import { toRelativePath } from '@/lib/utils/path';
 import DiffView, { DiffData } from './DiffView';
+import { useI18n } from '@/contexts/I18nContext';
 
 interface ToolResultItemProps {
   action: 'Edited' | 'Created' | 'Read' | 'Deleted' | 'Generated' | 'Searched' | 'Executed';
@@ -11,6 +12,16 @@ interface ToolResultItemProps {
   isExpanded?: boolean;
   onToggle?: (nextExpanded: boolean) => void;
 }
+
+const ACTION_KEYS = {
+  Edited: 'chat.tool.edited',
+  Created: 'chat.tool.created',
+  Read: 'chat.tool.read',
+  Deleted: 'chat.tool.deleted',
+  Generated: 'chat.tool.generated',
+  Searched: 'chat.tool.searched',
+  Executed: 'chat.tool.executed',
+} as const satisfies Record<ToolResultItemProps['action'], string>;
 
 const hasDiffData = (diff?: DiffData | null): diff is DiffData =>
   Boolean(diff && (diff.patch || (diff.segments && diff.segments.length > 0)));
@@ -23,6 +34,7 @@ const ToolResultItem: React.FC<ToolResultItemProps> = ({
   isExpanded: controlledExpanded,
   onToggle,
 }) => {
+  const { t } = useI18n();
   const [uncontrolledExpanded, setUncontrolledExpanded] = useState(false);
   const [copied, setCopied] = useState(false);
   const contentId = useId();
@@ -122,7 +134,7 @@ const ToolResultItem: React.FC<ToolResultItemProps> = ({
           {getIcon()}
         </div>
         <span className="shrink-0 font-normal text-gray-600 dark:text-gray-300 ">
-          {action}
+          {ACTION_KEYS[action] ? t(ACTION_KEYS[action]) : action}
         </span>
         <span
           className="relative w-fit max-w-xs truncate rounded-md bg-gray-100 dark:bg-white/6 px-2 py-0 text-start text-xs font-normal text-gray-600 dark:text-gray-300 transition-colors hover:bg-gray-200 dark:hover:bg-white/6 "
@@ -143,6 +155,7 @@ const ToolResultItem: React.FC<ToolResultItemProps> = ({
             strokeWidth="2"
             strokeLinecap="round"
             strokeLinejoin="round"
+            aria-hidden="true"
             className={`ml-1 text-gray-400 dark:text-gray-500 transition-transform ${isExpanded ? 'rotate-90' : ''}`}
           >
             <polyline points="9 18 15 12 9 6"></polyline>
@@ -173,9 +186,9 @@ const ToolResultItem: React.FC<ToolResultItemProps> = ({
                   type="button"
                   onClick={handleCopy}
                   className="shrink-0 rounded-sm px-1.5 py-0.5 text-[11px] text-gray-500 hover:bg-gray-200 dark:text-gray-400 dark:hover:bg-white/6 transition-colors"
-                  aria-label="Copy to clipboard"
+                  aria-label={t('chat.tool.copyAria')}
                 >
-                  {copied ? 'Copied' : 'Copy'}
+                  {copied ? t('common.copied') : t('common.copy')}
                 </button>
               ) : null}
             </div>

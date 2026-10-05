@@ -49,6 +49,13 @@ interface Props {
 
 const REGEN_PROMPT = 'Regenerate: produce a fresh alternative take in the same overall direction.';
 
+/** Server error text from a failed response (`{ error }` / `{ message }`), or null. */
+async function serverMessage(r: Response): Promise<string | null> {
+  const j = await r.json().catch(() => null) as { error?: unknown; message?: unknown } | null;
+  const msg = j?.error ?? j?.message;
+  return typeof msg === 'string' && msg.trim() ? msg : null;
+}
+
 export default function DesignExplorerBoard({ projectId, onApply, busy, active }: Props) {
   const t = useT();
   const [brief, setBrief] = useState('');
@@ -193,7 +200,7 @@ export default function DesignExplorerBoard({ projectId, onApply, busy, active }
         body: JSON.stringify({ prompt, count, referenceImage: refImage || undefined }),
       });
       const j = await r.json().catch(() => null);
-      if (!r.ok || !j?.data) { setError(j?.message || t('designExplorer.actionFailed')); return; }
+      if (!r.ok || !j?.data) { setError(j?.error || j?.message || t('designExplorer.actionFailed')); return; }
       setHtml({}); setVersionIdx({}); setRefImage(null);
       setCanvas(j.data as Canvas);
       setCanvases((cs) => [j.data as Canvas, ...cs]);
@@ -202,23 +209,27 @@ export default function DesignExplorerBoard({ projectId, onApply, busy, active }
 
   const addMore = useCallback(async () => {
     if (!canvas || addingMore) return;
-    setAddingMore(true);
+    setAddingMore(true); setError(null);
     try {
-      await fetch(`${API_BASE}/api/projects/${projectId}/design-explorer/${canvas.id}/frames`, {
+      const r = await fetch(`${API_BASE}/api/projects/${projectId}/design-explorer/${canvas.id}/frames`, {
         method: 'POST', credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ count: 2 }),
       });
+      if (!r.ok) { setError((await serverMessage(r)) ?? t('designExplorer.actionFailed')); return; }
       await refreshCanvas(canvas.id);
-    } catch { /* ignore */ } finally { setAddingMore(false); }
-  }, [canvas, addingMore, projectId, refreshCanvas]);
+    } catch { setError(t('designExplorer.actionFailed')); } finally { setAddingMore(false); }
+  }, [canvas, addingMore, projectId, refreshCanvas, t]);
 
   const deleteCanvas = useCallback(async () => {
     if (!canvas || !window.confirm(t('designExplorer.confirmDelete'))) return;
     const id = canvas.id;
+    setError(null);
     try {
-      await fetch(`${API_BASE}/api/projects/${projectId}/design-explorer/${id}`, { method: 'DELETE', credentials: 'include' });
-    } catch { /* ignore */ }
+      const r = await fetch(`${API_BASE}/api/projects/${projectId}/design-explorer/${id}`, { method: 'DELETE', credentials: 'include' });
+      // A failed delete keeps the canvas on screen (and in the history list).
+      if (!r.ok) { setError((await serverMessage(r)) ?? t('designExplorer.actionFailed')); return; }
+    } catch { setError(t('designExplorer.actionFailed')); return; }
     setCanvases((cs) => {
       const next = cs.filter((c) => c.id !== id);
       setCanvas(next[0] ?? null);
@@ -228,31 +239,36 @@ export default function DesignExplorerBoard({ projectId, onApply, busy, active }
 
   const refineFrame = useCallback(async (frameId: string, prompt: string) => {
     if (!prompt.trim() || refineBusy === frameId) return; // guard double-submit
-    setRefineBusy(frameId);
-    setRefiningId(null); setRefineText('');
+    setRefineBusy(frameId); setError(null);
     try {
-      await fetch(`${API_BASE}/api/projects/${projectId}/design-explorer/frames/${frameId}/refine`, {
+      const r = await fetch(`${API_BASE}/api/projects/${projectId}/design-explorer/frames/${frameId}/refine`, {
         method: 'POST', credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ prompt }),
       });
+      // On failure keep the refine input open with the typed text so it can be retried.
+      if (!r.ok) { setError((await serverMessage(r)) ?? t('designExplorer.actionFailed')); return; }
+      setRefiningId((cur) => (cur === frameId ? null : cur));
+      setRefineText('');
       if (canvas) refreshCanvas(canvas.id);
-    } catch { /* surfaced on next poll */ } finally { setRefineBusy(null); }
-  }, [projectId, canvas, refreshCanvas, refineBusy]);
+    } catch { setError(t('designExplorer.actionFailed')); } finally { setRefineBusy(null); }
+  }, [projectId, canvas, refreshCanvas, refineBusy, t]);
 
   const use = useCallback(async (frameId: string) => {
     if (!canvas || busy) return;
-    setApplyingId(frameId);
+    setApplyingId(frameId); setError(null);
     try {
       const r = await fetch(`${API_BASE}/api/projects/${projectId}/design-explorer/${canvas.id}/apply`, {
         method: 'POST', credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ frameId }),
       });
+      if (!r.ok) { setError((await serverMessage(r)) ?? t('designExplorer.actionFailed')); return; }
       const j = await r.json().catch(() => null);
-      if (r.ok && j?.data?.suggestedPrompt) onApply(j.data.suggestedPrompt as string);
-    } catch { /* ignore */ } finally { setApplyingId(null); }
-  }, [canvas, busy, projectId, onApply]);
+      if (j?.data?.suggestedPrompt) onApply(j.data.suggestedPrompt as string);
+      else setError(t('designExplorer.actionFailed'));
+    } catch { setError(t('designExplorer.actionFailed')); } finally { setApplyingId(null); }
+  }, [canvas, busy, projectId, onApply, t]);
 
   const onPickImage = useCallback((file: File | null) => {
     if (!file) { setRefImage(null); return; }
@@ -268,17 +284,18 @@ export default function DesignExplorerBoard({ projectId, onApply, busy, active }
 
   const combine = useCallback(async () => {
     if (!canvas || selected.length !== 2 || combining) return;
-    setCombining(true);
+    setCombining(true); setError(null);
     try {
-      await fetch(`${API_BASE}/api/projects/${projectId}/design-explorer/${canvas.id}/combine`, {
+      const r = await fetch(`${API_BASE}/api/projects/${projectId}/design-explorer/${canvas.id}/combine`, {
         method: 'POST', credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ frameIds: selected }),
       });
+      if (!r.ok) { setError((await serverMessage(r)) ?? t('designExplorer.actionFailed')); return; }
       setSelected([]); setCombineMode(false);
       await refreshCanvas(canvas.id);
-    } catch { /* ignore */ } finally { setCombining(false); }
-  }, [canvas, selected, combining, projectId, refreshCanvas]);
+    } catch { setError(t('designExplorer.actionFailed')); } finally { setCombining(false); }
+  }, [canvas, selected, combining, projectId, refreshCanvas, t]);
 
   const exportHtml = useCallback((frame: Frame) => {
     const content = html[frame.id];
@@ -323,7 +340,7 @@ export default function DesignExplorerBoard({ projectId, onApply, busy, active }
         </button>
         {canvas && (
           <button onClick={deleteCanvas} aria-label={t('designExplorer.deleteCanvas')} title={t('designExplorer.deleteCanvas')} className="text-xs px-2 py-1 rounded-md border border-gray-200 dark:border-white/10 text-gray-500 hover:text-red-500">
-            🗑
+            <span aria-hidden="true">🗑</span>
           </button>
         )}
         <div className="ml-auto flex items-center gap-2">
@@ -335,6 +352,7 @@ export default function DesignExplorerBoard({ projectId, onApply, busy, active }
           {canvas && (canvas.frames?.length ?? 0) >= 2 && (
             <button
               onClick={() => { setCombineMode((v) => !v); setSelected([]); }}
+              aria-pressed={combineMode}
               className={`text-xs px-2 py-1 rounded-md border ${combineMode ? 'border-brand-500 text-brand-500' : 'border-gray-200 dark:border-white/10 text-gray-600 dark:text-gray-300'}`}
             >
               {t('designExplorer.combine')}
@@ -342,7 +360,7 @@ export default function DesignExplorerBoard({ projectId, onApply, busy, active }
           )}
           <div className="flex items-center bg-gray-100 dark:bg-white/6 rounded-md p-0.5">
             {(['desktop', 'mobile'] as const).map((d) => (
-              <button key={d} onClick={() => setDevice(d)} className={`text-xs px-2 py-0.5 rounded ${device === d ? 'bg-white dark:bg-white/12 text-gray-900 dark:text-gray-50' : 'text-gray-500 dark:text-gray-400'}`}>
+              <button key={d} onClick={() => setDevice(d)} aria-pressed={device === d} className={`text-xs px-2 py-0.5 rounded ${device === d ? 'bg-white dark:bg-white/12 text-gray-900 dark:text-gray-50' : 'text-gray-500 dark:text-gray-400'}`}>
                 {t(d === 'desktop' ? 'designExplorer.desktop' : 'designExplorer.mobile')}
               </button>
             ))}
@@ -354,7 +372,7 @@ export default function DesignExplorerBoard({ projectId, onApply, busy, active }
       {combineMode && (
         <div className="sticky top-[41px] z-10 flex items-center justify-between px-4 py-1.5 bg-brand-500/10 text-brand-500 text-xs">
           <span>{t('designExplorer.combineSelect')} ({selected.length}/2)</span>
-          <button onClick={combine} disabled={selected.length !== 2 || combining} className="px-3 py-1 bg-brand-500 text-white rounded-md disabled:opacity-40">
+          <button onClick={combine} disabled={selected.length !== 2 || combining} aria-busy={combining} className="px-3 py-1 bg-brand-500 text-white rounded-md disabled:opacity-40">
             {combining ? '…' : t('designExplorer.combine')}
           </button>
         </div>
@@ -448,7 +466,7 @@ export default function DesignExplorerBoard({ projectId, onApply, busy, active }
                       {versions.length > 1 && (
                         <span className="flex items-center gap-1 text-[11px] text-gray-400 dark:text-gray-500 shrink-0">
                           <button aria-label={t('designExplorer.previousVersion')} onClick={() => setVersionIdx((v) => ({ ...v, [root]: Math.max(0, idx - 1) }))} disabled={idx === 0} className="disabled:opacity-30">‹</button>
-                          v{f.version}
+                          {t('chat.explorer.version', { version: f.version })}
                           <button aria-label={t('designExplorer.nextVersion')} onClick={() => setVersionIdx((v) => ({ ...v, [root]: Math.min(versions.length - 1, idx + 1) }))} disabled={idx === versions.length - 1} className="disabled:opacity-30">›</button>
                         </span>
                       )}
@@ -463,7 +481,7 @@ export default function DesignExplorerBoard({ projectId, onApply, busy, active }
                       </div>
                     ) : (
                       <div className="flex items-center gap-1.5">
-                        <button onClick={() => use(f.id)} disabled={f.status !== 'ready' || busy || applyingId === f.id} className="flex-1 text-xs px-2 py-1 bg-brand-500 text-white rounded-md hover:bg-brand-600 disabled:opacity-40">
+                        <button onClick={() => use(f.id)} disabled={f.status !== 'ready' || busy || applyingId === f.id} aria-busy={applyingId === f.id} className="flex-1 text-xs px-2 py-1 bg-brand-500 text-white rounded-md hover:bg-brand-600 disabled:opacity-40">
                           {applyingId === f.id ? '…' : t('designExplorer.use')}
                         </button>
                         <button onClick={() => { setRefiningId(f.id); setRefineText(''); }} disabled={f.status !== 'ready'} className="text-xs px-2 py-1 text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 border border-gray-200 dark:border-white/10 rounded-md disabled:opacity-40">
@@ -485,7 +503,7 @@ export default function DesignExplorerBoard({ projectId, onApply, busy, active }
             {/* Add more */}
             {canvas && (
               <button onClick={addMore} disabled={addingMore} className="rounded-xl border-2 border-dashed border-gray-200 dark:border-white/10 aspect-4/3 flex flex-col items-center justify-center gap-2 text-gray-400 dark:text-gray-500 hover:border-brand-500/40 hover:text-brand-500 transition-colors disabled:opacity-50">
-                {addingMore ? <span className="w-5 h-5 rounded-full border-2 border-gray-300 dark:border-white/8 border-t-brand-500 animate-spin" /> : <span className="text-2xl">+</span>}
+                {addingMore ? <span className="w-5 h-5 rounded-full border-2 border-gray-300 dark:border-white/8 border-t-brand-500 animate-spin" /> : <span className="text-2xl" aria-hidden="true">+</span>}
                 <span className="text-xs">{t('designExplorer.addMore')}</span>
               </button>
             )}

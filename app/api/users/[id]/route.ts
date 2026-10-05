@@ -9,6 +9,7 @@ import { NextRequest } from 'next/server';
 import { getAdminUser } from '@/lib/auth/session';
 import { deleteUser, serializeUser } from '@/lib/services/users';
 import { prisma } from '@/lib/db/client';
+import { orgErrorResponse } from '@/lib/services/settings-org-errors';
 import { createSuccessResponse, createErrorResponse, handleApiError } from '@/lib/utils/api-response';
 
 export const runtime = 'nodejs';
@@ -113,6 +114,9 @@ export async function DELETE(
     await deleteUser(id, admin.id);
     return createSuccessResponse({ id });
   } catch (error) {
+    // last_owner: the person is the only owner of an organisation.
+    const orgError = orgErrorResponse(error);
+    if (orgError) return orgError;
     return handleApiError(error, 'API', 'Failed to delete user');
   }
 }

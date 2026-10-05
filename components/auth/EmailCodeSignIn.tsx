@@ -24,7 +24,8 @@ function withEmail(template: string, email: string): React.ReactNode {
   return <>{before}<span className="text-white/80">{email}</span>{after}</>;
 }
 
-export default function EmailCodeSignIn() {
+/** `redirectTo` is already sanitised by the login page (safeCallbackPath). */
+export default function EmailCodeSignIn({ redirectTo = '/' }: { redirectTo?: string }) {
   const t = useT();
   const [step, setStep] = useState<Step>('closed');
   const [email, setEmail] = useState('');
@@ -64,8 +65,7 @@ export default function EmailCodeSignIn() {
         // Full reload is intentional: the new session cookie must be picked up by
         // the server-rendered auth gate and every client auth context. Keep the
         // button busy while the page navigates away.
-        // eslint-disable-next-line @next/next/no-location-assign-relative-destination -- hard reload after sign-in resets auth state
-        window.location.href = '/';
+        window.location.href = redirectTo;
         return;
       }
       setError(t('login.emailCode.invalid'));

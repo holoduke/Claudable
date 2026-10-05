@@ -2,6 +2,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { responseErrorMessage } from '@/lib/client/api-error';
+import { useT } from '@/contexts/I18nContext';
+import type { MessageKey } from '@/lib/i18n/messages/en';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? '';
 
@@ -11,6 +13,19 @@ interface ServiceConnectionModalProps {
   provider: 'github' | 'supabase' | 'vercel';
   projectId?: string;
 }
+
+const GITHUB_STEPS = [
+  'settings.modal.token.gh1', 'settings.modal.token.gh2', 'settings.modal.token.stepName', 'settings.modal.token.gh4',
+  'settings.modal.token.gh5', 'settings.modal.token.gh6', 'settings.modal.token.stepPaste',
+] as const satisfies readonly MessageKey[];
+const SUPABASE_STEPS = [
+  'settings.modal.token.sb1', 'settings.modal.token.sb2', 'settings.modal.token.stepName', 'settings.modal.token.sb4',
+  'settings.modal.token.sb5', 'settings.modal.token.stepPaste',
+] as const satisfies readonly MessageKey[];
+const VERCEL_STEPS = [
+  'settings.modal.token.vc1', 'settings.modal.token.vc2', 'settings.modal.token.stepName', 'settings.modal.token.vc4',
+  'settings.modal.token.vc5', 'settings.modal.token.vc6', 'settings.modal.token.stepPaste',
+] as const satisfies readonly MessageKey[];
 
 interface ServiceToken {
   id: string;
@@ -27,6 +42,7 @@ export default function ServiceConnectionModal({
   provider,
   projectId 
 }: ServiceConnectionModalProps) {
+  const t = useT();
   const [isLoading, setIsLoading] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
   const [token, setToken] = useState('');
@@ -59,7 +75,7 @@ export default function ServiceConnectionModal({
 
   const handleSaveToken = async () => {
     if (!token.trim()) {
-      setNotice({ kind: 'error', text: 'Please enter a valid token' });
+      setNotice({ kind: 'error', text: t('settings.modal.token.enterValid') });
       return;
     }
 
@@ -88,20 +104,20 @@ export default function ServiceConnectionModal({
         }
         setToken('');
         setShowTokenInput(false);
-        setNotice({ kind: 'ok', text: 'Token saved.' });
+        setNotice({ kind: 'ok', text: t('settings.modal.token.saved') });
       } else {
-        setNotice({ kind: 'error', text: await responseErrorMessage(response, 'Failed to save token') });
+        setNotice({ kind: 'error', text: await responseErrorMessage(response, t('settings.modal.token.saveFailed')) });
       }
     } catch (error) {
       console.error('Failed to save token:', error);
-      setNotice({ kind: 'error', text: 'Failed to save token (network error). Please try again.' });
+      setNotice({ kind: 'error', text: t('settings.modal.token.saveNetwork') });
     } finally {
       setIsLoading(false);
     }
   };
 
   const handleDeleteToken = async () => {
-    if (!savedToken || !confirm('Are you sure you want to delete this token?')) {
+    if (!savedToken || !confirm(t('settings.modal.token.confirmDelete'))) {
       return;
     }
     
@@ -114,13 +130,13 @@ export default function ServiceConnectionModal({
 
       if (response.ok) {
         setSavedToken(null);
-        setNotice({ kind: 'ok', text: 'Token deleted.' });
+        setNotice({ kind: 'ok', text: t('settings.modal.token.deleted') });
       } else {
-        setNotice({ kind: 'error', text: await responseErrorMessage(response, 'Failed to delete token') });
+        setNotice({ kind: 'error', text: await responseErrorMessage(response, t('settings.modal.token.deleteFailed')) });
       }
     } catch (error) {
       console.error('Failed to delete token:', error);
-      setNotice({ kind: 'error', text: 'Failed to delete token (network error). Please try again.' });
+      setNotice({ kind: 'error', text: t('settings.modal.token.deleteNetwork') });
     } finally {
       setIsLoading(false);
     }
@@ -145,14 +161,14 @@ export default function ServiceConnectionModal({
         
         if (response.ok) {
           const data = await response.json();
-          setNotice({ kind: 'ok', text: `Repository created: ${data.html_url}` });
+          setNotice({ kind: 'ok', text: t('settings.modal.token.repoCreated', { url: data.html_url }) });
         } else {
-          setNotice({ kind: 'error', text: await responseErrorMessage(response, 'Failed to create repository') });
+          setNotice({ kind: 'error', text: await responseErrorMessage(response, t('settings.modal.token.repoFailed')) });
         }
       }
     } catch (error) {
       console.error('GitHub action failed:', error);
-      setNotice({ kind: 'error', text: 'GitHub action failed. Please check your token.' });
+      setNotice({ kind: 'error', text: t('settings.modal.token.actionFailed', { name: 'GitHub' }) });
     } finally {
       setActionLoading(false);
     }
@@ -164,7 +180,7 @@ export default function ServiceConnectionModal({
     setActionLoading(true);
     try {
       if (action === 'create-project') {
-        const dbPass = prompt('Enter database password for new Supabase project:');
+        const dbPass = prompt(t('settings.modal.token.dbPassPrompt'));
         if (!dbPass) return;
         
         const response = await fetch(`${API_BASE}/api/supabase/create-project`, {
@@ -181,14 +197,14 @@ export default function ServiceConnectionModal({
         
         if (response.ok) {
           const data = await response.json();
-          setNotice({ kind: 'ok', text: `Supabase project created: ${data.name}` });
+          setNotice({ kind: 'ok', text: t('settings.modal.token.supabaseCreated', { name: data.name }) });
         } else {
-          setNotice({ kind: 'error', text: await responseErrorMessage(response, 'Failed to create project') });
+          setNotice({ kind: 'error', text: await responseErrorMessage(response, t('settings.modal.token.projectFailed')) });
         }
       }
     } catch (error) {
       console.error('Supabase action failed:', error);
-      setNotice({ kind: 'error', text: 'Supabase action failed. Please check your token.' });
+      setNotice({ kind: 'error', text: t('settings.modal.token.actionFailed', { name: 'Supabase' }) });
     } finally {
       setActionLoading(false);
     }
@@ -210,52 +226,46 @@ export default function ServiceConnectionModal({
           const status = data.status ?? 'queued';
           if (deploymentUrl) {
             const formatted = deploymentUrl.startsWith('http') ? deploymentUrl : `https://${deploymentUrl}`;
-            setNotice({ kind: 'ok', text: `Deployment ${status}. URL: ${formatted}` });
+            setNotice({ kind: 'ok', text: t('settings.modal.token.deployUrl', { status, url: formatted }) });
           } else {
-            setNotice({ kind: 'ok', text: `Deployment ${status}.` });
+            setNotice({ kind: 'ok', text: t('settings.modal.token.deployStatus', { status }) });
           }
         } else {
-          setNotice({ kind: 'error', text: await responseErrorMessage(response, 'Failed to deploy') });
+          setNotice({ kind: 'error', text: await responseErrorMessage(response, t('settings.modal.token.deployFailed')) });
         }
       }
     } catch (error) {
       console.error('Vercel action failed:', error);
-      setNotice({ kind: 'error', text: 'Vercel action failed. Please check your token.' });
+      setNotice({ kind: 'error', text: t('settings.modal.token.actionFailed', { name: 'Vercel' }) });
     } finally {
       setActionLoading(false);
     }
   };
+
+  const steps = (keys: readonly MessageKey[]) => keys.map((k) => t(k));
 
   const getProviderInfo = () => {
     switch (provider) {
       case 'github':
         return {
           title: 'GitHub',
-          description: 'Connect with your GitHub Personal Access Token to create repositories and manage code',
+          description: t('settings.modal.token.githubDesc'),
           tokenUrl: 'https://github.com/settings/tokens',
-          tokenName: 'Personal Access Token',
+          tokenName: t('settings.modal.token.pat'),
           icon: (
             <svg width="32" height="32" viewBox="0 0 98 96" fill="none" xmlns="http://www.w3.org/2000/svg">
               <path fillRule="evenodd" clipRule="evenodd" d="M48.854 0C21.839 0 0 22 0 49.217c0 21.756 13.993 40.172 33.405 46.69 2.427.49 3.316-1.059 3.316-2.362 0-1.141-.08-5.052-.08-9.127-13.59 2.934-16.42-5.867-16.42-5.867-2.184-5.704-5.42-7.17-5.42-7.17-4.448-3.015.324-3.015.324-3.015 4.934.326 7.523 5.052 7.523 5.052 4.367 7.496 11.404 5.378 14.235 4.074.404-3.178 1.699-5.378 3.074-6.6-10.839-1.141-22.243-5.378-22.243-24.283 0-5.378 1.94-9.778 5.014-13.2-.485-1.222-2.184-6.275.486-13.038 0 0 4.125-1.304 13.426 5.052a46.97 46.97 0 0 1 12.214-1.63c4.125 0 8.33.571 12.213 1.63 9.302-6.356 13.427-5.052 13.427-5.052 2.67 6.763.97 11.816.485 13.038 3.155 3.422 5.015 7.822 5.015 13.2 0 18.905-11.404 23.06-22.324 24.283 1.78 1.548 3.316 4.481 3.316 9.126 0 6.6-.08 11.897-.08 13.526 0 1.304.89 2.853 3.316 2.364 19.412-6.52 33.405-24.935 33.405-46.691C97.707 22 75.788 0 48.854 0z" fill="currentColor"/>
             </svg>
           ),
-          instructions: [
-            "Go to GitHub → Settings → Developer settings → Personal access tokens → Tokens (classic)",
-            "Click 'Generate new token' → 'Generate new token (classic)'",
-            "Enter a descriptive name (e.g., 'Clovable Integration')",
-            "Select expiration (recommend 'No expiration' for development)",
-            "Select scopes: 'repo' (full repository access) and 'user' (user profile access)",
-            "Click 'Generate token' and copy the token immediately (you won't see it again!)",
-            "Paste the token below and click 'Save Token'"
-          ],
+          instructions: steps(GITHUB_STEPS),
           actions: ['create-repo']
         };
       case 'supabase':
         return {
           title: 'Supabase',
-          description: 'Connect with your Supabase Personal Access Token to manage projects and databases',
+          description: t('settings.modal.token.supabaseDesc'),
           tokenUrl: 'https://supabase.com/dashboard/account/tokens',
-          tokenName: 'Personal Access Token',
+          tokenName: t('settings.modal.token.pat'),
           icon: (
             <svg width="32" height="32" viewBox="0 0 109 113" fill="none" xmlns="http://www.w3.org/2000/svg">
               <path d="M63.7076 110.284C60.8481 113.885 55.0502 111.912 54.9813 107.314L53.9738 40.0627L99.1935 40.0627C107.384 40.0627 111.952 49.5228 106.859 55.9374L63.7076 110.284Z" fill="url(#paint0_linear)"/>
@@ -268,36 +278,21 @@ export default function ServiceConnectionModal({
               </defs>
             </svg>
           ),
-          instructions: [
-            "Go to Supabase Dashboard → Account → Access Tokens",
-            "Click 'Generate new token'",
-            "Enter a descriptive name (e.g., 'Clovable Integration')",
-            "Select appropriate expiration date (or no expiration for development)",
-            "Click 'Generate token' and copy it immediately",
-            "Paste the token below and click 'Save Token'"
-          ],
+          instructions: steps(SUPABASE_STEPS),
           actions: ['create-project']
         };
       case 'vercel':
         return {
           title: 'Vercel',
-          description: 'Connect with your Vercel API Token to deploy projects and manage domains',
+          description: t('settings.modal.token.vercelDesc'),
           tokenUrl: 'https://vercel.com/account/tokens',
-          tokenName: 'API Token',
+          tokenName: t('settings.modal.token.apiToken'),
           icon: (
             <svg width="32" height="32" viewBox="0 0 76 65" fill="none" xmlns="http://www.w3.org/2000/svg">
               <path d="M37.5274 0L75.0548 65H0L37.5274 0Z" fill="currentColor"/>
             </svg>
           ),
-          instructions: [
-            "Go to Vercel Dashboard → Settings → Tokens",
-            "Click 'Create Token'",
-            "Enter a descriptive name (e.g., 'Clovable Integration')",
-            "Select appropriate scope (recommend 'Full Access' for development)",
-            "Set expiration date or select 'No Expiration'",
-            "Click 'Create Token' and copy the token immediately",
-            "Paste the token below and click 'Save Token'"
-          ],
+          instructions: steps(VERCEL_STEPS),
           actions: ['deploy']
         };
     }
@@ -318,7 +313,7 @@ export default function ServiceConnectionModal({
           onClick={onClose}
         />
         
-        <div className="relative bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-auto">
+        <div role="dialog" aria-modal="true" aria-labelledby="service-token-modal-title" className="relative bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90dvh] overflow-auto">
           <motion.div 
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
@@ -332,7 +327,7 @@ export default function ServiceConnectionModal({
                   {providerInfo.icon}
                 </div>
                 <div>
-                  <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-50 ">
+                  <h2 id="service-token-modal-title" className="text-xl font-semibold text-gray-900 dark:text-gray-50 ">
                     {providerInfo.title} {providerInfo.tokenName}
                   </h2>
                   <p className="text-sm text-gray-600 dark:text-gray-300 ">
@@ -342,6 +337,7 @@ export default function ServiceConnectionModal({
               </div>
               <button
                 onClick={onClose}
+                aria-label={t('settings.modal.close')}
                 className="text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 "
               >
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -363,7 +359,7 @@ export default function ServiceConnectionModal({
                 }`}
               >
                 <span className="wrap-break-word min-w-0">{notice.text}</span>
-                <button onClick={() => setNotice(null)} className="shrink-0 opacity-70 hover:opacity-100" aria-label="Dismiss">✕</button>
+                <button onClick={() => setNotice(null)} className="shrink-0 opacity-70 hover:opacity-100" aria-label={t('settings.modal.dismiss')}>✕</button>
               </div>
             )}
             {savedToken ? (
@@ -373,15 +369,15 @@ export default function ServiceConnectionModal({
                   <div className="flex items-center gap-2 mb-2">
                     <div className="w-2 h-2 bg-green-500 rounded-full"></div>
                     <span className="text-sm font-medium text-green-700 ">
-                      Token Connected
+                      {t('settings.modal.token.connected')}
                     </span>
                   </div>
                   <div className="text-sm text-gray-600 dark:text-gray-300 ">
-                    <p>Name: {savedToken.name}</p>
-                    <p>Provider: {savedToken.provider}</p>
-                    <p className="text-xs mt-1">Added: {new Date(savedToken.created_at).toLocaleString()}</p>
+                    <p>{t('settings.modal.token.name', { name: savedToken.name ?? '' })}</p>
+                    <p>{t('settings.modal.token.provider', { provider: savedToken.provider })}</p>
+                    <p className="text-xs mt-1">{t('settings.modal.token.added', { date: new Date(savedToken.created_at).toLocaleString() })}</p>
                     {savedToken.last_used && (
-                      <p className="text-xs">Last used: {new Date(savedToken.last_used).toLocaleString()}</p>
+                      <p className="text-xs">{t('settings.modal.token.lastUsed', { date: new Date(savedToken.last_used).toLocaleString() })}</p>
                     )}
                   </div>
                 </div>
@@ -389,14 +385,14 @@ export default function ServiceConnectionModal({
                 {/* Service Actions */}
                 {projectId && (
                   <div className="space-y-2">
-                    <h3 className="text-sm font-medium text-gray-700 dark:text-gray-200 ">Available Actions</h3>
+                    <h3 className="text-sm font-medium text-gray-700 dark:text-gray-200 ">{t('settings.modal.token.actions')}</h3>
                     {provider === 'github' && (
                       <button
                         onClick={() => handleGitHubAction('create-repo')}
                         disabled={actionLoading}
                         className="w-full px-4 py-2 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200 rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
                       >
-                        {actionLoading ? 'Creating Repository...' : 'Create GitHub Repository'}
+                        {actionLoading ? t('settings.modal.token.creatingRepo') : t('settings.modal.token.createRepo')}
                       </button>
                     )}
                     {provider === 'supabase' && (
@@ -405,7 +401,7 @@ export default function ServiceConnectionModal({
                         disabled={actionLoading}
                         className="w-full px-4 py-2 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200 rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
                       >
-                        {actionLoading ? 'Creating Project...' : 'Create Supabase Project'}
+                        {actionLoading ? t('settings.modal.token.creatingProject') : t('settings.modal.token.createSupabase')}
                       </button>
                     )}
                     {provider === 'vercel' && (
@@ -414,7 +410,7 @@ export default function ServiceConnectionModal({
                         disabled={actionLoading}
                         className="w-full px-4 py-2 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200 rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
                       >
-                        {actionLoading ? 'Deploying...' : 'Deploy to Vercel'}
+                        {actionLoading ? t('settings.modal.token.deploying') : t('settings.modal.token.deployVercel')}
                       </button>
                     )}
                   </div>
@@ -426,33 +422,34 @@ export default function ServiceConnectionModal({
                       onClick={() => setShowTokenInput(true)}
                       className="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors"
                     >
-                      Update Token
+                      {t('settings.modal.token.update')}
                     </button>
                     <button
                       onClick={handleDeleteToken}
                       disabled={isLoading}
                       className="flex-1 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
                     >
-                      {isLoading ? 'Deleting...' : 'Delete Token'}
+                      {isLoading ? t('settings.modal.token.deleting') : t('settings.modal.token.delete')}
                     </button>
                   </div>
                 ) : (
                   <div key="edit-token" className="space-y-4">
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">
-                        Enter new {providerInfo.title} {providerInfo.tokenName}:
+                      <label htmlFor="service-token-new" className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">
+                        {t('settings.modal.token.enterNew', { provider: providerInfo.title, token: providerInfo.tokenName })}
                       </label>
                       <input
+                        id="service-token-new"
                         type="password"
                         value={token}
                         onChange={(e) => setToken(e.target.value)}
-                        placeholder={`Paste your new ${providerInfo.tokenName} here...`}
+                        placeholder={t('settings.modal.token.pasteNew', { token: providerInfo.tokenName })}
                         className="w-full px-4 py-3 border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-50 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm transition-colors"
                         disabled={isLoading}
                         autoFocus
                       />
                       <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
-                        This will replace your current token. The old token will be permanently removed.
+                        {t('settings.modal.token.replaceHint')}
                       </p>
                     </div>
 
@@ -465,14 +462,14 @@ export default function ServiceConnectionModal({
                         className="flex-1 px-4 py-2 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200 rounded-lg text-sm font-medium transition-colors"
                         disabled={isLoading}
                       >
-                        Cancel
+                        {t('settings.modal.cancel')}
                       </button>
                       <button
                         onClick={handleSaveToken}
                         disabled={isLoading || !token.trim()}
                         className="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                       >
-                        {isLoading ? 'Updating...' : 'Update Token'}
+                        {isLoading ? t('settings.modal.token.updating') : t('settings.modal.token.update')}
                       </button>
                     </div>
                   </div>
@@ -483,10 +480,10 @@ export default function ServiceConnectionModal({
               <div className="space-y-6">
                 <div className="bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
                   <h3 className="text-sm font-medium text-gray-900 dark:text-gray-50 mb-2">
-                    Setup Instructions
+                    {t('settings.modal.token.setupTitle')}
                   </h3>
                   <p className="text-xs text-gray-700 dark:text-gray-200 mb-3">
-                    To use {providerInfo.title} integration, you need to create a {providerInfo.tokenName} first.
+                    {t('settings.modal.token.setupIntro', { provider: providerInfo.title, token: providerInfo.tokenName })}
                   </p>
                   <a
                     href={providerInfo.tokenUrl}
@@ -494,7 +491,7 @@ export default function ServiceConnectionModal({
                     rel="noopener noreferrer"
                     className="inline-flex items-center gap-1 text-xs text-blue-600 hover:text-blue-500 font-medium"
                   >
-                    Open {providerInfo.title} Token Settings
+                    {t('settings.modal.token.openSettings', { provider: providerInfo.title })}
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                       <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14L21 3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                     </svg>
@@ -503,7 +500,7 @@ export default function ServiceConnectionModal({
 
                 <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-4">
                   <h4 className="text-sm font-medium text-gray-700 dark:text-gray-200 mb-3">
-                    Step-by-step Guide:
+                    {t('settings.modal.token.guide')}
                   </h4>
                   <ol className="text-xs text-gray-600 dark:text-gray-300 space-y-2">
                     {providerInfo.instructions.map((step, index) => (
@@ -520,19 +517,20 @@ export default function ServiceConnectionModal({
                 {/* Token Input Section - Always Visible */}
                 <div className="space-y-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">
-                      Enter your {providerInfo.title} {providerInfo.tokenName}:
+                    <label htmlFor="service-token-input" className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">
+                      {t('settings.modal.token.enter', { provider: providerInfo.title, token: providerInfo.tokenName })}
                     </label>
                     <input
+                      id="service-token-input"
                       type="password"
                       value={token}
                       onChange={(e) => setToken(e.target.value)}
-                      placeholder={`Paste your ${providerInfo.tokenName} here...`}
+                      placeholder={t('settings.modal.token.paste', { token: providerInfo.tokenName })}
                       className="w-full px-4 py-3 border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-50 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm transition-colors"
                       disabled={isLoading}
                     />
                     <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
-                      Your token will be encrypted and stored securely. You can delete it anytime.
+                      {t('settings.modal.token.encryptedHint')}
                     </p>
                   </div>
 
@@ -541,7 +539,7 @@ export default function ServiceConnectionModal({
                     disabled={isLoading || !token.trim()}
                     className="w-full px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-all duration-200 shadow-xs hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    {isLoading ? 'Saving Token...' : 'Save Token'}
+                    {isLoading ? t('settings.modal.token.saving') : t('settings.modal.token.save')}
                   </button>
                 </div>
               </div>

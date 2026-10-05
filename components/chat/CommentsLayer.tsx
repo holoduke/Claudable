@@ -5,6 +5,8 @@ import {
   splitBodyByMentions,
   type CommentMention,
 } from '@/lib/utils/mentions';
+import { useT } from '@/contexts/I18nContext';
+import { commentActionError, type CommentActionResult } from './chat-comment-action';
 
 export interface CommentPin {
   id: string;
@@ -42,11 +44,13 @@ interface CommentsLayerProps {
   activeId: string | null;
   compose: ComposeAnchor | null;
   viewport: { w: number; h: number };
-  /** Return true on success, false on failure — drives the inline error state. */
-  onSubmitNew: (body: string, mentions: CommentMention[]) => Promise<boolean> | boolean | void;
+  /** Return true on success; false, a server message string or `{ ok: false, message }`
+   *  on failure — drives the inline error state (a message is shown verbatim). */
+  onSubmitNew: (body: string, mentions: CommentMention[]) => Promise<CommentActionResult> | CommentActionResult;
   onCancelCompose: () => void;
-  onResolve: (id: string, resolved: boolean) => void;
-  onDelete: (id: string) => void;
+  /** Same result contract as onSubmitNew; void/undefined counts as success. */
+  onResolve: (id: string, resolved: boolean) => Promise<CommentActionResult> | CommentActionResult;
+  onDelete: (id: string) => Promise<CommentActionResult> | CommentActionResult;
   onCloseThread: () => void;
   /** Hide Resolve/Delete (e.g. guests on the share page can't manage). */
   readOnly?: boolean;
@@ -62,12 +66,12 @@ function clampPopover(x: number, y: number, w: number, h: number, vw: number, vh
   return { left, top };
 }
 
-function timeAgo(iso: string): string {
+function timeAgo(iso: string, t: ReturnType<typeof useT>): string {
   const s = Math.max(0, (Date.now() - new Date(iso).getTime()) / 1000);
-  if (s < 60) return 'just now';
-  if (s < 3600) return `${Math.floor(s / 60)}m ago`;
-  if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
-  return `${Math.floor(s / 86400)}d ago`;
+  if (s < 60) return t('chat.comments.justNow');
+  if (s < 3600) return t('chat.comments.minutesAgo', { n: Math.floor(s / 60) });
+  if (s < 86400) return t('chat.comments.hoursAgo', { n: Math.floor(s / 3600) });
+  return t('chat.comments.daysAgo', { n: Math.floor(s / 86400) });
 }
 
 function Avatar({ name, image }: { name: string; image: string | null }) {
@@ -110,6 +114,7 @@ export function MentionedBody({ body, mentions }: { body: string; mentions?: Com
 export default function CommentsLayer({
   comments, positions, activeId, compose, viewport, onSubmitNew, onCancelCompose, onResolve, onDelete, onCloseThread, readOnly = false, searchMentionUsers,
 }: CommentsLayerProps) {
+  const t = useT();
   const [draft, setDraft] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -145,8 +150,8 @@ export default function CommentsLayer({
   }
   useEffect(() => {
     if (!composeKey) return;
-    const t = setTimeout(() => composeRef.current?.focus(), 30);
-    return () => clearTimeout(t);
+    const timer = setTimeout(() => composeRef.current?.focus(), 30);
+    return () => clearTimeout(timer);
   }, [composeKey]);
 
   // No active @-token: drop any results (adjusted during render).
@@ -157,7 +162,7 @@ export default function CommentsLayer({
   useEffect(() => {
     if (!searchMentionUsers || !mentionQuery) return;
     const seq = ++mentionFetchSeqRef.current;
-    const t = setTimeout(async () => {
+    const timer = setTimeout(async () => {
       try {
         const users = await searchMentionUsers(mentionQuery.query);
         if (mentionFetchSeqRef.current === seq) {
@@ -168,7 +173,7 @@ export default function CommentsLayer({
         if (mentionFetchSeqRef.current === seq) setMentionResults([]);
       }
     }, 150);
-    return () => clearTimeout(t);
+    return () => clearTimeout(timer);
   }, [mentionQuery, searchMentionUsers]);
 
   const refreshMentionQuery = useCallback((text: string, caret: number) => {
@@ -203,14 +208,55 @@ export default function CommentsLayer({
     try {
       // Only send mentions whose @Name text survived editing.
       const mentions = draftMentions.filter((m) => text.includes(`@${m.name}`));
-      const ok = await onSubmitNew(text, mentions);
-      if (ok === false) setSubmitError('Couldn’t add your comment — check your connection and try again.');
+      const result = await onSubmitNew(text, mentions);
+      const error = commentActionError(result, t('chat.comments.addFailed'));
+      if (error) setSubmitError(error);
     } catch {
-      setSubmitError('Couldn’t add your comment — check your connection and try again.');
+      setSubmitError(t('chat.comments.addFailed'));
     } finally {
       setSubmitting(false);
     }
   };
+
+  // Resolve / delete on the open thread: one at a time, failures shown inline
+  // with the server's message. The parent only refreshes the list on success.
+  const [threadPending, setThreadPending] = useState(false);
+  const [threadError, setThreadError] = useState<string | null>(null);
+  const [prevActiveId, setPrevActiveId] = useState(activeId);
+  if (activeId !== prevActiveId) {
+    setPrevActiveId(activeId);
+    setThreadError(null);
+    setThreadPending(false);
+  }
+  const runThreadAction = async (action: () => Promise<CommentActionResult> | CommentActionResult, fallback: string) => {
+    if (threadPending) return;
+    setThreadPending(true);
+    setThreadError(null);
+    try {
+      const error = commentActionError(await action(), fallback);
+      if (error) setThreadError(error);
+    } catch {
+      setThreadError(fallback);
+    } finally {
+      setThreadPending(false);
+    }
+  };
+
+  // Escape closes whichever popover is open (thread first, then compose). Keys
+  // already handled elsewhere (mention picker, chat input stop) call
+  // preventDefault and are ignored here.
+  const threadOpen = !!activeId;
+  const composeOpen = !!compose;
+  useEffect(() => {
+    if (!threadOpen && !composeOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape' || e.defaultPrevented) return;
+      if (threadOpen) onCloseThread();
+      else if (composeOpen && !submitting) onCancelCompose();
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [threadOpen, composeOpen, submitting, onCloseThread, onCancelCompose]);
 
   const active = activeId ? comments.find((c) => c.id === activeId) : null;
   const activePos = activeId ? positions[activeId] : null;
@@ -220,6 +266,8 @@ export default function CommentsLayer({
       {/* New-comment compose card */}
       {compose && (
         <div
+          role="dialog"
+          aria-label={t('chat.comments.composeLabel')}
           className="absolute pointer-events-auto w-64 bg-white dark:bg-[#181310] rounded-lg shadow-xl border border-gray-200 dark:border-white/10 p-2"
           style={clampPopover(compose.x, compose.y, 256, 130, viewport.w, viewport.h)}
         >
@@ -236,9 +284,10 @@ export default function CommentsLayer({
                 if (e.key === 'Escape') { e.preventDefault(); setMentionQuery(null); setMentionResults([]); return; }
               }
               if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); void doSubmit(); }
-              if (e.key === 'Escape') onCancelCompose();
+              if (e.key === 'Escape') { e.preventDefault(); if (!submitting) onCancelCompose(); }
             }}
-            placeholder={searchMentionUsers ? 'Add a comment… (@ to tag someone)' : 'Add a comment…'}
+            placeholder={searchMentionUsers ? t('chat.comments.placeholderMention') : t('chat.comments.placeholder')}
+            aria-label={t('chat.comments.composeLabel')}
             rows={3}
             disabled={submitting}
             className="w-full text-sm border border-gray-200 dark:border-white/8 rounded-md p-2 focus:outline-hidden focus:ring-2 focus:ring-brand-500/30 resize-none disabled:opacity-60"
@@ -248,6 +297,8 @@ export default function CommentsLayer({
               {mentionResults.map((u, i) => (
                 <button
                   key={u.id}
+                  type="button"
+                  aria-label={t('chat.comments.mentionLabel', { name: u.name })}
                   onMouseDown={(e) => { e.preventDefault(); pickMention(u); }}
                   onMouseEnter={() => setMentionIndex(i)}
                   className={`w-full flex items-center gap-2 px-2 py-1.5 text-left ${i === mentionIndex ? 'bg-brand-500/10' : ''}`}
@@ -261,9 +312,9 @@ export default function CommentsLayer({
               ))}
             </div>
           )}
-          {submitError && <p className="text-[11px] text-red-600 mt-1 px-0.5">{submitError}</p>}
+          {submitError && <p role="alert" className="text-[11px] text-red-600 mt-1 px-0.5">{submitError}</p>}
           <div className="flex items-center justify-end gap-2 mt-1">
-            <button onClick={onCancelCompose} disabled={submitting} className="text-xs text-gray-500 dark:text-gray-400 hover:text-gray-800 px-2 py-1 disabled:opacity-40">Cancel</button>
+            <button onClick={onCancelCompose} disabled={submitting} className="text-xs text-gray-500 dark:text-gray-400 hover:text-gray-800 px-2 py-1 disabled:opacity-40">{t('common.cancel')}</button>
             <button
               onClick={() => void doSubmit()}
               disabled={!draft.trim() || submitting}
@@ -272,7 +323,7 @@ export default function CommentsLayer({
               {submitting && (
                 <svg className="animate-spin" width="11" height="11" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" className="opacity-25" /><path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" strokeWidth="4" strokeLinecap="round" /></svg>
               )}
-              {submitting ? 'Adding…' : 'Comment'}
+              {submitting ? t('chat.comments.adding') : t('chat.comments.submit')}
             </button>
           </div>
         </div>
@@ -281,6 +332,8 @@ export default function CommentsLayer({
       {/* Open thread for the active pin */}
       {active && activePos && activePos.x !== null && activePos.y !== null && (
         <div
+          role="dialog"
+          aria-label={t('chat.comments.threadLabel', { name: active.authorName })}
           className="absolute pointer-events-auto w-72 bg-white dark:bg-[#181310] rounded-lg shadow-xl border border-gray-200 dark:border-white/10"
           style={clampPopover(activePos.x, activePos.y, 288, 150, viewport.w, viewport.h)}
         >
@@ -289,18 +342,33 @@ export default function CommentsLayer({
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2">
                 <span className="text-sm font-medium text-gray-900 dark:text-gray-50 truncate">{active.authorName}</span>
-                <span className="text-[11px] text-gray-400 dark:text-gray-500">{timeAgo(active.createdAt)}</span>
+                <span className="text-[11px] text-gray-400 dark:text-gray-500">{timeAgo(active.createdAt, t)}</span>
               </div>
               <p className={`text-sm text-gray-700 dark:text-gray-200 mt-1 whitespace-pre-wrap wrap-break-word ${active.resolved ? 'line-through text-gray-400 dark:text-gray-500' : ''}`}><MentionedBody body={active.body} mentions={active.mentions} /></p>
             </div>
-            <button onClick={onCloseThread} className="text-gray-300 hover:text-gray-600 dark:hover:text-gray-300 text-sm shrink-0" aria-label="Close">✕</button>
+            <button onClick={onCloseThread} className="text-gray-300 hover:text-gray-600 dark:hover:text-gray-300 text-sm shrink-0" aria-label={t('chat.comments.closeThread')}>✕</button>
           </div>
+          {!readOnly && threadError && <p role="alert" className="text-[11px] text-red-600 px-3 pb-1">{threadError}</p>}
           {!readOnly && (
             <div className="flex items-center justify-end gap-2 px-3 pb-2 border-t border-gray-100 dark:border-white/8 pt-2">
-              <button onClick={() => onResolve(active.id, !active.resolved)} className="text-xs text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 px-2 py-1 rounded-sm hover:bg-gray-100 dark:hover:bg-white/6">
-                {active.resolved ? 'Reopen' : 'Resolve'}
+              <button
+                type="button"
+                disabled={threadPending}
+                onClick={() => void runThreadAction(() => onResolve(active.id, !active.resolved), t('chat.comments.resolveFailed'))}
+                aria-label={active.resolved ? t('chat.comments.reopenLabel') : t('chat.comments.resolveLabel')}
+                className="text-xs text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 px-2 py-1 rounded-sm hover:bg-gray-100 dark:hover:bg-white/6 disabled:opacity-40"
+              >
+                {active.resolved ? t('chat.comments.reopen') : t('chat.comments.resolve')}
               </button>
-              <button onClick={() => onDelete(active.id)} className="text-xs text-red-500 hover:text-red-700 px-2 py-1 rounded-sm hover:bg-red-50">Delete</button>
+              <button
+                type="button"
+                disabled={threadPending}
+                onClick={() => void runThreadAction(() => onDelete(active.id), t('chat.comments.deleteFailed'))}
+                aria-label={t('chat.comments.deleteLabel')}
+                className="text-xs text-red-500 hover:text-red-700 px-2 py-1 rounded-sm hover:bg-red-50 disabled:opacity-40"
+              >
+                {t('common.delete')}
+              </button>
             </div>
           )}
         </div>

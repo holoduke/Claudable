@@ -18,14 +18,40 @@ const SUPERADMIN: MemberActor = { superadmin: true, role: null };
 /** How long an invitation stays valid. */
 export const INVITE_TTL_DAYS = 14;
 
-class OrgPolicyError extends Error {
-  constructor(message: string) { super(message); this.name = 'OrgPolicyError'; }
+/**
+ * Every refusal from this module carries a stable machine `code` (mapped to a
+ * translated sentence in the UI) and an HTTP `status`; `message` is English
+ * for logs / API clients that don't translate.
+ */
+export type OrgErrorCode =
+  | 'org_name_required' | 'org_invalid_type' | 'org_invalid_domain' | 'org_domain_exists'
+  | 'org_not_found' | 'org_has_projects' | 'org_has_members'
+  | 'invalid_role' | 'invalid_email' | 'already_member' | 'owner_required'
+  | 'invite_not_found' | 'invite_already_accepted' | 'membership_not_found' | 'last_owner';
+
+export class OrgError extends Error {
+  constructor(readonly code: OrgErrorCode, message: string, readonly status: number = 400) {
+    super(message);
+    this.name = 'OrgError';
+  }
+}
+class OrgPolicyError extends OrgError {
+  constructor(message: string) { super('owner_required', message, 403); this.name = 'OrgPolicyError'; }
 }
 export function isOrgPolicyError(e: unknown): boolean { return e instanceof OrgPolicyError; }
+export function isOrgError(e: unknown): e is OrgError { return e instanceof OrgError; }
+
+/** Prisma unique violation on Organization.domain → a typed OrgError (else unchanged). */
+export function toOrgError(e: unknown): unknown {
+  if (e instanceof Error && (e as { code?: string }).code === 'P2002') {
+    return new OrgError('org_domain_exists', 'An organisation with this domain already exists', 409);
+  }
+  return e;
+}
 
 function assertPolicy(actor: MemberActor, targetRole: OrgRole | null, newRole: OrgRole | null) {
   if (!canActorSetRole(actor, targetRole, newRole)) {
-    throw new OrgPolicyError('Alleen een eigenaar kan eigenaren toevoegen, wijzigen of verwijderen');
+    throw new OrgPolicyError('Only an owner can add, change or remove owners');
   }
 }
 
@@ -38,13 +64,13 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 function assertType(type: string): asserts type is OrgType {
   if (!ORG_TYPES.includes(type as OrgType)) {
-    throw new Error(`Organisatietype moet 'intern' of 'klant' zijn`);
+    throw new OrgError('org_invalid_type', `Organisation type must be 'intern' or 'klant'`);
   }
 }
 
 function assertRole(role: string): asserts role is OrgMemberRole {
   if (!ORG_MEMBER_ROLES.includes(role as OrgMemberRole)) {
-    throw new Error(`Rol moet 'eigenaar', 'beheerder' of 'lid' zijn`);
+    throw new OrgError('invalid_role', `Role must be 'eigenaar', 'beheerder' or 'lid'`);
   }
 }
 
@@ -53,7 +79,7 @@ function normalizeDomain(domain?: string | null): string | null {
   const d = (domain ?? '').trim().toLowerCase();
   if (!d) return null;
   if (!/^[a-z0-9.-]+\.[a-z]{2,}$/.test(d)) {
-    throw new Error('Domein is ongeldig (verwacht bijv. klant.nl)');
+    throw new OrgError('org_invalid_domain', 'Invalid domain (expected e.g. customer.com)');
   }
   return d;
 }
@@ -82,7 +108,7 @@ export async function createOrg(
   actor?: AuditActor | null,
 ) {
   const name = input.name?.trim();
-  if (!name) throw new Error('Naam is verplicht');
+  if (!name) throw new OrgError('org_name_required', 'Name is required');
   const type = input.type?.trim() || 'klant';
   assertType(type);
   const org = await prisma.organization.create({
@@ -102,7 +128,7 @@ export async function updateOrg(
   if (typeof input.allowOwnToken === 'boolean') data.allowOwnToken = input.allowOwnToken;
   if (input.name !== undefined) {
     const name = input.name.trim();
-    if (!name) throw new Error('Naam mag niet leeg zijn');
+    if (!name) throw new OrgError('org_name_required', 'Name cannot be empty');
     data.name = name;
   }
   if (input.type !== undefined) {
@@ -121,12 +147,12 @@ export async function deleteOrg(id: string, actor?: AuditActor | null) {
     where: { id },
     include: { _count: { select: { members: true, projects: true, users: true } } },
   });
-  if (!counts) throw new Error('Organisatie niet gevonden');
+  if (!counts) throw new OrgError('org_not_found', 'Organisation not found', 404);
   if (counts._count.projects > 0) {
-    throw new Error(`Kan niet verwijderen: er hangen nog ${counts._count.projects} project(en) aan deze organisatie`);
+    throw new OrgError('org_has_projects', `Cannot delete: ${counts._count.projects} project(s) still belong to this organisation`, 409);
   }
   if (counts._count.members > 0 || counts._count.users > 0) {
-    throw new Error('Kan niet verwijderen: de organisatie heeft nog leden');
+    throw new OrgError('org_has_members', 'Cannot delete: the organisation still has members', 409);
   }
   await prisma.organization.delete({ where: { id } });
   // orgId is nulled by the cascade; keep the name in meta so the trail stays readable.
@@ -159,10 +185,10 @@ export async function listOrgMembers(orgId: string) {
 export async function addOrgMember(orgId: string, email: string, role: string, actor: MemberActor = SUPERADMIN) {
   assertRole(role);
   const lower = email.trim().toLowerCase();
-  if (!EMAIL_RE.test(lower)) throw new Error('Een geldig e-mailadres is verplicht');
+  if (!EMAIL_RE.test(lower)) throw new OrgError('invalid_email', 'A valid e-mail address is required');
 
   const org = await prisma.organization.findUnique({ where: { id: orgId } });
-  if (!org) throw new Error('Organisatie niet gevonden');
+  if (!org) throw new OrgError('org_not_found', 'Organisation not found', 404);
 
   const user = await prisma.user.findUnique({ where: { email: lower } });
   const existing = user
@@ -171,7 +197,7 @@ export async function addOrgMember(orgId: string, email: string, role: string, a
   // Already a member: never change the role through this path (it would skip
   // the last-owner guard and demote silently). The role menu in the list is
   // the one place for that.
-  if (existing) throw new OrgPolicyError(`${lower} is al lid van deze organisatie — wijzig de rol in de ledenlijst`);
+  if (existing) throw new OrgError('already_member', `${lower} is already a member of this organisation — change the role in the member list`, 409);
   assertPolicy(actor, null, role);
 
   if (!user) {
@@ -223,29 +249,29 @@ export async function listOrgInvites(orgId: string) {
 
 export async function revokeOrgInvite(orgId: string, inviteId: string, actor: MemberActor = SUPERADMIN) {
   const invite = await prisma.orgInvite.findFirst({ where: { id: inviteId, orgId } });
-  if (!invite) throw new Error('Uitnodiging niet gevonden');
-  if (invite.acceptedAt) throw new Error('Uitnodiging is al geaccepteerd');
+  if (!invite) throw new OrgError('invite_not_found', 'Invitation not found', 404);
+  if (invite.acceptedAt) throw new OrgError('invite_already_accepted', 'Invitation has already been accepted', 409);
   assertPolicy(actor, null, invite.role as OrgRole);
   await prisma.orgInvite.update({ where: { id: invite.id }, data: { revokedAt: new Date() } });
   await recordAudit({ orgId, actor: actor.user, action: 'org.invite.revoked', targetType: 'invite', targetId: invite.id, meta: { email: invite.email, role: invite.role } });
 }
 
 /** De laatste eigenaar mag niet weg of omlaag — anders is de org stuurloos. */
-async function assertNotLastOwner(orgId: string, userId: string) {
+export async function assertNotLastOwner(orgId: string, userId: string) {
   const member = await prisma.orgMember.findUnique({
     where: { orgId_userId: { orgId, userId } },
   });
   if (member?.role !== 'eigenaar') return;
   const owners = await prisma.orgMember.count({ where: { orgId, role: 'eigenaar' } });
   if (owners <= 1) {
-    throw new Error('Dit is de laatste eigenaar van de organisatie — wijs eerst een andere eigenaar aan');
+    throw new OrgError('last_owner', 'This is the last owner of the organisation — appoint another owner first', 409);
   }
 }
 
 export async function updateOrgMemberRole(orgId: string, userId: string, role: string, actor: MemberActor = SUPERADMIN) {
   assertRole(role);
   const current = await prisma.orgMember.findUnique({ where: { orgId_userId: { orgId, userId } } });
-  if (!current) throw new Error('Lidmaatschap niet gevonden');
+  if (!current) throw new OrgError('membership_not_found', 'Membership not found', 404);
   assertPolicy(actor, current.role as OrgRole, role);
   if (role !== 'eigenaar') await assertNotLastOwner(orgId, userId);
   const updated = await prisma.orgMember.update({
@@ -258,7 +284,7 @@ export async function updateOrgMemberRole(orgId: string, userId: string, role: s
 
 export async function removeOrgMember(orgId: string, userId: string, actor: MemberActor = SUPERADMIN) {
   const current = await prisma.orgMember.findUnique({ where: { orgId_userId: { orgId, userId } } });
-  if (!current) throw new Error('Lidmaatschap niet gevonden');
+  if (!current) throw new OrgError('membership_not_found', 'Membership not found', 404);
   assertPolicy(actor, current.role as OrgRole, null);
   await assertNotLastOwner(orgId, userId);
   // Definitief: provisioning maakt lidmaatschappen niet meer opnieuw aan bij
@@ -270,4 +296,13 @@ export async function removeOrgMember(orgId: string, userId: string, actor: Memb
     prisma.projectMember.deleteMany({ where: { userId, project: { orgId } } }),
   ]);
   await recordAudit({ orgId, actor: actor.user, action: 'org.member.removed', targetType: 'user', targetId: userId, meta: { role: current.role } });
+}
+
+/**
+ * Refuse when `userId` is the last owner of ANY organisation — used before an
+ * account is deleted, which would otherwise leave that org without an owner.
+ */
+export async function assertNotLastOwnerOfAnyOrg(userId: string) {
+  const owned = await prisma.orgMember.findMany({ where: { userId, role: 'eigenaar' }, select: { orgId: true } });
+  for (const { orgId } of owned) await assertNotLastOwner(orgId, userId);
 }

@@ -139,7 +139,7 @@ export default function BranchSwitcher({ branches, busy, onTreeChanged, onMerge 
                   b.current ? 'text-gray-900 dark:text-white' : 'text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-white/6 disabled:opacity-50'
                 }`}
               >
-                <span className="w-4 shrink-0 text-brand-500">{b.current ? '✓' : ''}</span>
+                <span className="w-4 shrink-0 text-brand-500" aria-hidden="true">{b.current ? '✓' : ''}</span>
                 <span className="truncate flex-1" title={b.name}>{b.name}</span>
                 {b.base && <span className="shrink-0 rounded px-1.5 py-0.5 text-[10px] bg-gray-100 dark:bg-white/10 text-gray-600 dark:text-gray-300">{t('branch.baseBadge')}</span>}
                 {data.mode === 'remote' && b.local && !b.remote && (
@@ -175,7 +175,7 @@ export default function BranchSwitcher({ branches, busy, onTreeChanged, onMerge 
             </form>
           ) : (
             <button role="menuitem" disabled={blocked} onClick={() => setCreating(true)} className="w-full flex items-center gap-2 px-3 py-1.5 text-left text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-white/6 disabled:opacity-50">
-              <span className="w-4 shrink-0 text-center">+</span>
+              <span className="w-4 shrink-0 text-center" aria-hidden="true">+</span>
               <span>{t('branch.create')}</span>
             </button>
           )}
@@ -198,7 +198,7 @@ export default function BranchSwitcher({ branches, busy, onTreeChanged, onMerge 
               </div>
             ) : (
               <button role="menuitem" disabled={blocked} onClick={() => setConfirmMerge(true)} className="w-full flex items-center gap-2 px-3 py-1.5 text-left text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-white/6 disabled:opacity-50">
-                <span className="w-4 shrink-0 text-center">⤵</span>
+                <span className="w-4 shrink-0 text-center" aria-hidden="true">⤵</span>
                 <span className="truncate">{t('branch.merge', { branch: data.current, base: data.base })}</span>
               </button>
             )

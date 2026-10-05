@@ -1,6 +1,7 @@
 "use client";
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { apiErrorMessage } from '@/lib/client/api-error';
+import { useT } from '@/contexts/I18nContext';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? '';
 
@@ -16,6 +17,7 @@ interface Props {
 }
 
 export default function DesignSettings({ projectId }: Props) {
+  const t = useT();
   const [catalog, setCatalog] = useState<DesignEntry[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -36,11 +38,11 @@ export default function DesignSettings({ projectId }: Props) {
       if (cJson.success) setCatalog(cJson.data as DesignEntry[]);
       if (aJson.success) setActiveId(aJson.data?.activeId ?? null);
     } catch {
-      setError('Failed to load designs');
+      setError(t('settings.design.loadFailed'));
     } finally {
       setLoading(false);
     }
-  }, [projectId]);
+  }, [projectId, t]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -63,10 +65,10 @@ export default function DesignSettings({ projectId }: Props) {
         body: JSON.stringify({ id }),
       });
       const json = await res.json();
-      if (!res.ok || !json.success) throw new Error(apiErrorMessage(json, 'Failed to apply design'));
+      if (!res.ok || !json.success) throw new Error(apiErrorMessage(json, t('settings.design.applyFailed')));
       setActiveId(json.data?.activeId ?? null);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to apply design');
+      setError(e instanceof Error ? e.message : t('settings.design.applyFailed'));
     } finally {
       setBusy(false);
     }
@@ -77,9 +79,9 @@ export default function DesignSettings({ projectId }: Props) {
   return (
     <div className="p-6 space-y-5">
       <div className="flex items-baseline gap-3">
-        <h3 className="text-lg font-medium text-gray-900 dark:text-gray-50">Design</h3>
+        <h3 className="text-lg font-medium text-gray-900 dark:text-gray-50">{t('settings.design.title')}</h3>
         <span className="text-sm text-gray-600 dark:text-gray-300">
-          {active ? <>Active: <span className="font-medium text-gray-900 dark:text-gray-50">{active.name}</span></> : 'No design selected'}
+          {active ? <>{t('settings.design.activeLabel')} <span className="font-medium text-gray-900 dark:text-gray-50">{active.name}</span></> : t('settings.design.none')}
         </span>
       </div>
 
@@ -88,7 +90,8 @@ export default function DesignSettings({ projectId }: Props) {
           type="text"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search designs…"
+          placeholder={t('settings.design.search')}
+          aria-label={t('settings.design.search')}
           className="flex-1 px-3 py-2 rounded-lg border border-gray-200 dark:border-white/8 bg-white dark:bg-white/6 text-sm text-gray-800 dark:text-gray-100 focus:outline-hidden focus:ring-2 focus:ring-brand-500"
         />
         {activeId && (
@@ -97,17 +100,17 @@ export default function DesignSettings({ projectId }: Props) {
             disabled={busy}
             className="px-3 py-2 text-sm font-medium border border-gray-200 dark:border-white/8 rounded-lg bg-white dark:bg-white/3 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-white/6 disabled:opacity-50 whitespace-nowrap"
           >
-            Clear design
+            {t('settings.design.clear')}
           </button>
         )}
       </div>
 
       {error && (
-        <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>
+        <div role="alert" className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>
       )}
 
       {loading ? (
-        <div className="py-10 text-center text-sm text-gray-500 dark:text-gray-400">Loading designs…</div>
+        <div className="py-10 text-center text-sm text-gray-500 dark:text-gray-400">{t('settings.design.loading')}</div>
       ) : (
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
           {filtered.map((d) => {
@@ -116,6 +119,7 @@ export default function DesignSettings({ projectId }: Props) {
               <button
                 key={d.id}
                 onClick={() => choose(d.id)}
+                aria-pressed={selected}
                 disabled={busy}
                 title={d.description}
                 className={`group text-left rounded-xl border overflow-hidden transition-all disabled:opacity-60 ${
@@ -127,11 +131,11 @@ export default function DesignSettings({ projectId }: Props) {
                     // eslint-disable-next-line @next/next/no-img-element
                     <img src={d.preview} alt={d.name} loading="lazy" className="w-full h-full object-cover" />
                   ) : (
-                    <div className="w-full h-full flex items-center justify-center text-gray-400 dark:text-gray-500 text-xs">No preview</div>
+                    <div className="w-full h-full flex items-center justify-center text-gray-400 dark:text-gray-500 text-xs">{t('settings.design.noPreview')}</div>
                   )}
                   {selected && (
                     <span className="absolute top-2 right-2 text-[11px] font-semibold text-white bg-brand-500 px-2 py-0.5 rounded-full">
-                      Active
+                      {t('settings.design.active')}
                     </span>
                   )}
                 </div>
@@ -143,7 +147,7 @@ export default function DesignSettings({ projectId }: Props) {
             );
           })}
           {filtered.length === 0 && (
-            <div className="col-span-full py-8 text-center text-sm text-gray-400 dark:text-gray-500">No designs match “{query}”.</div>
+            <div className="col-span-full py-8 text-center text-sm text-gray-400 dark:text-gray-500">{t('settings.design.noMatch', { query })}</div>
           )}
         </div>
       )}

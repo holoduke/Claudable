@@ -4,6 +4,7 @@ import EmailCodeSignIn from '@/components/auth/EmailCodeSignIn';
 import SpotlightCard from '@/components/auth/SpotlightCard';
 import BrandWordmark from '@/components/ui/BrandWordmark';
 import LoginText, { LoginErrorText } from '@/components/auth/LoginText';
+import { safeCallbackPath } from '@/lib/client/safe-callback';
 
 export const dynamic = 'force-dynamic';
 
@@ -16,9 +17,11 @@ const GRAIN =
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string }>;
+  searchParams: Promise<{ error?: string; callbackUrl?: string }>;
 }) {
-  const { error } = await searchParams;
+  const { error, callbackUrl } = await searchParams;
+  // Back to where the session expired (set by the session guard), same-site only.
+  const next = safeCallbackPath(callbackUrl);
 
   return (
     <div className="font-grotesk relative min-h-screen overflow-hidden bg-[#0a0807] text-white antialiased flex items-center justify-center px-5 py-10">
@@ -109,12 +112,12 @@ export default async function LoginPage({
             className="mt-6"
             action={async () => {
               'use server';
-              await signIn('google', { redirectTo: '/' });
+              await signIn('google', { redirectTo: next });
             }}
           >
             <GoogleSignInButton />
           </form>
-          <EmailCodeSignIn />
+          <EmailCodeSignIn redirectTo={next} />
 
           <div className="mt-6 border-t border-white/6 pt-4">
             <div className="flex items-center justify-center gap-1.5 text-[12px] text-white/30">

@@ -2,6 +2,7 @@
 
 import React, { useCallback, useEffect, useState } from 'react';
 import { apiErrorMessage } from '@/lib/client/api-error';
+import { useT } from '@/contexts/I18nContext';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? '';
 
@@ -20,6 +21,7 @@ interface EffectivePlugin {
  * tab. Enabled plugins load into the project's agent as /<plugin>:<command>.
  */
 export function ProjectPluginSettings({ projectId }: { projectId: string }) {
+  const t = useT();
   const [plugins, setPlugins] = useState<EffectivePlugin[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -30,13 +32,13 @@ export function ProjectPluginSettings({ projectId }: { projectId: string }) {
       const res = await fetch(`${API_BASE}/api/projects/${projectId}/plugins`);
       const json = await res.json();
       if (res.ok && json?.success) setPlugins(Array.isArray(json.data) ? json.data : []);
-      else setError(apiErrorMessage(json, 'Failed to load plugins'));
+      else setError(apiErrorMessage(json, t('settings.projectPlugins.loadFailed')));
     } catch {
-      setError('Failed to load plugins');
+      setError(t('settings.projectPlugins.loadFailed'));
     } finally {
       setLoading(false);
     }
-  }, [projectId]);
+  }, [projectId, t]);
 
   useEffect(() => { void load(); }, [load]);
 
@@ -57,29 +59,28 @@ export function ProjectPluginSettings({ projectId }: { projectId: string }) {
         return;
       }
       setEnabled(p.enabled);
-      setError(apiErrorMessage(json, `Could not ${enabled ? 'enable' : 'disable'} ${p.name}`));
+      setError(apiErrorMessage(json, t(enabled ? 'settings.projectPlugins.enableFailed' : 'settings.projectPlugins.disableFailed', { name: p.name })));
     } catch {
       setEnabled(p.enabled);
-      setError(`Could not ${enabled ? 'enable' : 'disable'} ${p.name} (network error).`);
+      setError(`${t(enabled ? 'settings.projectPlugins.enableFailed' : 'settings.projectPlugins.disableFailed', { name: p.name })} ${t('settings.projectPlugins.networkError')}`);
     }
   };
 
   return (
-    <div className="space-y-4">
+    <div className="p-6 space-y-4">
       <div>
-        <h3 className="text-base font-semibold text-gray-900 dark:text-gray-50">Plugins</h3>
+        <h3 className="text-base font-semibold text-gray-900 dark:text-gray-50">{t('settings.projectPlugins.title')}</h3>
         <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-          Plugins registered for your team, with a per-project switch. Turning one off here disables it for this
-          project only. Marketplaces are managed by an admin in Global Settings.
+          {t('settings.projectPlugins.intro')}
         </p>
       </div>
 
-      {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
+      {error && <p role="alert" className="text-sm text-red-600 dark:text-red-400">{error}</p>}
 
       {loading ? (
-        <p className="text-sm text-gray-400">Loading…</p>
+        <p className="text-sm text-gray-400">{t('common.loading')}</p>
       ) : plugins.length === 0 ? (
-        <p className="text-sm text-gray-400">No plugins are available. An admin can register a marketplace in Global Settings → Plugins.</p>
+        <p className="text-sm text-gray-400">{t('settings.projectPlugins.empty')}</p>
       ) : (
         <div className="space-y-1.5">
           {plugins.map((p) => (
@@ -87,7 +88,7 @@ export function ProjectPluginSettings({ projectId }: { projectId: string }) {
               <input type="checkbox" checked={p.enabled} disabled={!p.synced} onChange={(e) => toggle(p, e.target.checked)} />
               <span className="font-medium text-gray-800 dark:text-gray-100">{p.name}</span>
               <span className="text-[11px] text-gray-400">({p.marketplace})</span>
-              {!p.synced && <span className="text-[11px] text-amber-500">not synced</span>}
+              {!p.synced && <span className="text-[11px] text-amber-500">{t('settings.projectPlugins.notSynced')}</span>}
               {p.description && <span className="text-xs text-gray-400 truncate">— {p.description}</span>}
             </label>
           ))}

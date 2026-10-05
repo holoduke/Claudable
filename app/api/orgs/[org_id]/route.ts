@@ -6,6 +6,7 @@
 import { NextRequest } from 'next/server';
 import { getAdminUser } from '@/lib/auth/session';
 import { updateOrg, deleteOrg } from '@/lib/services/orgs';
+import { orgErrorResponse } from '@/lib/services/settings-org-errors';
 import { createSuccessResponse, createErrorResponse, handleApiError } from '@/lib/utils/api-response';
 
 export const runtime = 'nodejs';
@@ -30,12 +31,8 @@ export async function PATCH(request: NextRequest, { params }: RouteContext) {
     }, admin);
     return createSuccessResponse(org);
   } catch (error) {
-    if (error instanceof Error && (error as { code?: string }).code === 'P2002') {
-      return createErrorResponse('duplicate_domain', 'Er bestaat al een organisatie met dit domein', 409);
-    }
-    if (error instanceof Error && /verplicht|ongeldig|moet|leeg/u.test(error.message)) {
-      return createErrorResponse('invalid_input', error.message, 400);
-    }
+    const orgError = orgErrorResponse(error);
+    if (orgError) return orgError;
     return handleApiError(error, 'API', 'Failed to update organization');
   }
 }
@@ -49,9 +46,8 @@ export async function DELETE(_request: NextRequest, { params }: RouteContext) {
     await deleteOrg(org_id, admin);
     return createSuccessResponse({ deleted: true });
   } catch (error) {
-    if (error instanceof Error && /Kan niet verwijderen|niet gevonden/u.test(error.message)) {
-      return createErrorResponse('conflict', error.message, 409);
-    }
+    const orgError = orgErrorResponse(error);
+    if (orgError) return orgError;
     return handleApiError(error, 'API', 'Failed to delete organization');
   }
 }

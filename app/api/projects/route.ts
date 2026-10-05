@@ -4,17 +4,18 @@
  * POST /api/projects - Create new project
  */
 
-import { NextRequest } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { getAllProjects, createProject } from '@/lib/services/project';
 import type { CreateProjectInput } from '@/types/backend';
 import { serializeProjects, serializeProject } from '@/lib/serializers/project';
 import { getDefaultModelForCli, normalizeModelId } from '@/lib/constants/cliModels';
-import { createSuccessResponse, createErrorResponse, handleApiError } from '@/lib/utils/api-response';
+import { createErrorResponse, handleApiError } from '@/lib/utils/api-response';
 import { getSessionUser, authEnabled } from '@/lib/auth/session';
-import { accessibleProjectIds } from '@/lib/services/project-access';
+import { accessibleProjectIds, canManageProject } from '@/lib/services/project-access';
+import { isInternalUser, CUSTOMER_ORG_TYPE } from '@/lib/services/tenant-policy';
 import { orgIdsFor, orgAllowsProjectCreation } from '@/lib/services/org-access';
 import { isValidStack } from '@/lib/config/stacks';
-import { isValidBackend } from '@/lib/config/backend-stacks';
+import { isValidBackend, getBackendStack } from '@/lib/config/backend-stacks';
 import { getDatabaseOption, isValidDatabase } from '@/lib/config/databases';
 import { prisma } from '@/lib/db/client';
 import path from 'path';
@@ -32,16 +33,43 @@ export async function GET() {
       // Fail CLOSED: with auth on but no resolvable session, expose nothing
       // (middleware already 401s these, this is defense-in-depth so a middleware
       // gap can't leak the whole project list — including restricted ones).
-      if (!me) return createSuccessResponse(serializeProjects([]));
+      if (!me) return listResponse([], false);
       // getAllProjects spreads the full Prisma row, so ownerId/orgId/visibility
       // exist at runtime even though the backend Project type omits them.
       const allowed = await accessibleProjectIds(me, projects as unknown as Parameters<typeof accessibleProjectIds>[1]);
-      return createSuccessResponse(serializeProjects(projects.filter((p) => allowed.has(p.id))));
+      const internal = await isInternalUser(me);
+      const items = projects
+        .filter((p) => allowed.has(p.id))
+        .map((p) => ({ ...serializeProject(p), canManage: canManageListed(me, p as unknown as ListedRow, internal) }));
+      return listResponse(items, !!process.env.XAI_API_KEY && internal);
     }
-    return createSuccessResponse(serializeProjects(projects));
+    const items = serializeProjects(projects).map((p) => ({ ...p, canManage: true }));
+    return listResponse(items, !!process.env.XAI_API_KEY);
   } catch (error) {
     return handleApiError(error, 'API', 'Failed to fetch projects');
   }
+}
+
+type ListedRow = { ownerId: string | null; organization?: { type?: string } | null };
+
+/**
+ * Rename/delete tier for the sidebar — mirrors denyUnlessProjectAccess({ manage })
+ * in [project_id]/route.ts: owner or global admin, and in a customer project only
+ * New Story staff.
+ */
+function canManageListed(me: { id: string; role: string }, row: ListedRow, internal: boolean): boolean {
+  if (!canManageProject(me as Parameters<typeof canManageProject>[0], row)) return false;
+  return row.organization?.type !== CUSTOMER_ORG_TYPE || internal;
+}
+
+/**
+ * The list plus light, non-sensitive capability flags for the start screen.
+ * `imageGenAvailable`: the shared xAI key exists AND the user may use it (not a
+ * customer-only user — customer projects never bill New Story's key). The
+ * client still hides it when the picked org is a customer org.
+ */
+function listResponse(data: unknown[], imageGenAvailable: boolean) {
+  return NextResponse.json({ success: true, data, meta: { imageGenAvailable } });
 }
 
 /**
@@ -158,16 +186,26 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Follow-up steps are best-effort (the project already exists), but their
+    // failures are reported back as human-readable warnings so the start screen
+    // can tell the user instead of silently dropping a backend or database.
+    const warnings: CreateWarning[] = [];
+
     // Optional image-generation utility picked on the start screen. 'grok'
     // connects the per-project images capability (shared xAI key unless the
     // project later sets its own). Best-effort — never fails project creation.
     const imageProvider = typeof body.imageProvider === 'string' ? body.imageProvider : (typeof body.image_provider === 'string' ? body.image_provider : '');
     if (imageProvider === 'grok') {
       try {
-        const { connectImages } = await import('@/lib/services/capabilities/images');
+        const { connectImages, getImagesConnection } = await import('@/lib/services/capabilities/images');
         await connectImages(project.id);
+        const status = await getImagesConnection(project.id);
+        if (!status.hasOwnKey && !status.globalAvailable) {
+          warnings.push({ code: 'image_gen_no_key', message: 'Image generation was connected, but no xAI key is available for this project. Add one in Project Settings → Services.' });
+        }
       } catch (e) {
         console.error('[API] Failed to connect image generation to new project:', e);
+        warnings.push({ code: 'image_gen_failed', message: 'Image generation could not be connected. You can connect it later in Project Settings.' });
       }
     }
 
@@ -176,40 +214,63 @@ export async function POST(request: NextRequest) {
     // the preview runs it as its own isolated service.
     const backendId = typeof body.backendId === 'string' ? body.backendId : (typeof body.backend_id === 'string' ? body.backend_id : '');
     if (isValidBackend(backendId) || isValidDatabase(databaseId)) {
+      let backendOk = isValidBackend(backendId);
+      // Scaffold the backend BEFORE persisting, so settings never claim a
+      // backend the repo doesn't actually have (mirrors the containers route).
+      if (backendOk && project.repoPath) {
+        try {
+          const { scaffoldBackend } = await import('@/lib/utils/scaffold-backend');
+          await scaffoldBackend(path.resolve(project.repoPath), backendId);
+        } catch (e) {
+          console.error('[API] backend scaffold failed:', e);
+          backendOk = false;
+          warnings.push({ code: 'backend_scaffold_failed', message: `The ${getBackendStack(backendId)?.name ?? backendId} backend could not be set up. The project was created without a backend; you can add one later in Project Settings.` });
+        }
+      }
+      // Postgres / MySQL: a PER-PROJECT CONTAINER database (own container on the
+      // project's internal net, reachable only by this project) when isolation is
+      // available; Postgres otherwise falls back to the legacy Coolify host DB.
+      if (isValidDatabase(databaseId)) {
+        try {
+          const { provisionProjectDatabase } = await import('@/lib/services/project-database-provision');
+          await provisionProjectDatabase(project.id, databaseId);
+        } catch (e) {
+          console.error('[API] database provisioning failed:', e);
+          warnings.push({ code: 'database_provision_failed', message: `The ${getDatabaseOption(databaseId)?.name ?? databaseId} database could not be provisioned yet. Retry it from Project Settings → Database.` });
+        }
+      }
       try {
         const prev = project.settings ? JSON.parse(project.settings) : {};
         const nextSettings = {
           ...prev,
-          ...(isValidBackend(backendId) ? { backendType: backendId } : {}),
+          ...(backendOk ? { backendType: backendId } : {}),
           ...(isValidDatabase(databaseId) ? { databaseType: databaseId } : {}),
         };
-        // Scaffold the backend BEFORE persisting, so settings never claim a
-        // backend the repo doesn't actually have (mirrors the containers route).
-        if (isValidBackend(backendId) && project.repoPath) {
-          const { scaffoldBackend } = await import('@/lib/utils/scaffold-backend');
-          await scaffoldBackend(path.resolve(project.repoPath), backendId);
-        }
-        // Postgres / MySQL: a PER-PROJECT CONTAINER database (own container on the
-        // project's internal net, reachable only by this project) when isolation is
-        // available; Postgres otherwise falls back to the legacy Coolify host DB.
-        if (isValidDatabase(databaseId)) {
-          try {
-            const { provisionProjectDatabase } = await import('@/lib/services/project-database-provision');
-            await provisionProjectDatabase(project.id, databaseId);
-          } catch (e) { console.error('[API] database provisioning failed:', e); }
-        }
-        await prisma.project.update({ where: { id: project.id }, data: { settings: JSON.stringify(nextSettings) } });
-        (project as { settings?: string | null }).settings = JSON.stringify(nextSettings);
-        return createSuccessResponse(serializeProject(project), 201); // re-serialize with the new settings
+        const settings = JSON.stringify(nextSettings);
+        await prisma.project.update({ where: { id: project.id }, data: { settings } });
+        return createdResponse({ ...project, settings }, warnings); // re-serialize with the new settings
       } catch (e) {
         console.error('[API] Failed to apply project composition:', e);
+        warnings.push({ code: 'composition_save_failed', message: 'The chosen backend/database could not be saved on the project. Set them again in Project Settings.' });
       }
     }
 
-    return createSuccessResponse(serializeProject(project), 201);
+    return createdResponse(project, warnings);
   } catch (error) {
     return handleApiError(error, 'API', 'Failed to create project');
   }
+}
+
+interface CreateWarning { code: string; message: string }
+
+/** 201 with the project, plus `warnings` (human-readable) and `warningCodes` (for i18n) when follow-ups failed. */
+function createdResponse(project: Parameters<typeof serializeProject>[0], warnings: CreateWarning[]) {
+  return NextResponse.json({
+    success: true,
+    data: serializeProject(project),
+    warnings: warnings.map((w) => w.message),
+    warningCodes: warnings.map((w) => w.code),
+  }, { status: 201 });
 }
 
 export const runtime = 'nodejs';

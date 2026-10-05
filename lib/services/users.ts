@@ -8,6 +8,7 @@
  */
 import { prisma } from '@/lib/db/client';
 import type { User } from '@prisma/client';
+import { assertNotLastOwnerOfAnyOrg } from '@/lib/services/orgs';
 
 const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/u;
 
@@ -31,8 +32,11 @@ export async function setUserLocale(id: string, locale: string | null): Promise<
  * Delete an account. Org-level Claude credentials this person happened to set
  * are re-owned by the acting admin first — `ClaudeCredential.owner` cascades,
  * and an organisation must not lose its credential because its setter left.
+ * Refuses (OrgError 'last_owner') when the person is the last owner of any
+ * organisation: deleting them would leave that org without an owner.
  */
 export async function deleteUser(id: string, reassignOrgCredentialsTo?: string): Promise<void> {
+  await assertNotLastOwnerOfAnyOrg(id);
   await prisma.$transaction(async (tx) => {
     if (reassignOrgCredentialsTo && reassignOrgCredentialsTo !== id) {
       await tx.claudeCredential.updateMany({

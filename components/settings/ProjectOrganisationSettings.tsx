@@ -51,7 +51,7 @@ export default function ProjectOrganisationSettings({ projectId }: { projectId: 
   };
 
   return (
-    <div className="rounded-xl border border-gray-200 dark:border-white/8 p-4 flex items-center justify-between gap-4">
+    <div className="mx-6 mt-6 rounded-xl border border-gray-200 dark:border-white/8 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
       <div className="min-w-0">
         <p className="font-medium text-gray-900 dark:text-gray-50">{t('projectOrg.title')}</p>
         <p className="text-xs text-gray-500 dark:text-gray-400">
@@ -63,6 +63,7 @@ export default function ProjectOrganisationSettings({ projectId }: { projectId: 
         value={orgId ?? ''}
         disabled={busy}
         onChange={(e) => move(e.target.value)}
+        aria-label={t('projectOrg.title')}
         className="shrink-0 pl-3 pr-8 py-2 text-sm border border-gray-200 dark:border-white/8 rounded-lg bg-white dark:bg-white/6 text-gray-700 dark:text-gray-200 focus:outline-hidden focus:ring-0 disabled:opacity-50 cursor-pointer"
       >
         {orgId === null && <option value="">{t('projectOrg.none')}</option>}

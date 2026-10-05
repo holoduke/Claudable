@@ -16,6 +16,7 @@ import { serializeProject } from '@/lib/serializers/project';
 import { getSessionUser, authEnabled } from '@/lib/auth/session';
 import { canAccessProject } from '@/lib/services/project-access';
 import { denyUnlessProjectAccess } from '@/lib/auth/gate';
+import { ALL_PERMISSIONS, computeProjectPermissions } from '@/lib/services/settings-permissions';
 
 interface RouteContext {
   params: Promise<{ project_id: string }>;
@@ -47,6 +48,7 @@ export async function GET(
     // (isActive=false). Falling through on null would leak ANY project and defeat
     // the isActive revocation + membership checks — so deny unless there's an
     // active user WITH access.
+    let permissions = ALL_PERMISSIONS;
     if (authEnabled()) {
       const me = await getSessionUser();
       if (!me || !(await canAccessProject(me, project as never))) {
@@ -55,9 +57,12 @@ export async function GET(
           { status: 404 }
         );
       }
+      // What this user may do here, so the UI can hide/explain controls that
+      // would 403 (same rules as lib/auth/gate.ts).
+      permissions = await computeProjectPermissions(me, project as never);
     }
 
-    return NextResponse.json({ success: true, data: serializeProject(project) });
+    return NextResponse.json({ success: true, data: { ...serializeProject(project), permissions } });
   } catch (error) {
     console.error('[API] Failed to get project:', error);
     return NextResponse.json(

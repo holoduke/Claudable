@@ -3,6 +3,7 @@
  * Create and connect a Vercel project to the existing GitHub repository
  */
 import React, { useState } from 'react';
+import { useT } from '@/contexts/I18nContext';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? '';
 
@@ -21,6 +22,7 @@ export default function VercelProjectModal({
   projectName,
   onSuccess 
 }: VercelProjectModalProps) {
+  const t = useT();
   const [vercelProjectName, setVercelProjectName] = useState('');
   const [framework, setFramework] = useState('nextjs');
   const [teamId, setTeamId] = useState('');
@@ -71,20 +73,20 @@ export default function VercelProjectModal({
           const errorData = await response.json();
           setIsAvailable(false);
           if (response.status === 401) {
-            setError('Invalid Vercel token. Please check your token in Settings.');
+            setError(t('settings.modal.vercel.errToken'));
           } else if (response.status === 409) {
-            setError('Project name already exists');
+            setError(t('settings.modal.vercel.errExists'));
           } else {
-            setError(errorData.detail || 'Project name not available');
+            setError(errorData.detail || t('settings.modal.vercel.errUnavailable'));
           }
         } catch {
           setIsAvailable(false);
-          setError('Project name not available');
+          setError(t('settings.modal.vercel.errUnavailable'));
         }
       }
     } catch (err) {
       console.error('Error checking Vercel project availability:', err);
-      setError('Failed to check availability. Please check your Vercel token.');
+      setError(t('settings.modal.vercel.errCheck'));
       setIsAvailable(null);
     } finally {
       setCheckingAvailability(false);
@@ -115,24 +117,24 @@ export default function VercelProjectModal({
         const result = await response.json();
         onSuccess();
         onClose();
-        alert(`Success! ${result.message}`);
+        alert(t('settings.modal.vercel.success', { message: result.message }));
       } else {
         try {
           const errorData = await response.json();
           if (response.status === 400) {
-            setError(errorData.detail || 'GitHub repository must be connected first');
+            setError(errorData.detail || t('settings.modal.vercel.errNeedsRepo'));
           } else if (response.status === 401) {
-            setError('Invalid Vercel token. Please check your token in Settings.');
+            setError(t('settings.modal.vercel.errToken'));
           } else {
-            setError(errorData.detail || 'Failed to connect Vercel project');
+            setError(errorData.detail || t('settings.modal.vercel.errConnect'));
           }
         } catch {
-          setError('Failed to connect Vercel project');
+          setError(t('settings.modal.vercel.errConnect'));
         }
       }
     } catch (err) {
       console.error('Error connecting Vercel:', err);
-      setError('Network error. Please check your connection and try again.');
+      setError(t('settings.modal.vercel.errNetwork'));
     } finally {
       setIsLoading(false);
     }
@@ -154,14 +156,15 @@ export default function VercelProjectModal({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white dark:bg-gray-900 rounded-lg p-6 w-full max-w-md mx-4">
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+      <div role="dialog" aria-modal="true" aria-labelledby="vercel-modal-title" className="bg-white dark:bg-gray-900 rounded-lg p-6 w-full max-w-md mx-4 max-h-[90dvh] overflow-y-auto">
         <div className="flex justify-between items-center mb-4">
-          <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-50 ">
-            Connect to Vercel
+          <h2 id="vercel-modal-title" className="text-xl font-semibold text-gray-900 dark:text-gray-50 ">
+            {t('settings.modal.vercel.title')}
           </h2>
           <button
             onClick={handleClose}
+            aria-label={t('settings.modal.close')}
             className="text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 "
           >
             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -172,16 +175,17 @@ export default function VercelProjectModal({
 
         <div className="mb-4 p-3 bg-blue-50 rounded-lg">
           <p className="text-sm text-blue-700 ">
-            This will create a new Vercel project and link it to your existing GitHub repository.
+            {t('settings.modal.vercel.intro')}
           </p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">
-              Project Name
+            <label htmlFor="vercel-project-name" className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">
+              {t('settings.modal.vercel.projectName')}
             </label>
             <input
+              id="vercel-project-name"
               type="text"
               value={vercelProjectName}
               onChange={(e) => applyProjectName(e.target.value)}
@@ -191,15 +195,16 @@ export default function VercelProjectModal({
               disabled={isLoading}
             />
             {isAvailable === true && vercelProjectName.trim() && (
-              <p className="text-sm text-green-600 mt-1">✓ Ready to create project</p>
+              <p className="text-sm text-green-600 mt-1">✓ {t('settings.modal.vercel.ready')}</p>
             )}
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">
-              Framework
+            <label htmlFor="vercel-framework" className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">
+              {t('settings.modal.vercel.framework')}
             </label>
             <select
+              id="vercel-framework"
               value={framework}
               onChange={(e) => setFramework(e.target.value)}
               className="w-full px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-md focus:outline-hidden focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-50 "
@@ -211,16 +216,17 @@ export default function VercelProjectModal({
               <option value="nuxtjs">Nuxt.js</option>
               <option value="svelte">Svelte</option>
               <option value="angular">Angular</option>
-              <option value="static">Static HTML</option>
-              <option value="other">Other</option>
+              <option value="static">{t('settings.modal.vercel.staticHtml')}</option>
+              <option value="other">{t('settings.modal.vercel.other')}</option>
             </select>
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">
-              Team ID (Optional)
+            <label htmlFor="vercel-team-id" className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">
+              {t('settings.modal.vercel.teamId')}
             </label>
             <input
+              id="vercel-team-id"
               type="text"
               value={teamId}
               onChange={(e) => setTeamId(e.target.value)}
@@ -229,7 +235,7 @@ export default function VercelProjectModal({
               disabled={isLoading}
             />
             <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-              Leave empty for personal projects
+              {t('settings.modal.vercel.teamIdHint')}
             </p>
           </div>
 
@@ -246,14 +252,14 @@ export default function VercelProjectModal({
               className="flex-1 px-4 py-2 text-gray-700 dark:text-gray-200 border border-gray-300 dark:border-gray-700 rounded-md hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
               disabled={isLoading}
             >
-              Cancel
+              {t('settings.modal.cancel')}
             </button>
             <button
               type="submit"
               className="flex-1 px-4 py-2 bg-black text-white rounded-md hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               disabled={isLoading || !vercelProjectName.trim()}
             >
-              {isLoading ? 'Connecting...' : 'Connect'}
+              {isLoading ? t('settings.modal.vercel.connecting') : t('settings.modal.vercel.connect')}
             </button>
           </div>
         </form>

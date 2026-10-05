@@ -4,6 +4,7 @@
  */
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { apiErrorMessage, responseErrorMessage } from '@/lib/client/api-error';
+import { useT } from '@/contexts/I18nContext';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? '';
 
@@ -19,12 +20,6 @@ interface SkillsSettingsProps {
   projectId: string;
 }
 
-const EXAMPLE = `When asked to do X, follow these steps:
-1. ...
-2. ...
-
-Reference any conventions or helper files the agent should follow.`;
-
 function SkillCard({
   skill,
   onEdit,
@@ -34,6 +29,7 @@ function SkillCard({
   onEdit?: () => void;
   onDelete?: () => void;
 }) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const isGlobal = skill.scope === 'global';
   return (
@@ -54,33 +50,34 @@ function SkillCard({
                 isGlobal ? 'bg-violet-100 text-violet-700' : 'bg-brand-500/10 text-brand-500'
               }`}
             >
-              {isGlobal ? 'Global' : 'Project'}
+              {isGlobal ? t('settings.skills.global') : t('settings.skills.project')}
             </span>
           </div>
           <p className="mt-0.5 line-clamp-2 text-xs text-gray-500 dark:text-gray-400">
-            {skill.description || 'No description'}
+            {skill.description || t('settings.skills.noDescription')}
           </p>
           <div className="mt-2 flex items-center gap-3">
             <button
               onClick={() => setOpen((v) => !v)}
+              aria-expanded={open}
               className="text-xs font-medium text-gray-500 dark:text-gray-400 hover:text-gray-800"
             >
-              {open ? 'Hide' : 'View'} instructions
+              {open ? t('settings.skills.hideInstructions') : t('settings.skills.viewInstructions')}
             </button>
             {onEdit && (
               <button onClick={onEdit} className="text-xs font-medium text-brand-500 hover:text-brand-600">
-                Edit
+                {t('common.edit')}
               </button>
             )}
             {onDelete && (
               <button onClick={onDelete} className="text-xs font-medium text-red-500 hover:text-red-600">
-                Delete
+                {t('common.delete')}
               </button>
             )}
           </div>
           {open && (
             <pre className="mt-2 max-h-56 overflow-auto whitespace-pre-wrap rounded-lg bg-gray-50 dark:bg-white/6 p-3 text-[11px] leading-relaxed text-gray-700 dark:text-gray-200">
-              {skill.content || '(no body)'}
+              {skill.content || t('settings.skills.noBody')}
             </pre>
           )}
         </div>
@@ -90,6 +87,7 @@ function SkillCard({
 }
 
 export function SkillsSettings({ projectId }: SkillsSettingsProps) {
+  const t = useT();
   const [project, setProject] = useState<Skill[]>([]);
   const [global, setGlobal] = useState<Skill[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -110,12 +108,13 @@ export function SkillsSettings({ projectId }: SkillsSettingsProps) {
       const data = json?.data ?? {};
       setProject(Array.isArray(data.project) ? data.project : []);
       setGlobal(Array.isArray(data.global) ? data.global : []);
-    } catch (e) {
-      console.error('Failed to load skills:', e);
+      if (!res.ok || json?.success === false) setError(apiErrorMessage(json, t('settings.skills.loadFailed')));
+    } catch {
+      setError(t('settings.skills.loadFailed'));
     } finally {
       setIsLoading(false);
     }
-  }, [projectId]);
+  }, [projectId, t]);
 
   useEffect(() => {
     load();
@@ -142,7 +141,7 @@ export function SkillsSettings({ projectId }: SkillsSettingsProps) {
 
   const save = async () => {
     if (!name.trim()) {
-      setError('Name is required');
+      setError(t('settings.skills.nameRequired'));
       return;
     }
     setSaving(true);
@@ -155,32 +154,32 @@ export function SkillsSettings({ projectId }: SkillsSettingsProps) {
       });
       const json = await res.json();
       if (!res.ok || json?.success === false) {
-        setError(apiErrorMessage(json, 'Failed to save skill'));
+        setError(apiErrorMessage(json, t('settings.skills.saveFailed')));
         return;
       }
       resetForm();
       await load();
     } catch {
-      setError('Failed to save skill');
+      setError(t('settings.skills.saveFailed'));
     } finally {
       setSaving(false);
     }
   };
 
   const remove = async (skillName: string) => {
-    if (!window.confirm(`Delete the skill "${skillName}"? This can't be undone.`)) return;
+    if (!window.confirm(t('settings.skills.confirmDelete', { name: skillName }))) return;
     try {
       const r = await fetch(`${API_BASE}/api/projects/${projectId}/skills/${encodeURIComponent(skillName)}`, {
         method: 'DELETE',
       });
       if (!r.ok) {
-        setError(await responseErrorMessage(r, `Failed to delete skill (${r.status})`));
+        setError(await responseErrorMessage(r, t('settings.skills.deleteFailedStatus', { status: r.status })));
         return;
       }
       if (editing === skillName) resetForm();
       await load();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to delete skill');
+      setError(e instanceof Error ? e.message : t('settings.skills.deleteFailed'));
     }
   };
 
@@ -194,13 +193,13 @@ export function SkillsSettings({ projectId }: SkillsSettingsProps) {
 
   return (
     <div className="space-y-6 p-6">
-      <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-50">Skills</h3>
+      <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-50">{t('settings.skills.title')}</h3>
 
       {/* Project skills */}
       <section className="space-y-3">
         <div className="flex items-center justify-between">
           <h4 className="flex items-center gap-2 text-sm font-semibold text-gray-800 dark:text-gray-100">
-            Project skills
+            {t('settings.skills.projectSkills')}
             <span className="rounded-full bg-gray-100 dark:bg-white/6 px-2 py-0.5 text-xs font-medium text-gray-600 dark:text-gray-300">
               {project.length}
             </span>
@@ -210,7 +209,7 @@ export function SkillsSettings({ projectId }: SkillsSettingsProps) {
               onClick={startNew}
               className="rounded-lg bg-brand-500 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-600"
             >
-              + Add skill
+              {t('settings.skills.add')}
             </button>
           )}
         </div>
@@ -218,51 +217,54 @@ export function SkillsSettings({ projectId }: SkillsSettingsProps) {
         {/* Errors from actions taken OUTSIDE the form (e.g. a failed delete) must
             be visible too — only suppress this copy while the form shows its own. */}
         {error && editing === null && (
-          <div className="flex items-start justify-between gap-3 text-xs text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg px-3 py-2">
+          <div role="alert" className="flex items-start justify-between gap-3 text-xs text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg px-3 py-2">
             <span className="wrap-break-word min-w-0">{error}</span>
-            <button onClick={() => setError(null)} className="shrink-0 hover:text-red-800 dark:hover:text-red-300">✕</button>
+            <button onClick={() => setError(null)} aria-label={t('settings.skills.dismissError')} className="shrink-0 hover:text-red-800 dark:hover:text-red-300">✕</button>
           </div>
         )}
 
         {editing !== null && (
           <div className="space-y-3 rounded-xl border border-brand-500/30 bg-brand-500/5 p-4">
             <div className="text-sm font-medium text-gray-900 dark:text-gray-50">
-              {editing === '__new__' ? 'New skill' : `Edit: ${editing}`}
+              {editing === '__new__' ? t('settings.skills.newSkill') : t('settings.skills.editNamed', { name: editing })}
             </div>
             <input
               value={name}
               onChange={(e) => setName(e.target.value)}
               disabled={editing !== '__new__'}
-              placeholder="skill-name (e.g. brand-voice)"
+              placeholder={t('settings.skills.namePlaceholder')}
+              aria-label={t('settings.skills.nameLabel')}
               className="w-full rounded-lg border border-gray-300 dark:border-white/8 px-3 py-2 text-sm disabled:bg-gray-100"
             />
             <input
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              placeholder="Description — when should the agent use this?"
+              placeholder={t('settings.skills.descriptionPlaceholder')}
+              aria-label={t('settings.skills.descriptionLabel')}
               className="w-full rounded-lg border border-gray-300 dark:border-white/8 px-3 py-2 text-sm"
             />
             <textarea
               value={content}
               onChange={(e) => setContent(e.target.value)}
               rows={9}
-              placeholder={EXAMPLE}
+              placeholder={t('settings.skills.contentPlaceholder')}
+              aria-label={t('settings.skills.contentLabel')}
               className="w-full rounded-lg border border-gray-300 dark:border-white/8 px-3 py-2 font-mono text-xs"
             />
-            {error && <p className="text-xs text-red-600">{error}</p>}
+            {error && <p role="alert" className="text-xs text-red-600">{error}</p>}
             <div className="flex gap-2">
               <button
                 onClick={save}
                 disabled={saving}
                 className="rounded-lg bg-brand-500 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-600 disabled:opacity-50"
               >
-                {saving ? 'Saving…' : 'Save skill'}
+                {saving ? t('common.saving') : t('settings.skills.save')}
               </button>
               <button
                 onClick={resetForm}
                 className="rounded-lg border border-gray-300 dark:border-white/8 px-3 py-1.5 text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-white/6"
               >
-                Cancel
+                {t('common.cancel')}
               </button>
             </div>
           </div>
@@ -270,7 +272,7 @@ export function SkillsSettings({ projectId }: SkillsSettingsProps) {
 
         {project.length === 0 && editing === null ? (
           <div className="rounded-xl border border-dashed border-gray-300 dark:border-white/8 p-6 text-center text-sm text-gray-400 dark:text-gray-500">
-            No project skills yet. Add one to teach the agent project-specific conventions.
+            {t('settings.skills.emptyProject')}
           </div>
         ) : (
           <div className="grid gap-3 grid-cols-1">
@@ -285,7 +287,7 @@ export function SkillsSettings({ projectId }: SkillsSettingsProps) {
       <section className="space-y-3">
         <div className="flex items-center justify-between gap-3">
           <h4 className="flex items-center gap-2 text-sm font-semibold text-gray-800 dark:text-gray-100">
-            Available globally
+            {t('settings.skills.availableGlobally')}
             <span className="rounded-full bg-violet-100 px-2 py-0.5 text-xs font-medium text-violet-700">
               {global.length}
             </span>
@@ -294,16 +296,17 @@ export function SkillsSettings({ projectId }: SkillsSettingsProps) {
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search skills…"
+              placeholder={t('settings.skills.search')}
+              aria-label={t('settings.skills.search')}
               className="w-44 rounded-lg border border-gray-300 dark:border-white/8 px-3 py-1.5 text-sm focus:w-56 transition-all"
             />
           )}
         </div>
         {isLoading ? (
-          <p className="text-sm text-gray-400 dark:text-gray-500">Loading…</p>
+          <p className="text-sm text-gray-400 dark:text-gray-500">{t('common.loading')}</p>
         ) : filteredGlobal.length === 0 ? (
           <div className="rounded-xl border border-dashed border-gray-300 dark:border-white/8 p-6 text-center text-sm text-gray-400 dark:text-gray-500">
-            {global.length === 0 ? 'No global skills installed.' : 'No skills match your search.'}
+            {global.length === 0 ? t('settings.skills.emptyGlobal') : t('settings.skills.noMatch')}
           </div>
         ) : (
           <div className="grid gap-3 grid-cols-1">

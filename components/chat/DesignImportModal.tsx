@@ -4,6 +4,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { unzipSync, zipSync } from 'fflate';
 import { FaFileImport, FaTimes, FaCheckCircle, FaMagic } from 'react-icons/fa';
 import { shouldKeep } from '@/lib/utils/design-keep';
+import { uploadFileChunked } from '@/lib/client/upload';
+import { useI18n } from '@/contexts/I18nContext';
 
 interface DesignImportManifest {
   dir: string;
@@ -34,17 +36,40 @@ interface RemoteDesignProject {
 }
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? '';
+// Same cap as the server (MAX_DESIGN_UPLOAD_BYTES): checked on the filtered zip we upload.
+const MAX_UPLOAD_MB = 600;
 
-function timeAgo(iso: string | null): string {
+type TFn = ReturnType<typeof useI18n>['t'];
+
+function timeAgo(iso: string | null, t: TFn): string {
   if (!iso) return '';
   const then = new Date(iso).getTime();
   if (Number.isNaN(then)) return '';
   const mins = Math.floor((Date.now() - then) / 60000);
-  if (mins < 1) return 'just now';
-  if (mins < 60) return `${mins}m ago`;
+  if (mins < 1) return t('server.designImport.justNow');
+  if (mins < 60) return t('server.designImport.minutesAgo', { count: mins });
   const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs}h ago`;
-  return `${Math.floor(hrs / 24)}d ago`;
+  if (hrs < 24) return t('server.designImport.hoursAgo', { count: hrs });
+  return t('server.designImport.daysAgo', { count: Math.floor(hrs / 24) });
+}
+
+interface ImportErrorPayload {
+  code?: string;
+  error?: string;
+  params?: { size?: number; limit?: number };
+}
+
+/** A design-import API error in the viewer's language (by `code`), else the server's text. */
+function describeImportError(payload: ImportErrorPayload | null, status: number, t: TFn): string {
+  switch (payload?.code) {
+    case 'not_zip': return t('server.designImport.notZip');
+    case 'not_design_export': return t('server.designImport.notDesignExport');
+    case 'unreadable': return t('server.designImport.unreadable');
+    case 'too_large':
+      return t('server.designImport.tooLarge', { size: payload.params?.size ?? '?', limit: payload.params?.limit ?? MAX_UPLOAD_MB });
+    default:
+      return t('server.designImport.importFailed', { reason: payload?.error || `HTTP ${status}` });
+  }
 }
 
 export default function DesignImportModal({
@@ -53,6 +78,7 @@ export default function DesignImportModal({
   onClose,
   onApply,
 }: DesignImportModalProps) {
+  const { t } = useI18n();
   const [phase, setPhase] = useState<Phase>('idle');
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
@@ -121,16 +147,16 @@ export default function DesignImportModal({
           setPhase('done');
         } else {
           setPhase('error');
-          setError(payload?.error || `Import failed (${res.status})`);
+          setError(describeImportError(payload, res.status, t));
         }
       } catch {
         setPhase('error');
-        setError('Network error while importing the design project.');
+        setError(t('server.designImport.networkError'));
       } finally {
         setImportingId(null);
       }
     },
-    [projectId]
+    [projectId, t]
   );
 
   const handleClose = useCallback(() => {
@@ -142,7 +168,7 @@ export default function DesignImportModal({
     async (file: File) => {
       if (!file.name.toLowerCase().endsWith('.zip')) {
         setPhase('error');
-        setError('Please choose a .zip export from Claude Design.');
+        setError(t('server.designImport.notZip'));
         return;
       }
       setFileName(file.name);
@@ -152,8 +178,8 @@ export default function DesignImportModal({
 
       // Pre-filter the zip in the browser: keep only the design files (screens,
       // fonts, assets) and re-zip them, so we upload a few MB instead of the full
-      // export (often hundreds of MB of screenshots/raw uploads that otherwise
-      // time out the proxy). The server filters again as a safety net.
+      // export (often hundreds of MB of screenshots/raw uploads). The server
+      // filters again as a safety net.
       let payloadZip: Uint8Array;
       try {
         await new Promise((r) => setTimeout(r, 30)); // let the 'preparing' state paint
@@ -162,51 +188,65 @@ export default function DesignImportModal({
         const hasScreens = Object.keys(kept).some((n) => n.toLowerCase().endsWith('.dc.html'));
         if (!hasScreens) {
           setPhase('error');
-          setError("This doesn't look like a Claude Design export — no .dc.html screens found.");
+          setError(t('server.designImport.notDesignExport'));
           return;
         }
         payloadZip = zipSync(kept);
       } catch {
         setPhase('error');
-        setError('Could not read the zip file.');
+        setError(t('server.designImport.unreadable'));
+        return;
+      }
+      if (payloadZip.byteLength > MAX_UPLOAD_MB * 1024 * 1024) {
+        setPhase('error');
+        setError(t('server.designImport.tooLarge', { size: Math.ceil(payloadZip.byteLength / 1024 / 1024), limit: MAX_UPLOAD_MB }));
         return;
       }
 
       setPhase('uploading');
+      // Even filtered, fonts + assets can exceed the ~10MB single-request cap of
+      // the proxies (→ 413), so send it through the chunked asset upload and then
+      // import the reassembled file server-side by its path.
       // zipSync returns a fresh, offset-0 array, so its buffer is exactly the data.
-      const blob = new Blob([payloadZip.buffer as ArrayBuffer], { type: 'application/zip' });
-      const form = new FormData();
-      form.append('file', blob, 'design.zip');
+      const zipFile = new File([payloadZip.buffer as ArrayBuffer], 'design.zip', { type: 'application/zip' });
+      let uploadPath: string | undefined;
+      try {
+        const uploaded = await uploadFileChunked(projectId, zipFile, { onProgress: setProgress });
+        uploadPath = uploaded.path;
+      } catch (err) {
+        const reason = err instanceof Error ? err.message : '';
+        setPhase('error');
+        setError(t('server.designImport.uploadFailed', { reason: /^\d+$/.test(reason) ? `HTTP ${reason}` : reason || '?' }));
+        return;
+      }
+      if (!uploadPath) {
+        setPhase('error');
+        setError(t('server.designImport.uploadFailed', { reason: '?' }));
+        return;
+      }
+      setProgress(100);
 
-      // XHR gives upload progress (now of just the filtered payload).
-      const xhr = new XMLHttpRequest();
-      xhr.open('POST', `${API_BASE}/api/projects/${projectId}/design-import`);
-      xhr.upload.onprogress = (e) => {
-        if (e.lengthComputable) setProgress(Math.round((e.loaded / e.total) * 100));
-      };
-      xhr.onload = () => {
-        let payload: any = null;
-        try {
-          payload = JSON.parse(xhr.responseText);
-        } catch {
-          /* ignore */
-        }
-        if (xhr.status >= 200 && xhr.status < 300 && payload?.success) {
+      try {
+        const res = await fetch(`${API_BASE}/api/projects/${projectId}/design-import`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ uploadPath }),
+        });
+        const payload = await res.json().catch(() => null);
+        if (res.ok && payload?.success) {
           setManifest(payload.data.manifest);
           setPrompt(payload.data.suggestedPrompt || '');
           setPhase('done');
         } else {
           setPhase('error');
-          setError(payload?.error || `Upload failed (${xhr.status})`);
+          setError(describeImportError(payload, res.status, t));
         }
-      };
-      xhr.onerror = () => {
+      } catch {
         setPhase('error');
-        setError('Network error during upload.');
-      };
-      xhr.send(form);
+        setError(t('server.designImport.networkError'));
+      }
     },
-    [projectId]
+    [projectId, t]
   );
 
   const onPick = useCallback(
@@ -230,6 +270,9 @@ export default function DesignImportModal({
 
   if (!isOpen) return null;
 
+  // The intro sentence wraps the folder name in <code>: split the translation around {dir}.
+  const [introBefore = '', introAfter = ''] = t('server.designImport.intro').split('{dir}');
+
   return (
     <div className="fixed inset-0 z-60 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/50" onClick={handleClose} />
@@ -238,9 +281,9 @@ export default function DesignImportModal({
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 dark:border-white/8">
           <div className="flex items-center gap-2.5">
             <FaFileImport className="text-gray-700 dark:text-gray-200" size={16} />
-            <h3 className="text-base font-semibold text-gray-900 dark:text-gray-50">Import from Claude Design</h3>
+            <h3 className="text-base font-semibold text-gray-900 dark:text-gray-50">{t('server.designImport.title')}</h3>
           </div>
-          <button onClick={handleClose} className="text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300" aria-label="Close">
+          <button onClick={handleClose} className="text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300" aria-label={t('server.designImport.close')}>
             <FaTimes size={16} />
           </button>
         </div>
@@ -250,10 +293,9 @@ export default function DesignImportModal({
           {phase === 'idle' && (
             <>
               <p className="text-sm text-gray-600 dark:text-gray-300 mb-4">
-                Upload a <span className="font-medium">.zip</span> export from{' '}
-                <span className="font-medium">claude.ai/design</span>. The screens, fonts and
-                assets are staged into <code className="px-1 py-0.5 bg-gray-100 dark:bg-white/6 rounded-sm text-xs">design-reference/</code>,
-                then the AI ports them into this app — keeping your current framework and structure.
+                {introBefore}
+                <code className="px-1 py-0.5 bg-gray-100 dark:bg-white/6 rounded-sm text-xs">design-reference/</code>
+                {introAfter}
               </p>
               <div
                 onClick={() => inputRef.current?.click()}
@@ -268,8 +310,8 @@ export default function DesignImportModal({
                 }`}
               >
                 <FaFileImport className="mx-auto text-gray-400 dark:text-gray-500 mb-3" size={26} />
-                <p className="text-sm font-medium text-gray-700 dark:text-gray-200">Drop the zip here, or click to choose</p>
-                <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">Design-process noise (screenshots, raw uploads) is skipped automatically.</p>
+                <p className="text-sm font-medium text-gray-700 dark:text-gray-200">{t('server.designImport.dropHint')}</p>
+                <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">{t('server.designImport.noiseHint')}</p>
               </div>
               <input ref={inputRef} type="file" accept=".zip,application/zip" className="hidden" onChange={onPick} />
 
@@ -280,13 +322,13 @@ export default function DesignImportModal({
                 <div className="mt-5">
                   <div className="flex items-center gap-2 mb-2">
                     <span className="h-px flex-1 bg-gray-100 dark:bg-white/8" />
-                    <span className="text-[11px] uppercase tracking-wide text-gray-400 dark:text-gray-500">or pick from your designs</span>
+                    <span className="text-[11px] uppercase tracking-wide text-gray-400 dark:text-gray-500">{t('server.designImport.orPick')}</span>
                     <span className="h-px flex-1 bg-gray-100 dark:bg-white/8" />
                   </div>
                   {remoteLoading ? (
-                    <p className="text-xs text-gray-400 dark:text-gray-500 py-3 text-center">Loading your designs…</p>
+                    <p className="text-xs text-gray-400 dark:text-gray-500 py-3 text-center">{t('server.designImport.loadingDesigns')}</p>
                   ) : remoteProjects.length === 0 ? (
-                    <p className="text-xs text-gray-400 dark:text-gray-500 py-3 text-center">No Claude Design projects found.</p>
+                    <p className="text-xs text-gray-400 dark:text-gray-500 py-3 text-center">{t('server.designImport.noDesigns')}</p>
                   ) : (
                     <div className="max-h-52 overflow-y-auto space-y-1.5 pr-0.5">
                       {remoteProjects.map((p) => (
@@ -299,11 +341,11 @@ export default function DesignImportModal({
                           <div className="min-w-0 flex-1">
                             <p className="text-sm font-medium text-gray-900 dark:text-gray-50 truncate">{p.name}</p>
                             <p className="text-xs text-gray-400 dark:text-gray-500 truncate">
-                              {[p.ownerName, timeAgo(p.updatedAt)].filter(Boolean).join(' · ') || 'Claude Design'}
+                              {[p.ownerName, timeAgo(p.updatedAt, t)].filter(Boolean).join(' · ') || 'Claude Design'}
                             </p>
                           </div>
                           <span className="text-xs text-brand-500 font-medium shrink-0">
-                            {importingId === p.id ? 'Importing…' : 'Import'}
+                            {importingId === p.id ? t('server.designImport.importing') : t('server.designImport.import')}
                           </span>
                         </button>
                       ))}
@@ -318,18 +360,18 @@ export default function DesignImportModal({
           {phase === 'preparing' && (
             <div className="py-8 text-center">
               <div className="mx-auto mb-3 h-6 w-6 animate-spin rounded-full border-2 border-gray-300 dark:border-white/8 border-t-brand-500" />
-              <p className="text-sm text-gray-700 dark:text-gray-200 truncate">Preparing {fileName}…</p>
-              <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">Extracting just the design files (skipping screenshots &amp; raw uploads)</p>
+              <p className="text-sm text-gray-700 dark:text-gray-200 truncate">{t('server.designImport.preparing', { name: fileName })}</p>
+              <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">{t('server.designImport.preparingHint')}</p>
             </div>
           )}
 
           {phase === 'uploading' && (
             <div className="py-6">
-              <p className="text-sm text-gray-700 dark:text-gray-200 mb-3 truncate">Uploading {fileName}…</p>
+              <p className="text-sm text-gray-700 dark:text-gray-200 mb-3 truncate">{t('server.designImport.uploading', { name: fileName })}</p>
               <div className="h-2 w-full bg-gray-100 dark:bg-white/6 rounded-full overflow-hidden">
                 <div className="h-full bg-brand-500 transition-all" style={{ width: `${progress}%` }} />
               </div>
-              <p className="text-xs text-gray-400 dark:text-gray-500 mt-2">{progress}%{progress === 100 ? ' · extracting…' : ''}</p>
+              <p className="text-xs text-gray-400 dark:text-gray-500 mt-2">{progress}%{progress === 100 ? ` · ${t('server.designImport.extracting')}` : ''}</p>
             </div>
           )}
 
@@ -341,7 +383,7 @@ export default function DesignImportModal({
                 onClick={reset}
                 className="h-9 px-4 bg-gray-100 dark:bg-white/6 hover:bg-gray-200 dark:hover:bg-white/6 text-gray-800 dark:text-gray-100 rounded-lg text-sm font-medium"
               >
-                Try again
+                {t('server.designImport.tryAgain')}
               </button>
             </div>
           )}
@@ -352,8 +394,13 @@ export default function DesignImportModal({
               <div className="flex items-center gap-2 text-emerald-600 mb-3">
                 <FaCheckCircle size={15} />
                 <span className="text-sm font-medium">
-                  Staged {manifest.screens.length} screen{manifest.screens.length === 1 ? '' : 's'} ·{' '}
-                  {manifest.assetCount} assets · {manifest.fontCount} fonts
+                  {t('server.designImport.staged', {
+                    screens: manifest.screens.length === 1
+                      ? t('server.designImport.screensOne')
+                      : t('server.designImport.screensMany', { count: manifest.screens.length }),
+                    assets: manifest.assetCount,
+                    fonts: manifest.fontCount,
+                  })}
                 </span>
               </div>
 
@@ -373,7 +420,7 @@ export default function DesignImportModal({
               </div>
 
               <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1.5">
-                Instruction for the AI
+                {t('server.designImport.instructionLabel')}
               </label>
               <textarea
                 value={prompt}
@@ -387,7 +434,7 @@ export default function DesignImportModal({
                   onClick={handleClose}
                   className="h-9 px-4 text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 text-sm font-medium"
                 >
-                  Keep staged for later
+                  {t('server.designImport.keepForLater')}
                 </button>
                 <button
                   onClick={() => {
@@ -398,7 +445,7 @@ export default function DesignImportModal({
                   className="h-9 px-4 bg-brand-500 text-white rounded-lg text-sm font-medium hover:bg-brand-600 disabled:opacity-40 flex items-center gap-2"
                 >
                   <FaMagic size={13} />
-                  Send to AI
+                  {t('server.designImport.sendToAi')}
                 </button>
               </div>
             </div>

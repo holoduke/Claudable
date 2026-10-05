@@ -6,6 +6,8 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { validateProjectName } from '@/lib/utils';
 import { ProjectWipeSection } from './ProjectWipeSection';
 import { apiErrorMessage } from '@/lib/client/api-error';
+import { useT } from '@/contexts/I18nContext';
+import { PermissionNotice, type DenyReason } from './settings-permissions';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? '';
 
@@ -14,6 +16,9 @@ interface GeneralSettingsProps {
   projectName: string;
   projectDescription?: string | null;
   onProjectUpdated?: (update: { name: string; description?: string | null }) => void;
+  /** Saving name/description and the danger zone need `manage` on the server. */
+  canManage?: boolean;
+  manageDenyReason?: DenyReason;
 }
 
 type StatusMessage = { type: 'success' | 'error'; text: string } | null;
@@ -23,7 +28,10 @@ export function GeneralSettings({
   projectName,
   projectDescription = '',
   onProjectUpdated,
+  canManage = true,
+  manageDenyReason = 'ownerOnly',
 }: GeneralSettingsProps) {
+  const t = useT();
   const [name, setName] = useState(projectName);
   const [description, setDescription] = useState(projectDescription ?? '');
   const [originalName, setOriginalName] = useState(projectName);
@@ -69,6 +77,7 @@ export function GeneralSettings({
     normalizedName !== normalizedOriginalName ||
     normalizedDescription !== normalizedOriginalDescription;
   const isSaveDisabled =
+    !canManage ||
     !isProjectScoped ||
     isSaving ||
     !normalizedName ||
@@ -102,7 +111,7 @@ export function GeneralSettings({
       if (!response.ok) {
         throw new Error(apiErrorMessage(
           payload,
-          typeof payload?.detail === 'string' && payload.detail ? payload.detail : 'Failed to update project settings.',
+          typeof payload?.detail === 'string' && payload.detail ? payload.detail : t('settings.projectGeneral.saveFailed'),
         ));
       }
 
@@ -124,12 +133,12 @@ export function GeneralSettings({
         description: updatedDescription || null,
       });
 
-      setStatus({ type: 'success', text: 'Changes saved successfully.' });
+      setStatus({ type: 'success', text: t('settings.projectGeneral.saved') });
     } catch (error) {
       const message =
         error instanceof Error && error.message
           ? error.message
-          : 'Something went wrong while saving changes.';
+          : t('settings.projectGeneral.saveError');
       setStatus({ type: 'error', text: message });
     } finally {
       setIsSaving(false);
@@ -138,31 +147,34 @@ export function GeneralSettings({
 
   const nameError =
     normalizedName && !validateProjectName(normalizedName)
-      ? 'Use 1-50 characters: letters, numbers, spaces, hyphens, or underscores.'
+      ? t('settings.projectGeneral.nameRule')
       : null;
 
   return (
     <div className="p-6 space-y-6">
       <div>
-        <h3 className="text-lg font-medium text-gray-900 dark:text-gray-50 mb-4">General Settings</h3>
+        <h3 className="text-lg font-medium text-gray-900 dark:text-gray-50 mb-4">{t('settings.projectGeneral.title')}</h3>
 
         {!isProjectScoped ? (
           <div className="rounded-lg border border-gray-200 dark:border-white/8 bg-gray-50 dark:bg-white/3 px-4 py-3 text-sm text-gray-600 dark:text-gray-300">
-            Select a project to edit its general settings.
+            {t('settings.projectGeneral.selectProject')}
           </div>
         ) : (
           <div className="space-y-5">
+            {!canManage && <PermissionNotice reason={manageDenyReason} />}
             <div>
-              <label className="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-200">Project Name</label>
+              <label htmlFor="settings-project-name" className="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-200">{t('settings.projectGeneral.name')}</label>
               <input
+                id="settings-project-name"
                 type="text"
+                disabled={!canManage}
                 value={name}
                 onChange={event => {
                   setName(event.target.value);
                   if (status?.type) setStatus(null);
                 }}
-                className="w-full rounded-lg border border-gray-300 dark:border-white/8 px-3 py-2 focus:outline-hidden focus:ring-2 focus:ring-brand-500"
-                placeholder="Enter project name"
+                className="w-full rounded-lg border border-gray-300 dark:border-white/8 px-3 py-2 focus:outline-hidden focus:ring-2 focus:ring-brand-500 disabled:cursor-not-allowed disabled:opacity-60"
+                placeholder={t('settings.projectGeneral.namePlaceholder')}
               />
               {nameError && (
                 <p className="mt-2 text-sm text-red-600">
@@ -172,8 +184,9 @@ export function GeneralSettings({
             </div>
 
             <div>
-              <label className="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-200">Project ID</label>
+              <label htmlFor="settings-project-id" className="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-200">{t('settings.projectGeneral.id')}</label>
               <input
+                id="settings-project-id"
                 type="text"
                 value={projectId}
                 disabled
@@ -182,21 +195,24 @@ export function GeneralSettings({
             </div>
 
             <div>
-              <label className="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-200">Description</label>
+              <label htmlFor="settings-project-description" className="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-200">{t('settings.projectGeneral.description')}</label>
               <textarea
+                id="settings-project-description"
+                disabled={!canManage}
                 value={description}
                 onChange={event => {
                   setDescription(event.target.value);
                   if (status?.type) setStatus(null);
                 }}
                 rows={4}
-                className="w-full rounded-lg border border-gray-300 dark:border-white/8 px-3 py-2 focus:outline-hidden focus:ring-2 focus:ring-brand-500"
-                placeholder="Describe your project..."
+                className="w-full rounded-lg border border-gray-300 dark:border-white/8 px-3 py-2 focus:outline-hidden focus:ring-2 focus:ring-brand-500 disabled:cursor-not-allowed disabled:opacity-60"
+                placeholder={t('settings.projectGeneral.descriptionPlaceholder')}
               />
             </div>
 
             {status && (
               <div
+                role={status.type === 'error' ? 'alert' : 'status'}
                 className={`rounded-lg px-4 py-3 text-sm ${
                   status.type === 'success'
                     ? 'border border-green-200 bg-green-50 text-green-700'
@@ -207,17 +223,17 @@ export function GeneralSettings({
               </div>
             )}
 
-            <div className="flex justify-end">
+            {canManage && (<div className="flex justify-end">
               <button
                 onClick={handleSave}
                 disabled={isSaveDisabled}
                 className="rounded-lg bg-brand-500 px-4 py-2 text-white transition-colors hover:bg-brand-600 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                {isSaving ? 'Saving...' : 'Save Changes'}
+                {isSaving ? t('common.saving') : t('settings.projectGeneral.save')}
               </button>
-            </div>
+            </div>)}
 
-            <ProjectWipeSection projectId={projectId} />
+            {canManage && <ProjectWipeSection projectId={projectId} />}
           </div>
         )}
       </div>
