@@ -1,6 +1,18 @@
+import { chatpageNl } from './nl/chatpage';
+import { chatNl } from './nl/chat';
+import { settingsNl } from './nl/settings';
+import { homeNl } from './nl/home';
+import { serverNl } from './nl/server';
 import type { en } from './en';
 
 export const nl: Record<keyof typeof en, string> = {
+  // Per-area catalogs (lib/i18n/messages/nl/*.ts)
+  ...chatpageNl,
+  ...chatNl,
+  ...settingsNl,
+  ...homeNl,
+  ...serverNl,
+
   'common.save': 'Opslaan',
   'common.saving': 'Opslaan…',
   'common.cancel': 'Annuleren',

@@ -1,6 +1,18 @@
+import { chatpageFr } from './fr/chatpage';
+import { chatFr } from './fr/chat';
+import { settingsFr } from './fr/settings';
+import { homeFr } from './fr/home';
+import { serverFr } from './fr/server';
 import type { en } from './en';
 
 export const fr: Record<keyof typeof en, string> = {
+  // Per-area catalogs (lib/i18n/messages/fr/*.ts)
+  ...chatpageFr,
+  ...chatFr,
+  ...settingsFr,
+  ...homeFr,
+  ...serverFr,
+
   'common.save': 'Enregistrer',
   'common.saving': 'Enregistrement…',
   'common.cancel': 'Annuler',

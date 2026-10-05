@@ -1,6 +1,18 @@
+import { chatpageDe } from './de/chatpage';
+import { chatDe } from './de/chat';
+import { settingsDe } from './de/settings';
+import { homeDe } from './de/home';
+import { serverDe } from './de/server';
 import type { en } from './en';
 
 export const de: Record<keyof typeof en, string> = {
+  // Per-area catalogs (lib/i18n/messages/de/*.ts)
+  ...chatpageDe,
+  ...chatDe,
+  ...settingsDe,
+  ...homeDe,
+  ...serverDe,
+
   'common.save': 'Speichern',
   'common.saving': 'Wird gespeichert…',
   'common.cancel': 'Abbrechen',
