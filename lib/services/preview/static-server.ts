@@ -14,6 +14,10 @@ import fs from 'fs/promises';
  * manual refresh. The server now exposes /__claudable/livereload (max mtime
  * over the project tree, throttled) and injects a small poller into served
  * HTML that reloads the page when that version changes.
+ *
+ * PREVIEW BRIDGE: with CLAUDABLE_BRIDGE_FILE set (bridge-assets.ts), served HTML
+ * also references /__claudable/bridge.js (route sync, visual editor, comments,
+ * error capture), which this server serves from that Claudable-owned file.
  */
 const STATIC_SERVER_SRC = `const http = require('http');
 const fs = require('fs');
@@ -50,6 +54,21 @@ function liveVersion(){
   return state.v;
 }
 var LR_SCRIPT = '<script>(function(){var v=null;setInterval(function(){fetch("/__claudable/livereload",{cache:"no-store"}).then(function(r){return r.json();}).then(function(j){if(v===null){v=j.v;return;}if(j.v!==v){location.reload();}}).catch(function(){});},1500);})();</' + 'script>';
+// Preview bridge (route sync, visual editor, comments, error capture): a
+// Claudable-owned script (CLAUDABLE_BRIDGE_FILE, outside the project) served at
+// /__claudable/bridge.js and referenced from every served HTML page.
+var BRIDGE_FILE = process.env.CLAUDABLE_BRIDGE_FILE || '';
+var BRIDGE_TAG = '<script src="/__claudable/bridge.js"></' + 'script>';
+function injectBridge(html){
+  if (!BRIDGE_FILE) return html;
+  var m = /<head(?=[\\s>\\/])[^>]*>/i.exec(html);
+  if (m) return html.slice(0, m.index + m[0].length) + BRIDGE_TAG + html.slice(m.index + m[0].length);
+  m = /<\\/head\\s*>/i.exec(html);
+  if (m) return html.slice(0, m.index) + BRIDGE_TAG + html.slice(m.index);
+  m = /<body(?=[\\s>\\/])[^>]*>/i.exec(html);
+  if (m) return html.slice(0, m.index + m[0].length) + BRIDGE_TAG + html.slice(m.index + m[0].length);
+  return html;
+}
 var REAL_ROOT = null;
 try { REAL_ROOT = fs.realpathSync(ROOT); } catch (e) { REAL_ROOT = ROOT; }
 function serve(res, fp, status){
@@ -65,7 +84,7 @@ function serveReal(res, fp, status){
     if (e) { res.writeHead(404, {'Content-Type':'text/plain'}); res.end('Not found'); return; }
     var mime = type(fp);
     if (mime.indexOf('text/html') === 0) {
-      var html = data.toString('utf8');
+      var html = injectBridge(data.toString('utf8'));
       var idx = html.lastIndexOf('</body>');
       html = idx >= 0 ? html.slice(0, idx) + LR_SCRIPT + html.slice(idx) : html + LR_SCRIPT;
       res.writeHead(status || 200, {'Content-Type': mime, 'Cache-Control':'no-store'});
@@ -97,6 +116,14 @@ const server = http.createServer(function(req, res){
   if (urlPath === '/__claudable/livereload') {
     res.writeHead(200, {'Content-Type':'application/json', 'Cache-Control':'no-store'});
     res.end(JSON.stringify({ v: liveVersion() }));
+    return;
+  }
+  if (urlPath === '/__claudable/bridge.js' && BRIDGE_FILE) {
+    fs.readFile(BRIDGE_FILE, function(e, data){
+      if (e) { res.writeHead(404, {'Content-Type':'text/plain', 'Cache-Control':'no-store'}); res.end('bridge not available'); return; }
+      res.writeHead(200, {'Content-Type':'text/javascript; charset=utf-8', 'Cache-Control':'no-store'});
+      res.end(data);
+    });
     return;
   }
   if (shouldProxy(urlPath)) return proxy(req, res);

@@ -10,6 +10,7 @@ import { getAdminUser } from '@/lib/auth/session';
 import { deleteUser, serializeUser } from '@/lib/services/users';
 import { prisma } from '@/lib/db/client';
 import { orgErrorResponse } from '@/lib/services/settings-org-errors';
+import { assertNotLastActiveOwnerOfAnyOrg } from '@/lib/services/orgs';
 import { createSuccessResponse, createErrorResponse, handleApiError } from '@/lib/utils/api-response';
 
 export const runtime = 'nodejs';
@@ -67,6 +68,17 @@ export async function PATCH(
       const activeAdmins = await prisma.user.count({ where: { role: 'admin', isActive: true } });
       if (activeAdmins <= 1) {
         return createErrorResponse('last_admin', 'Cannot remove the last active admin', 409);
+      }
+    }
+
+    // Deactivating the last active owner of an org would lock that org out.
+    if (hasActive && body.isActive === false && target.isActive) {
+      try {
+        await assertNotLastActiveOwnerOfAnyOrg(id);
+      } catch (e) {
+        const orgError = orgErrorResponse(e);
+        if (orgError) return orgError;
+        throw e;
       }
     }
 

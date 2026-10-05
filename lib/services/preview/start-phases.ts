@@ -50,6 +50,7 @@ import { ensureStaticServer } from './static-server';
 import { waitForPreviewReady, appendCommandLogs } from './process-utils';
 import type { PreviewProcess } from './types';
 import { NODE_IMAGE } from '@/lib/config/stack-versions';
+import { prepareContainerBridge, prepareStaticBridge } from './bridge-assets';
 
 type ProjectRecord = NonNullable<Awaited<ReturnType<typeof getProjectById>>>;
 
@@ -504,6 +505,11 @@ export async function startStaticServer(ctx: StaticServerContext): Promise<Stati
 
   const serverPath = await ensureStaticServer();
   const command = process.execPath; // the node binary
+  // Preview bridge (route sync, editor, comments, errors): served + injected by
+  // the static server itself (see static-server.ts), never written into the site.
+  const bridgeFile = await prepareStaticBridge(projectId, cfg, log);
+  if (bridgeFile) spawnEnv.CLAUDABLE_BRIDGE_FILE = bridgeFile;
+  else delete spawnEnv.CLAUDABLE_BRIDGE_FILE;
   const args = [serverPath, String(effectivePort), (bindHost && bindHost.trim()) || '0.0.0.0', projectPath];
 
   // Optional backend sidecar (e.g. a Go service). Build it, run it on an
@@ -746,9 +752,18 @@ export async function buildFrontendContainerArgs(
   const installStep = reinstall
     ? `rm -f node_modules/.package-lock.json; npm install --include=dev --no-audit --no-fund && rm -f node_modules/${REINSTALL_MARKER}`
     : '[ -n "$(ls -A node_modules 2>/dev/null)" ] || npm install --include=dev --no-audit --no-fund';
-  const devScript = isLaravel
+  const baseDevScript = isLaravel
     ? inner
     : `rm -rf .next/dev/lock 2>/dev/null; [ ! -f package.json ] || ${reinstall ? `{ ${installStep}; }` : installStep}; ${inner}`;
+
+  // Preview bridge for non-Nuxt stacks, delivered from a Claudable-owned
+  // read-only mount (bridge-assets.ts): node stacks get a reverse proxy on a
+  // dedicated container port that injects the bridge script into HTML;
+  // Laravel gets a PHP auto_prepend_file. Nuxt keeps its plugin (no change).
+  const bridge = await prepareContainerBridge({
+    projectId, projectPath, cfg, kind, image, defaultNodeImage: NODE_IMAGE, effectivePort, toHostPath, log,
+  });
+  const devScript = bridge.wrap(baseDevScript);
 
   // Package cache PER PROJECT (npm cacache for node, composer for laravel). It
   // used to be one cache shared by every preview container — writable by each —
@@ -801,6 +816,7 @@ export async function buildFrontendContainerArgs(
         // else a file SQLite fallback. NOT hardcoded here.
         APP_ENV: 'local',
         APP_DEBUG: 'true',
+        ...bridge.env,
       }
     : {
         NODE_ENV: 'development',
@@ -816,6 +832,7 @@ export async function buildFrontendContainerArgs(
         // without every project needing a vite.config change; non-Vite stacks
         // simply ignore it.
         ...(publicPreviewHost ? { __VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS: publicPreviewHost } : {}),
+        ...bridge.env,
       };
   if (composedBackendUrl) {
     // Composed backend URL (model B): PUBLIC url for the BROWSER (client-side).
@@ -849,7 +866,9 @@ export async function buildFrontendContainerArgs(
     // reached by the reverse proxy at the host GATEWAY IP, not via 127.0.0.1
     // (unlike the backend sidecar, which Claudable's own static server
     // proxies to on loopback). Parity with the in-process 0.0.0.0 bind.
-    '-p', `${previewPublishHost}:${effectivePort}:${effectivePort}`,
+    // With the bridge proxy the host port maps to the proxy's container port;
+    // the dev server keeps listening on effectivePort inside (unpublished).
+    '-p', `${previewPublishHost}:${effectivePort}:${bridge.containerPort}`,
     // 2g default: Next 16 (Turbopack) and cold Nuxt/Vite builds routinely spike
     // past 1g during compile — at 1g the kernel OOM-kills next-server mid-start
     // and the preview dies with "exited before it became reachable".
@@ -862,6 +881,7 @@ export async function buildFrontendContainerArgs(
     // and override its entrypoint to a plain shell.
     ...(isLaravel ? ['--user', '1000:1000', '--entrypoint', 'sh'] : ['--user', 'node']),
     ...cacheArgs,
+    ...bridge.mountArgs,
     ...(sandboxNet ? ['--network', sandboxNet] : []),
     ...cenvFile.args,
     // PHP image: entrypoint is already `sh`, so pass just `-c <script>`.

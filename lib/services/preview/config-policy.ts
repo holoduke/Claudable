@@ -71,6 +71,12 @@ export async function enforcePreviewConfigPolicy(
     }
   }
 
+  if ('bridge' in cfg && typeof cfg.bridge !== 'boolean') {
+    const { bridge: _invalid, ...rest } = cfg;
+    cfg = rest;
+    notes.push('"bridge" ignored: must be true or false');
+  }
+
   if (!opts.customer) return { cfg, notes };
 
   if (cfg.frontend) {

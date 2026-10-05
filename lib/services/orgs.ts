@@ -302,6 +302,22 @@ export async function removeOrgMember(orgId: string, userId: string, actor: Memb
  * Refuse when `userId` is the last owner of ANY organisation — used before an
  * account is deleted, which would otherwise leave that org without an owner.
  */
+/**
+ * Deactivating a user must not leave an organisation without an owner who can
+ * still sign in: refuse when every OTHER owner of one of their orgs is inactive.
+ */
+export async function assertNotLastActiveOwnerOfAnyOrg(userId: string) {
+  const owned = await prisma.orgMember.findMany({ where: { userId, role: 'eigenaar' }, select: { orgId: true } });
+  for (const { orgId } of owned) {
+    const otherActiveOwners = await prisma.orgMember.count({
+      where: { orgId, role: 'eigenaar', userId: { not: userId }, user: { isActive: true } },
+    });
+    if (otherActiveOwners === 0) {
+      throw new OrgError('last_owner', 'This is the last active owner of the organisation — appoint another owner first', 409);
+    }
+  }
+}
+
 export async function assertNotLastOwnerOfAnyOrg(userId: string) {
   const owned = await prisma.orgMember.findMany({ where: { userId, role: 'eigenaar' }, select: { orgId: true } });
   for (const { orgId } of owned) await assertNotLastOwner(orgId, userId);
