@@ -174,3 +174,21 @@ export async function prepareStaticBridge(projectId: string, cfg: PreviewConfig 
     return null;
   }
 }
+
+/**
+ * A preview container started BEFORE the bridge existed (or with it disabled)
+ * runs without it. When Claudable restarts and would re-adopt such a container,
+ * the editor/comments/route sync would silently do nothing until someone
+ * restarts the preview. Decide whether adoption should be skipped so the next
+ * open starts it fresh WITH the bridge. Same rules as prepareContainerBridge;
+ * Nuxt (plugin file) never needs the mount.
+ */
+export function adoptionNeedsBridgeRestart(i: {
+  enabled: boolean;
+  hasNuxtPlugin: boolean;
+  customImage: boolean;
+  containerMounts: string[];
+}): boolean {
+  if (!i.enabled || i.hasNuxtPlugin || i.customImage) return false;
+  return !i.containerMounts.some((m) => m === BRIDGE_MOUNT || m.startsWith(`${BRIDGE_MOUNT}/`));
+}

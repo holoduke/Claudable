@@ -31,7 +31,8 @@ export const BRIDGE_CONTAINER_PORT = 39917;
  * - Never crashes on client aborts / upstream errors (logs one line).
  *
  * When required (tests) it only exports its helpers; it starts when run as main.
- * Written with String.raw: no backticks or dollar-brace sequences inside.
+ * Written with String.raw: no backticks or dollar-brace sequences inside the
+ * proxy code itself (the only interpolation is BRIDGE_CONTAINER_PORT).
  */
 export const BRIDGE_PROXY_SRC = String.raw`'use strict';
 // Auto-written by Claudable (preview only): preview bridge proxy. Not part of the project.
@@ -280,7 +281,9 @@ function startBridgeProxy(opts) {
   server.on('clientError', function (err, socket) {
     try { if (socket.writable) socket.end('HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n'); else socket.destroy(); } catch (e) { /* ignore */ }
   });
-  server.requestTimeout = 0;
+  // Node's default: a client may take 5 min to send its request (headers +
+  // body); responses (SSE, long polls) are not limited by this.
+  server.requestTimeout = 300000;
   server.keepAliveTimeout = 61000;
   server.headersTimeout = 62000;
 
@@ -339,7 +342,7 @@ module.exports = {
 if (require.main === module) {
   process.on('uncaughtException', function (e) { log('uncaught: ' + (e && e.message)); });
   process.on('unhandledRejection', function (e) { log('unhandled: ' + (e && e.message)); });
-  var listenPort = parseInt(process.argv[2] || process.env.BRIDGE_PORT || '39917', 10);
+  var listenPort = parseInt(process.argv[2] || process.env.BRIDGE_PORT || '${BRIDGE_CONTAINER_PORT}', 10);
   var upstream = parseInt(process.argv[3] || process.env.BRIDGE_UPSTREAM_PORT || '', 10);
   if (!upstream) { log('no upstream port given; not starting'); }
   else startBridgeProxy({ port: listenPort, upstreamPort: upstream, bridgeFile: path.join(__dirname, 'bridge.js') });

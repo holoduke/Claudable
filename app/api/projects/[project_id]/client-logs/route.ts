@@ -15,6 +15,7 @@ import { NextRequest } from 'next/server';
 import { prisma } from '@/lib/db/client';
 import { recordConsole } from '@/lib/services/diagnostics';
 import { isValidClientLogToken } from '@/lib/services/client-log-token';
+import { allowClientLogBatch } from '@/lib/services/client-log-rate-limit';
 
 export const runtime = 'nodejs';
 
@@ -38,6 +39,8 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
     if (!isValidClientLogToken(project_id, request.nextUrl.searchParams.get('t'))) {
       return new Response(null, { status: 204 }); // silently drop, like an unknown project
     }
+    // The token is public (baked into bridge.js), so cap batches per project.
+    if (!allowClientLogBatch(project_id)) return new Response(null, { status: 204 });
     const project = await prisma.project.findUnique({ where: { id: project_id }, select: { id: true } });
     if (!project) return new Response(null, { status: 204 }); // silently drop; plugin ignores the response
 

@@ -13,6 +13,8 @@
  * signed-out visitors.
  */
 
+import { safeCallbackPath } from './safe-callback';
+
 /** Pages that a signed-out visitor may legitimately be on. */
 const PUBLIC_PAGE_PREFIXES = ['/login', '/share', '/privacy'];
 
@@ -60,7 +62,9 @@ export function shouldRedirectOnUnauthorized(input: UnauthorizedDecisionInput): 
 /** /login?callbackUrl=<path+query+hash> — only same-site relative paths. */
 export function buildLoginUrl(pathname: string, search = '', hash = ''): string {
   const target = `${pathname || '/'}${search}${hash}`;
-  const safe = target.startsWith('/') && !target.startsWith('//') ? target : '/';
+  // Validate with the same rules the login page applies, but keep the raw
+  // (still-encoded) target so it isn't decoded twice on the way back.
+  const safe = safeCallbackPath(target, '') ? target : '/';
   return `/login?callbackUrl=${encodeURIComponent(safe)}`;
 }
 

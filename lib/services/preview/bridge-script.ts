@@ -7,12 +7,14 @@
 //    proxy (bridge-proxy.ts) or inlined by the PHP prepend (bridge-php.ts),
 //    routes via the History API.
 // Everything is inert outside the preview iframe (window.parent === window).
+// The empty catch blocks are deliberate: this runs inside arbitrary user apps,
+// so every hook is best-effort and must never break or spam the host page.
 import { clientLogToken } from '@/lib/services/client-log-token';
 
 export type BridgeRouteMode = 'nuxt-router' | 'history';
 
 export interface BridgeOptions {
-  /** Exact Claudable origin; '' falls back to referrer/ancestor origin, then '*'. */
+  /** Exact Claudable origin; '' falls back to the referrer/ancestor origin, else the bridge stays silent. */
   claudableOrigin: string;
   projectId: string;
   /** Per-project client-log token (see client-log-token.ts). */
@@ -329,19 +331,22 @@ const REST = `
 `;
 
 function preamble(o: BridgeOptions): string {
-  return `  // Known Claudable origin (baked in). Fall back to the referrer/ancestor origin,
-  // then '*' only as a last resort. Used to scope BOTH outgoing posts and to
-  // validate incoming commands, so a page that frames the preview can't drive it.
+  return `  // Known Claudable origin (baked in). Without one (local dev without
+  // NEXT_PUBLIC_APP_URL/AUTH_URL) fall back to the referrer/ancestor origin; if
+  // that is unknown too the bridge stays silent — never '*'. The target scopes
+  // BOTH outgoing posts and incoming commands, so a page that frames the
+  // preview can't drive it.
   const CLAUDABLE_ORIGIN = ${JSON.stringify(o.claudableOrigin)};
   const CLAUDABLE_PROJECT_ID = ${JSON.stringify(o.projectId)};
   const CLAUDABLE_LOG_TOKEN = ${JSON.stringify(o.logToken)};
-  let target = CLAUDABLE_ORIGIN || '*';
+  let target = CLAUDABLE_ORIGIN;
   try {
-    if (!CLAUDABLE_ORIGIN && document.referrer) target = new URL(document.referrer).origin;
-    if (!CLAUDABLE_ORIGIN && target === '*' && window.location.ancestorOrigins && window.location.ancestorOrigins.length) target = window.location.ancestorOrigins[0];
+    if (!target && document.referrer) target = new URL(document.referrer).origin;
+    if (!target && window.location.ancestorOrigins && window.location.ancestorOrigins.length) target = window.location.ancestorOrigins[0];
   } catch {}
-  const trusted = (ev) => target === '*' || ev.origin === target;
-  const post = (msg) => { try { window.parent.postMessage(msg, target); } catch {} };
+  if (target === 'null') target = '';
+  const trusted = (ev) => !!target && ev.origin === target;
+  const post = (msg) => { if (!target) return; try { window.parent.postMessage(msg, target); } catch {} };
 
   // --- route reporter: keep the preview URL bar in sync with in-app navigation ---
   // Pathname ONLY: Claudable scopes review comments by route, and a query or

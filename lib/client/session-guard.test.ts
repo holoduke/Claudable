@@ -52,6 +52,8 @@ describe('buildLoginUrl', () => {
   it('never produces an off-site callback', () => {
     expect(buildLoginUrl('//evil.example')).toBe('/login?callbackUrl=%2F');
     expect(buildLoginUrl('')).toBe('/login?callbackUrl=%2F');
+    expect(buildLoginUrl('/%2F%2Fevil.example')).toBe('/login?callbackUrl=%2F');
+    expect(buildLoginUrl('/\\evil.example')).toBe('/login?callbackUrl=%2F');
   });
 });
 

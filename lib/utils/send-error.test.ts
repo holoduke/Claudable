@@ -13,6 +13,7 @@ describe('extractErrorMessage', () => {
     expect(extractErrorMessage('<html>Bad Gateway</html>', 502, 'Bad Gateway')).toBe('502 Bad Gateway');
     expect(extractErrorMessage('', 403, '')).toBe('403');
     expect(extractErrorMessage('null', 400, 'Bad Request')).toBe('400 Bad Request');
+    expect(extractErrorMessage(JSON.stringify({ error: 'action_failed' }), 500, 'Internal Server Error')).toBe('500 Internal Server Error');
   });
 });
 
