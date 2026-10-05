@@ -35,6 +35,10 @@ export interface PreviewBackendConfig {
 }
 export interface PreviewConfig {
   backend?: PreviewBackendConfig;
+  // `false` turns off the Claudable preview bridge (route sync, visual editor,
+  // comments, error capture) injected by the bridge proxy / PHP prepend /
+  // static server for this project. Nuxt's own plugin path is unaffected.
+  bridge?: boolean;
   proxy?: string[];   // path prefixes proxied to the backend (e.g. ["/api","/d"])
   // Phase 2 (opt-in): run this project's FRONTEND dev server in an isolated
   // container instead of a bare in-container process. Only honored when

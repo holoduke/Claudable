@@ -167,6 +167,8 @@ export async function planWipe(projectId: string): Promise<WipePlan> {
     // per-project package caches of the isolated preview (start-phases.ts)
     [path.join(DATA_ROOT, '.npm-cache', 'projects'), path.join(DATA_ROOT, '.npm-cache', 'projects', projectId)],
     [path.join(DATA_ROOT, '.composer-cache', 'projects'), path.join(DATA_ROOT, '.composer-cache', 'projects', projectId)],
+    // per-project preview-bridge runtime files (bridge-assets.ts)
+    [path.join(DATA_ROOT, '.preview-bridge', 'projects'), path.join(DATA_ROOT, '.preview-bridge', 'projects', projectId)],
   ];
   const canvases = await prisma.designCanvas.findMany({ where: { projectId }, select: { id: true } }).catch(() => []);
   const canvasRoot = path.resolve(process.cwd(), 'data', 'design-canvases');
