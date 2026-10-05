@@ -12,6 +12,7 @@ import { useT } from '@/contexts/I18nContext';
  * progress. Rendered in both the "deploying" and "failed" panels.
  */
 function DeployJobList({ jobs, tone }: { jobs?: DeployRunJob[]; tone: 'blue' | 'red' }) {
+  const t = useT();
   if (!jobs || jobs.length === 0) return null;
   const terminal = ['success', 'failure', 'cancelled', 'skipped'];
   const done = jobs.filter((j) => terminal.includes(j.status)).length;
@@ -30,17 +31,17 @@ function DeployJobList({ jobs, tone }: { jobs?: DeployRunJob[]; tone: 'blue' | '
   const icon = (status: string) => {
     switch (status) {
       case 'success':
-        return <svg className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-label="succeeded"><polyline points="20 6 9 17 4 12" /></svg>;
+        return <svg className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" role="img" aria-label={t('chat.publish.job.succeeded')}><polyline points="20 6 9 17 4 12" /></svg>;
       case 'failure':
-        return <svg className="w-3.5 h-3.5 text-red-600 dark:text-red-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" aria-label="failed"><path d="M18 6L6 18M6 6l12 12" /></svg>;
+        return <svg className="w-3.5 h-3.5 text-red-600 dark:text-red-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" role="img" aria-label={t('chat.publish.job.failed')}><path d="M18 6L6 18M6 6l12 12" /></svg>;
       case 'cancelled':
-        return <svg className="w-3.5 h-3.5 text-gray-500 dark:text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-label="cancelled"><circle cx="12" cy="12" r="9" /><line x1="7" y1="12" x2="17" y2="12" /></svg>;
+        return <svg className="w-3.5 h-3.5 text-gray-500 dark:text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" role="img" aria-label={t('chat.publish.job.cancelled')}><circle cx="12" cy="12" r="9" /><line x1="7" y1="12" x2="17" y2="12" /></svg>;
       case 'skipped':
-        return <svg className="w-3.5 h-3.5 text-gray-400 dark:text-gray-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-label="skipped"><polyline points="13 17 18 12 13 7" /><polyline points="6 17 11 12 6 7" /></svg>;
+        return <svg className="w-3.5 h-3.5 text-gray-400 dark:text-gray-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" role="img" aria-label={t('chat.publish.job.skipped')}><polyline points="13 17 18 12 13 7" /><polyline points="6 17 11 12 6 7" /></svg>;
       case 'running':
-        return <span className="w-3.5 h-3.5 border-2 border-blue-600 dark:border-blue-400 border-t-transparent rounded-full animate-spin" aria-label="running" />;
+        return <span className="w-3.5 h-3.5 border-2 border-blue-600 dark:border-blue-400 border-t-transparent rounded-full animate-spin" role="img" aria-label={t('chat.publish.job.running')} />;
       default: // queued / unknown
-        return <span className="w-3.5 h-3.5 rounded-full border-2 border-gray-300 dark:border-gray-600" aria-label="pending" />;
+        return <span className="w-3.5 h-3.5 rounded-full border-2 border-gray-300 dark:border-gray-600" role="img" aria-label={t('chat.publish.job.pending')} />;
     }
   };
 
@@ -59,7 +60,7 @@ function DeployJobList({ jobs, tone }: { jobs?: DeployRunJob[]; tone: 'blue' | '
             <span className={`truncate ${j.status === 'skipped' || j.status === 'cancelled' ? 'text-gray-400 dark:text-gray-500 line-through' : 'text-gray-700 dark:text-gray-200'}`}>
               {j.name}
             </span>
-            {j.status === 'running' && <span className={`ml-auto shrink-0 ${textDim}`}>running…</span>}
+            {j.status === 'running' && <span className={`ml-auto shrink-0 ${textDim}`}>{t('chat.publish.job.runningInline')}</span>}
           </li>
         ))}
       </ul>
@@ -69,7 +70,6 @@ function DeployJobList({ jobs, tone }: { jobs?: DeployRunJob[]; tone: 'blue' | '
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? '';
 const AGENT_BUSY_POLL_MS = 3000;
-const AGENT_BUSY_NOTE = 'The agent is still working on this project. Publishing now would deploy a half-finished change — wait until it is done (or stop it).';
 
 /** The push route refused (busy agent, missing repo, git failure): its message is meant for the user. */
 class PushRejectedError extends Error {
@@ -80,7 +80,7 @@ class PushRejectedError extends Error {
 }
 
 /** Turn a failed push response into a PushRejectedError carrying the server's message. */
-async function pushRejection(res: Response): Promise<PushRejectedError> {
+async function pushRejection(res: Response, fallback: string): Promise<PushRejectedError> {
   const text = await res.text().catch(() => '');
   let message = '';
   try {
@@ -89,7 +89,7 @@ async function pushRejection(res: Response): Promise<PushRejectedError> {
   } catch {
     message = text.trim().slice(0, 300);
   }
-  return new PushRejectedError(message || `Publish failed (HTTP ${res.status})`, res.status);
+  return new PushRejectedError(message || fallback, res.status);
 }
 
 /**
@@ -203,38 +203,43 @@ export default function PublishPanel({
     try {
       setPublishLoading(true);
       const res = await fetch(`${API_BASE}/api/projects/${projectId}/github/push`, { method: 'POST' });
-      if (!res.ok) throw await pushRejection(res);
+      if (!res.ok) throw await pushRejection(res, t('chat.publish.failedHttp', { status: res.status }));
       const body = await res.json().catch(() => ({}));
-      if (body?.success === false) throw new PushRejectedError(body?.message || 'Publish failed', res.status);
+      if (body?.success === false) throw new PushRejectedError(body?.message || t('chat.publish.failed'), res.status);
       setBranchPushed(true);
       toast.success(t('publish.branchPushed', { branch: branch ?? '' }));
     } catch (e) {
-      reportPushFailure(e, e instanceof Error && e.message ? e.message : 'Publish failed');
+      reportPushFailure(e, e instanceof Error && e.message ? e.message : t('chat.publish.failed'));
     } finally {
       setPublishLoading(false);
     }
   };
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
   const mergeNow = async () => {
     if (!onMergeBranch) return;
     setMerging(true);
     try { await onMergeBranch(); } finally { setMerging(false); }
   };
   return (
-    <div className="fixed inset-0 z-60 flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-60 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="publish-panel-title">
       <div className="absolute inset-0 bg-black/50" onClick={onClose} />
       <div className="relative w-full max-w-lg bg-white dark:bg-[#181310] border border-gray-200 dark:border-white/10 rounded-2xl shadow-2xl overflow-hidden">
           <div className="px-6 py-4 border-b border-gray-200 dark:border-white/8 flex items-center justify-between bg-gray-50 dark:bg-white/3 ">
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 rounded-lg flex items-center justify-center text-white bg-black border border-black/10 ">
-              <FaRocket size={14} />
+              <FaRocket size={14} aria-hidden="true" />
             </div>
             <div>
-              <h3 className="text-base font-semibold text-gray-900 dark:text-gray-50 ">Publish Project</h3>
-              <p className="text-xs text-gray-600 dark:text-gray-300 ">{branchMode ? t('publish.branchTitle', { branch: branch ?? '' }) : isGitea ? 'Pushes your code to Git — auto-deploys via CI' : 'Deploy with Vercel, linked to your GitHub repo'}</p>
+              <h3 id="publish-panel-title" className="text-base font-semibold text-gray-900 dark:text-gray-50 ">{t('chat.publish.title')}</h3>
+              <p className="text-xs text-gray-600 dark:text-gray-300 ">{branchMode ? t('publish.branchTitle', { branch: branch ?? '' }) : isGitea ? t('chat.publish.subtitleGit') : t('chat.publish.subtitleVercel')}</p>
             </div>
           </div>
-          <button onClick={onClose} className="text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 ">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M18 6L6 18M6 6l12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>
+          <button onClick={onClose} aria-label={t('common.close')} title={t('common.close')} className="text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 ">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true" xmlns="http://www.w3.org/2000/svg"><path d="M18 6L6 18M6 6l12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>
           </button>
         </div>
 
@@ -262,24 +267,24 @@ export default function PublishPanel({
               <div className="flex items-center gap-2 mb-1">
                 <div className="w-4 h-4 border-2 border-blue-600 dark:border-blue-400 border-t-transparent rounded-full animate-spin" />
                 <p className="text-sm font-medium text-blue-700 dark:text-blue-300 ">
-                  {deployRun?.state === 'queued' ? 'Queued — waiting for the runner…'
-                    : deployRun?.state === 'running' ? 'Building & deploying…'
-                    : 'Pushing to the repository…'}
+                  {deployRun?.state === 'queued' ? t('chat.publish.stateQueued')
+                    : deployRun?.state === 'running' ? t('chat.publish.stateRunning')
+                    : t('chat.publish.statePushing')}
                 </p>
               </div>
               <p className="text-xs text-blue-700/80 dark:text-blue-300/80">
                 {isGitea
-                  ? 'Live status from CI — each pipeline step reports as it runs.'
-                  : 'Building and deploying your project. This may take a few minutes.'}
+                  ? t('chat.publish.liveStatusGit')
+                  : t('chat.publish.liveStatusVercel')}
               </p>
               <DeployJobList jobs={deployRun?.jobs} tone="blue" />
               {isGitea && publishedUrl && (
-                <p className="text-xs text-blue-700/80 dark:text-blue-300/80mt-1">Will be live at <a href={publishedUrl} target="_blank" rel="noopener noreferrer" className="font-mono underline">{publishedUrl}</a></p>
+                <p className="text-xs text-blue-700/80 dark:text-blue-300/80mt-1">{t('chat.publish.willBeLive')} <a href={publishedUrl} target="_blank" rel="noopener noreferrer" className="font-mono underline">{publishedUrl}</a></p>
               )}
               {isGitea && deployRun?.url && (
                 <p className="text-xs text-blue-700/80 dark:text-blue-300/80mt-1">
                   <a href={deployRun.url} target="_blank" rel="noopener noreferrer" className="underline">
-                    View build log{deployRun.runNumber ? ` (run #${deployRun.runNumber})` : ''} →
+                    {deployRun.runNumber ? t('chat.publish.viewLogRun', { run: deployRun.runNumber }) : t('chat.publish.viewLog')} →
                   </a>
                 </p>
               )}
@@ -290,7 +295,7 @@ export default function PublishPanel({
               already-deployed project (before the user clicks Update). */}
           {deploymentStatus !== 'deploying' && deploymentStatus !== 'ready' && deploymentStatus !== 'error' && isGitea && publishedUrl && (
             <div className="p-4 rounded-xl border border-gray-200 dark:border-white/8 bg-gray-50 dark:bg-white/3 ">
-              <p className="text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">Currently live at:</p>
+              <p className="text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">{t('chat.publish.currentlyLive')}</p>
               <div className="flex items-center gap-2">
                 <a href={publishedUrl} target="_blank" rel="noopener noreferrer" className="text-sm font-mono text-gray-700 dark:text-gray-200 underline break-all flex-1">
                   {publishedUrl}
@@ -299,24 +304,24 @@ export default function PublishPanel({
                   onClick={() => navigator.clipboard?.writeText(publishedUrl)}
                   className="px-2 py-1 text-xs rounded-lg border border-gray-300 dark:border-white/8 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-white/6 "
                 >
-                  Copy
+                  {t('common.copy')}
                 </button>
               </div>
               {deployRun?.state === 'success' && (deployRun?.title || deployRun?.updatedAt) && (
                 <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
-                  Last deployed{formatTimeAgo(deployRun.updatedAt) ? ` ${formatTimeAgo(deployRun.updatedAt)}` : ''}
+                  {t('chat.publish.lastDeployed')}{formatTimeAgo(deployRun.updatedAt) ? ` ${formatTimeAgo(deployRun.updatedAt)}` : ''}
                   {deployRun.title ? ` · ${deployRun.title}` : ''}
                   {deployRun.sha ? ` (${deployRun.sha})` : ''}
-                  {deployRun.url ? <> · <a href={deployRun.url} target="_blank" rel="noopener noreferrer" className="underline">log</a></> : null}
+                  {deployRun.url ? <> · <a href={deployRun.url} target="_blank" rel="noopener noreferrer" className="underline">{t('chat.publish.log')}</a></> : null}
                 </p>
               )}
-              {!branchMode && <p className="text-xs text-gray-400 dark:text-gray-500 mt-2">Click Update to deploy your latest changes.</p>}
+              {!branchMode && <p className="text-xs text-gray-400 dark:text-gray-500 mt-2">{t('chat.publish.clickUpdate')}</p>}
             </div>
           )}
 
           {deploymentStatus === 'ready' && publishedUrl && (
             <div className="p-4 rounded-xl border border-emerald-200 bg-emerald-50 dark:border-emerald-900 dark:bg-emerald-950/40 ">
-              <p className="text-sm font-medium text-emerald-700 dark:text-emerald-300 mb-2">Published successfully</p>
+              <p className="text-sm font-medium text-emerald-700 dark:text-emerald-300 mb-2">{t('chat.publish.success')}</p>
               <div className="flex items-center gap-2">
                 <a href={publishedUrl} target="_blank" rel="noopener noreferrer" className="text-sm font-mono text-emerald-700 dark:text-emerald-300 underline break-all flex-1">
                   {publishedUrl}
@@ -325,7 +330,7 @@ export default function PublishPanel({
                   onClick={() => navigator.clipboard?.writeText(publishedUrl)}
                   className="px-2 py-1 text-xs rounded-lg border border-emerald-300/80 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 "
                 >
-                  Copy
+                  {t('common.copy')}
                 </button>
               </div>
             </div>
@@ -334,15 +339,15 @@ export default function PublishPanel({
           {deploymentStatus === 'error' && (
             <div className="p-4 rounded-xl border border-red-200 bg-red-50 dark:border-red-900 dark:bg-red-950/40 ">
               <p className="text-sm font-medium text-red-700 dark:text-red-300 ">
-                {deployRun?.state === 'cancelled' ? 'Deployment was cancelled.'
-                  : deployRun?.state === 'unknown' ? 'Deployment did not finish in time — check the CI run on your Git server.'
-                  : 'Deployment failed — the CI build did not pass.'}
+                {deployRun?.state === 'cancelled' ? t('chat.publish.errCancelled')
+                  : deployRun?.state === 'unknown' ? t('chat.publish.errTimeout')
+                  : t('chat.publish.errFailed')}
               </p>
               <DeployJobList jobs={deployRun?.jobs} tone="red" />
               {isGitea && deployRun?.url && (
                 <p className="text-xs text-red-600 dark:text-red-400 mt-1">
                   <a href={deployRun.url} target="_blank" rel="noopener noreferrer" className="underline">
-                    View the failed build log{deployRun.runNumber ? ` (run #${deployRun.runNumber})` : ''} →
+                    {deployRun.runNumber ? t('chat.publish.viewFailedLogRun', { run: deployRun.runNumber }) : t('chat.publish.viewFailedLog')} →
                   </a>
                 </p>
               )}
@@ -351,23 +356,23 @@ export default function PublishPanel({
 
           {!githubConnected || (!isGitea && !vercelConnected) ? (
             <div className="p-4 rounded-xl border border-amber-200 bg-amber-50 dark:border-amber-900 dark:bg-amber-950/40 ">
-              <p className="text-sm font-medium text-gray-900 dark:text-gray-50 mb-2">Connect the following services:</p>
+              <p className="text-sm font-medium text-gray-900 dark:text-gray-50 mb-2">{t('chat.publish.connectServices')}</p>
               <div className="space-y-1 text-amber-700 dark:text-amber-300 text-sm">
-                {!githubConnected && (<div className="flex items-center gap-2"><span className="w-1.5 h-1.5 rounded-full bg-amber-500"/>Git repository not connected</div>)}
-                {!isGitea && !vercelConnected && (<div className="flex items-center gap-2"><span className="w-1.5 h-1.5 rounded-full bg-amber-500"/>Vercel project not connected</div>)}
+                {!githubConnected && (<div className="flex items-center gap-2"><span className="w-1.5 h-1.5 rounded-full bg-amber-500"/>{t('chat.publish.gitNotConnected')}</div>)}
+                {!isGitea && !vercelConnected && (<div className="flex items-center gap-2"><span className="w-1.5 h-1.5 rounded-full bg-amber-500"/>{t('chat.publish.vercelNotConnected')}</div>)}
               </div>
               <button
                 className="mt-3 w-full px-4 py-2 rounded-xl border border-gray-200 dark:border-white/8 text-gray-800 dark:text-gray-100 hover:bg-gray-50 dark:hover:bg-white/6 "
                 onClick={onOpenServiceSettings}
               >
-                Open Settings → Services
+                {t('chat.publish.openServices')}
               </button>
             </div>
           ) : null}
 
           {agentBusy && (
             <div role="status" className="p-3 rounded-xl border border-amber-200 bg-amber-50 dark:border-amber-900 dark:bg-amber-950/40 text-sm text-amber-800 dark:text-amber-200">
-              {AGENT_BUSY_NOTE}
+              {t('chat.publish.agentBusyNote')}
             </div>
           )}
 
@@ -391,7 +396,7 @@ export default function PublishPanel({
                   } catch {}
                   const pushRes = await fetch(`${API_BASE}/api/projects/${projectId}/github/push`, { method: 'POST' });
                   if (!pushRes.ok) {
-                    throw await pushRejection(pushRes);
+                    throw await pushRejection(pushRes, t('chat.publish.failedHttp', { status: pushRes.status }));
                   }
                   const pushBody = await pushRes.json().catch(() => ({}));
                   const url = githubRepoName && gitDeployDomain
@@ -410,7 +415,7 @@ export default function PublishPanel({
                     if (s?.found && (s.state === 'failure' || s.state === 'cancelled')) {
                       setDeployRun({ state: s.state, jobs: s.jobs, runNumber: s.runNumber, url: s.url, title: s.title, sha: s.sha, updatedAt: s.updatedAt });
                       setDeploymentStatus('error');
-                      toast.error('Nothing new to publish — and the last deploy FAILED in CI. Fix the build and publish again.');
+                      toast.error(t('chat.publish.nothingNewFailed'));
                     } else if (s?.found && (s.state === 'queued' || s.state === 'running')) {
                       // A run for the already-pushed commit is still going —
                       // track it to its real outcome.
@@ -427,7 +432,7 @@ export default function PublishPanel({
                   }
                 } catch (e) {
                   console.error('🚀 Gitea publish failed:', e);
-                  reportPushFailure(e, 'Publish failed. Make sure the project is connected to Gitea in Settings → Services.');
+                  reportPushFailure(e, t('chat.publish.failedGitea'));
                   setDeploymentStatus('idle');
                   setPublishLoading(false);
                 }
@@ -440,7 +445,7 @@ export default function PublishPanel({
                 try {
                   const pushRes = await fetch(`${API_BASE}/api/projects/${projectId}/github/push`, { method: 'POST' });
                   if (!pushRes.ok) {
-                    const err = await pushRejection(pushRes);
+                    const err = await pushRejection(pushRes, t('chat.publish.failedHttp', { status: pushRes.status }));
                     console.error('🚀 GitHub push failed:', err.message);
                     throw err;
                   }
@@ -475,7 +480,7 @@ export default function PublishPanel({
                 }
               } catch (e) {
                 console.error('🚀 Publish failed:', e);
-                reportPushFailure(e, 'Publish failed. Check Settings and tokens.');
+                reportPushFailure(e, t('chat.publish.failedGeneric'));
                 setDeploymentStatus('idle');
                 setPublishLoading(false);
                 // Keep the panel open for a busy agent so the explanation stays visible.
@@ -490,7 +495,7 @@ export default function PublishPanel({
                 : 'bg-brand-500 hover:bg-brand-600'
             }`}
           >
-            {publishLoading ? 'Publishing…' : agentBusy && deploymentStatus !== 'deploying' ? 'Agent is working…' : deploymentStatus === 'deploying' ? 'Deploying…' : (!githubConnected || (!isGitea && !vercelConnected)) ? 'Connect Services First' : branchMode ? t('publish.branchTitle', { branch: branch ?? '' }) : (publishedUrl ? 'Update' : 'Publish')}
+            {publishLoading ? t('chat.publish.btnPublishing') : agentBusy && deploymentStatus !== 'deploying' ? t('chat.publish.btnAgentWorking') : deploymentStatus === 'deploying' ? t('chat.publish.btnDeploying') : (!githubConnected || (!isGitea && !vercelConnected)) ? t('chat.publish.btnConnectFirst') : branchMode ? t('publish.branchTitle', { branch: branch ?? '' }) : (publishedUrl ? t('chat.publish.btnUpdate') : t('chat.publish.btnPublish'))}
           </button>
         </div>
       </div>

@@ -16,6 +16,9 @@ import { createCheckpoint } from '@/lib/services/checkpoints';
 import { enforceTurnEditProfile, prepareTurnEditGuard, type TurnEditGuard } from '@/lib/services/edit-profile-enforce';
 import { streamManager } from '@/lib/services/stream';
 import { prisma } from '@/lib/db/client';
+import { checkAgentRunAllowed, describeRunRefusal } from '@/lib/services/agent-billing';
+import { resolveRequestLocale } from '@/lib/services/server-i18n';
+import { parseTurnMode } from '@/lib/services/cli/turn-tools';
 
 /** After a turn completes, snapshot the source and stamp the sha on this turn's
  * assistant message so the UI can offer a one-click revert to this point. The
@@ -71,6 +74,7 @@ import path from 'path';
 import fs from 'fs/promises';
 import { randomUUID } from 'crypto';
 import { serializeMessage } from '@/lib/serializers/chat';
+import { toUserFacingAgentError } from '@/lib/services/cli/agent-error';
 import {
   upsertUserRequest,
   markUserRequestAsProcessing,
@@ -246,7 +250,7 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
     if (_gate) return _gate;
     const { isWiping } = await import('@/lib/services/project-wipe');
     if (isWiping(project_id)) {
-      return NextResponse.json({ success: false, error: 'This project is being deleted.' }, { status: 409 });
+      return NextResponse.json({ success: false, error: 'project_wiping', message: 'This project is being deleted.' }, { status: 409 });
     }
 
     // it-ops follows the USER triggering this run (not the project). Resolve it
@@ -256,7 +260,7 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
     // When the auth gate is on, the agent must not run for an unauthenticated
     // caller (it executes with bypassPermissions against the project files).
     if (authEnabled() && !requester) {
-      return NextResponse.json({ success: false, error: 'Authentication required' }, { status: 401 });
+      return NextResponse.json({ success: false, error: 'unauthorized', message: 'Sign in to send messages to the assistant.' }, { status: 401 });
     }
     const requesterItopsEnabled = !!requester?.itopsEnabled;
 
@@ -267,8 +271,34 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
     const project = await getProjectById(project_id);
     if (!project) {
       return NextResponse.json(
-        { success: false, error: 'Project not found' },
+        { success: false, error: 'not_found', message: 'This project no longer exists.' },
         { status: 404 },
+      );
+    }
+
+    // 'chat' = a read-only turn (no write/shell tools, no checkpoint); default 'act'.
+    const mode = parseTurnMode(body.mode);
+
+    // Refuse up front, in the viewer's language, a run that could not start (a
+    // customer org without an API key, or its monthly budget used up) — the
+    // chat shows `message`; `code`/`params`/`messageKey` let a client re-render it.
+    const refusal = await checkAgentRunAllowed(project_id, requester?.id);
+    if (refusal) {
+      const locale = resolveRequestLocale({
+        userLocale: (requester as { locale?: string | null } | null)?.locale,
+        bodyLocale: body.locale,
+        acceptLanguage: request.headers.get('accept-language'),
+      });
+      return NextResponse.json(
+        {
+          success: false,
+          error: refusal.code,
+          code: refusal.code,
+          params: refusal.params,
+          messageKey: refusal.messageKey,
+          message: describeRunRefusal(refusal.code, refusal.params, locale),
+        },
+        { status: refusal.code === 'budget_exhausted' ? 402 : 403 },
       );
     }
 
@@ -326,7 +356,7 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
 
     if (!finalInstruction) {
       return NextResponse.json(
-        { success: false, error: 'instruction or images are required' },
+        { success: false, error: 'instruction or images are required', message: 'Type a message or attach an image first.' },
         { status: 400 },
       );
     }
@@ -371,7 +401,7 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
     if (existingOwner && existingOwner !== project_id) {
       releaseAgentRun(project_id);
       return NextResponse.json(
-        { success: false, error: 'Invalid requestId' },
+        { success: false, error: 'Invalid requestId', message: 'This message could not be sent (invalid request id). Reload the page and try again.' },
         { status: 400 },
       );
     }
@@ -468,7 +498,8 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
     await pendingCheckpoints.get(project_id)?.catch(() => {});
 
     // Restricted edit profile: snapshot the baseline the post-turn check diffs against.
-    const editGuard = await prepareTurnEditGuard(project_id, projectPath, requester?.id).catch((error) => {
+    // Not needed for a read-only chat turn (it has no tools to edit with).
+    const editGuard = mode === 'chat' ? null : await prepareTurnEditGuard(project_id, projectPath, requester?.id).catch((error) => {
       console.error('[API] Edit profile preparation failed:', error);
       return null;
     });
@@ -485,7 +516,10 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
         requestId,
         requesterItopsEnabled,
         requester?.id,
+        mode,
       ).then(() => {
+        // A read-only chat turn changed nothing: no backstop, checkpoint or rebuild.
+        if (mode === 'chat') return;
         runCheckpoint(project_id, projectPath, finalInstruction, requestId, editGuard);
         // A compiled/production backend doesn't hot-reload — rebuild it if the agent
         // changed its source (no-op for frontend edits / dev-reload backends).
@@ -495,7 +529,7 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
        .catch(async (error) => {
         console.error('[API] Failed to initialize project:', error);
         // The turn may have written files before it died: still apply the edit-profile backstop.
-        if (editGuard) runCheckpoint(project_id, projectPath, finalInstruction, requestId, editGuard);
+        if (editGuard && mode !== 'chat') runCheckpoint(project_id, projectPath, finalInstruction, requestId, editGuard);
         // Mark terminal on outright rejection — otherwise the request row stays
         // 'processing' and locks the project for ACTIVE_REQUEST_STALE_MS (~20m).
         if (requestId) {
@@ -527,7 +561,10 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
         thinkingMode,
         requesterItopsEnabled,
         requester?.id,
+        mode,
       ).then(() => {
+        // A read-only chat turn changed nothing: no backstop, checkpoint or rebuild.
+        if (mode === 'chat') return;
         runCheckpoint(project_id, projectPath, finalInstruction, requestId, editGuard);
         // A compiled/production backend doesn't hot-reload — rebuild it if the agent
         // changed its source (no-op for frontend edits / dev-reload backends).
@@ -537,7 +574,7 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
        .catch(async (error) => {
         console.error('[API] Failed to execute AI:', error);
         // The turn may have written files before it died: still apply the edit-profile backstop.
-        if (editGuard) runCheckpoint(project_id, projectPath, finalInstruction, requestId, editGuard);
+        if (editGuard && mode !== 'chat') runCheckpoint(project_id, projectPath, finalInstruction, requestId, editGuard);
         // If the executor rejected outright, its own finally never marked the
         // request terminal — do it here so the row can't get stuck in an
         // active status and permanently lock the project.
@@ -563,6 +600,7 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
       success: true,
       message: 'AI execution started',
       requestId,
+      mode,
       userMessageId: userMessage.id,
       conversationId: conversationId ?? null,
     });
@@ -578,7 +616,7 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
       {
         success: false,
         error: 'Failed to execute AI',
-        message: error instanceof Error ? error.message : 'Unknown error',
+        message: toUserFacingAgentError(error instanceof Error ? error.message : null),
       },
       { status: 500 },
     );

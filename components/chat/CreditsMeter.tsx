@@ -21,6 +21,8 @@ interface Credits {
   exhausted?: boolean;
   resetsAt?: string;
   viewerIsStaff?: boolean;
+  /** The viewer runs on their own Claude account: the budget does not apply to them. */
+  usesOwnToken?: boolean;
 }
 
 interface Props {
@@ -63,10 +65,21 @@ export default function CreditsMeter({ projectId, refreshKey }: Props) {
   const pct = budget ? Math.min(100, Math.round((spent / budget) * 100)) : 0;
   const tone = credits.exhausted ? 'bg-red-500' : pct >= 90 ? 'bg-amber-500' : 'bg-brand-500';
 
+  // The org budget does not limit this viewer's runs: a neutral note, never the red banner.
+  if (credits.usesOwnToken) {
+    return (
+      <div role="status" className="mb-2 px-1 text-xs text-gray-500 dark:text-gray-400">
+        {t('server.credits.ownToken')}
+      </div>
+    );
+  }
+
+  // `exhausted` uses the same threshold as the run refusal (org-budget.isBudgetExhausted),
+  // and the same sentence the act route returns when it refuses a run.
   if (credits.exhausted && !credits.viewerIsStaff) {
     return (
       <div role="status" className="mb-2 rounded-lg border border-red-200 dark:border-red-500/30 bg-red-50 dark:bg-red-500/10 px-3 py-2 text-xs text-red-700 dark:text-red-300">
-        {t('credits.exhausted', { date: resetDate })}
+        {t('server.refusal.budgetExhausted', { date: resetDate })}
       </div>
     );
   }

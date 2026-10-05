@@ -9,6 +9,8 @@ import SupabaseModal from '@/components/modals/SupabaseModal';
 import ServiceConnectionModal from '@/components/modals/ServiceConnectionModal';
 import { isIntegrationVisible } from '@/lib/config/integrations';
 import { apiErrorMessage, responseErrorMessage } from '@/lib/client/api-error';
+import { useT } from '@/contexts/I18nContext';
+import { PermissionNotice, type DenyReason } from '@/components/settings/settings-permissions';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? '';
 
@@ -28,16 +30,39 @@ interface Service {
   icon: string;
   connected: boolean;
   status: string;
-  description: string;
   connection?: ServiceConnection;
+}
+
+type ServiceId = 'github' | 'vercel' | 'supabase';
+
+const SERVICE_NAMES: Record<ServiceId, string> = { github: 'Git', vercel: 'Vercel', supabase: 'Supabase' };
+
+/** What the user sees for a provider: "GitHub" for a github.com repo, else the card name. */
+function providerLabel(service: Service): string {
+  const url: unknown = service.connection?.service_data?.repo_url;
+  if (service.id === 'github' && typeof url === 'string' && /github\.com/i.test(url)) return 'GitHub';
+  return service.name;
+}
+
+/** Shape of PATCH github/settings with a `branch` (see switchProjectBranch). */
+interface BranchSwitchResult {
+  branch?: string;
+  changed_files?: number;
+  diverged?: boolean;
+  preview_restarted?: boolean;
+  preview_error?: string | null;
 }
 
 interface ServiceSettingsProps {
   projectId: string;
   projectName?: string;
+  /** May the user change git/deploy connections (server gate `manage`)? */
+  canManage?: boolean;
+  manageDenyReason?: DenyReason;
 }
 
-export function ServiceSettings({ projectId, projectName }: ServiceSettingsProps) {
+export function ServiceSettings({ projectId, projectName, canManage = true, manageDenyReason = 'ownerOnly' }: ServiceSettingsProps) {
+  const t = useT();
   // Provider whose access token is being set up (was a global-settings tab; now
   // done inline here, where the missing token actually blocks a connection).
   const [tokenSetupProvider, setTokenSetupProvider] = useState<'github' | 'supabase' | 'vercel' | null>(null);
@@ -53,32 +78,11 @@ export function ServiceSettings({ projectId, projectName }: ServiceSettingsProps
   // Only admins may add provider tokens (POST /api/tokens). Others get a hint instead.
   const [canManageTokens, setCanManageTokens] = useState(false);
   const [serviceError, setServiceError] = useState<string | null>(null);
-  const [services, setServices] = useState<Service[]>([
-    {
-      id: 'github',
-      name: 'Git',
-      icon: 'github',
-      connected: false,
-      status: 'disconnected',
-      description: 'Connect a Git repository to push code and deploy'
-    },
-    {
-      id: 'vercel',
-      name: 'Vercel',
-      icon: 'vercel',
-      connected: false,
-      status: 'disconnected',
-      description: 'Deploy your project to Vercel for production hosting'
-    },
-    {
-      id: 'supabase',
-      name: 'Supabase',
-      icon: 'supabase',
-      connected: false,
-      status: 'disconnected',
-      description: 'Connect to Supabase for backend services and database'
-    }
-  ].filter(service => isIntegrationVisible(service.id)));
+  const [services, setServices] = useState<Service[]>(() =>
+    (Object.keys(SERVICE_NAMES) as ServiceId[])
+      .filter((id) => isIntegrationVisible(id))
+      .map((id) => ({ id, name: SERVICE_NAMES[id], icon: id, connected: false, status: 'disconnected' })),
+  );
   
   const [gitHubModalOpen, setGitHubModalOpen] = useState(false);
   const [vercelModalOpen, setVercelModalOpen] = useState(false);
@@ -179,16 +183,29 @@ export function ServiceSettings({ projectId, projectName }: ServiceSettingsProps
       });
       const body = await res.json().catch(() => ({}));
       if (!res.ok) {
-        throw new Error(apiErrorMessage(body, 'Failed to save branch'));
+        throw new Error(apiErrorMessage(body, t('settings.service.switchFailed')));
       }
-      setGitStatusMessage({ kind: 'ok', text: `Operating branch set to "${body.branch}"` });
+      setGitStatusMessage(describeBranchSwitch(body as BranchSwitchResult));
       branchDirtyRef.current = false; // saved value is now canonical again
       loadServiceConnections();
     } catch (error) {
-      setGitStatusMessage({ kind: 'error', text: error instanceof Error ? error.message : 'Failed to save branch' });
+      setGitStatusMessage({ kind: 'error', text: error instanceof Error ? error.message : t('settings.service.switchFailed') });
     } finally {
       setBranchSaving(false);
     }
+  };
+
+  // Report a branch switch the same way Sync reports a pull: a preview that
+  // failed to come back is an error; divergence from the remote is called out.
+  const describeBranchSwitch = (r: BranchSwitchResult): { kind: 'ok' | 'error'; text: string } => {
+    const branch = r.branch || branchInput;
+    if (r.preview_error) {
+      return { kind: 'error', text: t('settings.service.switchPreviewFailed', { branch, error: r.preview_error }) };
+    }
+    const parts = [t('settings.service.switched', { branch, count: r.changed_files ?? 0 })];
+    if (r.preview_restarted) parts.push(t('settings.service.previewRestarted'));
+    if (r.diverged) parts.push(t('branch.diverged', { branch }));
+    return { kind: 'ok', text: parts.join(' — ') };
   };
 
   const handleSync = async () => {
@@ -198,21 +215,21 @@ export function ServiceSettings({ projectId, projectName }: ServiceSettingsProps
       const res = await fetch(`${API_BASE}/api/projects/${projectId}/github/pull`, { method: 'POST' });
       const body = await res.json().catch(() => ({}));
       if (!res.ok) {
-        throw new Error(apiErrorMessage(body, 'Sync failed'));
+        throw new Error(apiErrorMessage(body, t('settings.service.syncFailed')));
       }
       if (body.preview_error) {
         // Sync succeeded but the preview couldn't come back up — surface it as
         // an error so the user knows their preview is down.
-        setGitStatusMessage({ kind: 'error', text: `${body.message}, but the preview failed to restart: ${body.preview_error}` });
+        setGitStatusMessage({ kind: 'error', text: t('settings.service.syncPreviewFailed', { message: body.message, error: body.preview_error }) });
       } else {
         setGitStatusMessage({
           kind: 'ok',
-          text: body.message + (body.preview_restarted ? ' — preview restarted' : ''),
+          text: body.preview_restarted ? `${body.message} — ${t('settings.service.previewRestarted')}` : body.message,
         });
       }
       loadServiceConnections();
     } catch (error) {
-      setGitStatusMessage({ kind: 'error', text: error instanceof Error ? error.message : 'Sync failed' });
+      setGitStatusMessage({ kind: 'error', text: error instanceof Error ? error.message : t('settings.service.syncFailed') });
     } finally {
       setSyncing(false);
     }
@@ -230,18 +247,18 @@ export function ServiceSettings({ projectId, projectName }: ServiceSettingsProps
         body: JSON.stringify({ auto_sync: nextEnabled, auto_sync_interval_minutes: nextMinutes }),
       });
       const body = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(apiErrorMessage(body, 'Failed to update auto-sync'));
+      if (!res.ok) throw new Error(apiErrorMessage(body, t('settings.service.autoSyncFailed')));
       setAutoSync(body.auto_sync === true);
       setAutoSyncMinutes(Number(body.auto_sync_interval_minutes) || nextMinutes);
       autoSyncMinutesDirtyRef.current = false;
       setGitStatusMessage({
         kind: 'ok',
         text: body.auto_sync
-          ? `Auto-sync on — pulling ${body.branch || branchInput || 'the branch'} every ${body.auto_sync_interval_minutes} min`
-          : 'Auto-sync off',
+          ? t('settings.service.autoSyncOn', { branch: body.branch || branchInput || t('settings.service.theBranch'), minutes: body.auto_sync_interval_minutes })
+          : t('settings.service.autoSyncOff'),
       });
     } catch (error) {
-      setGitStatusMessage({ kind: 'error', text: error instanceof Error ? error.message : 'Failed to update auto-sync' });
+      setGitStatusMessage({ kind: 'error', text: error instanceof Error ? error.message : t('settings.service.autoSyncFailed') });
     } finally {
       setAutoSyncSaving(false);
     }
@@ -255,7 +272,7 @@ export function ServiceSettings({ projectId, projectName }: ServiceSettingsProps
     try {
       const res = await fetch(`${API_BASE}/api/projects/${projectId}/services/token-status`);
       if (!res.ok) {
-        setServiceError(await responseErrorMessage(res, 'Could not check service tokens'));
+        setServiceError(await responseErrorMessage(res, t('settings.service.tokensFailed')));
         setTokenStatus({ github: null, supabase: null, vercel: null });
         return;
       }
@@ -265,9 +282,9 @@ export function ServiceSettings({ projectId, projectName }: ServiceSettingsProps
       setCanManageTokens(body?.can_manage_tokens === true);
     } catch (error) {
       console.error('Failed to check service tokens:', error);
-      setServiceError('Could not check service tokens (network error).');
+      setServiceError(t('settings.service.tokensNetwork'));
     }
-  }, [projectId]);
+  }, [projectId, t]);
 
   // Load connections and check tokens on mount
   useEffect(() => {
@@ -292,7 +309,7 @@ export function ServiceSettings({ projectId, projectName }: ServiceSettingsProps
     }
     
     // For other services, show placeholder
-    setServiceError(`${serviceId} integration is not implemented yet.`);
+    setServiceError(t('settings.service.notImplemented', { name: serviceId }));
   };
 
   const handleGitHubModalSuccess = () => {
@@ -317,11 +334,12 @@ export function ServiceSettings({ projectId, projectName }: ServiceSettingsProps
   // so send the connection's id — not the provider name, which never matched.
   const handleDisconnect = async (service: Service) => {
     const connectionId = service.connection?.id;
+    const label = providerLabel(service);
     if (!connectionId) {
-      setServiceError(`No ${service.name} connection found to disconnect.`);
+      setServiceError(t('settings.service.noConnection', { name: label }));
       return;
     }
-    if (!confirm(`Disconnect from ${service.name}?`)) return;
+    if (!confirm(t('settings.service.confirmDisconnect', { name: label }))) return;
 
     setIsLoading(true);
     setServiceError(null);
@@ -331,14 +349,14 @@ export function ServiceSettings({ projectId, projectName }: ServiceSettingsProps
         { method: 'DELETE' },
       );
       if (!response.ok) {
-        setServiceError(await responseErrorMessage(response, `Failed to disconnect from ${service.name}`));
+        setServiceError(await responseErrorMessage(response, t('settings.service.disconnectFailed', { name: label })));
         return;
       }
       await loadServiceConnections();
       window.dispatchEvent(new CustomEvent('services-updated'));
     } catch (error) {
       console.error(`Error disconnecting from ${service.id}:`, error);
-      setServiceError(`Failed to disconnect from ${service.name} (network error).`);
+      setServiceError(t('settings.service.disconnectNetwork', { name: label }));
     } finally {
       setIsLoading(false);
     }
@@ -348,13 +366,15 @@ export function ServiceSettings({ projectId, projectName }: ServiceSettingsProps
     <div className="p-6 space-y-6">
       <div>
         <h3 className="text-lg font-medium text-gray-900 dark:text-gray-50 mb-4">
-          Service Integrations
+          {t('settings.service.title')}
         </h3>
+
+        {!canManage && <PermissionNotice reason={manageDenyReason} className="mb-4" />}
 
         {serviceError && (
           <div className="mb-4 flex items-start justify-between gap-3 text-xs text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg px-3 py-2">
             <span className="wrap-break-word min-w-0">{serviceError}</span>
-            <button onClick={() => setServiceError(null)} className="shrink-0 hover:text-red-800 dark:hover:text-red-300" aria-label="Dismiss">✕</button>
+            <button onClick={() => setServiceError(null)} className="shrink-0 hover:text-red-800 dark:hover:text-red-300" aria-label={t('settings.service.dismiss')}>✕</button>
           </div>
         )}
 
@@ -378,13 +398,13 @@ export function ServiceSettings({ projectId, projectName }: ServiceSettingsProps
                       {service.connected && (
                         <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium text-emerald-700 bg-emerald-100 whitespace-nowrap">
                           <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                          Connected
+                          {t('settings.service.connected')}
                         </span>
                       )}
                       {!service.connected && tokenStatus[service.id as keyof typeof tokenStatus] === false && (
                         <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium text-amber-700 bg-amber-100 whitespace-nowrap">
                           <svg className="w-3.5 h-3.5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd"/></svg>
-                          Token needed
+                          {t('settings.service.tokenNeeded')}
                         </span>
                       )}
                     </div>
@@ -395,7 +415,7 @@ export function ServiceSettings({ projectId, projectName }: ServiceSettingsProps
                           {service.id === 'github' && service.connection?.service_data?.repo_url ? (
                             <div className="space-y-2">
                               <div className="flex items-center gap-2">
-                                <span className="shrink-0">Repository:</span>
+                                <span className="shrink-0">{t('settings.service.repository')}</span>
                                 <a
                                   href={service.connection.service_data.repo_url}
                                   target="_blank" rel="noopener noreferrer"
@@ -405,33 +425,38 @@ export function ServiceSettings({ projectId, projectName }: ServiceSettingsProps
                                 </a>
                               </div>
                               <div className="flex flex-wrap items-center gap-2">
-                                <span className="shrink-0">Branch:</span>
+                                <span className="shrink-0">{t('settings.service.branch')}</span>
                                 <input
+                                  aria-label={t('settings.service.branchAria')}
+                                  readOnly={!canManage}
                                   value={branchInput}
                                   onChange={(e) => { branchDirtyRef.current = true; setBranchInput(e.target.value); }}
                                   spellCheck={false}
                                   className="w-36 px-2 py-1 text-sm font-mono rounded-lg border border-gray-300 dark:border-white/12 bg-white dark:bg-white/6 text-gray-800 dark:text-gray-100 focus:outline-hidden focus:ring-1 focus:ring-brand-500"
                                 />
+                                {canManage && (
                                 <button
                                   onClick={handleSaveBranch}
                                   disabled={branchSaving || !branchInput.trim() || branchInput.trim() === (service.connection.service_data.branch || service.connection.service_data.default_branch || 'main')}
                                   className="px-3 py-1 text-xs rounded-lg border border-gray-300 dark:border-white/12 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-white/6 disabled:opacity-40 disabled:cursor-not-allowed"
                                 >
-                                  {branchSaving ? 'Saving…' : 'Save'}
+                                  {branchSaving ? t('settings.service.switching') : t('settings.service.switchBranch')}
                                 </button>
+                                )}
                                 <button
                                   onClick={handleSync}
                                   disabled={syncing}
                                   className="px-3 py-1 text-xs rounded-lg bg-brand-500 hover:bg-brand-600 text-white disabled:opacity-50 flex items-center gap-1.5"
-                                  title="Pull the latest changes from the branch into this project (restarts the preview when something changed)"
+                                  title={t('settings.service.syncTitle')}
                                 >
                                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" className={syncing ? 'animate-spin' : ''}>
                                     <path d="M21 12a9 9 0 1 1-2.64-6.36M21 3v6h-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                                   </svg>
-                                  {syncing ? 'Syncing…' : 'Sync'}
+                                  {syncing ? t('settings.service.syncing') : t('settings.service.sync')}
                                 </button>
                               </div>
                               {/* Auto-sync: background pull of the operating branch on a cadence. */}
+                              {canManage && (
                               <div className="flex flex-wrap items-center gap-2">
                                 <label className="inline-flex items-center gap-2 cursor-pointer select-none">
                                   <input
@@ -441,31 +466,33 @@ export function ServiceSettings({ projectId, projectName }: ServiceSettingsProps
                                     onChange={(e) => saveAutoSync(e.target.checked, autoSyncMinutes)}
                                     className="h-4 w-4 rounded-sm border-gray-300 dark:border-white/20 text-brand-500 focus:ring-brand-500 accent-brand-500"
                                   />
-                                  <span className="shrink-0">Auto-sync from remote</span>
+                                  <span className="shrink-0">{t('settings.service.autoSync')}</span>
                                 </label>
                                 {autoSync && (
                                   <span className="flex items-center gap-1.5">
-                                    <span className="text-gray-500 dark:text-gray-400">every</span>
+                                    <span className="text-gray-500 dark:text-gray-400">{t('settings.service.every')}</span>
                                     <input
                                       type="number"
                                       min={1}
                                       max={1440}
+                                      aria-label={t('settings.service.intervalAria')}
                                       value={autoSyncMinutes}
                                       disabled={autoSyncSaving}
                                       onChange={(e) => { autoSyncMinutesDirtyRef.current = true; setAutoSyncMinutes(Number(e.target.value)); }}
                                       className="w-16 px-2 py-1 text-sm font-mono rounded-lg border border-gray-300 dark:border-white/12 bg-white dark:bg-white/6 text-gray-800 dark:text-gray-100 focus:outline-hidden focus:ring-1 focus:ring-brand-500"
                                     />
-                                    <span className="text-gray-500 dark:text-gray-400">min</span>
+                                    <span className="text-gray-500 dark:text-gray-400">{t('settings.service.minutes')}</span>
                                     <button
                                       onClick={() => saveAutoSync(true, Math.min(1440, Math.max(1, Math.round(autoSyncMinutes) || 5)))}
                                       disabled={autoSyncSaving || !autoSyncMinutesDirtyRef.current}
                                       className="px-3 py-1 text-xs rounded-lg border border-gray-300 dark:border-white/12 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-white/6 disabled:opacity-40 disabled:cursor-not-allowed"
                                     >
-                                      {autoSyncSaving ? 'Saving…' : 'Save'}
+                                      {autoSyncSaving ? t('settings.service.saving') : t('settings.service.save')}
                                     </button>
                                   </span>
                                 )}
                               </div>
+                              )}
                               {gitStatusMessage && (
                                 <p className={`text-xs ${gitStatusMessage.kind === 'ok' ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
                                   {gitStatusMessage.text}
@@ -474,7 +501,7 @@ export function ServiceSettings({ projectId, projectName }: ServiceSettingsProps
                             </div>
                           ) : service.id === 'vercel' && service.connection?.service_data?.project_url ? (
                             <div className="flex items-center gap-2">
-                              <span className="shrink-0">Project:</span>
+                              <span className="shrink-0">{t('settings.service.project')}</span>
                               <a 
                                 href={service.connection.service_data.project_url}
                                 target="_blank" rel="noopener noreferrer"
@@ -485,7 +512,7 @@ export function ServiceSettings({ projectId, projectName }: ServiceSettingsProps
                             </div>
                           ) : service.id === 'supabase' && service.connection?.service_data?.project_url ? (
                             <div className="flex items-center gap-2">
-                              <span className="shrink-0">Project:</span>
+                              <span className="shrink-0">{t('settings.service.project')}</span>
                               <a 
                                 href={service.connection.service_data.project_url}
                                 target="_blank" rel="noopener noreferrer"
@@ -495,7 +522,7 @@ export function ServiceSettings({ projectId, projectName }: ServiceSettingsProps
                               </a>
                             </div>
                           ) : (
-                            <span>Connected and ready to use</span>
+                            <span>{t('settings.service.connectedReady')}</span>
                           )}
                         </div>
                       )}
@@ -503,17 +530,17 @@ export function ServiceSettings({ projectId, projectName }: ServiceSettingsProps
                   </div>
 
                   <div className="flex items-center gap-2 sm:shrink-0 w-full sm:w-auto sm:justify-end">
-                    {service.connected ? (
+                    {!canManage ? null : service.connected ? (
                       <button
                         onClick={() => handleDisconnect(service)}
                         className="px-4 py-2 text-sm rounded-xl text-red-600 hover:text-red-700 border border-transparent hover:border-red-200 hover:bg-red-50 transition whitespace-nowrap w-full sm:w-auto"
                         disabled={isLoading}
                       >
-                        Disconnect
+                        {t('settings.service.disconnect')}
                       </button>
                     ) : tokenStatus[service.id as keyof typeof tokenStatus] === false && !canManageTokens ? (
                       <span className="text-xs text-amber-700 dark:text-amber-300 sm:text-right sm:max-w-56">
-                        Ask an admin to configure the {service.name} token
+                        {t('settings.service.askAdmin', { name: service.name })}
                       </span>
                     ) : tokenStatus[service.id as keyof typeof tokenStatus] === false ? (
                       <button
@@ -522,7 +549,7 @@ export function ServiceSettings({ projectId, projectName }: ServiceSettingsProps
                         disabled={isLoading}
                       >
                         <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd"/></svg>
-                        Setup Token
+                        {t('settings.service.setupToken')}
                       </button>
                     ) : (
                       <button
@@ -530,7 +557,7 @@ export function ServiceSettings({ projectId, projectName }: ServiceSettingsProps
                         className="px-4 py-2.5 text-sm rounded-xl bg-brand-500 hover:bg-brand-600 text-white shadow-xs transition disabled:opacity-50 whitespace-nowrap w-full sm:w-auto"
                         disabled={isLoading || tokenStatus[service.id as keyof typeof tokenStatus] === null}
                       >
-                        {tokenStatus[service.id as keyof typeof tokenStatus] === null ? 'Checking...' : 'Connect'}
+                        {tokenStatus[service.id as keyof typeof tokenStatus] === null ? t('settings.service.checking') : t('settings.service.connect')}
                       </button>
                     )}
                   </div>

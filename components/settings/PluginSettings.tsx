@@ -2,6 +2,7 @@
 
 import React, { useCallback, useEffect, useState } from 'react';
 import { apiErrorMessage, responseErrorMessage } from '@/lib/client/api-error';
+import { useT } from '@/contexts/I18nContext';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? '';
 
@@ -36,6 +37,7 @@ const EMPTY_FORM = { name: '', gitUrl: '', ref: '', subpath: '', includeMcpServe
  * Shared MCP panel; per-project opt-outs live in each project's settings.
  */
 export default function PluginSettings() {
+  const t = useT();
   const [markets, setMarkets] = useState<MarketplaceView[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -50,13 +52,13 @@ export default function PluginSettings() {
       const res = await fetch(`${API_BASE}/api/plugins/marketplaces`);
       const json = await res.json();
       if (res.ok && json?.success) setMarkets(Array.isArray(json.data) ? json.data : []);
-      else setError(apiErrorMessage(json, 'Failed to load plugin marketplaces'));
+      else setError(apiErrorMessage(json, t('settings.plugins.loadFailed')));
     } catch {
-      setError('Failed to load plugin marketplaces');
+      setError(t('settings.plugins.loadFailed'));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => { void load(); }, [load]);
 
@@ -80,14 +82,14 @@ export default function PluginSettings() {
         }),
       });
       const json = await res.json();
-      if (!res.ok || !json?.success) { setError(apiErrorMessage(json, 'Failed to add marketplace')); return; }
+      if (!res.ok || !json?.success) { setError(apiErrorMessage(json, t('settings.plugins.addFailed'))); return; }
       setForm({ ...EMPTY_FORM });
       setAdding(false);
       await load();
       // Immediately sync the freshly added marketplace so its catalog appears.
       void syncMarket(json.data.id);
     } catch {
-      setError('Failed to add marketplace');
+      setError(t('settings.plugins.addFailed'));
     } finally {
       setSaving(false);
     }
@@ -100,9 +102,9 @@ export default function PluginSettings() {
       const res = await fetch(`${API_BASE}/api/plugins/marketplaces/${id}/sync`, { method: 'POST' });
       const json = await res.json();
       if (res.ok && json?.success) patchMarket(id, json.data);
-      else setError(apiErrorMessage(json, 'Sync failed'));
+      else setError(apiErrorMessage(json, t('settings.plugins.syncFailed')));
     } catch {
-      setError('Sync failed');
+      setError(t('settings.plugins.syncFailed'));
     } finally {
       setBusyId(null);
     }
@@ -114,7 +116,7 @@ export default function PluginSettings() {
     });
     const json = await res.json().catch(() => null);
     if (res.ok && json?.success) patchMarket(id, json.data);
-    else setError(apiErrorMessage(json, `Could not ${enabled ? 'enable' : 'disable'} the marketplace`));
+    else setError(apiErrorMessage(json, t(enabled ? 'settings.plugins.enableMarketFailed' : 'settings.plugins.disableMarketFailed')));
   };
 
   const togglePlugin = async (id: string, plugin: string, enabled: boolean) => {
@@ -123,36 +125,36 @@ export default function PluginSettings() {
     });
     const json = await res.json().catch(() => null);
     if (res.ok && json?.success) patchMarket(id, json.data);
-    else setError(apiErrorMessage(json, `Could not ${enabled ? 'enable' : 'disable'} ${plugin}`));
+    else setError(apiErrorMessage(json, t(enabled ? 'settings.plugins.enablePluginFailed' : 'settings.plugins.disablePluginFailed', { plugin })));
   };
 
-  const removeMarket = async (id: string) => {
+  const removeMarket = async (m: MarketplaceView) => {
+    if (!window.confirm(t('settings.plugins.confirmRemove', { name: m.name }))) return;
+    const id = m.id;
     setBusyId(id);
     const res = await fetch(`${API_BASE}/api/plugins/marketplaces/${id}`, { method: 'DELETE' });
     setBusyId(null);
     if (res.ok) setMarkets((prev) => prev.filter((m) => m.id !== id));
-    else setError(await responseErrorMessage(res, 'Could not remove the marketplace'));
+    else setError(await responseErrorMessage(res, t('settings.plugins.removeFailed')));
   };
 
   return (
     <div className="space-y-6">
       <div>
-        <h3 className="text-base font-semibold text-gray-900 dark:text-gray-50">Plugins</h3>
+        <h3 className="text-lg font-medium text-gray-900 dark:text-gray-50">{t('settings.plugins.title')}</h3>
         <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-          Register a Claude Code plugin marketplace (a git repo). Its enabled plugins — commands, agents and
-          skills — load into every project&apos;s agent, exactly like the CLI. Bundled MCP servers are skipped by
-          default because their binaries can&apos;t run in the sandbox.
+          {t('settings.plugins.intro')}
         </p>
       </div>
 
       {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
 
       {loading ? (
-        <p className="text-sm text-gray-400">Loading…</p>
+        <p className="text-sm text-gray-400">{t('common.loading')}</p>
       ) : (
         <div className="space-y-4">
           {markets.length === 0 && !adding && (
-            <p className="text-sm text-gray-400">No marketplaces registered yet.</p>
+            <p className="text-sm text-gray-400">{t('settings.plugins.empty')}</p>
           )}
 
           {markets.map((m) => (
@@ -161,15 +163,15 @@ export default function PluginSettings() {
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
                     <span className="font-medium text-gray-900 dark:text-gray-50">{m.name}</span>
-                    {!m.enabled && <span className="text-[11px] px-1.5 py-0.5 rounded bg-gray-100 dark:bg-white/10 text-gray-500">disabled</span>}
+                    {!m.enabled && <span className="text-[11px] px-1.5 py-0.5 rounded bg-gray-100 dark:bg-white/10 text-gray-500">{t('settings.plugins.disabledBadge')}</span>}
                   </div>
                   <p className="text-xs text-gray-400 truncate">{m.gitUrl}{m.ref ? `#${m.ref}` : ''}</p>
                   <p className="text-[11px] text-gray-400 mt-0.5">
                     {m.lastSyncError
-                      ? <span className="text-red-500">Sync error: {m.lastSyncError}</span>
+                      ? <span className="text-red-500">{t('settings.plugins.syncError', { error: m.lastSyncError })}</span>
                       : m.lastSyncedAt
-                        ? `Synced ${new Date(m.lastSyncedAt).toLocaleString()}${m.syncedRef ? ` · ${m.syncedRef.slice(0, 7)}` : ''} · ${m.catalog.length} plugin(s)`
-                        : 'Not synced yet'}
+                        ? `${t('settings.plugins.synced', { date: new Date(m.lastSyncedAt).toLocaleString() })}${m.syncedRef ? ` · ${m.syncedRef.slice(0, 7)}` : ''} · ${t('settings.plugins.pluginCount', { count: m.catalog.length })}`
+                        : t('settings.plugins.notSynced')}
                   </p>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
@@ -178,13 +180,13 @@ export default function PluginSettings() {
                     disabled={busyId === m.id}
                     className="text-xs px-2 py-1 rounded border border-gray-200 dark:border-white/15 hover:bg-gray-50 dark:hover:bg-white/5 disabled:opacity-50"
                   >
-                    {busyId === m.id ? 'Syncing…' : 'Sync'}
+                    {busyId === m.id ? t('settings.plugins.syncing') : t('settings.plugins.sync')}
                   </button>
                   <label className="text-xs flex items-center gap-1 text-gray-600 dark:text-gray-300">
                     <input type="checkbox" checked={m.enabled} onChange={(e) => toggleMarket(m.id, e.target.checked)} />
-                    on
+                    {t('common.on')}
                   </label>
-                  <button onClick={() => removeMarket(m.id)} disabled={busyId === m.id} className="text-xs text-red-500 hover:text-red-700 px-1">Remove</button>
+                  <button onClick={() => removeMarket(m)} disabled={busyId === m.id} className="text-xs text-red-500 hover:text-red-700 px-1">{t('common.remove')}</button>
                 </div>
               </div>
 
@@ -208,9 +210,9 @@ export default function PluginSettings() {
                       });
                       const json = await res.json().catch(() => null);
                       if (res.ok && json?.success) { patchMarket(m.id, json.data); void syncMarket(m.id); }
-                      else setError(apiErrorMessage(json, 'Could not update the marketplace'));
+                      else setError(apiErrorMessage(json, t('settings.plugins.updateFailed')));
                     }} />
-                    Include the plugins&apos; bundled MCP servers (only if they run on linux/amd64 — re-syncs)
+                    {t('settings.plugins.includeMcp')}
                   </label>
                 </div>
               )}
@@ -219,21 +221,21 @@ export default function PluginSettings() {
 
           {adding ? (
             <div className="rounded-lg border border-gray-200 dark:border-white/10 p-4 space-y-2">
-              <input className="w-full text-sm border border-gray-200 dark:border-white/10 rounded px-2 py-1 bg-transparent" placeholder="Name (e.g. newstory-dev-tools)" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
-              <input className="w-full text-sm border border-gray-200 dark:border-white/10 rounded px-2 py-1 bg-transparent" placeholder="https git URL" value={form.gitUrl} onChange={(e) => setForm({ ...form, gitUrl: e.target.value })} />
-              <div className="flex gap-2">
-                <input className="flex-1 text-sm border border-gray-200 dark:border-white/10 rounded px-2 py-1 bg-transparent" placeholder="branch/tag (optional)" value={form.ref} onChange={(e) => setForm({ ...form, ref: e.target.value })} />
-                <input className="flex-1 text-sm border border-gray-200 dark:border-white/10 rounded px-2 py-1 bg-transparent" placeholder="subpath (optional)" value={form.subpath} onChange={(e) => setForm({ ...form, subpath: e.target.value })} />
+              <input className="w-full text-sm border border-gray-200 dark:border-white/10 rounded px-2 py-1 bg-transparent" placeholder={t('settings.plugins.namePlaceholder')} aria-label={t('common.name')} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+              <input className="w-full text-sm border border-gray-200 dark:border-white/10 rounded px-2 py-1 bg-transparent" placeholder={t('settings.plugins.gitUrlPlaceholder')} aria-label={t('settings.plugins.gitUrlPlaceholder')} value={form.gitUrl} onChange={(e) => setForm({ ...form, gitUrl: e.target.value })} />
+              <div className="flex flex-col sm:flex-row gap-2">
+                <input className="flex-1 text-sm border border-gray-200 dark:border-white/10 rounded px-2 py-1 bg-transparent" placeholder={t('settings.plugins.refPlaceholder')} aria-label={t('settings.plugins.refPlaceholder')} value={form.ref} onChange={(e) => setForm({ ...form, ref: e.target.value })} />
+                <input className="flex-1 text-sm border border-gray-200 dark:border-white/10 rounded px-2 py-1 bg-transparent" placeholder={t('settings.plugins.subpathPlaceholder')} aria-label={t('settings.plugins.subpathPlaceholder')} value={form.subpath} onChange={(e) => setForm({ ...form, subpath: e.target.value })} />
               </div>
               <div className="flex items-center justify-end gap-2 pt-1">
-                <button onClick={() => { setAdding(false); setForm({ ...EMPTY_FORM }); }} className="text-xs text-gray-500 px-2 py-1">Cancel</button>
+                <button onClick={() => { setAdding(false); setForm({ ...EMPTY_FORM }); }} className="text-xs text-gray-500 px-2 py-1">{t('common.cancel')}</button>
                 <button onClick={addMarketplace} disabled={saving || !form.name.trim() || !form.gitUrl.trim()} className="text-xs font-medium text-white bg-brand-500 hover:bg-brand-600 rounded px-3 py-1 disabled:opacity-50">
-                  {saving ? 'Adding…' : 'Add & sync'}
+                  {saving ? t('settings.plugins.adding') : t('settings.plugins.addAndSync')}
                 </button>
               </div>
             </div>
           ) : (
-            <button onClick={() => setAdding(true)} className="text-sm text-brand-500 hover:underline">+ Register a marketplace</button>
+            <button onClick={() => setAdding(true)} className="text-sm text-brand-500 hover:underline">+ {t('settings.plugins.register')}</button>
           )}
         </div>
       )}

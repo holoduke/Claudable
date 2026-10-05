@@ -1,6 +1,8 @@
 "use client";
 import { useCallback, useEffect, useState } from 'react';
 import { apiErrorMessage } from '@/lib/client/api-error';
+import { useT } from '@/contexts/I18nContext';
+import type { MessageKey } from '@/lib/i18n/messages/en';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? '';
 
@@ -16,7 +18,10 @@ interface Overview {
 }
 
 const ROLE_ICON: Record<string, string> = { frontend: '🖥️', backend: '⚙️', database: '🗄️', agent: '🤖', system: '🧩', other: '📦' };
-const ROLE_LABEL: Record<string, string> = { frontend: 'Frontend', backend: 'Backend', database: 'Database', agent: 'Agent', system: 'System', other: 'Container' };
+const ROLE_LABEL: Record<string, MessageKey> = {
+  frontend: 'settings.system.role.frontend', backend: 'settings.system.role.backend', database: 'settings.system.role.database',
+  agent: 'settings.system.role.agent', system: 'settings.system.role.system', other: 'settings.system.role.other',
+};
 
 function isUp(state: string) { return state.includes('run') || state.includes('up'); }
 
@@ -31,11 +36,12 @@ function Pill({ tone, children }: { tone: 'green' | 'amber' | 'gray' | 'blue'; c
 }
 
 function ContainerRow({ c }: { c: Container }) {
+  const t = useT();
   return (
     <div className="flex items-center gap-2.5 px-3 py-2 text-sm">
       <span className="text-sm leading-none" aria-hidden>{ROLE_ICON[c.role] || '📦'}</span>
       <span className={`w-2 h-2 rounded-full shrink-0 ${isUp(c.state) ? 'bg-emerald-500' : 'bg-gray-400'}`} />
-      <span className="text-[11px] text-gray-400 w-16 shrink-0">{ROLE_LABEL[c.role] || 'Container'}</span>
+      <span className="text-[11px] text-gray-400 w-16 shrink-0">{t(ROLE_LABEL[c.role] ?? 'settings.system.role.other')}</span>
       <span className="font-mono text-[11px] text-gray-900 dark:text-gray-100 truncate min-w-0 flex-1">{c.name}</span>
       <span className="text-[10px] text-gray-400 hidden md:block truncate max-w-[22%]" title={c.ports}>{c.ports || '—'}</span>
       <span className="text-[10px] text-gray-500 dark:text-gray-400 shrink-0">{c.status}</span>
@@ -44,6 +50,7 @@ function ContainerRow({ c }: { c: Container }) {
 }
 
 export default function SystemOverviewSettings() {
+  const t = useT();
   const [data, setData] = useState<Overview | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -53,49 +60,49 @@ export default function SystemOverviewSettings() {
     try {
       const r = await fetch(`${API_BASE}/api/system/overview`, { cache: 'no-store' });
       const j = await r.json();
-      if (!r.ok) { setError(apiErrorMessage(j, 'Failed to load')); setData(null); }
+      if (!r.ok) { setError(apiErrorMessage(j, t('settings.system.loadFailed'))); setData(null); }
       else setData((j?.data ?? j) as Overview);
-    } catch { setError('Failed to load'); } finally { setLoading(false); }
-  }, []);
+    } catch { setError(t('settings.system.loadFailed')); } finally { setLoading(false); }
+  }, [t]);
   useEffect(() => { load(); }, [load]);
 
   return (
-    <div className="p-6">
+    <div>
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-baseline gap-3">
-          <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Network</h3>
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">{t('settings.system.title')}</h3>
           {data?.host && <span className="text-xs font-mono text-gray-400 dark:text-gray-500">{data.host}</span>}
         </div>
-        <button onClick={load} className="text-xs px-3 py-1.5 rounded-lg border border-gray-200 dark:border-white/8 hover:bg-gray-50 dark:hover:bg-white/6">Refresh</button>
+        <button onClick={load} className="text-xs px-3 py-1.5 rounded-lg border border-gray-200 dark:border-white/8 hover:bg-gray-50 dark:hover:bg-white/6">{t('settings.system.refresh')}</button>
       </div>
 
       {data && (
         <div className="flex flex-wrap gap-2 mb-5">
           <Pill tone={data.agentContainerized ? 'green' : 'gray'}>
-            Agent: {data.agentContainerized ? 'containerized' : 'in-process'}
+            {t(data.agentContainerized ? 'settings.system.agentContainerized' : 'settings.system.agentInProcess')}
           </Pill>
           <Pill tone={data.previewIsolation ? 'green' : 'gray'}>
-            Preview isolation: {data.previewIsolation ? 'on' : 'off'}
+            {t(data.previewIsolation ? 'settings.system.isolationOn' : 'settings.system.isolationOff')}
           </Pill>
-          <Pill tone="blue">{data.projects.length} projects</Pill>
+          <Pill tone="blue">{data.projects.length === 1 ? t('common.projects.one') : t('common.projects.other', { count: data.projects.length })}</Pill>
         </div>
       )}
 
-      {loading ? <p className="text-sm text-gray-500">Loading…</p> :
+      {loading ? <p className="text-sm text-gray-500">{t('common.loading')}</p> :
        error ? <p className="text-sm text-red-500">{error}</p> :
        !data ? null : (
         <div className="space-y-4">
           {data.projects.map((p) => (
             <div key={p.id} className="rounded-xl border border-gray-200 dark:border-white/8 overflow-hidden">
               <div className="flex items-center gap-3 px-4 py-3 bg-gray-50 dark:bg-white/3">
-                <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${p.running ? 'bg-emerald-500' : 'bg-gray-400'}`} title={p.running ? 'running' : 'stopped'} />
+                <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${p.running ? 'bg-emerald-500' : 'bg-gray-400'}`} title={t(p.running ? 'settings.system.running' : 'settings.system.stopped')} />
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
                     <span className="font-medium text-sm text-gray-900 dark:text-gray-100 truncate">{p.name}</span>
                     {p.stack && <Pill tone="gray">{p.stack}</Pill>}
                     {p.hasDatabase && <Pill tone="blue">DB</Pill>}
                     <Pill tone={p.containers.some((c) => c.role === 'frontend' || c.role === 'backend') ? 'green' : 'amber'}>
-                      {p.containers.some((c) => c.role === 'frontend' || c.role === 'backend') ? 'container' : 'in-process'}
+                      {t(p.containers.some((c) => c.role === 'frontend' || c.role === 'backend') ? 'settings.system.container' : 'settings.system.inProcess')}
                     </Pill>
                   </div>
                   <div className="font-mono text-[10px] text-gray-400 truncate">{p.id}</div>
@@ -103,7 +110,7 @@ export default function SystemOverviewSettings() {
                 {p.previewUrl && (
                   <a href={p.previewUrl} target="_blank" rel="noopener noreferrer"
                      className="text-xs px-2.5 py-1 rounded-lg border border-gray-200 dark:border-white/8 hover:bg-white dark:hover:bg-white/6 text-brand-500 shrink-0">
-                    Open ↗
+                    {t('settings.system.open')} ↗
                   </a>
                 )}
               </div>
@@ -111,11 +118,11 @@ export default function SystemOverviewSettings() {
               {/* Addresses */}
               <div className="px-4 py-2 flex flex-wrap gap-x-5 gap-y-1 text-[11px] border-b border-gray-100 dark:border-white/6">
                 {p.previewUrl
-                  ? <span className="text-gray-500">Public: <a href={p.previewUrl} target="_blank" rel="noopener noreferrer" className="font-mono text-brand-500 hover:underline">{p.previewUrl.replace(/^https?:\/\//, '')}</a></span>
-                  : <span className="text-gray-400">Public: — (local only)</span>}
+                  ? <span className="text-gray-500">{t('settings.system.public')} <a href={p.previewUrl} target="_blank" rel="noopener noreferrer" className="font-mono text-brand-500 hover:underline">{p.previewUrl.replace(/^https?:\/\//, '')}</a></span>
+                  : <span className="text-gray-400">{t('settings.system.public')} — {t('settings.system.localOnly')}</span>}
                 {p.internalNetwork
-                  ? <span className="text-gray-500">Internal net: <span className="font-mono text-gray-600 dark:text-gray-300">{p.internalNetwork}</span></span>
-                  : <span className="text-gray-400">Internal net: —</span>}
+                  ? <span className="text-gray-500">{t('settings.system.internalNet')} <span className="font-mono text-gray-600 dark:text-gray-300">{p.internalNetwork}</span></span>
+                  : <span className="text-gray-400">{t('settings.system.internalNet')} —</span>}
               </div>
 
               {/* Containers */}
@@ -124,7 +131,7 @@ export default function SystemOverviewSettings() {
                   {p.containers.map((c) => <ContainerRow key={c.name} c={c} />)}
                 </div>
               ) : (
-                <div className="px-4 py-2.5 text-[11px] text-gray-400">No running containers.</div>
+                <div className="px-4 py-2.5 text-[11px] text-gray-400">{t('settings.system.noContainers')}</div>
               )}
             </div>
           ))}
@@ -132,7 +139,7 @@ export default function SystemOverviewSettings() {
           {/* Unassigned / system containers */}
           {data.unassigned.length > 0 && (
             <div>
-              <h4 className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 mb-2">Claudable system</h4>
+              <h4 className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 mb-2">{t('settings.system.claudableSystem')}</h4>
               <div className="rounded-xl border border-gray-200 dark:border-white/8 divide-y divide-gray-100 dark:divide-white/6 overflow-hidden">
                 {data.unassigned.map((c) => <ContainerRow key={c.name} c={c} />)}
               </div>
@@ -141,15 +148,15 @@ export default function SystemOverviewSettings() {
 
           {/* Networks */}
           <div>
-            <h4 className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 mb-2">Networks</h4>
+            <h4 className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 mb-2">{t('settings.system.networks')}</h4>
             <div className="rounded-xl border border-gray-200 dark:border-white/8 overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="text-left text-[11px] text-gray-400 border-b border-gray-100 dark:border-white/6">
-                    <th className="px-4 py-2 font-medium">Name</th>
-                    <th className="px-4 py-2 font-medium">Driver</th>
-                    <th className="px-4 py-2 font-medium">Subnet</th>
-                    <th className="px-4 py-2 font-medium">Inter-container</th>
+                    <th className="px-4 py-2 font-medium">{t('common.name')}</th>
+                    <th className="px-4 py-2 font-medium">{t('settings.system.driver')}</th>
+                    <th className="px-4 py-2 font-medium">{t('settings.system.subnet')}</th>
+                    <th className="px-4 py-2 font-medium">{t('settings.system.interContainer')}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -159,7 +166,7 @@ export default function SystemOverviewSettings() {
                       <td className="px-4 py-2 text-[12px] text-gray-500">{n.driver}</td>
                       <td className="px-4 py-2 font-mono text-[12px] text-gray-500">{n.subnet || '—'}</td>
                       <td className="px-4 py-2 text-[12px]">
-                        {n.icc === 'off' ? <span className="text-emerald-600">off (isolated)</span> : n.icc === 'on' ? <span className="text-amber-600">on</span> : <span className="text-gray-400">default</span>}
+                        {n.icc === 'off' ? <span className="text-emerald-600">{t('settings.system.iccIsolated')}</span> : n.icc === 'on' ? <span className="text-amber-600">{t('common.on')}</span> : <span className="text-gray-400">{t('settings.system.iccDefault')}</span>}
                       </td>
                     </tr>
                   ))}

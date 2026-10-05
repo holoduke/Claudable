@@ -895,9 +895,12 @@ interface ChatLogProps {
   onReverted?: () => void;
   /** Live agent usage snapshots (context %, tokens, rate limits) from SSE `agent_status` events. */
   onAgentStatus?: (snapshot: import('@/types/agent-usage').AgentUsageSnapshot) => void;
+  /** False for restricted edit profiles (permissions.fullEdit === false): hides
+   *  "Revert to here". Defaults to true; the server still enforces the profile. */
+  canRevert?: boolean;
 }
 
-export default function ChatLog({ projectId, onSessionStatusChange, onProjectStatusUpdate, onSseFallbackActive, startRequest, completeRequest, onAddUserMessage, serverBusy = false, onReverted, onAgentStatus }: ChatLogProps) {
+export default function ChatLog({ projectId, onSessionStatusChange, onProjectStatusUpdate, onSseFallbackActive, startRequest, completeRequest, onAddUserMessage, serverBusy = false, onReverted, onAgentStatus, canRevert = true }: ChatLogProps) {
   const toast = useToast();
   const tr = useT(); // `tr` (not `t`) — this file uses local `t` vars (timers/timestamps)
   const [revertingSha, setRevertingSha] = useState<string | null>(null);
@@ -906,27 +909,29 @@ export default function ChatLog({ projectId, onSessionStatusChange, onProjectSta
     try { await navigator.clipboard.writeText(text); setCopiedId(id); setTimeout(() => setCopiedId((c) => (c === id ? null : c)), 1500); } catch { /* clipboard blocked */ }
   }, []);
   const handleRevert = useCallback(async (sha: string) => {
-    if (typeof window !== 'undefined' && !window.confirm('Revert the project to how it was after this step? Later changes will be rolled back (you can re-run to move forward again).')) return;
+    if (typeof window !== 'undefined' && !window.confirm(tr('chat.log.revertConfirm'))) return;
     setRevertingSha(sha);
     try {
       const res = await fetch(`/api/projects/${projectId}/checkpoints/revert`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sha }),
       });
-      if (res.ok) onReverted?.();
-      else {
+      if (res.ok) {
+        toast.success(tr('chat.log.revertSuccess'));
+        onReverted?.();
+      } else {
         // Surface the server's reason (edit-profile 403, busy 409, …); only a
         // reason-less failure gets the generic "checkpoint gone" hint.
         const body = await res.text().catch(() => '');
         const reason = extractErrorMessage(body, res.status, res.statusText);
         const generic = reason === extractErrorMessage('', res.status, res.statusText);
-        toast.error(generic ? 'Revert failed. The checkpoint may no longer be available.' : `Revert failed: ${reason}`);
+        toast.error(generic ? tr('chat.log.revertFailedGeneric') : tr('chat.log.revertFailedReason', { reason }));
       }
     } catch {
-      toast.error('Revert failed.');
+      toast.error(tr('chat.log.revertFailed'));
     } finally {
       setRevertingSha(null);
     }
-  }, [projectId, onReverted, toast]);
+  }, [projectId, onReverted, toast, tr]);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [selectedLog, setSelectedLog] = useState<LogEntry | null>(null);
@@ -2673,9 +2678,10 @@ export default function ChatLog({ projectId, onSessionStatusChange, onProjectSta
         >
           <div className="bg-white dark:bg-[#181310] rounded-lg p-6 max-w-4xl max-h-[80vh] overflow-auto border border-gray-200 dark:border-white/10 ">
           <div className="flex justify-between items-center mb-4">
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-50 ">Log Details</h3>
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-50 ">{tr('chat.log.detailTitle')}</h3>
             <button
               onClick={closeDetailModal}
+              aria-label={tr('common.close')}
               className="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 text-xl"
             >
               ✕
@@ -2684,15 +2690,15 @@ export default function ChatLog({ projectId, onSessionStatusChange, onProjectSta
 
           <div className="space-y-4">
             <div className="text-gray-900 dark:text-gray-50 ">
-              <strong className="text-gray-700 dark:text-gray-200 ">Type:</strong> {type}
+              <strong className="text-gray-700 dark:text-gray-200 ">{tr('chat.log.detailType')}</strong> {type}
             </div>
             <div className="text-gray-900 dark:text-gray-50 ">
-              <strong className="text-gray-700 dark:text-gray-200 ">Time:</strong> {formatTime(selectedLog.timestamp)}
+              <strong className="text-gray-700 dark:text-gray-200 ">{tr('chat.log.detailTime')}</strong> {formatTime(selectedLog.timestamp)}
             </div>
 
             {type === 'tool_result' && data.diff_info && (
               <div>
-                <strong className="text-gray-700 dark:text-gray-200 ">Changes:</strong>
+                <strong className="text-gray-700 dark:text-gray-200 ">{tr('chat.log.detailChanges')}</strong>
                 <pre className="bg-gray-100 dark:bg-white/6 p-3 rounded-lg overflow-x-auto text-xs font-mono">
                   {data.diff_info}
                 </pre>
@@ -2700,7 +2706,7 @@ export default function ChatLog({ projectId, onSessionStatusChange, onProjectSta
             )}
 
             <div>
-              <strong className="text-gray-700 dark:text-gray-200 ">Detailed Data:</strong>
+              <strong className="text-gray-700 dark:text-gray-200 ">{tr('chat.log.detailData')}</strong>
               <pre className="bg-gray-100 dark:bg-white/6 p-3 rounded-lg overflow-x-auto text-xs font-mono">
                 {JSON.stringify(data, null, 2)}
               </pre>
@@ -2778,12 +2784,12 @@ export default function ChatLog({ projectId, onSessionStatusChange, onProjectSta
               </div>
               <div className="ml-3">
                 <h3 className="text-sm font-medium text-red-800 dark:text-red-200">
-                  Connection error
+                  {tr('chat.log.connectionError')}
                 </h3>
                 <div className="mt-2 text-sm text-red-700 dark:text-red-300">
                   <p>{errorMessage}</p>
                   <p className="mt-1 text-xs text-red-600 dark:text-red-400">
-                    Retrying automatically in a few seconds...
+                    {tr('chat.log.retrying')}
                   </p>
                 </div>
               </div>
@@ -2791,9 +2797,10 @@ export default function ChatLog({ projectId, onSessionStatusChange, onProjectSta
             <div className="ml-auto pl-3">
               <button
                 onClick={clearError}
+                aria-label={tr('chat.log.dismissError')}
                 className="inline-flex text-red-400 hover:text-red-600 focus:outline-hidden focus:text-red-600 transition-colors"
               >
-                <svg className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                <svg className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
                   <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
                 </svg>
               </button>
@@ -2803,7 +2810,7 @@ export default function ChatLog({ projectId, onSessionStatusChange, onProjectSta
       )}
 
       {/* Display messages and logs together */}
-      <div ref={scrollContainerRef} className="flex-1 overflow-y-auto px-8 py-3 space-y-2 custom-scrollbar " onScroll={handleLogScroll}>
+      <div ref={scrollContainerRef} role="log" aria-live="polite" aria-label={tr('chat.log.ariaLabel')} className="flex-1 overflow-y-auto px-8 py-3 space-y-2 custom-scrollbar " onScroll={handleLogScroll}>
         {isLoading && !hasLoadedOnce && !hasError && (
           <div className="flex items-center justify-center h-32 text-gray-400 dark:text-gray-500 text-sm">
             <div className="flex flex-col items-center">
@@ -2832,8 +2839,8 @@ export default function ChatLog({ projectId, onSessionStatusChange, onProjectSta
               disabled={isLoading}
             >
               {isLoading
-                ? 'Loading...'
-                : `Load older messages (${olderInMemory + Math.max(0, totalMessageCount - loadedRowCount)} remaining)`}
+                ? tr('common.loading')
+                : tr('chat.log.loadOlder', { count: olderInMemory + Math.max(0, totalMessageCount - loadedRowCount) })}
             </button>
           </div>
         )}
@@ -2856,12 +2863,12 @@ export default function ChatLog({ projectId, onSessionStatusChange, onProjectSta
                   <span className="text-lg leading-none mt-0.5">⏳</span>
                   <div className="min-w-0">
                     <p className="text-sm font-semibold text-amber-800 dark:text-amber-200">
-                      Claude usage limit reached
+                      {tr('chat.log.usageLimitTitle')}
                     </p>
                     <p className="mt-0.5 text-sm text-amber-700 dark:text-amber-300/90">
-                      The Claude account used for your runs has exhausted its 5-hour window
-                      {resetLabel ? <> — it resets around <span className="font-medium">{resetLabel}</span> (your local time)</> : null}.
-                      Wait for the reset, or switch this project to another account in Project Settings → Claude.
+                      {tr('chat.log.usageLimitBody')}
+                      {resetLabel ? <> {tr('chat.log.usageLimitResets', { time: resetLabel })}</> : null}
+                      {' '}{tr('chat.log.usageLimitHint')}
                     </p>
                     <p className="mt-1 text-xs text-amber-600/80 dark:text-amber-400/70">{localizeUtcResetTimes(messageText)}</p>
                   </div>
@@ -3076,30 +3083,30 @@ export default function ChatLog({ projectId, onSessionStatusChange, onProjectSta
                     reload it's always false — gate on "not streaming" too (the
                     same "settled" test used elsewhere) or these actions (incl.
                     "Revert to here") would never appear on loaded history. */}
-                {message.role === 'assistant' && (message.isFinal || !message.isStreaming) && (messageText || (message as any).commitSha) && (
+                {message.role === 'assistant' && (message.isFinal || !message.isStreaming) && (messageText || ((message as any).commitSha && canRevert)) && (
                   <div className="mt-1.5 flex items-center gap-3">
                     {messageText && (
                       <button
                         onClick={() => copyMessage(message.id, messageText)}
                         className="text-[11px] text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-200 inline-flex items-center gap-1"
-                        title="Copy this message"
+                        title={tr('chat.log.copyTitle')}
                       >
                         {copiedId === message.id ? (
-                          <><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>Copied</>
+                          <><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>{tr('common.copied')}</>
                         ) : (
-                          <><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" /></svg>Copy</>
+                          <><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" /></svg>{tr('common.copy')}</>
                         )}
                       </button>
                     )}
-                    {(message as any).commitSha && (
+                    {(message as any).commitSha && canRevert && (
                       <button
                         onClick={() => handleRevert((message as any).commitSha)}
                         disabled={!!revertingSha || serverBusy}
                         className="text-[11px] text-gray-400 dark:text-gray-500 hover:text-brand-500 inline-flex items-center gap-1 disabled:opacity-50 disabled:hover:text-gray-400"
-                        title={serverBusy ? 'Wait for the agent to finish before reverting' : 'Restore the project to how it was after this step'}
+                        title={serverBusy ? tr('chat.log.revertBusyTitle') : tr('chat.log.revertTitle')}
                       >
                         <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 7v6h6"/><path d="M3 13a9 9 0 1 0 3-7.7L3 8"/></svg>
-                        {revertingSha === (message as any).commitSha ? 'Reverting…' : 'Revert to here'}
+                        {revertingSha === (message as any).commitSha ? tr('chat.reverting') : tr('chat.revert')}
                       </button>
                     )}
                   </div>

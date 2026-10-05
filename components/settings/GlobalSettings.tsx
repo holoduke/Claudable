@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useId } from 'react';
 import Image from 'next/image';
 import { AnimatePresence } from 'framer-motion';
 import { MotionDiv } from '@/lib/motion';
@@ -17,6 +17,7 @@ import { useI18n } from '@/contexts/I18nContext';
 import { getModelDefinitionsForCli, normalizeModelId } from '@/lib/constants/cliModels';
 import { fetchCliStatusSnapshot, createCliStatusFallback } from '@/hooks/useCLI';
 import type { CLIStatus } from '@/types/cli';
+import { SETTINGS_TAB_STRIP, useEscapeToClose } from './settings-a11y';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? '';
 
@@ -41,6 +42,7 @@ interface CLIOption {
   id: string;
   name: string;
   icon: string;
+  /** Internal note only (not rendered). */
   description: string;
   models: { id: string; name: string; }[];
   color: string;
@@ -132,6 +134,14 @@ export default function GlobalSettings({ isOpen, onClose, initialTab = 'account'
   const [installModalOpen, setInstallModalOpen] = useState(false);
   const [selectedCLI, setSelectedCLI] = useState<CLIOption | null>(null);
   const [apiKeyVisibility, setApiKeyVisibility] = useState<Record<string, boolean>>({});
+  const titleId = useId();
+  const closeInstallGuide = useCallback(() => {
+    setInstallModalOpen(false);
+    setSelectedCLI(null);
+  }, []);
+  // Escape closes the install guide first, then the settings dialog.
+  useEscapeToClose(isOpen && !installModalOpen, onClose);
+  useEscapeToClose(installModalOpen, closeInstallGuide);
 
   // Show toast function. Memoized so it has a stable identity — it's passed to
   // UsersSettings, whose data-loading effect depends on it; an unstable ref
@@ -281,7 +291,7 @@ export default function GlobalSettings({ isOpen, onClose, initialTab = 'account'
       
       setSaveMessage({ 
         type: 'success', 
-        text: 'Settings saved successfully!' 
+        text: t('settings.global.saved') 
       });
       // make sure context stays in sync
       try {
@@ -295,7 +305,7 @@ export default function GlobalSettings({ isOpen, onClose, initialTab = 'account'
       console.error('Failed to save global settings:', error);
       setSaveMessage({ 
         type: 'error', 
-        text: 'Failed to save settings. Please try again.' 
+        text: t('settings.global.saveFailed') 
       });
       
       // Clear error message after 5 seconds
@@ -366,30 +376,36 @@ export default function GlobalSettings({ isOpen, onClose, initialTab = 'account'
 
   return (
     <AnimatePresence>
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-        <div 
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-2 md:p-4">
+        <div
           className="absolute inset-0 bg-black/60 backdrop-blur-md"
           onClick={onClose}
+          aria-hidden
         />
-        
-        <MotionDiv 
-          className="relative bg-white dark:bg-[#12100e] rounded-2xl shadow-2xl w-full max-w-5xl h-[700px] border border-gray-200 dark:border-white/10 flex flex-col"
+
+        <MotionDiv
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby={titleId}
+          className="relative bg-white dark:bg-[#12100e] rounded-2xl shadow-2xl w-full max-w-5xl h-[700px] max-h-[90dvh] border border-gray-200 dark:border-white/10 flex flex-col"
           initial={{ opacity: 0, scale: 0.95, y: 20 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.95, y: 20 }}
           transition={{ duration: 0.2 }}
         >
           {/* Header */}
-          <div className="p-5 border-b border-gray-200 dark:border-white/8">
+          <div className="px-4 py-3 md:p-5 border-b border-gray-200 dark:border-white/8">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-50 ">{t('settings.title')}</h2>
+                <h2 id={titleId} className="text-lg md:text-xl font-semibold text-gray-900 dark:text-gray-50 ">{t('settings.title')}</h2>
               </div>
               <button
+                type="button"
                 onClick={onClose}
+                aria-label={t('settings.dialog.close')}
                 className="text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 transition-colors p-1 hover:bg-gray-100 dark:hover:bg-white/6 rounded-lg"
               >
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>
                   <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
                 </svg>
               </button>
@@ -397,8 +413,8 @@ export default function GlobalSettings({ isOpen, onClose, initialTab = 'account'
           </div>
 
           {/* Body: grouped navigation on the left, content on the right */}
-          <div className="flex-1 flex min-h-0">
-          <nav className="w-52 shrink-0 border-r border-gray-200 dark:border-white/8 p-3 overflow-y-auto">
+          <div className="flex-1 flex flex-col md:flex-row min-h-0">
+          <nav role="tablist" aria-label={t('settings.title')} className={`${SETTINGS_TAB_STRIP} md:w-52 shrink-0 border-b md:border-b-0 md:border-r border-gray-200 dark:border-white/8 items-center md:items-stretch`}>
             {([
               {
                 label: t('settings.group.personal'),
@@ -428,15 +444,19 @@ export default function GlobalSettings({ isOpen, onClose, initialTab = 'account'
             ] as { label: string; items: { id: SettingsTab; label: string }[] }[])
               .filter((g) => g.items.length > 0)
               .map((group, gi) => (
-                <div key={group.label || 'misc'} className={gi > 0 ? 'mt-4' : ''}>
+                <div key={group.label || 'misc'} role="presentation" className={`flex md:block items-center gap-1 shrink-0 ${gi > 0 ? 'md:mt-4' : ''}`}>
                   {group.label && (
-                    <p className="px-3 mb-1 text-[11px] font-medium uppercase tracking-wider text-gray-400 dark:text-gray-500">{group.label}</p>
+                    <p className="hidden md:block px-3 mb-1 text-[11px] font-medium uppercase tracking-wider text-gray-400 dark:text-gray-500">{group.label}</p>
                   )}
                   {group.items.map((tab) => (
                     <button
                       key={tab.id}
+                      type="button"
+                      role="tab"
+                      aria-selected={activeTab === tab.id}
+                      aria-controls={`${titleId}-panel`}
                       onClick={() => setActiveTab(tab.id)}
-                      className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors ${
+                      className={`shrink-0 whitespace-nowrap md:w-full text-left px-3 py-2 rounded-lg text-sm transition-colors ${
                         activeTab === tab.id
                           ? 'bg-gray-100 dark:bg-white/8 text-gray-900 dark:text-gray-50 font-medium'
                           : 'text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-white/5 hover:text-gray-900 dark:hover:text-gray-100'
@@ -450,16 +470,17 @@ export default function GlobalSettings({ isOpen, onClose, initialTab = 'account'
           </nav>
 
           {/* Tab Content */}
-          <div className="flex-1 p-6 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-transparent">
+          <div id={`${titleId}-panel`} role="tabpanel" className="flex-1 min-w-0 min-h-0 p-4 md:p-6 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-transparent">
             {activeTab === 'ai-agents' && (
               <div className="space-y-6">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-4">
-                    <h3 className="text-lg font-medium text-gray-900 dark:text-gray-50">CLI Agents</h3>
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="flex flex-wrap items-center gap-4">
+                    <h3 className="text-lg font-medium text-gray-900 dark:text-gray-50">{t('settings.global.cliAgents')}</h3>
                     {/* Inline Default CLI Selector */}
-                    <div className="flex items-center gap-2 ml-6 pl-6 border-l border-gray-200 dark:border-white/8 ">
-                      <span className="text-sm text-gray-600 dark:text-gray-300 ">Default:</span>
+                    <div className="flex items-center gap-2 md:ml-6 md:pl-6 md:border-l border-gray-200 dark:border-white/8 ">
+                      <label htmlFor={`${titleId}-default-cli`} className="text-sm text-gray-600 dark:text-gray-300 ">{t('settings.global.defaultLabel')}</label>
                       <select
+                        id={`${titleId}-default-cli`}
                         value={globalSettings.default_cli}
                         onChange={(e) => setDefaultCLI(e.target.value)}
                         className="pl-3 pr-8 py-1.5 text-xs font-medium border border-gray-200 dark:border-white/8 rounded-full bg-transparent hover:bg-gray-50 dark:hover:bg-white/6 hover:border-gray-300 dark:hover:border-white/18 text-gray-700 dark:text-gray-200 focus:outline-hidden focus:ring-0 transition-colors cursor-pointer"
@@ -474,7 +495,7 @@ export default function GlobalSettings({ isOpen, onClose, initialTab = 'account'
                   </div>
                   <div className="flex items-center gap-3">
                     {saveMessage && (
-                      <div className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-sm ${
+                      <div role={saveMessage.type === 'error' ? 'alert' : 'status'} className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-sm ${
                         saveMessage.type === 'success' 
                           ? 'bg-green-100 text-green-700 '
                           : 'bg-red-100 text-red-700 '
@@ -496,14 +517,14 @@ export default function GlobalSettings({ isOpen, onClose, initialTab = 'account'
                         onClick={checkCLIStatus}
                         className="px-3 py-1.5 text-xs font-medium border border-gray-200 dark:border-white/8 rounded-full bg-transparent hover:bg-gray-50 dark:hover:bg-white/6 hover:border-gray-300 dark:hover:border-white/18 text-gray-700 dark:text-gray-200 transition-colors"
                       >
-                        Refresh Status
+                        {t('settings.global.refreshStatus')}
                       </button>
                       <button
                         onClick={saveGlobalSettings}
                         disabled={isLoading}
                         className="px-3 py-1.5 text-xs font-medium bg-brand-500 hover:bg-brand-600 text-white rounded-full transition-colors disabled:opacity-50"
                       >
-                        {isLoading ? 'Saving...' : 'Save Settings'}
+                        {isLoading ? t('common.saving') : t('settings.global.save')}
                       </button>
                     </div>
                   </div>
@@ -560,7 +581,7 @@ export default function GlobalSettings({ isOpen, onClose, initialTab = 'account'
                               <h4 className="font-medium text-gray-900 dark:text-gray-50 text-sm">{cli.name}</h4>
                               {isDefault && isInstalled && (
                                 <span className="text-xs font-medium" style={{ color: cli.brandColor }}>
-                                  Default
+                                  {t('settings.global.default')}
                                 </span>
                               )}
                             </div>
@@ -575,7 +596,7 @@ export default function GlobalSettings({ isOpen, onClose, initialTab = 'account'
                               onChange={(e) => setDefaultModel(cli.id, e.target.value)}
                               className="w-full px-3 py-1.5 border border-gray-200 dark:border-white/8 rounded-full bg-transparent hover:bg-gray-50 dark:hover:bg-white/6 text-gray-700 dark:text-gray-200 text-xs font-medium transition-colors focus:outline-hidden focus:ring-0"
                             >
-                              <option value="">Select model</option>
+                              <option value="">{t('settings.global.selectModel')}</option>
                               {cli.models.map(model => (
                                 <option key={model.id} value={model.id}>
                                   {model.name}
@@ -585,15 +606,16 @@ export default function GlobalSettings({ isOpen, onClose, initialTab = 'account'
 
                             {cli.id === 'glm' && (
                               <div className="space-y-1.5">
-                                <label className="text-xs font-medium text-gray-600 dark:text-gray-300 ">
-                                  API Key
+                                <label htmlFor={`${titleId}-key-${cli.id}`} className="text-xs font-medium text-gray-600 dark:text-gray-300 ">
+                                  {t('settings.global.apiKey')}
                                 </label>
                                 <div className="flex items-center gap-2">
                                   <input
+                                    id={`${titleId}-key-${cli.id}`}
                                     type={apiKeyVisibility[cli.id] ? 'text' : 'password'}
                                     value={settings.apiKey ?? ''}
                                     onChange={(e) => setCliApiKey(cli.id, e.target.value)}
-                                    placeholder="Enter GLM API key"
+                                    placeholder={t('settings.global.apiKeyPlaceholder', { name: 'GLM' })}
                                     className="flex-1 px-3 py-1.5 rounded-lg border border-gray-200 dark:border-white/8 bg-white dark:bg-white/6 text-sm text-gray-700 dark:text-gray-200 focus:outline-hidden focus:ring-2 focus:ring-brand-500/50"
                                   />
                                   <button
@@ -605,22 +627,23 @@ export default function GlobalSettings({ isOpen, onClose, initialTab = 'account'
                                     }}
                                     className="px-3 py-1.5 text-xs font-medium text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 border border-gray-200 dark:border-white/8 rounded-lg bg-white dark:bg-white/6 transition-colors"
                                   >
-                                    {apiKeyVisibility[cli.id] ? 'Hide' : 'Show'}
+                                    {apiKeyVisibility[cli.id] ? t('settings.global.hide') : t('settings.global.show')}
                                   </button>
                                 </div>
                               </div>
                             )}
                             {cli.id === 'cursor' && (
                               <div className="space-y-1.5">
-                                <label className="text-xs font-medium text-gray-600 dark:text-gray-300 ">
-                                  API Key (optional)
+                                <label htmlFor={`${titleId}-key-${cli.id}`} className="text-xs font-medium text-gray-600 dark:text-gray-300 ">
+                                  {t('settings.global.apiKeyOptional')}
                                 </label>
                                 <div className="flex items-center gap-2">
                                   <input
+                                    id={`${titleId}-key-${cli.id}`}
                                     type={apiKeyVisibility[cli.id] ? 'text' : 'password'}
                                     value={settings.apiKey ?? ''}
                                     onChange={(e) => setCliApiKey(cli.id, e.target.value)}
-                                    placeholder="Enter Cursor API key"
+                                    placeholder={t('settings.global.apiKeyPlaceholder', { name: 'Cursor' })}
                                     className="flex-1 px-3 py-1.5 rounded-lg border border-gray-200 dark:border-white/8 bg-white dark:bg-white/6 text-sm text-gray-700 dark:text-gray-200 focus:outline-hidden focus:ring-2 focus:ring-brand-500/50"
                                   />
                                   <button
@@ -632,7 +655,7 @@ export default function GlobalSettings({ isOpen, onClose, initialTab = 'account'
                                     }}
                                     className="px-3 py-1.5 text-xs font-medium text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 border border-gray-200 dark:border-white/8 rounded-lg bg-white dark:bg-white/6 transition-colors"
                                   >
-                                    {apiKeyVisibility[cli.id] ? 'Hide' : 'Show'}
+                                    {apiKeyVisibility[cli.id] ? t('settings.global.hide') : t('settings.global.show')}
                                   </button>
                                 </div>
                               </div>
@@ -647,7 +670,7 @@ export default function GlobalSettings({ isOpen, onClose, initialTab = 'account'
                               }}
                               className="w-full px-3 py-1.5 rounded-full bg-brand-500 hover:bg-brand-600 text-white text-xs font-semibold transition-all transform hover:scale-105"
                             >
-                              View Guide
+                              {t('settings.global.viewGuide')}
                             </button>
                           </div>
                         )}
@@ -692,12 +715,12 @@ export default function GlobalSettings({ isOpen, onClose, initialTab = 'account'
                     />
                   </div>
                   <BrandWordmark className="mx-auto h-[26px] w-[150px] bg-gray-900 dark:bg-white" />
-                  <p className="text-sm text-gray-500 dark:text-gray-400 mt-3">Version 1.0.0 · Self-hosted</p>
+                  <p className="text-sm text-gray-500 dark:text-gray-400 mt-3">{t('settings.global.version', { version: '1.0.0' })}</p>
                 </div>
 
                 <div className="text-center space-y-2">
                   <p className="text-sm text-gray-500 dark:text-gray-400">{t('about.blurb')}</p>
-                  <div className="flex justify-center gap-6">
+                  <div className="flex flex-wrap justify-center gap-x-6 gap-y-2">
                     <a href="/privacy" target="_blank" rel="noopener noreferrer" className="text-sm text-brand-500 hover:underline">{t('about.privacy')}</a>
                     <a href="https://github.com/holoduke/Claudable" target="_blank" rel="noopener noreferrer" className="text-sm text-brand-500 hover:underline">{t('about.source')}</a>
                     <a href="mailto:support@newstory.tf" className="text-sm text-brand-500 hover:underline">support@newstory.tf</a>
@@ -729,16 +752,17 @@ export default function GlobalSettings({ isOpen, onClose, initialTab = 'account'
       {/* Install Guide Modal */}
       {installModalOpen && selectedCLI && (
         <div className="fixed inset-0 z-70 flex items-center justify-center p-4" key={`modal-${selectedCLI.id}`}>
-          <div 
+          <div
             className="absolute inset-0 bg-black/60 backdrop-blur-md"
-            onClick={() => {
-              setInstallModalOpen(false);
-              setSelectedCLI(null);
-            }}
+            onClick={closeInstallGuide}
+            aria-hidden
           />
-          
-          <div 
-            className="relative bg-white dark:bg-[#181310] rounded-2xl shadow-2xl w-full max-w-lg border border-gray-200 dark:border-white/10 transform"
+
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={`${titleId}-install`}
+            className="relative bg-white dark:bg-[#181310] rounded-2xl shadow-2xl w-full max-w-lg max-h-[90dvh] overflow-y-auto border border-gray-200 dark:border-white/10 transform"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Header */}
@@ -754,15 +778,14 @@ export default function GlobalSettings({ isOpen, onClose, initialTab = 'account'
                   {selectedCLI.id === 'codex' && (
                     <Image src="/oai.png" alt="Codex" width={32} height={32} className="w-8 h-8" />
                   )}
-                  <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-50 ">
-                    Install {selectedCLI.name}
+                  <h3 id={`${titleId}-install`} className="text-lg font-semibold text-gray-900 dark:text-gray-50 ">
+                    {t('settings.global.install', { name: selectedCLI.name })}
                   </h3>
                 </div>
                 <button
-                  onClick={() => {
-                    setInstallModalOpen(false);
-                    setSelectedCLI(null);
-                  }}
+                  type="button"
+                  onClick={closeInstallGuide}
+                  aria-label={t('common.close')}
                   className="text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 transition-colors p-1 hover:bg-gray-100 dark:hover:bg-white/6 rounded-lg"
                 >
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -780,7 +803,7 @@ export default function GlobalSettings({ isOpen, onClose, initialTab = 'account'
                   <span className="flex items-center justify-center w-6 h-6 rounded-full text-white text-xs" style={{ backgroundColor: selectedCLI.brandColor }}>
                     1
                   </span>
-                  Install CLI
+                  {t('settings.global.installCli')}
                 </div>
                 <div className="ml-8 flex items-center gap-2 bg-gray-100 dark:bg-white/6 rounded-lg px-3 py-2">
                   <code className="text-sm text-gray-800 dark:text-gray-100 flex-1">
@@ -792,10 +815,11 @@ export default function GlobalSettings({ isOpen, onClose, initialTab = 'account'
                       e.preventDefault();
                       e.stopPropagation();
                       navigator.clipboard.writeText(selectedCLI.installCommand);
-                      showToast('Command copied to clipboard', 'success');
+                      showToast(t('settings.global.copied'), 'success');
                     }}
                     className="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 "
-                    title="Copy command"
+                    title={t('settings.global.copyCommand')}
+                    aria-label={t('settings.global.copyCommand')}
                   >
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                       <path d="M9 3h10a2 2 0 012 2v10M9 3H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-2M9 3v2a2 2 0 002 2h6a2 2 0 002-2V3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
@@ -810,12 +834,11 @@ export default function GlobalSettings({ isOpen, onClose, initialTab = 'account'
                   <span className="flex items-center justify-center w-6 h-6 rounded-full text-white text-xs" style={{ backgroundColor: selectedCLI.brandColor }}>
                     2
                   </span>
-                  {selectedCLI.id === 'gemini' && 'Authenticate (OAuth or API Key)'}
-                  {selectedCLI.id === 'glm' && 'Authenticate (Z.ai DevPack login)'}
-                  {selectedCLI.id === 'qwen' && 'Authenticate (Qwen OAuth or API Key)'}
-                  {selectedCLI.id === 'codex' && 'Start Codex and sign in'}
-                  {selectedCLI.id === 'claude' && 'Start Claude and sign in'}
-                  {selectedCLI.id === 'cursor' && 'Start Cursor CLI and sign in'}
+                  {selectedCLI.id === 'gemini' && t('settings.global.auth.oauthOrKey')}
+                  {selectedCLI.id === 'glm' && t('settings.global.auth.glm')}
+                  {selectedCLI.id === 'qwen' && t('settings.global.auth.qwen')}
+                  {(selectedCLI.id === 'codex' || selectedCLI.id === 'claude' || selectedCLI.id === 'cursor') &&
+                    t('settings.global.auth.startAndSignIn', { name: selectedCLI.id === 'cursor' ? 'Cursor CLI' : selectedCLI.id === 'codex' ? 'Codex' : 'Claude' })}
                 </div>
                 <div className="ml-8 flex items-center gap-2 bg-gray-100 dark:bg-white/6 rounded-lg px-3 py-2">
                   <code className="text-sm text-gray-800 dark:text-gray-100 flex-1">
@@ -838,10 +861,11 @@ export default function GlobalSettings({ isOpen, onClose, initialTab = 'account'
                                       selectedCLI.id === 'glm' ? 'zai' :
                                       selectedCLI.id === 'gemini' ? 'gemini' : '';
                       if (authCmd) navigator.clipboard.writeText(authCmd);
-                      showToast('Command copied to clipboard', 'success');
+                      showToast(t('settings.global.copied'), 'success');
                     }}
                     className="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 "
-                    title="Copy command"
+                    title={t('settings.global.copyCommand')}
+                    aria-label={t('settings.global.copyCommand')}
                   >
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                       <path d="M9 3h10a2 2 0 012 2v10M9 3H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-2M9 3v2a2 2 0 002 2h6a2 2 0 002-2V3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
@@ -856,7 +880,7 @@ export default function GlobalSettings({ isOpen, onClose, initialTab = 'account'
                   <span className="flex items-center justify-center w-6 h-6 rounded-full text-white text-xs" style={{ backgroundColor: selectedCLI.brandColor }}>
                     3
                   </span>
-                  Test your installation
+                  {t('settings.global.testInstall')}
                 </div>
                 <div className="ml-8 flex items-center gap-2 bg-gray-100 dark:bg-white/6 rounded-lg px-3 py-2">
                   <code className="text-sm text-gray-800 dark:text-gray-100 flex-1">
@@ -879,10 +903,11 @@ export default function GlobalSettings({ isOpen, onClose, initialTab = 'account'
                                         selectedCLI.id === 'glm' ? 'zai --version' :
                                         selectedCLI.id === 'gemini' ? 'gemini --version' : '';
                       if (versionCmd) navigator.clipboard.writeText(versionCmd);
-                      showToast('Command copied to clipboard', 'success');
+                      showToast(t('settings.global.copied'), 'success');
                     }}
                     className="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 "
-                    title="Copy command"
+                    title={t('settings.global.copyCommand')}
+                    aria-label={t('settings.global.copyCommand')}
                   >
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                       <path d="M9 3h10a2 2 0 012 2v10M9 3H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-2M9 3v2a2 2 0 002 2h6a2 2 0 002-2V3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
@@ -900,16 +925,13 @@ export default function GlobalSettings({ isOpen, onClose, initialTab = 'account'
                 onClick={() => checkCLIStatus()}
                 className="px-4 py-2 text-sm text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 transition-colors"
               >
-                Refresh Status
+                {t('settings.global.refreshStatus')}
               </button>
               <button
-                onClick={() => {
-                  setInstallModalOpen(false);
-                  setSelectedCLI(null);
-                }}
+                onClick={closeInstallGuide}
                 className="px-4 py-2 text-sm bg-brand-500 hover:bg-brand-600 text-white rounded-lg transition-colors"
               >
-                Done
+                {t('settings.global.done')}
               </button>
             </div>
           </div>

@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState } from 'react';
+import { useI18n } from '@/contexts/I18nContext';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? '';
 
@@ -29,6 +30,7 @@ export default function ArchitectureModal({
   open: boolean;
   onClose: () => void;
 }) {
+  const { t } = useI18n();
   const [containers, setContainers] = useState<Container[]>([]);
   const [loading, setLoading] = useState(false);
 
@@ -66,27 +68,27 @@ export default function ArchitectureModal({
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-100 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-label="Project containers">
+    <div className="fixed inset-0 z-100 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="architecture-modal-title">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-xs" onClick={onClose} />
       <div className="relative w-full max-w-2xl max-h-[82vh] overflow-hidden rounded-2xl border border-gray-200 dark:border-white/10 bg-white dark:bg-[#181310] shadow-2xl flex flex-col">
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-white/8 bg-linear-to-r from-gray-50 to-gray-100 dark:from-white/6 dark:to-white/3">
           <div className="flex items-center gap-2.5">
             <span className="h-8 w-8 flex items-center justify-center rounded-lg bg-brand-500/15 text-brand-500 text-sm font-bold">i</span>
-            <h2 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Containers</h2>
+            <h2 id="architecture-modal-title" className="text-sm font-semibold text-gray-900 dark:text-gray-100">{t('chat.arch.title')}</h2>
           </div>
           <button
             onClick={onClose}
-            aria-label="Close"
+            aria-label={t('common.close')}
             className="h-8 w-8 flex items-center justify-center rounded-lg text-gray-500 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-200 dark:hover:bg-white/6 transition-colors"
           >
-            ✕
+            <span aria-hidden="true">✕</span>
           </button>
         </div>
         <div className="px-6 py-5 overflow-y-auto">
           {loading ? (
-            <p className="text-sm text-gray-500 dark:text-gray-400">Loading…</p>
+            <p className="text-sm text-gray-500 dark:text-gray-400">{t('common.loading')}</p>
           ) : containers.length === 0 ? (
-            <p className="text-sm text-gray-500 dark:text-gray-400">No containers for this project.</p>
+            <p className="text-sm text-gray-500 dark:text-gray-400">{t('chat.arch.empty')}</p>
           ) : (
             <div className="rounded-xl border border-gray-200 dark:border-white/8 divide-y divide-gray-100 dark:divide-white/8 overflow-hidden">
               {containers.map((c) => (

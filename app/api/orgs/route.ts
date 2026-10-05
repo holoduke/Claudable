@@ -6,6 +6,7 @@
 import { NextRequest } from 'next/server';
 import { getAdminUser } from '@/lib/auth/session';
 import { listOrgs, createOrg } from '@/lib/services/orgs';
+import { orgErrorResponse } from '@/lib/services/settings-org-errors';
 import { createSuccessResponse, createErrorResponse, handleApiError } from '@/lib/utils/api-response';
 
 export const runtime = 'nodejs';
@@ -33,12 +34,8 @@ export async function POST(request: NextRequest) {
     }, admin);
     return createSuccessResponse(org, 201);
   } catch (error) {
-    if (error instanceof Error && (error as { code?: string }).code === 'P2002') {
-      return createErrorResponse('duplicate_domain', 'Er bestaat al een organisatie met dit domein', 409);
-    }
-    if (error instanceof Error && /verplicht|ongeldig|moet/u.test(error.message)) {
-      return createErrorResponse('invalid_input', error.message, 400);
-    }
+    const orgError = orgErrorResponse(error);
+    if (orgError) return orgError;
     return handleApiError(error, 'API', 'Failed to create organization');
   }
 }

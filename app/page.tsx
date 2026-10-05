@@ -21,6 +21,9 @@ import Image from 'next/image';
 import { Image as ImageIcon, Palette, Layers, Server, Database, Sparkles, Search, Building2 } from 'lucide-react';
 import BrandWordmark from '@/components/ui/BrandWordmark';
 import { apiErrorMessage, deriveProjectName } from '@/lib/utils/home-helpers';
+import { DATE_LOCALE } from '@/lib/i18n/config';
+import { formatRelativeTime } from '@/lib/client/home-time';
+import { buildPostCreateNotice, storePostCreateNotice } from '@/lib/client/home-post-create';
 import type { Project as ProjectSummary } from '@/types/project';
 import { fetchCliStatusSnapshot, createCliStatusFallback } from '@/hooks/useCLI';
 import type { CLIStatus } from '@/types/cli';
@@ -69,15 +72,27 @@ const assistantBrandColors = ACTIVE_CLI_BRAND_COLORS;
 
 const MODEL_OPTIONS_BY_ASSISTANT = ACTIVE_CLI_MODEL_OPTIONS;
 
-// Image-generation utilities the agent can use. 'none' keeps the capability off.
-const IMAGE_GEN_OPTIONS: { id: string; name: string; description: string }[] = [
-  { id: '', name: 'No image generation', description: 'The agent uses placeholders / stock assets only.' },
-  { id: 'grok', name: 'Grok (xAI)', description: 'Agent can generate images for the app via the Grok image API.' },
-];
+// Image-generation utilities the agent can use. '' keeps the capability off.
+// Labels are i18n keys; 'grok' is only offered when it can actually work.
+const IMAGE_GEN_OPTIONS = [
+  { id: '', nameKey: 'home.imageGen.none.name', descriptionKey: 'home.imageGen.none.desc' },
+  { id: 'grok', nameKey: 'home.imageGen.grok.name', descriptionKey: 'home.imageGen.grok.desc' },
+] as const;
+
+/** List item as returned by GET /api/projects (adds the rename/delete permission). */
+type HomeProject = ProjectSummary & { canManage?: boolean };
+
+/** Shared pill style for the composer's pickers; short label on phones, full from md. */
+const PICKER_BUTTON_CLASS = 'justify-center whitespace-nowrap text-sm font-medium transition-colors duration-100 ease-in-out border border-gray-200 dark:border-white/9 bg-transparent shadow-xs hover:bg-gray-50 dark:hover:bg-white/5 hover:border-gray-300 dark:hover:border-white/18 px-3 py-2 flex h-8 items-center gap-1.5 rounded-full text-gray-700 dark:text-gray-200 hover:text-gray-900 dark:hover:text-gray-100 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-brand-500/50';
+const PICKER_LABEL_CLASS = 'max-w-[6.5rem] truncate md:max-w-none text-sm font-medium';
 
 export default function HomePage() {
   const t = useT();
-  const [projects, setProjects] = useState<ProjectSummary[]>([]);
+  const { locale } = useI18n();
+  const [projects, setProjects] = useState<HomeProject[]>([]);
+  // Shared xAI key usable by this user (GET /api/projects meta); the picked org
+  // must also not be a customer org (customer projects never use the shared key).
+  const [imageGenGlobal, setImageGenGlobal] = useState(false);
   const [projectsLoaded, setProjectsLoaded] = useState(false);
   // A failed list load must not look like an empty account ("create your first
   // project") — it gets its own error state with a retry.
@@ -87,8 +102,8 @@ export default function HomePage() {
   const [showCreate, setShowCreate] = useState(false);
   const [showGlobalSettings, setShowGlobalSettings] = useState(false);
   const [globalSettingsTab, setGlobalSettingsTab] = useState<'general' | 'ai-assistant'>('ai-assistant');
-  const [editingProject, setEditingProject] = useState<ProjectSummary | null>(null);
-  const [deleteModal, setDeleteModal] = useState<{ isOpen: boolean; project: ProjectSummary | null }>({ isOpen: false, project: null });
+  const [editingProject, setEditingProject] = useState<HomeProject | null>(null);
+  const [deleteModal, setDeleteModal] = useState<{ isOpen: boolean; project: HomeProject | null }>({ isOpen: false, project: null });
   const [isDeleting, setIsDeleting] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const [prompt, setPrompt] = useState('');
@@ -102,7 +117,7 @@ export default function HomePage() {
     [DEFAULT_ASSISTANT]
   );
 
-  const normalizeProjectPayload = useCallback((project: any): ProjectSummary => {
+  const normalizeProjectPayload = useCallback((project: any): HomeProject => {
     const preferred = sanitizeAssistant(project?.preferredCli ?? project?.preferred_cli);
     const selected = normalizeModelForAssistant(preferred, project?.selectedModel ?? project?.selected_model);
 
@@ -124,6 +139,8 @@ export default function HomePage() {
       createdBy: project.createdBy ?? project.created_by ?? null,
       lastEditedBy: project.lastEditedBy ?? project.last_edited_by ?? null,
       organization: project.organization ?? null,
+      // Older servers don't send it: keep offering the actions (the API still enforces).
+      canManage: project.canManage !== false,
     };
   }, [sanitizeAssistant, normalizeModelForAssistant]);
   // Assistant/model the user picked on this page; null = follow Global Settings.
@@ -148,6 +165,12 @@ export default function HomePage() {
   const creatableOrgs = isSuperadmin ? myOrgs : myOrgs.filter(o => o.canCreateProjects !== false);
   const canCreateAnywhere = orgsLoaded && (isSuperadmin || myOrgs.length === 0 /* auth off */ || creatableOrgs.length > 0);
   const [showOrgMenu, setShowOrgMenu] = useState(false);
+  // Grok image generation only when it can work: shared key usable by this user
+  // AND the project's org is not a customer org (those never use the shared key;
+  // a new project has no own key yet).
+  const imageGenUsable = imageGenGlobal && myOrgs.find((o) => o.id === selectedOrgId)?.type !== 'klant';
+  const imageGenOptions = IMAGE_GEN_OPTIONS.filter((o) => o.id === '' || imageGenUsable);
+  const effectiveImageGen = imageGenUsable ? selectedImageGen : '';
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -292,44 +315,23 @@ export default function HomePage() {
     };
   }, []);
 
-  // Format time for display
-  const formatTime = (dateString: string | null) => {
-    if (!dateString) return 'Never';
-    
-    // Server sends UTC time without 'Z' suffix, so we need to add it
-    // to ensure it's parsed as UTC, not local time
-    let utcDateString = dateString;
-    
-    // Check if the string has timezone info
-    const hasTimezone = dateString.endsWith('Z') || 
-                       dateString.includes('+') || 
-                       dateString.match(/[-+]\d{2}:\d{2}$/);
-    
-    if (!hasTimezone) {
-      // Add 'Z' to indicate UTC
-      utcDateString = dateString + 'Z';
-    }
-    
-    // Parse the date as UTC
-    const date = new Date(utcDateString);
-    const now = new Date();
-    // Calculate the actual time difference
-    const diffMs = now.getTime() - date.getTime();
-    const diffMins = Math.floor(diffMs / (1000 * 60));
-    const diffHours = Math.floor(diffMins / 60);
-    const diffDays = Math.floor(diffHours / 24);
+  // Relative time in the UI language ("5 minuten geleden" in Dutch).
+  const formatTime = (dateString: string | null) =>
+    formatRelativeTime(dateString, DATE_LOCALE[locale], { never: t('home.time.never'), justNow: t('home.time.justNow') });
 
-    if (diffMins < 1) return 'Just now';
-    if (diffMins < 60) return `${diffMins}m ago`;
-    if (diffHours < 24) return `${diffHours}h ago`;
-    if (diffDays < 30) return `${diffDays}d ago`;
-    
-    return date.toLocaleDateString('en-US', { 
-      month: 'short', 
-      day: 'numeric',
-      year: date.getFullYear() !== now.getFullYear() ? 'numeric' : undefined
-    });
-  };
+  // Escape closes whichever composer menu is open.
+  const anyMenuOpen = showStackMenu || showPluginMenu || showBackendMenu || showDatabaseMenu || showOrgMenu
+    || showImageGenMenu || showAssistantDropdown || showModelDropdown;
+  useEffect(() => {
+    if (!anyMenuOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      setShowStackMenu(false); setShowPluginMenu(false); setShowBackendMenu(false); setShowDatabaseMenu(false);
+      setShowOrgMenu(false); setShowImageGenMenu(false); setShowAssistantDropdown(false); setShowModelDropdown(false);
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [anyMenuOpen]);
 
   // Format CLI and model information
   const formatCliInfo = (cli?: string, model?: string) => {
@@ -339,16 +341,6 @@ export default function HomePage() {
     const modelId = normalizeModelForAssistant(normalizedCli, model);
     const modelLabel = getModelDisplayName(normalizedCli, modelId);
     return `${cliName} • ${modelLabel}`;
-  };
-
-  const formatFullTime = (dateString: string) => {
-    return new Date(dateString).toLocaleString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
   };
 
   const load = useCallback(async () => {
@@ -373,7 +365,7 @@ export default function HomePage() {
         ? payload
         : [];
 
-      const normalized: ProjectSummary[] = items
+      const normalized: HomeProject[] = items
         .filter((project): project is Record<string, unknown> => Boolean(project && typeof project === 'object'))
         .map((project) => normalizeProjectPayload(project));
 
@@ -389,6 +381,7 @@ export default function HomePage() {
 
       setProjects(sortedProjects);
       setProjectsError(false);
+      setImageGenGlobal(payload?.meta?.imageGenAvailable === true);
 
       // Refresh thumbnails for projects whose preview is RUNNING right now
       // (the server no-ops instantly for stopped previews and never overwrites
@@ -449,7 +442,7 @@ export default function HomePage() {
     setTimeout(() => setToast(null), 4000);
   }, []);
 
-  const openDeleteModal = (project: ProjectSummary) => {
+  const openDeleteModal = (project: HomeProject) => {
     setDeleteModal({ isOpen: true, project });
   };
 
@@ -524,14 +517,14 @@ export default function HomePage() {
       }
     } catch (error) {
       console.error('File processing failed:', error);
-      showToast('Failed to process file. Please try again.', 'error');
+      showToast(t('home.processFileFailed'), 'error');
     } finally {
       setIsUploading(false);
       if (fileInputRef.current) {
         fileInputRef.current.value = '';
       }
     }
-  }, [showToast]);
+  }, [showToast, t]);
 
   // Handle image upload - store locally first, upload after project creation
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -608,7 +601,7 @@ export default function HomePage() {
           stackId: selectedStack,
           backendId: selectedBackend || undefined,
           databaseId: selectedDatabase || undefined,
-          imageProvider: selectedImageGen || undefined,
+          imageProvider: effectiveImageGen || undefined,
           orgId: selectedOrgId || undefined,
         })
       });
@@ -622,6 +615,10 @@ export default function HomePage() {
       }
       
       const payload = await response.json();
+      // Best-effort follow-ups the server could not complete (backend scaffold,
+      // database provisioning, …) — shown on the chat page after navigating.
+      const warnings: string[] = Array.isArray(payload?.warnings) ? payload.warnings.filter((w: unknown) => typeof w === 'string') : [];
+      const warningCodes: string[] = Array.isArray(payload?.warningCodes) ? payload.warningCodes.filter((w: unknown) => typeof w === 'string') : [];
       const projectData = (payload && typeof payload === 'object') ? (payload.data ?? payload) : payload;
       const createdProjectId: string | undefined = projectData?.id ?? projectId;
       if (!createdProjectId) {
@@ -642,6 +639,7 @@ export default function HomePage() {
       // model inline; other files are referenced by path so the agent reads them.
       let imageData: any[] = [];
       const attachedFileRefs: string[] = [];
+      const failedUploads: string[] = [];
 
       if (uploadedImages.length > 0) {
         for (let i = 0; i < uploadedImages.length; i++) {
@@ -665,7 +663,7 @@ export default function HomePage() {
           } catch (uploadError) {
             // One bad file shouldn't drop the others — report and keep going.
             console.error(`File upload failed for "${item.name}":`, uploadError);
-            showToast(`"${item.name}" could not be uploaded, but the project was created`, 'error');
+            failedUploads.push(item.name);
           }
         }
       }
@@ -679,6 +677,7 @@ export default function HomePage() {
       }
 
       // Execute the initial prompt (with images inline + file references in text).
+      let actFailed = false;
       if (instruction || imageData.length > 0) {
         try {
           const actResponse = await fetchAPI(`${API_BASE}/api/chat/${createdProjectId}/act`, {
@@ -693,17 +692,24 @@ export default function HomePage() {
             })
           });
           
-          if (actResponse.ok) {
-            // Successfully kicked off ACT with image payloads
-          } else {
-            console.error('❌ ACT failed:', await actResponse.text());
-            showToast('Project created, but the agent could not start — open the chat and try again.', 'error');
+          if (!actResponse.ok) {
+            console.error('ACT failed:', await actResponse.text().catch(() => ''));
+            actFailed = true;
           }
         } catch (actError) {
-          console.error('❌ ACT API error:', actError);
-          showToast('Project created, but the agent could not start — open the chat and try again.', 'error');
+          console.error('ACT API error:', actError);
+          actFailed = true;
         }
       }
+
+      // Hand any failure/warning to the chat page (sessionStorage contract) —
+      // a toast here would vanish with the navigation. A prompt that never
+      // reached the assistant is kept so it isn't lost.
+      const notice = buildPostCreateNotice(
+        { failedUploads, actFailed, prompt: prompt.trim(), warningCodes, warnings },
+        t as (key: string, vars?: Record<string, string | number>) => string,
+      );
+      storePostCreateNotice(sessionStorage, createdProjectId, notice, actFailed ? instruction : undefined);
       
       // Navigate to chat page with model and CLI parameters
       uploadedImages.forEach(image => {
@@ -943,14 +949,14 @@ export default function HomePage() {
                             onMouseDown={(e) => e.preventDefault()}
                             className="px-2 py-1 text-xs bg-brand-500 text-white rounded-sm hover:bg-brand-600 transition-colors"
                           >
-                            Save
+                            {t('common.save')}
                           </button>
                           <button
                             type="button"
                             onClick={() => setEditingProject(null)}
                             className="px-2 py-1 text-xs bg-gray-500 text-white rounded-sm hover:bg-gray-600 transition-colors"
                           >
-                            Cancel
+                            {t('common.cancel')}
                           </button>
                         </div>
                       </form>
@@ -1003,32 +1009,38 @@ export default function HomePage() {
                             )}
                           </div>
                         </div>
-                        <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                        {project.canManage !== false && (
+                        <div className="flex gap-1 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 pointer-coarse:opacity-100 transition-opacity shrink-0">
                           <button
+                            type="button"
                             onClick={(e) => {
                               e.stopPropagation();
                               setEditingProject(project);
                             }}
-                            className="p-1 text-gray-400 dark:text-gray-500 hover:text-brand-500 transition-colors"
+                            className="p-1 rounded-sm text-gray-400 dark:text-gray-500 hover:text-brand-500 transition-colors focus-visible:opacity-100 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-brand-500/50"
                             title={t('home.editProjectName')}
+                            aria-label={`${t('home.editProjectName')}: ${project.name}`}
                           >
-                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <svg aria-hidden className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                             </svg>
                           </button>
                           <button
+                            type="button"
                             onClick={(e) => {
                               e.stopPropagation();
                               openDeleteModal(project);
                             }}
-                            className="p-1 text-gray-400 dark:text-gray-500 hover:text-red-500 transition-colors"
+                            className="p-1 rounded-sm text-gray-400 dark:text-gray-500 hover:text-red-500 transition-colors focus-visible:opacity-100 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-red-500/50"
                             title={t('home.deleteProject')}
+                            aria-label={`${t('home.deleteProject')}: ${project.name}`}
                           >
-                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <svg aria-hidden className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                             </svg>
                           </button>
                         </div>
+                        )}
                       </div>
                     )}
                     </div>
@@ -1047,7 +1059,7 @@ export default function HomePage() {
                 <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                 <circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
               </svg>
-              Settings
+              {t('topbar.settings')}
             </button>
           </div>
         </div>
@@ -1083,7 +1095,7 @@ export default function HomePage() {
                 </div>
               </div>
               <p className="text-xl text-gray-700 dark:text-gray-200 font-light tracking-tight">
-                Newstory Application Design Portal
+                {t('home.tagline')}
               </p>
               {/* Which organisation you are working in — customers see their own org; staff see all. */}
               {!isSuperadmin && myOrgs.length > 0 && (
@@ -1130,9 +1142,11 @@ export default function HomePage() {
                     <button
                       type="button"
                       onClick={() => removeImage(image.id)}
-                      className="absolute -top-2 -right-2 w-5 h-5 bg-red-500 text-white rounded-full flex items-center justify-center text-xs opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600"
+                      aria-label={t('home.removeAttachment', { name: image.name })}
+                      title={t('home.removeAttachment', { name: image.name })}
+                      className="absolute -top-2 -right-2 w-5 h-5 bg-red-500 text-white rounded-full flex items-center justify-center text-xs opacity-0 group-hover:opacity-100 focus-visible:opacity-100 pointer-coarse:opacity-100 transition-opacity hover:bg-red-600 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-red-500/50 focus-visible:ring-offset-1"
                     >
-                      ×
+                      <span aria-hidden>×</span>
                     </button>
                   </div>
                 ))}
@@ -1165,6 +1179,8 @@ export default function HomePage() {
                   className="flex w-full rounded-md px-2 py-2 placeholder:text-gray-400 focus-visible:outline-hidden disabled:cursor-not-allowed disabled:opacity-50 resize-none text-[16px] leading-snug md:text-base focus-visible:ring-0 focus-visible:ring-offset-0 bg-transparent focus:bg-transparent flex-1 text-gray-900 dark:text-gray-50 overflow-y-auto"
                   style={{ height: '120px' }}
                   onKeyDown={(e) => {
+                    // Never submit while an IME composition is in progress (CJK input etc.).
+                    if (e.nativeEvent.isComposing || e.keyCode === 229) return;
                     if (e.key === 'Enter') {
                       if (e.metaKey || e.ctrlKey) {
                         e.preventDefault();
@@ -1182,12 +1198,12 @@ export default function HomePage() {
               {isDragOver && (
                 <div className="absolute inset-0 bg-brand-500/10 rounded-[28px] flex items-center justify-center z-10 border-2 border-dashed border-brand-500">
                   <div className="text-center">
-                    <div className="text-3xl mb-3">📸</div>
+                    <div className="text-3xl mb-3" aria-hidden>📎</div>
                     <div className="text-lg font-semibold text-brand-500 mb-2">
-                      {t('home.dropImages')}
+                      {t('home.dropFiles')}
                     </div>
-                    <div className="text-sm text-brand-500 ">
-                      {t('home.dropSupports')}
+                    <div className="text-sm text-brand-500 max-w-md mx-auto px-4">
+                      {t('home.dropAnyFile')}
                     </div>
                   </div>
                 </div>
@@ -1196,31 +1212,40 @@ export default function HomePage() {
               <div className="flex gap-1 flex-wrap items-center">
                 {/* Image Upload Button */}
                 <div className="flex items-center gap-2">
-                  <label
-                    className="flex items-center justify-center w-8 h-8 text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-white/6 rounded-full transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                  {/* A real button (keyboard reachable) that opens the hidden file input. */}
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={isUploading || isCreatingProject}
                     title={t('home.uploadFiles')}
+                    aria-label={t('home.uploadFiles')}
+                    className="flex items-center justify-center w-8 h-8 text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-white/6 rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-brand-500/50"
                   >
-                    <ImageIcon className="h-4 w-4" />
-                    <input
-                      ref={fileInputRef}
-                      type="file"
-                      multiple
-                      onChange={handleImageUpload}
-                      disabled={isUploading || isCreatingProject}
-                      className="hidden"
-                    />
-                  </label>
+                    <ImageIcon aria-hidden className="h-4 w-4" />
+                  </button>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    multiple
+                    tabIndex={-1}
+                    aria-hidden
+                    onChange={handleImageUpload}
+                    disabled={isUploading || isCreatingProject}
+                    className="hidden"
+                  />
                 </div>
                 {/* Design Selector */}
                 <button
                   type="button"
                   onClick={() => setShowDesignPicker(true)}
                   title={t('home.pickDesign')}
-                  className="justify-center whitespace-nowrap text-sm font-medium transition-colors duration-100 ease-in-out border border-gray-200 dark:border-white/9 bg-transparent shadow-xs hover:bg-gray-50 dark:hover:bg-white/5 hover:border-gray-300 dark:hover:border-white/18 px-3 py-2 flex h-8 items-center gap-1.5 rounded-full text-gray-700 dark:text-gray-200 hover:text-gray-900 dark:hover:text-gray-100"
+                  aria-label={t('home.pickerLabel', { picker: t('home.pickDesign'), value: selectedDesign?.name ?? t('home.design') })}
+                  aria-haspopup="dialog"
+                  className={PICKER_BUTTON_CLASS}
                 >
                   <Palette aria-hidden className="h-3.5 w-3.5 text-brand-500/80" />
-                  <span className="hidden md:flex text-sm font-medium">
-                    {selectedDesign ? selectedDesign.name : 'Design'}
+                  <span className={PICKER_LABEL_CLASS}>
+                    {selectedDesign ? selectedDesign.name : t('home.design')}
                   </span>
                 </button>
                 {/* Tech-stack Selector */}
@@ -1229,11 +1254,14 @@ export default function HomePage() {
                     type="button"
                     onClick={() => setShowStackMenu(v => !v)}
                     title={t('home.pickStack')}
-                    className="justify-center whitespace-nowrap text-sm font-medium transition-colors duration-100 ease-in-out border border-gray-200 dark:border-white/9 bg-transparent shadow-xs hover:bg-gray-50 dark:hover:bg-white/5 hover:border-gray-300 dark:hover:border-white/18 px-3 py-2 flex h-8 items-center gap-1.5 rounded-full text-gray-700 dark:text-gray-200 hover:text-gray-900 dark:hover:text-gray-100"
+                    aria-label={t('home.pickerLabel', { picker: t('home.pickStack'), value: STACKS.find(s => s.id === selectedStack)?.name ?? t('home.stack') })}
+                    aria-haspopup="true"
+                    aria-expanded={showStackMenu}
+                    className={PICKER_BUTTON_CLASS}
                   >
                     <Layers aria-hidden className="h-3.5 w-3.5 text-brand-500/80" />
-                    <span className="hidden md:flex text-sm font-medium">
-                      {STACKS.find(s => s.id === selectedStack)?.name ?? 'Stack'}
+                    <span className={PICKER_LABEL_CLASS}>
+                      {STACKS.find(s => s.id === selectedStack)?.name ?? t('home.stack')}
                     </span>
                   </button>
                   {showStackMenu && (
@@ -1268,10 +1296,13 @@ export default function HomePage() {
                       type="button"
                       onClick={() => setShowPluginMenu(v => !v)}
                       title={t('home.pluginCommand')}
-                      className="justify-center whitespace-nowrap text-sm font-medium transition-colors duration-100 ease-in-out border border-gray-200 dark:border-white/9 bg-transparent shadow-xs hover:bg-gray-50 dark:hover:bg-white/5 hover:border-gray-300 dark:hover:border-white/18 px-3 py-2 flex h-8 items-center gap-1.5 rounded-full text-gray-700 dark:text-gray-200 hover:text-gray-900 dark:hover:text-gray-100"
+                      aria-label={t('home.pluginCommand')}
+                      aria-haspopup="true"
+                      aria-expanded={showPluginMenu}
+                      className={PICKER_BUTTON_CLASS}
                     >
                       <Sparkles aria-hidden className="h-3.5 w-3.5 text-brand-500/80" />
-                      <span className="hidden md:flex text-sm font-medium">{t('home.plugin')}</span>
+                      <span className={PICKER_LABEL_CLASS}>{t('home.plugin')}</span>
                     </button>
                     {showPluginMenu && (
                       <>
@@ -1305,11 +1336,14 @@ export default function HomePage() {
                     type="button"
                     onClick={() => setShowBackendMenu(v => !v)}
                     title={t('home.addBackend')}
-                    className="justify-center whitespace-nowrap text-sm font-medium transition-colors duration-100 ease-in-out border border-gray-200 dark:border-white/9 bg-transparent shadow-xs hover:bg-gray-50 dark:hover:bg-white/5 hover:border-gray-300 dark:hover:border-white/18 px-3 py-2 flex h-8 items-center gap-1.5 rounded-full text-gray-700 dark:text-gray-200 hover:text-gray-900 dark:hover:text-gray-100"
+                    aria-label={t('home.pickerLabel', { picker: t('home.addBackend'), value: BACKEND_STACKS.find(b => b.id === selectedBackend)?.name ?? t('home.noBackend') })}
+                    aria-haspopup="true"
+                    aria-expanded={showBackendMenu}
+                    className={PICKER_BUTTON_CLASS}
                   >
                     <Server aria-hidden className="h-3.5 w-3.5 text-brand-500/80" />
-                    <span className="hidden md:flex text-sm font-medium">
-                      {BACKEND_STACKS.find(b => b.id === selectedBackend)?.name ?? 'No backend'}
+                    <span className={PICKER_LABEL_CLASS}>
+                      {BACKEND_STACKS.find(b => b.id === selectedBackend)?.name ?? t('home.noBackend')}
                     </span>
                   </button>
                   {showBackendMenu && (
@@ -1344,11 +1378,14 @@ export default function HomePage() {
                     type="button"
                     onClick={() => setShowDatabaseMenu(v => !v)}
                     title={t('home.addDatabase')}
-                    className="justify-center whitespace-nowrap text-sm font-medium transition-colors duration-100 ease-in-out border border-gray-200 dark:border-white/9 bg-transparent shadow-xs hover:bg-gray-50 dark:hover:bg-white/5 hover:border-gray-300 dark:hover:border-white/18 px-3 py-2 flex h-8 items-center gap-1.5 rounded-full text-gray-700 dark:text-gray-200 hover:text-gray-900 dark:hover:text-gray-100"
+                    aria-label={t('home.pickerLabel', { picker: t('home.addDatabase'), value: DATABASES.find(d => d.id === selectedDatabase)?.name ?? t('home.noDatabase') })}
+                    aria-haspopup="true"
+                    aria-expanded={showDatabaseMenu}
+                    className={PICKER_BUTTON_CLASS}
                   >
                     <Database aria-hidden className="h-3.5 w-3.5 text-brand-500/80" />
-                    <span className="hidden md:flex text-sm font-medium">
-                      {DATABASES.find(d => d.id === selectedDatabase)?.name ?? 'No database'}
+                    <span className={PICKER_LABEL_CLASS}>
+                      {DATABASES.find(d => d.id === selectedDatabase)?.name ?? t('home.noDatabase')}
                     </span>
                   </button>
                   {showDatabaseMenu && (
@@ -1383,10 +1420,13 @@ export default function HomePage() {
                       type="button"
                       onClick={() => setShowOrgMenu(v => !v)}
                       title={t('home.orgPicker')}
-                      className="justify-center whitespace-nowrap text-sm font-medium transition-colors duration-100 ease-in-out border border-gray-200 dark:border-white/9 bg-transparent shadow-xs hover:bg-gray-50 dark:hover:bg-white/5 hover:border-gray-300 dark:hover:border-white/18 px-3 py-2 flex h-8 items-center gap-1.5 rounded-full text-gray-700 dark:text-gray-200 hover:text-gray-900 dark:hover:text-gray-100"
+                      aria-label={t('home.pickerLabel', { picker: t('home.orgPicker'), value: myOrgs.find(o => o.id === selectedOrgId)?.name ?? '—' })}
+                      aria-haspopup="true"
+                      aria-expanded={showOrgMenu}
+                      className={PICKER_BUTTON_CLASS}
                     >
                       <Building2 aria-hidden className="h-3.5 w-3.5 text-brand-500/80" />
-                      <span className="hidden md:flex text-sm font-medium">
+                      <span className={PICKER_LABEL_CLASS}>
                         {myOrgs.find(o => o.id === selectedOrgId)?.name ?? t('home.orgPicker')}
                       </span>
                     </button>
@@ -1409,37 +1449,43 @@ export default function HomePage() {
                     )}
                   </div>
                 )}
-                {/* Image-generation Selector (optional) */}
+                {/* Image-generation Selector (optional) — only offered when Grok can
+                    actually work for this user + organisation (see imageGenUsable). */}
+                {imageGenOptions.length > 1 && (
                 <div className="relative">
                   <button
                     type="button"
                     onClick={() => setShowImageGenMenu(v => !v)}
                     title={t('home.pickImageGen')}
-                    className="justify-center whitespace-nowrap text-sm font-medium transition-colors duration-100 ease-in-out border border-gray-200 dark:border-white/9 bg-transparent shadow-xs hover:bg-gray-50 dark:hover:bg-white/5 hover:border-gray-300 dark:hover:border-white/18 px-3 py-2 flex h-8 items-center gap-1.5 rounded-full text-gray-700 dark:text-gray-200 hover:text-gray-900 dark:hover:text-gray-100"
+                    aria-label={t('home.pickerLabel', { picker: t('home.pickImageGen'), value: effectiveImageGen ? t('home.imageGen.grok.name') : t('home.noImageGen') })}
+                    aria-haspopup="true"
+                    aria-expanded={showImageGenMenu}
+                    className={PICKER_BUTTON_CLASS}
                   >
                     <Sparkles aria-hidden className="h-3.5 w-3.5 text-brand-500/80" />
-                    <span className="hidden md:flex text-sm font-medium">
-                      {IMAGE_GEN_OPTIONS.find(o => o.id === selectedImageGen)?.name.replace('No image generation', 'No image gen') ?? 'No image gen'}
+                    <span className={PICKER_LABEL_CLASS}>
+                      {effectiveImageGen ? t('home.imageGen.grok.name') : t('home.noImageGen')}
                     </span>
                   </button>
                   {showImageGenMenu && (
                     <>
                       <div className="fixed inset-0 z-290" onClick={() => setShowImageGenMenu(false)} />
                       <div className="absolute bottom-full mb-2 left-0 z-300 w-72 rounded-xl border border-gray-200 dark:border-white/10 bg-white dark:bg-[#181310] shadow-xl p-1">
-                        {IMAGE_GEN_OPTIONS.map(o => (
+                        {imageGenOptions.map(o => (
                           <button key={o.id || 'none'} type="button" onClick={() => { setSelectedImageGen(o.id); setShowImageGenMenu(false); }}
-                            className={`w-full text-left px-3 py-2 rounded-lg transition-colors ${selectedImageGen === o.id ? 'bg-gray-100 dark:bg-white/[0.07]' : 'hover:bg-gray-50 dark:hover:bg-white/5'}`}>
+                            className={`w-full text-left px-3 py-2 rounded-lg transition-colors ${effectiveImageGen === o.id ? 'bg-gray-100 dark:bg-white/[0.07]' : 'hover:bg-gray-50 dark:hover:bg-white/5'}`}>
                             <div className="flex items-center justify-between">
-                              <span className="text-sm font-medium text-gray-900 dark:text-gray-50">{o.name}</span>
-                              {selectedImageGen === o.id && <span className="text-xs text-brand-500">✓</span>}
+                              <span className="text-sm font-medium text-gray-900 dark:text-gray-50">{t(o.nameKey)}</span>
+                              {effectiveImageGen === o.id && <span className="text-xs text-brand-500">✓</span>}
                             </div>
-                            <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{o.description}</p>
+                            <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{t(o.descriptionKey)}</p>
                           </button>
                         ))}
                       </div>
                     </>
                   )}
                 </div>
+                )}
                 {/* Agent Selector */}
                 <div className="relative z-200" ref={assistantDropdownRef}>
                   <button
@@ -1448,6 +1494,9 @@ export default function HomePage() {
                       setShowAssistantDropdown(!showAssistantDropdown);
                       setShowModelDropdown(false);
                     }}
+                    aria-label={t('home.pickerLabel', { picker: t('home.assistant'), value: selectedAssistantOption?.name ?? 'Claude Code' })}
+                    aria-haspopup="true"
+                    aria-expanded={showAssistantDropdown}
                     className="justify-center whitespace-nowrap text-sm font-medium transition-colors duration-100 ease-in-out disabled:pointer-events-none disabled:opacity-50 border border-gray-200 dark:border-white/9 bg-transparent shadow-xs hover:bg-gray-50 dark:hover:bg-white/5 hover:border-gray-300 dark:hover:border-white/18 px-3 py-2 flex h-8 items-center gap-1 rounded-full text-gray-700 dark:text-gray-200 hover:text-gray-900 dark:hover:text-gray-100"
                   >
                     <div className="w-4 h-4 rounded-sm overflow-hidden">
@@ -1459,7 +1508,7 @@ export default function HomePage() {
                         className="w-full h-full object-contain"
                       />
                     </div>
-                    <span className="hidden md:flex text-sm font-medium">
+                    <span className={PICKER_LABEL_CLASS}>
                       {selectedAssistantOption?.name ?? 'Claude Code'}
                     </span>
                     <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 -960 960 960" className="shrink-0 h-3 w-3 rotate-90" fill="currentColor">
@@ -1471,6 +1520,7 @@ export default function HomePage() {
                     <div className="absolute top-full mt-1 left-0 z-300 min-w-full whitespace-nowrap rounded-2xl border border-gray-200 dark:border-white/10 bg-white dark:bg-[#181310] backdrop-blur-xl shadow-xl">
                       {ASSISTANT_OPTIONS.map((option) => (
                         <button
+                          type="button"
                           key={option.id}
                           onClick={() => handleAssistantChange(option.id)}
                           disabled={!cliStatus[option.id]?.installed}
@@ -1506,6 +1556,9 @@ export default function HomePage() {
                       setShowModelDropdown((current) => !current);
                       setShowAssistantDropdown(false);
                     }}
+                    aria-label={t('home.pickerLabel', { picker: t('home.model'), value: availableModels.find(m => m.id === selectedModel)?.name ?? getModelDisplayName(selectedAssistant, selectedModel) })}
+                    aria-haspopup="true"
+                    aria-expanded={showModelDropdown}
                     className="justify-center whitespace-nowrap text-sm font-medium transition-colors duration-100 ease-in-out disabled:pointer-events-none disabled:opacity-50 border border-gray-200 dark:border-white/9 bg-transparent shadow-xs hover:bg-gray-50 dark:hover:bg-white/5 hover:border-gray-300 dark:hover:border-white/18 px-3 py-2 flex h-8 items-center gap-1 rounded-full text-gray-700 dark:text-gray-200 hover:text-gray-900 dark:hover:text-gray-100 min-w-[140px]"
                   >
                     <span className="text-sm font-medium whitespace-nowrap">
@@ -1520,6 +1573,7 @@ export default function HomePage() {
                     <div className="absolute top-full mt-1 left-0 z-300 min-w-full max-h-[300px] overflow-y-auto rounded-2xl border border-gray-200 dark:border-white/10 bg-white dark:bg-[#181310] backdrop-blur-xl shadow-xl">
                       {availableModels.map((model) => (
                           <button
+                            type="button"
                             key={model.id}
                             onClick={() => handleModelChange(model.id)}
                             className={`w-full px-3 py-2 text-left first:rounded-t-2xl last:rounded-b-2xl transition-colors ${
@@ -1539,6 +1593,8 @@ export default function HomePage() {
                 <div className="ml-auto flex items-center gap-1">
                   <button
                     type="submit"
+                    aria-label={t('home.send')}
+                    title={t('home.send')}
                     disabled={(!prompt.trim() && uploadedImages.length === 0) || isCreatingProject}
                     className="flex h-8 w-8 items-center justify-center rounded-full bg-brand-500 text-white shadow-[0_4px_16px_-4px_color-mix(in_srgb,var(--color-brand-500)_60%,transparent)] transition-all duration-150 ease-out hover:bg-brand-600 hover:scale-105 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-gray-950 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:scale-100 disabled:hover:bg-brand-500"
                   >

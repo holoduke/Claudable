@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useI18n } from '@/contexts/I18nContext';
 
 interface ThinkingSectionProps {
   content: string;
@@ -12,6 +13,7 @@ export default function ThinkingSection({
   content, 
   isExpanded: initialExpanded = false
 }: ThinkingSectionProps) {
+  const { t } = useI18n();
   const [isExpanded, setIsExpanded] = useState(initialExpanded);
   
   // Get first line as title
@@ -60,9 +62,18 @@ export default function ThinkingSection({
       {/* Always visible first line */}
       <div 
         onClick={() => hasMoreContent && setIsExpanded(!isExpanded)}
+        role={hasMoreContent ? 'button' : undefined}
+        tabIndex={hasMoreContent ? 0 : undefined}
+        aria-expanded={hasMoreContent ? isExpanded : undefined}
+        onKeyDown={(e) => {
+          if (hasMoreContent && (e.key === 'Enter' || e.key === ' ')) {
+            e.preventDefault();
+            setIsExpanded(!isExpanded);
+          }
+        }}
         className={`${hasMoreContent ? 'cursor-pointer hover:text-gray-600 dark:hover:text-gray-300 ' : ''} transition-colors`}
       >
-        <span className="italic">Thinking: </span>
+        <span className="italic">{t('chat.thinking')}: </span>
         <span className="italic">{formatThinkingContent(firstLine.replace(/^\*\*/, '').replace(/\*\*$/, ''))}</span>
       </div>
       

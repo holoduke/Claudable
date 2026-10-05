@@ -6,7 +6,8 @@
  */
 import { NextRequest } from 'next/server';
 import { requireOrgManager } from '@/lib/services/org-access';
-import { updateOrgMemberRole, removeOrgMember, isOrgPolicyError } from '@/lib/services/orgs';
+import { updateOrgMemberRole, removeOrgMember } from '@/lib/services/orgs';
+import { orgErrorResponse } from '@/lib/services/settings-org-errors';
 import { createSuccessResponse, createErrorResponse, handleApiError } from '@/lib/utils/api-response';
 
 export const runtime = 'nodejs';
@@ -25,10 +26,8 @@ export async function PATCH(request: NextRequest, { params }: RouteContext) {
     const member = await updateOrgMemberRole(org_id, user_id, role, { ...gate.actor, user: gate.actor.user });
     return createSuccessResponse(member);
   } catch (error) {
-    if (isOrgPolicyError(error)) return createErrorResponse('forbidden', (error as Error).message, 403);
-    if (error instanceof Error && /Rol moet|laatste eigenaar|niet gevonden/u.test(error.message)) {
-      return createErrorResponse('invalid_input', error.message, 400);
-    }
+    const orgError = orgErrorResponse(error);
+    if (orgError) return orgError;
     return handleApiError(error, 'API', 'Failed to update member');
   }
 }
@@ -41,10 +40,8 @@ export async function DELETE(_request: NextRequest, { params }: RouteContext) {
     await removeOrgMember(org_id, user_id, { ...gate.actor, user: gate.actor.user });
     return createSuccessResponse({ removed: true });
   } catch (error) {
-    if (isOrgPolicyError(error)) return createErrorResponse('forbidden', (error as Error).message, 403);
-    if (error instanceof Error && /laatste eigenaar|niet gevonden/u.test(error.message)) {
-      return createErrorResponse('invalid_input', error.message, 400);
-    }
+    const orgError = orgErrorResponse(error);
+    if (orgError) return orgError;
     return handleApiError(error, 'API', 'Failed to remove member');
   }
 }

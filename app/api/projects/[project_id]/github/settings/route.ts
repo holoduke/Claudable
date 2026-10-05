@@ -26,7 +26,8 @@ export async function GET(_request: Request, { params }: RouteContext) {
 
 /**
  * Update per-project git settings. Each field is optional; supply any of:
- *  - `branch` (switches the project to it — same safe switch as the toolbar menu)
+ *  - `branch` (switches the project to it — same safe switch as the toolbar menu;
+ *    the response then carries the full switch outcome, see switchProjectBranch)
  *  - `auto_sync` (boolean) — enable/disable background pull
  *  - `auto_sync_interval_minutes` (number) — cadence (clamped server-side)
  */
@@ -47,18 +48,20 @@ export async function PATCH(request: NextRequest, { params }: RouteContext) {
       );
     }
 
-    const out: Record<string, unknown> = { success: true };
-    if (hasBranch) {
-      out.branch = (await switchProjectBranch(project_id, body.branch)).branch;
-    }
-    if (hasAutoSync || hasInterval) {
-      const auto = await setProjectAutoSync(project_id, {
-        enabled: hasAutoSync ? body.auto_sync : undefined,
-        intervalMinutes: hasInterval ? Number(body.auto_sync_interval_minutes) : undefined,
-      });
-      out.auto_sync = auto.auto_sync;
-      out.auto_sync_interval_minutes = auto.auto_sync_interval_minutes;
-    }
+    // A branch switch returns its whole outcome (changed_files, diverged,
+    // preview_restarted, preview_error, …) so the UI can report it like Sync.
+    const switched = hasBranch ? await switchProjectBranch(project_id, body.branch) : null;
+    const auto = hasAutoSync || hasInterval
+      ? await setProjectAutoSync(project_id, {
+          enabled: hasAutoSync ? body.auto_sync : undefined,
+          intervalMinutes: hasInterval ? Number(body.auto_sync_interval_minutes) : undefined,
+        })
+      : null;
+    const out = {
+      success: true,
+      ...(switched ?? {}),
+      ...(auto ? { auto_sync: auto.auto_sync, auto_sync_interval_minutes: auto.auto_sync_interval_minutes } : {}),
+    };
     return NextResponse.json(out);
   } catch (error) {
     console.error('[API] Failed to update git settings:', error);

@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import ProjectEditProfilesSettings from './ProjectEditProfilesSettings';
 import { apiErrorMessage } from '@/lib/client/api-error';
+import { useT } from '@/contexts/I18nContext';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? '';
 
@@ -11,6 +12,7 @@ interface AccessState { visibility: 'org' | 'restricted'; members: Member[] }
 interface Props { projectId: string }
 
 export default function ProjectAccessSettings({ projectId }: Props) {
+  const t = useT();
   const [access, setAccess] = useState<AccessState | null>(null);
   const [loading, setLoading] = useState(true);
   const [denied, setDenied] = useState<string | null>(null);
@@ -32,17 +34,17 @@ export default function ProjectAccessSettings({ projectId }: Props) {
       const res = await fetch(`${API_BASE}/api/projects/${projectId}/access`);
       const json = await res.json().catch(() => ({}));
       if (res.status === 401 || res.status === 403) {
-        setDenied(apiErrorMessage(json, 'You do not have permission to manage this project.'));
+        setDenied(apiErrorMessage(json, t('settings.access.denied')));
         return;
       }
-      if (!res.ok || !json.success) throw new Error(apiErrorMessage(json, 'Failed to load access'));
+      if (!res.ok || !json.success) throw new Error(apiErrorMessage(json, t('settings.access.loadFailed')));
       setAccess(json.data as AccessState);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load access');
+      setError(err instanceof Error ? err.message : t('settings.access.loadFailed'));
     } finally {
       setLoading(false);
     }
-  }, [projectId]);
+  }, [projectId, t]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -74,7 +76,7 @@ export default function ProjectAccessSettings({ projectId }: Props) {
     if (visibility !== 'restricted') return;
     const q = query.trim();
     let cancelled = false;
-    const t = setTimeout(async () => {
+    const timer = setTimeout(async () => {
       try {
         const res = await fetch(`${API_BASE}/api/users/search?q=${encodeURIComponent(q)}&project=${encodeURIComponent(projectId)}`);
         const json = await res.json().catch(() => ({}));
@@ -88,7 +90,7 @@ export default function ProjectAccessSettings({ projectId }: Props) {
         if (!cancelled) setSearching(false);
       }
     }, 250);
-    return () => { cancelled = true; clearTimeout(t); };
+    return () => { cancelled = true; clearTimeout(timer); };
   }, [query, visibility, members, projectId]);
 
   const setVisibility = async (visibility: 'org' | 'restricted') => {
@@ -101,10 +103,10 @@ export default function ProjectAccessSettings({ projectId }: Props) {
         body: JSON.stringify({ visibility }),
       });
       const json = await res.json().catch(() => ({}));
-      if (!res.ok || !json.success) throw new Error(apiErrorMessage(json, 'Failed to update'));
+      if (!res.ok || !json.success) throw new Error(apiErrorMessage(json, t('settings.access.updateFailed')));
       setAccess(json.data as AccessState);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to update');
+      setError(err instanceof Error ? err.message : t('settings.access.updateFailed'));
     } finally {
       setBusy(false);
     }
@@ -123,10 +125,10 @@ export default function ProjectAccessSettings({ projectId }: Props) {
         body: JSON.stringify({ userId }),
       });
       const json = await res.json().catch(() => ({}));
-      if (!res.ok || !json.success) throw new Error(apiErrorMessage(json, 'Failed to add'));
+      if (!res.ok || !json.success) throw new Error(apiErrorMessage(json, t('settings.access.addFailed')));
       setAccess(json.data as AccessState);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to add');
+      setError(err instanceof Error ? err.message : t('settings.access.addFailed'));
     } finally {
       setBusy(false);
     }
@@ -140,10 +142,10 @@ export default function ProjectAccessSettings({ projectId }: Props) {
         method: 'DELETE',
       });
       const json = await res.json().catch(() => ({}));
-      if (!res.ok || !json.success) throw new Error(apiErrorMessage(json, 'Failed to remove'));
+      if (!res.ok || !json.success) throw new Error(apiErrorMessage(json, t('settings.access.removeFailed')));
       setAccess(json.data as AccessState);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to remove');
+      setError(err instanceof Error ? err.message : t('settings.access.removeFailed'));
     } finally {
       setBusy(false);
     }
@@ -159,22 +161,22 @@ export default function ProjectAccessSettings({ projectId }: Props) {
         body: JSON.stringify({ role }),
       });
       const json = await res.json().catch(() => ({}));
-      if (!res.ok || !json.success) throw new Error(apiErrorMessage(json, 'Failed to update role'));
+      if (!res.ok || !json.success) throw new Error(apiErrorMessage(json, t('settings.access.roleFailed')));
       setAccess(json.data as AccessState);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to update role');
+      setError(err instanceof Error ? err.message : t('settings.access.roleFailed'));
     } finally {
       setBusy(false);
     }
   };
 
   if (loading) {
-    return <div className="p-6 text-sm text-gray-500 dark:text-gray-400">Loading access settings…</div>;
+    return <div className="p-6 text-sm text-gray-500 dark:text-gray-400">{t('settings.access.loading')}</div>;
   }
   if (denied) {
     return (
       <div className="p-6">
-        <h3 className="text-lg font-medium text-gray-900 dark:text-gray-50 mb-1">Access</h3>
+        <h3 className="text-lg font-medium text-gray-900 dark:text-gray-50 mb-1">{t('settings.access.title')}</h3>
         <p className="text-sm text-gray-500 dark:text-gray-400">{denied}</p>
       </div>
     );
@@ -193,14 +195,17 @@ export default function ProjectAccessSettings({ projectId }: Props) {
 
   return (
     <div className="p-6 space-y-5">
-      <h3 className="text-lg font-medium text-gray-900 dark:text-gray-50">Access</h3>
+      <h3 className="text-lg font-medium text-gray-900 dark:text-gray-50">{t('settings.access.title')}</h3>
 
       {/* Toggle */}
       <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-white/3 rounded-xl border border-gray-200 dark:border-white/8">
-        <p className="pr-4 font-medium text-gray-900 dark:text-gray-50">Restrict to specific users</p>
+        <label htmlFor="settings-access-restrict" className="pr-4 font-medium text-gray-900 dark:text-gray-50 cursor-pointer">{t('settings.access.restrict')}</label>
         <label className="relative inline-flex items-center cursor-pointer">
           <input
+            id="settings-access-restrict"
             type="checkbox"
+            role="switch"
+            aria-checked={restricted}
             className="sr-only peer"
             checked={restricted}
             disabled={busy}
@@ -211,28 +216,29 @@ export default function ProjectAccessSettings({ projectId }: Props) {
       </div>
 
       {error && (
-        <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>
+        <div role="alert" className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>
       )}
 
       {restricted && (
         <>
           {/* Autocomplete search */}
           <div ref={boxRef} className="relative">
-            <label className="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">Add people</label>
+            <label htmlFor="settings-access-search" className="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">{t('settings.access.addPeople')}</label>
             <input
+              id="settings-access-search"
               type="text"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               onFocus={() => { if (results.length) setOpen(true); }}
-              placeholder="Search by name or email…"
+              placeholder={t('settings.access.searchPlaceholder')}
               className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-white/8 bg-white dark:bg-white/6 text-sm text-gray-800 dark:text-gray-100 focus:outline-hidden focus:ring-2 focus:ring-brand-500"
             />
             {open && (
               <div className="absolute z-10 mt-1 w-full rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-[#181310] shadow-lg max-h-60 overflow-y-auto">
                 {searching ? (
-                  <div className="px-3 py-2 text-sm text-gray-400 dark:text-gray-500">Searching…</div>
+                  <div className="px-3 py-2 text-sm text-gray-400 dark:text-gray-500">{t('settings.access.searching')}</div>
                 ) : results.length === 0 ? (
-                  <div className="px-3 py-2 text-sm text-gray-400 dark:text-gray-500">No matching users</div>
+                  <div className="px-3 py-2 text-sm text-gray-400 dark:text-gray-500">{t('settings.access.noMatches')}</div>
                 ) : (
                   results.map((u) => (
                     <button
@@ -256,10 +262,10 @@ export default function ProjectAccessSettings({ projectId }: Props) {
           {/* Assigned members */}
           <div>
             <p className="text-xs font-medium text-gray-600 dark:text-gray-300 mb-2">
-              Assigned ({access?.members.length ?? 0})
+              {t('settings.access.assigned', { count: access?.members.length ?? 0 })}
             </p>
             {(access?.members.length ?? 0) === 0 ? (
-              <p className="text-sm text-gray-400 dark:text-gray-500">No one assigned yet — search above to add people.</p>
+              <p className="text-sm text-gray-400 dark:text-gray-500">{t('settings.access.noneAssigned')}</p>
             ) : (
               <ul className="divide-y divide-gray-100 dark:divide-white/6 rounded-xl border border-gray-200 dark:border-white/8">
                 {access!.members.map((m) => (
@@ -274,17 +280,18 @@ export default function ProjectAccessSettings({ projectId }: Props) {
                       value={m.role ?? 'viewer'}
                       onChange={(e) => setMemberRole(m.id, e.target.value as 'viewer' | 'editor')}
                       disabled={busy}
+                      aria-label={t('settings.access.roleFor', { name: m.name || m.email })}
                       className="text-xs border border-gray-200 dark:border-white/8 rounded-full bg-white dark:bg-white/6 text-gray-600 dark:text-gray-300 px-2 py-1 disabled:opacity-40"
                     >
-                      <option value="viewer">Viewer</option>
-                      <option value="editor">Editor</option>
+                      <option value="viewer">{t('settings.access.viewer')}</option>
+                      <option value="editor">{t('settings.access.editor')}</option>
                     </select>
                     <button
                       onClick={() => removeMember(m.id)}
                       disabled={busy}
                       className="px-2.5 py-1 text-xs font-medium border border-gray-200 dark:border-white/8 rounded-full bg-white dark:bg-white/3 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-white/6 disabled:opacity-40"
                     >
-                      Remove
+                      {t('common.remove')}
                     </button>
                   </li>
                 ))}

@@ -17,8 +17,9 @@
  *   if (denied) return denied;
  *
  * Three tiers: read < write < manage. `write` lets an editor member (or any
- * org user on an org-visible project) run the agent, edit files/env values and
- * deploy; `manage` is owner/admin only — reserved for reading/setting secrets,
+ * org user on an org-visible project) run the agent, edit files and deploy;
+ * environment variables are manage-only (they hold the project's secrets).
+ * `manage` is owner/admin only — reserved for reading/setting secrets,
  * destroying containers/databases, and deleting/reconfiguring the project.
  *
  * In a CUSTOMER project, `manage` and `configure` (the project's settings: skills,

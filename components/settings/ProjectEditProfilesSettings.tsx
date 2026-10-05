@@ -1,6 +1,8 @@
 "use client";
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { apiErrorMessage } from '@/lib/client/api-error';
+import { useT } from '@/contexts/I18nContext';
+import type { MessageKey } from '@/lib/i18n/messages/en';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? '';
 
@@ -12,11 +14,11 @@ interface Person { id: string; email: string; name: string | null; image: string
 interface CustomProfile { label: string; description: string; kinds: Kind[]; allowPaths: string[]; denyPaths: string[] }
 interface Config { default: ProfileId; members: Record<string, ProfileId>; custom: CustomProfile | null }
 
-const KIND_OPTIONS: { kind: Kind; label: string; hint: string }[] = [
-  { kind: 'text', label: 'Text', hint: 'Headings, paragraphs, button labels, links, Markdown and translation files' },
-  { kind: 'style', label: 'Styling', hint: 'Classes, CSS, colours and fonts in the theme config' },
-  { kind: 'asset', label: 'Images & media', hint: 'Add or replace pictures, video and fonts' },
-  { kind: 'code', label: 'Code & structure', hint: 'Elements, components, logic, config — everything else' },
+const KIND_OPTIONS: { kind: Kind; label: MessageKey; hint: MessageKey }[] = [
+  { kind: 'text', label: 'settings.editProfiles.kind.text', hint: 'settings.editProfiles.kind.textHint' },
+  { kind: 'style', label: 'settings.editProfiles.kind.style', hint: 'settings.editProfiles.kind.styleHint' },
+  { kind: 'asset', label: 'settings.editProfiles.kind.asset', hint: 'settings.editProfiles.kind.assetHint' },
+  { kind: 'code', label: 'settings.editProfiles.kind.code', hint: 'settings.editProfiles.kind.codeHint' },
 ];
 
 const EMPTY_CUSTOM: CustomProfile = { label: 'Custom', description: '', kinds: ['text'], allowPaths: [], denyPaths: [] };
@@ -24,6 +26,7 @@ const EMPTY_CUSTOM: CustomProfile = { label: 'Custom', description: '', kinds: [
 const lines = (s: string) => s.split('\n').map((l) => l.trim()).filter(Boolean);
 
 export default function ProjectEditProfilesSettings({ projectId }: { projectId: string }) {
+  const t = useT();
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [people, setPeople] = useState<Person[]>([]);
   const [config, setConfig] = useState<Config | null>(null);
@@ -54,15 +57,15 @@ export default function ProjectEditProfilesSettings({ projectId }: { projectId: 
     try {
       const res = await fetch(`${API_BASE}/api/projects/${projectId}/edit-profiles`);
       const json = await res.json().catch(() => ({}));
-      if (!res.ok || !json.success) throw new Error(apiErrorMessage(json, 'Failed to load edit profiles'));
+      if (!res.ok || !json.success) throw new Error(apiErrorMessage(json, t('settings.editProfiles.loadFailed')));
       setCanManage(Boolean(json.data.canManage));
       apply(json.data);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load edit profiles');
+      setError(err instanceof Error ? err.message : t('settings.editProfiles.loadFailed'));
     } finally {
       setLoading(false);
     }
-  }, [projectId, apply]);
+  }, [projectId, apply, t]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -73,7 +76,7 @@ export default function ProjectEditProfilesSettings({ projectId }: { projectId: 
   }, [config, allowText, denyText]);
   const dirty = draft !== null && JSON.stringify(draft) !== saved;
 
-  const labelOf = (id: ProfileId) => (id === 'custom' ? draft?.custom?.label || 'Custom' : profiles.find((p) => p.id === id)?.label ?? id);
+  const labelOf = (id: ProfileId) => (id === 'custom' ? draft?.custom?.label || t('settings.editProfiles.customDefault') : profiles.find((p) => p.id === id)?.label ?? id);
   const selectable = profiles.filter((p) => p.id !== 'custom' || Boolean(config?.custom));
 
   const setDefault = (id: ProfileId) => setConfig((c) => (c ? { ...c, default: id } : c));
@@ -108,17 +111,27 @@ export default function ProjectEditProfilesSettings({ projectId }: { projectId: 
         body: JSON.stringify(draft),
       });
       const json = await res.json().catch(() => ({}));
-      if (!res.ok || !json.success) throw new Error(apiErrorMessage(json, 'Failed to save'));
+      if (!res.ok || !json.success) throw new Error(apiErrorMessage(json, t('settings.editProfiles.saveFailed')));
       apply(json.data);
-      setNotice('Saved — applies from the next chat message.');
+      setNotice(t('settings.editProfiles.saved'));
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to save');
+      setError(err instanceof Error ? err.message : t('settings.editProfiles.saveFailed'));
     } finally {
       setBusy(false);
     }
   };
 
-  if (loading) return <div className="text-sm text-gray-500 dark:text-gray-400">Loading edit profiles…</div>;
+  if (loading) return <div className="text-sm text-gray-500 dark:text-gray-400">{t('settings.editProfiles.loading')}</div>;
+  // A failed load must stay visible (with a retry) instead of the block silently vanishing.
+  if (error && !draft) {
+    return (
+      <div role="alert" className="flex items-center justify-between gap-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-300">
+        <span>{error}</span>
+        <button type="button" onClick={() => void load()} className="shrink-0 text-xs font-medium underline">{t('common.retry')}</button>
+      </div>
+    );
+  }
+  // Non-managers get a successful response with canManage=false: nothing to configure here.
   if (!canManage || !draft) return null;
 
   const selectCls = 'text-xs border border-gray-200 dark:border-white/8 rounded-full bg-white dark:bg-white/6 text-gray-700 dark:text-gray-200 px-2 py-1 disabled:opacity-40';
@@ -128,32 +141,31 @@ export default function ProjectEditProfilesSettings({ projectId }: { projectId: 
   return (
     <div className="space-y-4">
       <div>
-        <h4 className="text-base font-medium text-gray-900 dark:text-gray-50">Edit profiles</h4>
+        <h4 className="text-base font-medium text-gray-900 dark:text-gray-50">{t('settings.editProfiles.title')}</h4>
         <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
-          What the AI may change for someone in this project. The owner and admins (and New Story staff in customer
-          projects) can always change everything. Edits outside a profile are blocked, and anything that slips through is undone after the turn.
+          {t('settings.editProfiles.intro')}
         </p>
       </div>
 
-      {error && <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>}
-      {notice && !dirty && <div className="rounded-lg border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-700 dark:border-green-500/20 dark:bg-green-500/10 dark:text-green-300">{notice}</div>}
+      {error && <div role="alert" className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>}
+      {notice && !dirty && <div role="status" className="rounded-lg border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-700 dark:border-green-500/20 dark:bg-green-500/10 dark:text-green-300">{notice}</div>}
 
       <div className="flex items-start justify-between gap-4 p-4 bg-gray-50 dark:bg-white/3 rounded-xl border border-gray-200 dark:border-white/8">
         <div className="min-w-0">
-          <p className="font-medium text-gray-900 dark:text-gray-50 text-sm">Default for everyone else</p>
+          <p className="font-medium text-gray-900 dark:text-gray-50 text-sm">{t('settings.editProfiles.defaultForOthers')}</p>
           <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-            {draft.default === 'custom' ? draft.custom?.description || 'Custom profile' : defaultProfile?.description}
+            {draft.default === 'custom' ? draft.custom?.description || t('settings.editProfiles.customProfile') : defaultProfile?.description}
           </p>
         </div>
-        <select value={draft.default} onChange={(e) => setDefault(e.target.value as ProfileId)} disabled={busy} className={selectCls}>
+        <select aria-label={t('settings.editProfiles.defaultForOthers')} value={draft.default} onChange={(e) => setDefault(e.target.value as ProfileId)} disabled={busy} className={selectCls}>
           {selectable.map((p) => <option key={p.id} value={p.id}>{labelOf(p.id)}</option>)}
         </select>
       </div>
 
       <div>
-        <p className="text-xs font-medium text-gray-600 dark:text-gray-300 mb-2">Per person</p>
+        <p className="text-xs font-medium text-gray-600 dark:text-gray-300 mb-2">{t('settings.editProfiles.perPerson')}</p>
         {people.length === 0 ? (
-          <p className="text-sm text-gray-400 dark:text-gray-500">No other people can edit this project yet.</p>
+          <p className="text-sm text-gray-400 dark:text-gray-500">{t('settings.editProfiles.noPeople')}</p>
         ) : (
           <ul className="divide-y divide-gray-100 dark:divide-white/6 rounded-xl border border-gray-200 dark:border-white/8">
             {people.map((p) => (
@@ -163,10 +175,10 @@ export default function ProjectEditProfilesSettings({ projectId }: { projectId: 
                   {p.name && <span className="block text-xs text-gray-500 dark:text-gray-400 truncate">{p.email}</span>}
                 </span>
                 {p.exempt ? (
-                  <span className="text-xs text-gray-500 dark:text-gray-400">{p.owner ? 'Owner' : 'Admin / staff'} · always everything</span>
+                  <span className="text-xs text-gray-500 dark:text-gray-400">{p.owner ? t('settings.editProfiles.owner') : t('settings.editProfiles.adminStaff')} · {t('settings.editProfiles.alwaysEverything')}</span>
                 ) : (
-                  <select value={draft.members[p.id] ?? ''} onChange={(e) => setMember(p.id, e.target.value as ProfileId | '')} disabled={busy} className={selectCls}>
-                    <option value="">Default ({labelOf(draft.default)})</option>
+                  <select aria-label={t('settings.editProfiles.profileFor', { name: p.name || p.email })} value={draft.members[p.id] ?? ''} onChange={(e) => setMember(p.id, e.target.value as ProfileId | '')} disabled={busy} className={selectCls}>
+                    <option value="">{t('settings.editProfiles.defaultOption', { profile: labelOf(draft.default) })}</option>
                     {selectable.map((pr) => <option key={pr.id} value={pr.id}>{labelOf(pr.id)}</option>)}
                   </select>
                 )}
@@ -179,48 +191,49 @@ export default function ProjectEditProfilesSettings({ projectId }: { projectId: 
       <div className="rounded-xl border border-gray-200 dark:border-white/8">
         <button
           type="button"
-          onClick={() => { if (!draft.custom) setCustom({}); setCustomOpen((o) => !o || !draft.custom); }}
+          onClick={() => { if (!draft.custom) setCustom({ label: t('settings.editProfiles.customDefault') }); setCustomOpen((o) => !o || !draft.custom); }}
+          aria-expanded={customOpen && Boolean(draft.custom)}
           className="w-full flex items-center justify-between px-4 py-3 text-sm font-medium text-gray-900 dark:text-gray-50"
         >
-          <span>{draft.custom ? `Custom profile: ${draft.custom.label}` : 'Create a custom profile'}</span>
-          <span className="text-gray-400">{customOpen && draft.custom ? '−' : '+'}</span>
+          <span>{draft.custom ? t('settings.editProfiles.customNamed', { name: draft.custom.label }) : t('settings.editProfiles.createCustom')}</span>
+          <span className="text-gray-400" aria-hidden>{customOpen && draft.custom ? '−' : '+'}</span>
         </button>
         {customOpen && draft.custom && (
           <div className="px-4 pb-4 space-y-3">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <label className="block">
-                <span className="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">Name</span>
+                <span className="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">{t('common.name')}</span>
                 <input value={draft.custom.label} maxLength={60} onChange={(e) => setCustom({ label: e.target.value })} className={inputCls} />
               </label>
               <label className="block">
-                <span className="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">Note for the AI (optional)</span>
-                <input value={draft.custom.description} maxLength={500} placeholder="e.g. Only the blog and the team page" onChange={(e) => setCustom({ description: e.target.value })} className={inputCls} />
+                <span className="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">{t('settings.editProfiles.aiNote')}</span>
+                <input value={draft.custom.description} maxLength={500} placeholder={t('settings.editProfiles.aiNotePlaceholder')} onChange={(e) => setCustom({ description: e.target.value })} className={inputCls} />
               </label>
             </div>
             <div>
-              <span className="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">May change</span>
+              <span className="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">{t('settings.editProfiles.mayChange')}</span>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 {KIND_OPTIONS.map((o) => (
                   <label key={o.kind} className="flex items-start gap-2 text-sm text-gray-800 dark:text-gray-100">
                     <input type="checkbox" className="mt-0.5" checked={draft.custom!.kinds.includes(o.kind)} onChange={() => toggleKind(o.kind)} />
-                    <span>{o.label}<span className="block text-xs text-gray-500 dark:text-gray-400">{o.hint}</span></span>
+                    <span>{t(o.label)}<span className="block text-xs text-gray-500 dark:text-gray-400">{t(o.hint)}</span></span>
                   </label>
                 ))}
               </div>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <label className="block">
-                <span className="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">Only these files (one pattern per line)</span>
+                <span className="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">{t('settings.editProfiles.allowPaths')}</span>
                 <textarea rows={3} value={allowText} placeholder={'content/**\npages/blog/**'} onChange={(e) => setAllowText(e.target.value)} className={`${inputCls} font-mono text-xs`} />
               </label>
               <label className="block">
-                <span className="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">Never these files</span>
+                <span className="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">{t('settings.editProfiles.denyPaths')}</span>
                 <textarea rows={3} value={denyText} placeholder={'pages/checkout.vue'} onChange={(e) => setDenyText(e.target.value)} className={`${inputCls} font-mono text-xs`} />
               </label>
             </div>
             <div className="flex justify-between items-center">
-              <p className="text-xs text-gray-500 dark:text-gray-400">Empty “only these files” means all files. Patterns use * and **.</p>
-              <button type="button" onClick={removeCustom} disabled={busy} className="text-xs text-red-600 hover:underline disabled:opacity-40">Remove custom profile</button>
+              <p className="text-xs text-gray-500 dark:text-gray-400">{t('settings.editProfiles.pathsHint')}</p>
+              <button type="button" onClick={removeCustom} disabled={busy} className="text-xs text-red-600 hover:underline disabled:opacity-40">{t('settings.editProfiles.removeCustom')}</button>
             </div>
           </div>
         )}
@@ -233,7 +246,7 @@ export default function ProjectEditProfilesSettings({ projectId }: { projectId: 
           disabled={busy || !dirty || (draft.custom !== null && draft.custom.kinds.length === 0)}
           className="px-4 py-2 rounded-lg bg-brand-500 text-white text-sm font-medium hover:bg-brand-600 disabled:opacity-40"
         >
-          {busy ? 'Saving…' : 'Save edit profiles'}
+          {busy ? t('common.saving') : t('settings.editProfiles.save')}
         </button>
       </div>
     </div>

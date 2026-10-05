@@ -1,3 +1,8 @@
+import { chatpageEn } from './en/chatpage';
+import { chatEn } from './en/chat';
+import { settingsEn } from './en/settings';
+import { homeEn } from './en/home';
+import { serverEn } from './en/server';
 /**
  * English message catalog — the SOURCE OF TRUTH for i18n keys. Every other
  * locale mirrors these keys; missing keys fall back to English (see t()).
@@ -5,6 +10,13 @@
  * placeholders are interpolated by t(key, { name }).
  */
 export const en = {
+  // Per-area catalogs (lib/i18n/messages/en/*.ts)
+  ...chatpageEn,
+  ...chatEn,
+  ...settingsEn,
+  ...homeEn,
+  ...serverEn,
+
   // Common actions / states
   'common.save': 'Save',
   'common.saving': 'Saving…',

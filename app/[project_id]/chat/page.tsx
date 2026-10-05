@@ -19,6 +19,7 @@ import AgentStatusBar from '@/components/chat/AgentStatusBar';
 import EditProfileBadge from '@/components/chat/EditProfileBadge';
 import CreditsMeter from '@/components/chat/CreditsMeter';
 import type { AgentUsageSnapshot } from '@/types/agent-usage';
+import type { ProjectPermissions } from '@/lib/services/settings-permissions';
 
 // On-demand UI (code view, panels, modals) is code-split out of the initial
 // chat bundle: these only download when first rendered. Everything here is
@@ -46,6 +47,18 @@ import { useGlobalSettings } from '@/contexts/GlobalSettingsContext';
 import { getDefaultModelForCli, getModelDisplayName } from '@/lib/constants/cliModels';
 import { normalizePreviewRoute } from '@/lib/utils/preview-route';
 import { readSendError, isHardBusyError, queueRetryDelayMs } from '@/lib/utils/send-error';
+import { responseErrorMessage, apiErrorMessage } from '@/lib/client/api-error';
+import {
+  withStyleEdit,
+  withTextEdit,
+  countPendingEdits,
+  countEditedElements,
+  countElementEdits,
+  buildPersistInstruction,
+  type PendingEdits,
+} from '@/lib/utils/chatpage-visual-edits';
+import { isBinaryPath, looksBinaryContent, type FileLock } from '@/lib/utils/chatpage-file-view';
+import { POST_CREATE_NOTICE_PREFIX, readPostCreateNotice } from '@/lib/utils/chatpage-notice';
 import {
   ACTIVE_CLI_BRAND_COLORS,
   ACTIVE_CLI_IDS,
@@ -93,6 +106,17 @@ function fmtDateTime(iso: string | null): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return '';
   return d.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+}
+
+/** Keep only boolean permission flags from the API (anything else → absent = allowed). */
+function parsePermissions(raw: unknown): Partial<ProjectPermissions> | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const src = raw as Record<string, unknown>;
+  const out: Partial<ProjectPermissions> = {};
+  for (const key of ['canWrite', 'canManage', 'canConfigure', 'fullEdit'] as const) {
+    if (typeof src[key] === 'boolean') out[key] = src[key] as boolean;
+  }
+  return out;
 }
 
 /** One label/value row in the project-info panel. */
@@ -195,6 +219,12 @@ export default function ChatPage() {
   const [saveFeedback, setSaveFeedback] = useState<'idle' | 'success' | 'error'>('idle');
   const [saveError, setSaveError] = useState<string | null>(null);
   const [selectedFile, setSelectedFile] = useState<string>('');
+  // Why the open file can't be edited (load error / binary / no write access).
+  // While set, edits are ignored and saving is blocked so placeholder text can
+  // never be written over the real file.
+  const [fileLock, setFileLock] = useState<FileLock | null>(null);
+  const fileLockRef = useRef<FileLock | null>(null);
+  fileLockRef.current = fileLock;
   const [currentPath, setCurrentPath] = useState<string>('.');
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(() => new Set(['']));
   const [folderContents, setFolderContents] = useState<Map<string, Entry[]>>(() => new Map());
@@ -250,9 +280,22 @@ export default function ChatPage() {
   // --- Visual editor (inline edit mode) ---
   const [editMode, setEditMode] = useState(false);
   const [selectedEl, setSelectedEl] = useState<SelectedElement | null>(null);
-  const [styleEdits, setStyleEdits] = useState<Record<string, string>>({});
-  const [textEdit, setTextEdit] = useState<string | null>(null);
+  // Pending preview-only edits for EVERY touched element (keyed by selector), so
+  // selecting another element never drops earlier edits.
+  const [pendingEdits, setPendingEdits] = useState<PendingEdits>({});
+  const selectedEntry = selectedEl ? pendingEdits[selectedEl.selector] : undefined;
+  const styleEdits = useMemo(() => selectedEntry?.styles ?? {}, [selectedEntry]);
+  const textEdit = selectedEntry?.text ?? null;
+  const pendingEditCount = countPendingEdits(pendingEdits);
+  const pendingElementCount = countEditedElements(pendingEdits);
+  // Deferred action waiting for "discard unsaved visual edits?" confirmation.
+  const [discardEditsAction, setDiscardEditsAction] = useState<(() => void) | null>(null);
   const [persistingEdit, setPersistingEdit] = useState(false);
+  // Server-computed access for the current user (absent field → treat as allowed).
+  const [permissions, setPermissions] = useState<Partial<ProjectPermissions> | null>(null);
+  const canWrite = permissions?.canWrite !== false;
+  const canManage = permissions?.canManage !== false;
+  const canConfigure = permissions?.canConfigure !== false;
   // --- Comments (pinned review annotations) ---
   const [commentMode, setCommentMode] = useState(false);
   const [comments, setComments] = useState<CommentPin[]>([]);
@@ -318,7 +361,7 @@ export default function ChatPage() {
   }, [showInfoPanel]);
   const deviceViewportRef = useRef<HTMLDivElement>(null);
   // Always points at the latest runAct closure (used by persistEdits).
-  const runActRef = useRef<((m?: string, i?: any[]) => Promise<{ ok: boolean; busy: boolean } | void>) | null>(null);
+  const runActRef = useRef<((m?: string, i?: any[], modeOverride?: 'act' | 'chat') => Promise<{ ok: boolean; busy: boolean } | void>) | null>(null);
   const currentRouteRef = useRef<string>('/');
   // User explicitly stopped the preview — suppress the auto-start effect until
   // they act again, else stop() (previewUrl→null) immediately re-triggered
@@ -355,23 +398,24 @@ export default function ChatPage() {
     const result = searchParams?.get('mcp_auth');
     if (!result) return;
     if (result === 'success') {
-      toast.success('MCP server authenticated.');
+      toast.success(t('chatpage.toast.mcpAuthOk'));
     } else {
-      toast.error(`MCP authentication failed${searchParams?.get('mcp_auth_msg') ? `: ${searchParams.get('mcp_auth_msg')}` : ''}`);
+      const detail = searchParams?.get('mcp_auth_msg');
+      toast.error(detail ? t('chatpage.toast.mcpAuthFailedDetail', { message: detail }) : t('chatpage.toast.mcpAuthFailed'));
     }
     // Strip the params so a reload doesn't re-fire the toast.
     const url = new URL(window.location.href);
     url.searchParams.delete('mcp_auth');
     url.searchParams.delete('mcp_auth_msg');
     window.history.replaceState({}, '', url.toString());
-  }, [searchParams, toast]);
+  }, [searchParams, toast, t]);
   const [uploadedImages, setUploadedImages] = useState<{name: string; url: string; base64?: string; path?: string}[]>([]);
   const [isInitializing, setIsInitializing] = useState(true);
   // Initialize states with default values, will be loaded from localStorage in useEffect
   const [hasInitialPrompt, setHasInitialPrompt] = useState<boolean>(false);
   const [agentWorkComplete, setAgentWorkComplete] = useState<boolean>(false);
   const [projectStatus, setProjectStatus] = useState<ProjectStatus>('initializing');
-  const [initializationMessage, setInitializationMessage] = useState('Starting project initialization...');
+  const [initializationMessage, setInitializationMessage] = useState('');
   const [initialPromptSent, setInitialPromptSent] = useState(false);
   const initialPromptSentRef = useRef(false);
   const [showPublishPanel, setShowPublishPanel] = useState(false);
@@ -452,7 +496,10 @@ export default function ChatPage() {
   // when the user explicitly clicks the Play button.
   const previewStartFailedRef = useRef(false);
   const [isStartingPreview, setIsStartingPreview] = useState(false);
-  const [previewInitializationMessage, setPreviewInitializationMessage] = useState('Starting development server...');
+  // Last preview start failure (server message). Stays visible with a Retry
+  // button instead of silently falling back to "Preview not running".
+  const [previewStartError, setPreviewStartError] = useState<string | null>(null);
+  const [previewInitializationMessage, setPreviewInitializationMessage] = useState('');
   // Preview reachability (server-side probe): the cross-origin iframe can't
   // distinguish a healthy page from Traefik's 502 while the dev server
   // (re)starts. While unreachable we cover the iframe with a friendly overlay
@@ -485,6 +532,14 @@ export default function ChatPage() {
   const [thinkingMode, setThinkingMode] = useState<'off' | 'auto' | 'forced'>('auto');
   const [isUpdatingModel, setIsUpdatingModel] = useState<boolean>(false);
   const [currentRoute, setCurrentRoute] = useState<string>('/');
+  // Route bar text being typed; only applied (navigated) on Enter / Go, and
+  // re-synced whenever the preview's actual route changes.
+  const [routeDraft, setRouteDraft] = useState<string>('');
+  const [routeDraftFor, setRouteDraftFor] = useState<string>('/');
+  if (routeDraftFor !== currentRoute) {
+    setRouteDraftFor(currentRoute);
+    setRouteDraft(currentRoute.startsWith('/') ? currentRoute.slice(1) : currentRoute);
+  }
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const editorRef = useRef<HTMLTextAreaElement>(null);
   const highlightRef = useRef<HTMLPreElement>(null);
@@ -676,16 +731,16 @@ export default function ChatPage() {
       const json = await res.json().catch(() => ({}));
       if (!res.ok || !json.success) {
         throw new Error(res.status === 403
-          ? 'Only the project owner or an admin can rename this project.'
-          : (json.message || 'Failed to rename project'));
+          ? t('chatpage.toast.renameForbidden')
+          : (json.message || t('chatpage.toast.renameFailed')));
       }
     } catch (e) {
       setProjectName(previous);
-      toast.error(e instanceof Error ? e.message : 'Failed to rename project');
+      toast.error(e instanceof Error ? e.message : t('chatpage.toast.renameFailed'));
     } finally {
       savingNameRef.current = false;
     }
-  }, [nameDraft, projectName, projectId, toast]);
+  }, [nameDraft, projectName, projectId, toast, t]);
 
   // Inline edit of the project description (may be cleared to empty, unlike name).
   const commitProjectDescription = useCallback(async () => {
@@ -705,28 +760,28 @@ export default function ChatPage() {
       const json = await res.json().catch(() => ({}));
       if (!res.ok || !json.success) {
         throw new Error(res.status === 403
-          ? 'Only the project owner or an admin can edit this project.'
-          : (json.message || 'Failed to update description'));
+          ? t('chatpage.toast.descriptionForbidden')
+          : (json.message || t('chatpage.toast.descriptionFailed')));
       }
     } catch (e) {
       setProjectDescription(previous);
-      toast.error(e instanceof Error ? e.message : 'Failed to update description');
+      toast.error(e instanceof Error ? e.message : t('chatpage.toast.descriptionFailed'));
     } finally {
       savingDescRef.current = false;
     }
-  }, [descDraft, projectDescription, projectId, toast]);
+  }, [descDraft, projectDescription, projectId, toast, t]);
 
   // /clear — drop the agent's conversation context (server clears the resume
   // pointer + usage counters and posts a confirmation message via SSE).
   const clearAgentContext = useCallback(async () => {
     if (isRunning || hasActiveRequests) {
-      toast.error('The agent is still working — stop the current turn before clearing the context.');
+      toast.error(t('chatpage.toast.clearWhileBusy'));
       return;
     }
     try {
       const response = await fetch(`${API_BASE}/api/chat/${projectId}/clear-session`, { method: 'POST' });
       if (!response.ok) {
-        let message = 'Failed to clear the context.';
+        let message = t('chatpage.toast.clearFailed');
         try {
           const body = await response.json();
           if (body?.message) message = body.message;
@@ -734,9 +789,9 @@ export default function ChatPage() {
         toast.error(message);
       }
     } catch {
-      toast.error('Failed to clear the context.');
+      toast.error(t('chatpage.toast.clearFailed'));
     }
-  }, [isRunning, hasActiveRequests, projectId, toast]);
+  }, [isRunning, hasActiveRequests, projectId, toast, t]);
 
   // /help — local, ephemeral message listing the built-in commands.
   const showCommandHelp = useCallback(() => {
@@ -747,14 +802,16 @@ export default function ChatPage() {
       role: 'assistant',
       messageType: 'chat',
       content: [
-        'Available commands:',
+        t('chatpage.help.title'),
         '',
-        '- `/clear` — start a fresh conversation context (chat history stays)',
-        '- `/compact` — summarize the conversation to free up context space',
-        '- `/usage` — show context usage, token spend and rate limits',
-        '- `/help` — this list',
+        `- \`/clear\` — ${t('chatpage.help.clear')}`,
+        `- \`/compact\` — ${t('chatpage.help.compact')}`,
+        `- \`/usage\` — ${t('chatpage.help.usage')}`,
+        `- \`/mcp\` — ${t('chatpage.help.mcp')}`,
+        `- \`/plugin\` — ${t('chatpage.help.plugin')}`,
+        `- \`/help\` — ${t('chatpage.help.help')}`,
         '',
-        'Type `/` to see these together with your project skills.',
+        t('chatpage.help.footer'),
       ].join('\n'),
       conversationId: null,
       createdAt: new Date().toISOString(),
@@ -763,7 +820,7 @@ export default function ChatPage() {
       isFinal: true,
       isOptimistic: true,
     });
-  }, [projectId]);
+  }, [projectId, t]);
 
   const sendInitialPrompt = useCallback(async (initialPrompt: string) => {
     if (initialPromptSent) {
@@ -788,6 +845,7 @@ export default function ChatPage() {
         requestId,
         selectedModel,
         thinkingMode,
+        mode: 'act' as const,
       };
 
       const r = await fetch(`${API_BASE}/api/chat/${projectId}/act`, {
@@ -804,7 +862,7 @@ export default function ChatPage() {
         // with no retry and no user feedback.
         setInitialPromptSent(false);
         initialPromptSentRef.current = false;
-        toast.error('Could not start building — please try sending your prompt again.');
+        toast.error(t('chatpage.toast.initialPromptFailed'));
         return;
       }
 
@@ -842,11 +900,11 @@ export default function ChatPage() {
       console.error('Error sending initial prompt:', error);
       setInitialPromptSent(false);
       initialPromptSentRef.current = false;
-      toast.error('Could not start building — please try sending your prompt again.');
+      toast.error(t('chatpage.toast.initialPromptFailed'));
     } finally {
       setIsRunning(false);
     }
-  }, [initialPromptSent, preferredCli, conversationId, projectId, selectedModel, thinkingMode, createRequest, toast]);
+  }, [initialPromptSent, preferredCli, conversationId, projectId, selectedModel, thinkingMode, createRequest, toast, t]);
 
   // Guarded trigger that can be called from multiple places safely
   const triggerInitialPromptIfNeeded = useCallback(() => {
@@ -976,12 +1034,12 @@ const persistProjectPreferences = useCallback(
         console.error('Failed to update model preference:', error);
         updatePreferredCli(previousCli);
         updateSelectedModel(previousModel, previousCli);
-        toast.error('Failed to update model. Please try again.');
+        toast.error(t('chatpage.toast.modelUpdateFailed'));
       } finally {
         setIsUpdatingModel(false);
       }
     },
-    [projectId, preferredCli, selectedModel, conversationId, loadCliStatuses, persistProjectPreferences, updatePreferredCli, updateSelectedModel, toast]
+    [projectId, preferredCli, selectedModel, conversationId, loadCliStatuses, persistProjectPreferences, updatePreferredCli, updateSelectedModel, toast, t]
   );
 
   const handleCliChange = useCallback(
@@ -1016,12 +1074,12 @@ const persistProjectPreferences = useCallback(
         console.error('Failed to update CLI preference:', error);
         updatePreferredCli(previousCli);
         updateSelectedModel(previousModel, previousCli);
-        toast.error('Failed to update CLI. Please try again.');
+        toast.error(t('chatpage.toast.cliUpdateFailed'));
       } finally {
         setIsUpdatingModel(false);
       }
     },
-    [projectId, preferredCli, selectedModel, modelOptions, handleModelChange, loadCliStatuses, persistProjectPreferences, updatePreferredCli, updateSelectedModel, toast]
+    [projectId, preferredCli, selectedModel, modelOptions, handleModelChange, loadCliStatuses, persistProjectPreferences, updatePreferredCli, updateSelectedModel, toast, t]
   );
 
   useEffect(() => {
@@ -1219,6 +1277,7 @@ const persistProjectPreferences = useCallback(
           if (sp.status === 'running' && typeof sp.url === 'string') {
             setPreviewUrl(sp.url);
             setIsStartingPreview(false);
+            setPreviewStartError(null);
             previewStartFailedRef.current = false;
             return;
           }
@@ -1228,15 +1287,16 @@ const persistProjectPreferences = useCallback(
       }
 
       setIsStartingPreview(true);
-      setPreviewInitializationMessage('Starting development server…');
+      setPreviewStartError(null);
+      setPreviewInitializationMessage(t('chatpage.preview.startingServer'));
       setPreviewLogs([]);
 
       // Heuristic fallback messages for the install phase (before the dev-server
       // process registers, its logs aren't queryable yet).
       // eslint-disable-next-line @eslint-react/set-state-in-effect -- false positive: runs in a timer after an await inside start(), never synchronously in the auto-start effect
-      const t1 = setTimeout(() => setPreviewInitializationMessage('Installing dependencies…'), 3000);
+      const t1 = setTimeout(() => setPreviewInitializationMessage(t('chatpage.preview.installingDeps')), 3000);
       // eslint-disable-next-line @eslint-react/set-state-in-effect -- false positive: runs in a timer after an await inside start(), never synchronously in the auto-start effect
-      const t2 = setTimeout(() => setPreviewInitializationMessage('Building your application…'), 9000);
+      const t2 = setTimeout(() => setPreviewInitializationMessage(t('chatpage.preview.buildingApp')), 9000);
 
       // Live progress: poll the preview status and surface the REAL latest
       // dev-server line (e.g. "Nuxt … ready", "Local: …") once it appears, so the
@@ -1266,12 +1326,12 @@ const persistProjectPreferences = useCallback(
       clearTimeout(t2);
       clearInterval(poll);
       if (!r.ok) {
-        console.error('Failed to start preview:', r.statusText);
-        setPreviewInitializationMessage('Failed to start preview');
+        const reason = await responseErrorMessage(r, t('chatpage.preview.startFailed'));
+        console.error('Failed to start preview:', r.status, reason);
         // Don't let the auto-start effect immediately retry in a tight loop.
         previewStartFailedRef.current = true;
-        // eslint-disable-next-line @eslint-react/set-state-in-effect -- false positive: runs in a timer after an await inside start(), never synchronously in the auto-start effect
-        setTimeout(() => setIsStartingPreview(false), 2000);
+        setPreviewStartError(reason);
+        setIsStartingPreview(false);
         return;
       }
       const payload = await r.json();
@@ -1280,16 +1340,23 @@ const persistProjectPreferences = useCallback(
       // Reveal the iframe as soon as the URL is available (no artificial wait).
       setPreviewUrl(typeof data.url === 'string' ? data.url : null);
       setIsStartingPreview(false);
+      setPreviewStartError(null);
       previewStartFailedRef.current = false;
       setCurrentRoute('/');
     } catch (error) {
       console.error('Error starting preview:', error);
-      setPreviewInitializationMessage('An error occurred');
       previewStartFailedRef.current = true;
-      // eslint-disable-next-line @eslint-react/set-state-in-effect -- false positive: runs in a timer after an await inside start(), never synchronously in the auto-start effect
-      setTimeout(() => setIsStartingPreview(false), 2000);
+      setPreviewStartError(error instanceof Error && error.message ? error.message : t('chatpage.preview.startFailed'));
+      setIsStartingPreview(false);
     }
-  }, [projectId]);
+  }, [projectId, t]);
+
+  /** User-initiated (re)start: lifts the auto-start failure latch. */
+  const retryPreviewStart = useCallback(() => {
+    previewStartFailedRef.current = false;
+    setPreviewStartError(null);
+    void start();
+  }, [start]);
 
   // The preview iframe is cross-origin, so it can't be read directly. It reports
   // its current route to us via postMessage (injected claudable-preview plugin);
@@ -1352,7 +1419,7 @@ const persistProjectPreferences = useCallback(
   if (prevEditMode !== editMode) {
     setPrevEditMode(editMode);
     if (editMode) setCommentMode(false);
-    else { setSelectedEl(null); setStyleEdits({}); setTextEdit(null); }
+    else { setSelectedEl(null); setPendingEdits({}); }
   }
   const [prevCommentMode, setPrevCommentMode] = useState(commentMode);
   if (prevCommentMode !== commentMode) {
@@ -1386,9 +1453,9 @@ const persistProjectPreferences = useCallback(
       if (e.origin !== origin) return;
       const d = e.data as { source?: string; type?: string; element?: SelectedElement } | null;
       if (d?.source === 'claudable-editor' && d.type === 'selected' && d.element) {
+        // Keep pending edits of other elements: they're keyed by selector and
+        // all go into one "Apply to code".
         setSelectedEl(d.element);
-        setStyleEdits({});
-        setTextEdit(null);
       }
     };
     window.addEventListener('message', onMsg);
@@ -1396,44 +1463,43 @@ const persistProjectPreferences = useCallback(
   }, [previewUrl]);
 
   const applyStyle = useCallback((prop: string, value: string) => {
-    setStyleEdits((prev) => ({ ...prev, [prop]: value }));
+    if (!selectedEl) return;
+    setPendingEdits((prev) => withStyleEdit(prev, selectedEl, prop, value));
     postToPreview({ type: 'applyStyle', prop, value });
-  }, [postToPreview]);
+  }, [postToPreview, selectedEl]);
 
   const applyText = useCallback((value: string) => {
-    setTextEdit(value);
+    if (!selectedEl) return;
+    setPendingEdits((prev) => withTextEdit(prev, selectedEl, value));
     postToPreview({ type: 'applyText', value });
-  }, [postToPreview]);
+  }, [postToPreview, selectedEl]);
 
   const persistEdits = useCallback(async () => {
-    if (!selectedEl) return;
     // "Apply to code" launches an agent turn — refuse while one is running so it
     // doesn't race (the server would 409 anyway). The button is also disabled.
     if (hasActiveRequests) return;
-    const styleLines = Object.entries(styleEdits).map(([k, v]) => `  - ${k}: ${v}`);
-    const instruction = [
-      `Visual edit — persist these preview-only changes into the source code:`,
-      ``,
-      `Element: <${selectedEl.tag}>${selectedEl.id ? ` #${selectedEl.id}` : ''}${selectedEl.classes.length ? ` .${selectedEl.classes.join('.')}` : ''}`,
-      `CSS selector: ${selectedEl.selector}`,
-      selectedEl.text ? `Current text: "${selectedEl.text.slice(0, 100)}"` : '',
-      textEdit !== null && textEdit !== selectedEl.text ? `New text: "${textEdit}"` : '',
-      styleLines.length ? `Style changes:\n${styleLines.join('\n')}` : '',
-      ``,
-      `Locate this element in the source (match the selector / tag / classes) and apply the change idiomatically — prefer Tailwind classes or scoped styles as fits the codebase. Keep the diff minimal.`,
-    ].filter(Boolean).join('\n');
+    const instruction = buildPersistInstruction(pendingEdits);
+    if (!instruction) return;
     setPersistingEdit(true);
     try {
       // Always call the LATEST runAct (a fresh closure each render) via a ref, so
-      // the persisted edit uses the current model/mode — not a stale captured one.
-      await runActRef.current?.(instruction, []);
-      setStyleEdits({});
-      setTextEdit(null);
+      // the persisted edit uses the current model — and always in Act mode: it
+      // must change code even when the composer is in (read-only) Chat mode.
+      const res = await runActRef.current?.(instruction, [], 'act');
+      if (res && !res.ok) return; // keep the edits so the user can retry
+      setPendingEdits({});
       setEditMode(false);
     } finally {
       setPersistingEdit(false);
     }
-  }, [selectedEl, styleEdits, textEdit, hasActiveRequests]);
+  }, [pendingEdits, hasActiveRequests]);
+
+  /** Leave edit mode (then run `after`); asks first when unsaved edits would be lost. */
+  const exitEditMode = useCallback((after?: () => void) => {
+    const run = () => { setEditMode(false); after?.(); };
+    if (!editModeRef.current || pendingEditCount === 0) { run(); return; }
+    setDiscardEditsAction(() => run);
+  }, [pendingEditCount]);
 
   // --- Comments (pinned review annotations, Claudable-only) -----------------
   const postComments = useCallback((msg: Record<string, unknown>) => {
@@ -1589,7 +1655,7 @@ const persistProjectPreferences = useCallback(
     const list = previewErrors.map((e, i) => `${i + 1}. [${e.kind}] ${e.message}${e.at ? ` (${e.at})` : ''}`).join('\n');
     const instruction = `The live preview is throwing these runtime errors on route "${currentRouteRef.current || '/'}":\n\n${list}\n\nFind the cause in the source and fix it. Keep the change minimal and don't introduce new behavior.`;
     setPreviewErrors([]);
-    runActRef.current?.(instruction, []);
+    runActRef.current?.(instruction, [], 'act');
   }, [previewErrors]);
 
   // People picker for @-mentions in comments — the same org-scoped search that
@@ -1612,7 +1678,9 @@ const persistProjectPreferences = useCallback(
     }
   }, [projectId]);
 
-  const submitNewComment = useCallback(async (body: string, mentions: { id: string; name: string }[]): Promise<boolean> => {
+  // Comment actions return true on success, or the server's reason (string) on
+  // failure — CommentsLayer shows it inline (see chat-comment-action.ts).
+  const submitNewComment = useCallback(async (body: string, mentions: { id: string; name: string }[]): Promise<boolean | string> => {
     if (!composeAnchor) return false;
     const route = currentRoute || '/';
     const ctrl = new AbortController();
@@ -1622,26 +1690,41 @@ const persistProjectPreferences = useCallback(
         method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: ctrl.signal,
         body: JSON.stringify({ route, anchorSelector: composeAnchor.anchorSelector, relX: composeAnchor.relX, relY: composeAnchor.relY, body, mentions }),
       });
+      if (!r.ok) return await responseErrorMessage(r, t('chatpage.comments.saveFailed'));
       const j = await r.json().catch(() => null);
-      if (j?.success) { setComposeAnchor(null); await loadComments(route); return true; }
-      return false;
+      if (!j?.success) return apiErrorMessage(j, t('chatpage.comments.saveFailed'));
+      setComposeAnchor(null);
+      await loadComments(route);
+      return true;
     } catch {
-      return false;
+      return t('chatpage.comments.saveFailed');
     } finally {
       clearTimeout(timer);
     }
-  }, [composeAnchor, currentRoute, projectId, loadComments]);
+  }, [composeAnchor, currentRoute, projectId, loadComments, t]);
 
-  const resolveCommentById = useCallback(async (id: string, resolved: boolean) => {
-    await fetch(`${API_BASE}/api/projects/${projectId}/comments/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ resolved }) }).catch(() => {});
-    await loadComments(currentRoute || '/');
-  }, [projectId, currentRoute, loadComments]);
+  const resolveCommentById = useCallback(async (id: string, resolved: boolean): Promise<boolean | string> => {
+    try {
+      const r = await fetch(`${API_BASE}/api/projects/${projectId}/comments/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ resolved }) });
+      if (!r.ok) return await responseErrorMessage(r, t('chatpage.comments.resolveFailed'));
+      await loadComments(currentRoute || '/');
+      return true;
+    } catch {
+      return t('chatpage.comments.resolveFailed');
+    }
+  }, [projectId, currentRoute, loadComments, t]);
 
-  const deleteCommentById = useCallback(async (id: string) => {
-    await fetch(`${API_BASE}/api/projects/${projectId}/comments/${id}`, { method: 'DELETE' }).catch(() => {});
-    setActivePinId(null);
-    await loadComments(currentRoute || '/');
-  }, [projectId, currentRoute, loadComments]);
+  const deleteCommentById = useCallback(async (id: string): Promise<boolean | string> => {
+    try {
+      const r = await fetch(`${API_BASE}/api/projects/${projectId}/comments/${id}`, { method: 'DELETE' });
+      if (!r.ok) return await responseErrorMessage(r, t('chatpage.comments.deleteFailed'));
+      setActivePinId(null);
+      await loadComments(currentRoute || '/');
+      return true;
+    } catch {
+      return t('chatpage.comments.deleteFailed');
+    }
+  }, [projectId, currentRoute, loadComments, t]);
 
   const clearAllComments = useCallback(() => {
     setShowClearCommentsConfirm(true);
@@ -1649,30 +1732,91 @@ const persistProjectPreferences = useCallback(
 
   const confirmClearAllComments = useCallback(async () => {
     setShowClearCommentsConfirm(false);
-    await fetch(`${API_BASE}/api/projects/${projectId}/comments`, { method: 'DELETE' }).catch(() => {});
+    try {
+      const r = await fetch(`${API_BASE}/api/projects/${projectId}/comments`, { method: 'DELETE' });
+      if (!r.ok) {
+        toast.error(await responseErrorMessage(r, t('chatpage.comments.clearFailed')));
+        return;
+      }
+    } catch {
+      toast.error(t('chatpage.comments.clearFailed'));
+      return;
+    }
     setActivePinId(null); setComposeAnchor(null);
     await loadComments(currentRoute || '/');
-  }, [projectId, currentRoute, loadComments]);
+  }, [projectId, currentRoute, loadComments, toast, t]);
 
   // Create (or reuse) a public review link and copy it to the clipboard.
   const shareReviewLink = useCallback(async () => {
     try {
       const res = await fetch(`${API_BASE}/api/projects/${projectId}/share`, { method: 'POST' });
       const j = await res.json();
-      if (!j.success || !j.data?.token) throw new Error(j.message || 'Could not create share link');
+      if (!j.success || !j.data?.token) throw new Error(j.message || t('chatpage.share.failed'));
       const link = `${window.location.origin}/share/${j.data.token}`;
       try {
         await navigator.clipboard.writeText(link);
-        toast.success('Review link copied to clipboard');
+        toast.success(t('chatpage.share.copied'));
       } catch {
-        toast.info(`Review link: ${link}`);
+        toast.info(t('chatpage.share.link', { link }));
       }
       setShareCopied(true);
       setTimeout(() => setShareCopied(false), 2000);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Could not create share link');
+      toast.error(e instanceof Error ? e.message : t('chatpage.share.failed'));
     }
+  }, [projectId, toast, t]);
+
+  // Export the current preview route as PDF. Fetch first so a server error
+  // (e.g. preview not running) becomes a toast instead of raw JSON in a tab.
+  const exportPdf = useCallback(async () => {
+    const route = currentRouteRef.current || '/';
+    toast.info(t('chatpage.pdf.generating'));
+    try {
+      const res = await fetch(`${API_BASE}/api/projects/${projectId}/export-pdf?path=${encodeURIComponent(route)}`);
+      if (!res.ok) {
+        toast.error(await responseErrorMessage(res, t('chatpage.pdf.failed')));
+        return;
+      }
+      const blob = await res.blob();
+      const disposition = res.headers.get('Content-Disposition') ?? '';
+      const match = /filename="([^"]+)"/u.exec(disposition);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = match?.[1] ?? 'preview.pdf';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 10_000);
+    } catch (e) {
+      toast.error(e instanceof Error && e.message ? e.message : t('chatpage.pdf.failed'));
+    }
+  }, [projectId, toast, t]);
+
+  // One-shot notice left by the home page after creating this project.
+  useEffect(() => {
+    if (!projectId) return;
+    const key = `${POST_CREATE_NOTICE_PREFIX}${projectId}`;
+    let raw: string | null = null;
+    try {
+      raw = sessionStorage.getItem(key);
+      if (raw !== null) sessionStorage.removeItem(key);
+    } catch { /* storage unavailable */ }
+    const notice = readPostCreateNotice(raw);
+    if (!notice) return;
+    if (notice.type === 'error') toast.error(notice.message);
+    else toast.info(notice.message);
   }, [projectId, toast]);
+
+  // Close the device menu on Escape.
+  useEffect(() => {
+    if (!deviceMenuOpen) return;
+    const onKey = (e: globalThis.KeyboardEvent) => {
+      if (e.key === 'Escape') setDeviceMenuOpen(false);
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [deviceMenuOpen]);
 
   // --- Device frame fit-scaling: keep any device frame inside the pane ---
   const currentDevice = DEVICE_PRESETS.find((d) => d.id === deviceId) ?? DEVICE_PRESETS[0];
@@ -2009,12 +2153,23 @@ const persistProjectPreferences = useCallback(
     });
   }
 
+  /** Show `text` in the editor as the pristine content of `path` (no unsaved changes). */
+  const showFileContent = useCallback((path: string, text: string, lock: FileLock | null) => {
+    setContent(text);
+    setEditedContent(text);
+    editedContentRef.current = text;
+    setHasUnsavedChanges(false);
+    setSelectedFile(path);
+    setFileLock(lock);
+    setIsFileUpdating(false);
+  }, []);
+
   const openFile = useCallback(async (path: string) => {
     try {
       if (hasUnsavedChanges && path !== selectedFile) {
         const shouldDiscard =
           typeof window !== 'undefined'
-            ? window.confirm('You have unsaved changes. Discard them and open the new file?')
+            ? window.confirm(t('chatpage.code.discardAndOpen'))
             : true;
         if (!shouldDiscard) {
           return;
@@ -2024,27 +2179,29 @@ const persistProjectPreferences = useCallback(
       setSaveFeedback('idle');
       setSaveError(null);
 
+      if (isBinaryPath(path)) {
+        showFileContent(path, t('chatpage.code.binaryNote'), { kind: 'binary' });
+        return;
+      }
+
       const r = await fetch(`${API_BASE}/api/repo/${projectId}/file?path=${encodeURIComponent(path)}`);
       
       if (!r.ok) {
-        console.error('Failed to load file:', r.status, r.statusText);
-        const fallback = '// Failed to load file content';
-        setContent(fallback);
-        setEditedContent(fallback);
-        editedContentRef.current = fallback;
-        setHasUnsavedChanges(false);
-        setSelectedFile(path);
+        // e.g. "File too large to display" (>500KB) or "File not found": show the
+        // server's reason read-only — never as editable, saveable content.
+        const reason = await responseErrorMessage(r, t('chatpage.code.loadFailed'));
+        console.error('Failed to load file:', r.status, reason);
+        showFileContent(path, t('chatpage.code.loadErrorNote', { message: reason }), { kind: 'error', message: reason });
         return;
       }
       
       const data = await r.json();
       const fileContent = typeof data?.content === 'string' ? data.content : '';
-      setContent(fileContent);
-      setEditedContent(fileContent);
-      editedContentRef.current = fileContent;
-      setHasUnsavedChanges(false);
-      setSelectedFile(path);
-      setIsFileUpdating(false);
+      if (looksBinaryContent(fileContent)) {
+        showFileContent(path, t('chatpage.code.binaryNote'), { kind: 'binary' });
+        return;
+      }
+      showFileContent(path, fileContent, canWrite ? null : { kind: 'readonly' });
 
       requestAnimationFrame(() => {
         if (editorRef.current) {
@@ -2061,17 +2218,15 @@ const persistProjectPreferences = useCallback(
       });
     } catch (error) {
       console.error('Error opening file:', error);
-      const fallback = '// Error loading file';
-      setContent(fallback);
-      setEditedContent(fallback);
-      editedContentRef.current = fallback;
-      setHasUnsavedChanges(false);
-      setSelectedFile(path);
+      const reason = error instanceof Error && error.message ? error.message : t('chatpage.code.loadFailed');
+      showFileContent(path, t('chatpage.code.loadErrorNote', { message: reason }), { kind: 'error', message: reason });
     }
-  }, [projectId, hasUnsavedChanges, selectedFile]);
+  }, [projectId, hasUnsavedChanges, selectedFile, t, showFileContent, canWrite]);
 
   // Reload currently selected file
   const reloadCurrentFile = useCallback(async () => {
+    // A locked view (error/binary placeholder) has no real content to refresh.
+    if (fileLockRef.current && fileLockRef.current.kind !== 'readonly') return;
     if (selectedFile && !showPreview && !hasUnsavedChanges) {
       try {
         const r = await fetch(`${API_BASE}/api/repo/${projectId}/file?path=${encodeURIComponent(selectedFile)}`);
@@ -2133,6 +2288,7 @@ const persistProjectPreferences = useCallback(
   }, [hljs, editedContent, selectedFile]);
 
   const onEditorChange = useCallback((event: ChangeEvent<HTMLTextAreaElement>) => {
+    if (fileLockRef.current) return; // read-only view: ignore edits
     const value = event.target.value;
     setEditedContent(value);
     editedContentRef.current = value;
@@ -2159,6 +2315,11 @@ const persistProjectPreferences = useCallback(
     if (!selectedFile || isSavingFile || !hasUnsavedChanges) {
       return;
     }
+    if (fileLockRef.current) {
+      setSaveFeedback('error');
+      setSaveError(t('chatpage.code.saveBlocked'));
+      return;
+    }
 
     const contentToSave = editedContentRef.current;
     setIsSavingFile(true);
@@ -2173,7 +2334,7 @@ const persistProjectPreferences = useCallback(
       });
 
       if (!response.ok) {
-        let errorMessage = 'Failed to save file';
+        let errorMessage = t('chatpage.code.saveFailed');
         try {
           const data = await response.clone().json();
           errorMessage = data?.error || data?.message || errorMessage;
@@ -2199,11 +2360,11 @@ const persistProjectPreferences = useCallback(
     } catch (error) {
       console.error('Failed to save file:', error);
       setSaveFeedback('error');
-      setSaveError(error instanceof Error ? error.message : 'Failed to save file');
+      setSaveError(error instanceof Error ? error.message : t('chatpage.code.saveFailed'));
     } finally {
       setIsSavingFile(false);
     }
-  }, [selectedFile, isSavingFile, hasUnsavedChanges, projectId, refreshPreview]);
+  }, [selectedFile, isSavingFile, hasUnsavedChanges, projectId, refreshPreview, t]);
 
   const handleEditorKeyDown = useCallback((event: KeyboardEvent<HTMLTextAreaElement>) => {
     if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 's') {
@@ -2213,6 +2374,7 @@ const persistProjectPreferences = useCallback(
     }
 
     if (event.key === 'Tab') {
+      if (fileLockRef.current) return; // read-only: let Tab move focus
       event.preventDefault();
       const el = event.currentTarget;
       const start = el.selectionStart ?? 0;
@@ -2370,6 +2532,7 @@ const persistProjectPreferences = useCallback(
 
       setProjectName(project.name || `Project ${projectId.slice(0, 8)}`);
       setProjectOrg(project.organization ?? null);
+      setPermissions(parsePermissions(project.permissions));
 
       const projectCli = sanitizeCli(rawPreferredCli || preferredCli);
       if (rawPreferredCli) {
@@ -2603,7 +2766,7 @@ const persistProjectPreferences = useCallback(
     };
   }, [createStableMessageHandlers]);
 
-  runActRef.current = (m, i) => runAct(m, i);
+  runActRef.current = (m, i, modeOverride) => runAct(m, i, modeOverride);
   currentRouteRef.current = currentRoute;
 
   // CLI parity: Stop/Esc interrupts the running turn server-side. The SSE
@@ -2625,17 +2788,21 @@ const persistProjectPreferences = useCallback(
     }
   }
 
-  async function runAct(messageOverride?: string, externalImages?: any[]) {
+  async function runAct(messageOverride?: string, externalImages?: any[], modeOverride?: 'act' | 'chat') {
     let finalMessage = messageOverride || prompt;
     const imagesToUse = externalImages || uploadedImages;
+    // Programmatic turns that must change code (visual edits, "fix with AI",
+    // design apply) pass 'act'; typed messages follow the composer's mode.
+    const turnMode = modeOverride ?? mode;
 
     if (!finalMessage.trim() && imagesToUse.length === 0) {
-      toast.info('Please enter a task description or upload an image.');
+      toast.info(t('chatpage.toast.emptyPrompt'));
       return { ok: false, busy: false };
     }
 
-    // Add additional instructions in Chat Mode
-    if (mode === 'chat') {
+    // Chat mode is enforced server-side (read-only tools via `mode`); the short
+    // suffix stays as belt-and-braces for older servers.
+    if (turnMode === 'chat') {
       finalMessage = finalMessage + "\n\nDo not modify code, only answer to the user's request.";
     }
 
@@ -2645,7 +2812,7 @@ const persistProjectPreferences = useCallback(
       imageCount: imagesToUse.length,
       cliPreference: preferredCli,
       model: selectedModel,
-      mode
+      mode: turnMode
     });
 
     // Check for duplicate pending requests
@@ -2735,7 +2902,7 @@ const persistProjectPreferences = useCallback(
             processedImages.push(uploaded);
           } catch (uploadError) {
             console.error('Image upload failed:', uploadError);
-            toast.error('Failed to upload image. Please try again.');
+            toast.error(t('chatpage.toast.imageUploadFailed'));
             setIsRunning(false);
             // Remove from pending requests
             pendingRequestsRef.current.delete(requestFingerprint);
@@ -2754,6 +2921,7 @@ const persistProjectPreferences = useCallback(
         requestId,
         selectedModel,
         thinkingMode,
+        mode: turnMode,
       };
 
 
@@ -2832,7 +3000,7 @@ const persistProjectPreferences = useCallback(
           if (r.status === 409 && !isHardBusyError(errorMessage)) {
             return { ok: false, busy: true };
           }
-          toast.error(`Failed to send message: ${errorMessage}`);
+          toast.error(t('chatpage.toast.sendFailed', { message: errorMessage }));
           return { ok: false, busy: false };
         }
       } catch (fetchError: any) {
@@ -2846,7 +3014,7 @@ const persistProjectPreferences = useCallback(
             }
           }
 
-          toast.error('Request timed out after 60 seconds. Please check your connection and try again.');
+          toast.error(t('chatpage.toast.sendTimeout'));
           return { ok: false, busy: false };
         }
         throw fetchError;
@@ -2878,7 +3046,7 @@ const persistProjectPreferences = useCallback(
           ? result.user_message_id
           : '';
 
-      createRequest(resolvedRequestId, userMessageId, finalMessage, mode);
+      createRequest(resolvedRequestId, userMessageId, finalMessage, turnMode);
       
       // Refresh data after completion
       await loadTree('.');
@@ -2906,7 +3074,7 @@ const persistProjectPreferences = useCallback(
       }
 
       const errorMessage = error?.message || String(error);
-      toast.error(`Failed to send message: ${errorMessage}. Please try again — check the console if it persists.`);
+      toast.error(t('chatpage.toast.sendFailedRetry', { message: errorMessage }));
       return { ok: false, busy: false };
     } finally {
       setIsRunning(false);
@@ -2953,7 +3121,7 @@ const persistProjectPreferences = useCallback(
   const handleRetryInitialization = async () => {
     setProjectStatus('initializing');
     setIsInitializing(true);
-    setInitializationMessage('Retrying project initialization...');
+    setInitializationMessage(t('chatpage.init.retrying'));
     
     try {
       const response = await fetch(`${API_BASE}/api/projects/${projectId}/retry-initialization`, {
@@ -2966,7 +3134,7 @@ const persistProjectPreferences = useCallback(
     } catch (error) {
       console.error('Failed to retry initialization:', error);
       setProjectStatus('failed');
-      setInitializationMessage('Failed to retry initialization. Please try again.');
+      setInitializationMessage(t('chatpage.init.retryFailed'));
     }
   };
 
@@ -3175,17 +3343,36 @@ const persistProjectPreferences = useCallback(
             className="h-full flex flex-col min-w-0"
           >
             {editMode ? (
-              <VisualEditorPanel
-                element={selectedEl}
-                edits={styleEdits}
-                textEdit={textEdit}
-                onApplyStyle={applyStyle}
-                onApplyText={applyText}
-                onPersist={persistEdits}
-                onClose={() => setEditMode(false)}
-                persisting={persistingEdit}
-                busy={hasActiveRequests}
-              />
+              <div className="h-full flex flex-col min-h-0">
+                {/* Edits on OTHER elements than the selected one stay pending; the
+                    panel only counts the selected element, so surface the total. */}
+                {pendingEditCount > countElementEdits(selectedEntry) && (
+                  <div role="status" className="shrink-0 flex items-center justify-between gap-2 px-4 py-2 text-xs bg-amber-50 dark:bg-amber-500/10 text-amber-800 dark:text-amber-200 border-b border-amber-200 dark:border-amber-500/20">
+                    <span>{t('chatpage.visual.pendingSummary', { count: pendingEditCount, elements: pendingElementCount })}</span>
+                    <button
+                      type="button"
+                      onClick={() => void persistEdits()}
+                      disabled={persistingEdit || hasActiveRequests}
+                      className="shrink-0 font-semibold underline disabled:opacity-50 disabled:no-underline"
+                    >
+                      {t('chatpage.visual.applyAll', { count: pendingEditCount })}
+                    </button>
+                  </div>
+                )}
+                <div className="flex-1 min-h-0">
+                  <VisualEditorPanel
+                    element={selectedEl}
+                    edits={styleEdits}
+                    textEdit={textEdit}
+                    onApplyStyle={applyStyle}
+                    onApplyText={applyText}
+                    onPersist={persistEdits}
+                    onClose={() => exitEditMode()}
+                    persisting={persistingEdit}
+                    busy={hasActiveRequests}
+                  />
+                </div>
+              </div>
             ) : showCommentsList ? (
               <CommentsListPanel
                 comments={allComments}
@@ -3202,7 +3389,8 @@ const persistProjectPreferences = useCallback(
                 <button 
                   onClick={() => router.push('/')}
                   className="flex items-center justify-center w-8 h-8 text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-white/6 rounded-full transition-colors"
-                  title="Back to home"
+                  title={t('chatpage.header.back')}
+                  aria-label={t('chatpage.header.back')}
                 >
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                     <path d="M19 12H5M12 19L5 12L12 5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
@@ -3221,7 +3409,7 @@ const persistProjectPreferences = useCallback(
                       autoFocus
                       maxLength={80}
                       className="text-lg font-semibold text-gray-900 dark:text-gray-50 bg-transparent border-b border-brand-500 focus:outline-hidden w-full max-w-md"
-                      aria-label="Project name"
+                      aria-label={t('chatpage.header.projectName')}
                     />
                   ) : (
                     <button
@@ -3231,10 +3419,10 @@ const persistProjectPreferences = useCallback(
                         setNameDraft(projectName);
                         setEditingName(true);
                       }}
-                      title="Rename project"
+                      title={t('chatpage.header.rename')}
                       className="group flex items-center gap-1.5 text-left"
                     >
-                      <h1 className="text-lg font-semibold text-gray-900 dark:text-gray-50 truncate">{projectName || 'Loading...'}</h1>
+                      <h1 className="text-lg font-semibold text-gray-900 dark:text-gray-50 truncate">{projectName || t('common.loading')}</h1>
                       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-gray-300 dark:text-gray-600 opacity-0 group-hover:opacity-100 transition-opacity">
                         <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
                       </svg>
@@ -3242,7 +3430,7 @@ const persistProjectPreferences = useCallback(
                   )}
                   {projectOrg && (
                     <span
-                      title={projectOrg.type === 'klant' ? `Klantorganisatie: ${projectOrg.name}` : `Organisatie: ${projectOrg.name}`}
+                      title={projectOrg.type === 'klant' ? t('chatpage.header.customerOrg', { name: projectOrg.name }) : t('chatpage.header.org', { name: projectOrg.name })}
                       className={`inline-flex items-center max-w-[12rem] truncate text-[11px] font-medium px-1.5 py-0.5 rounded-sm shrink-0 ${
                         projectOrg.type === 'klant'
                           ? 'text-purple-700 dark:text-purple-300 bg-purple-100 dark:bg-purple-500/20'
@@ -3265,13 +3453,13 @@ const persistProjectPreferences = useCallback(
                       maxLength={160}
                       placeholder={t('topbar.addDescription')}
                       className="text-sm text-gray-500 dark:text-gray-400 bg-transparent border-b border-brand-500 focus:outline-hidden w-full max-w-md mt-0.5"
-                      aria-label="Project description"
+                      aria-label={t('chatpage.header.projectDescription')}
                     />
                   ) : projectName ? (
                     <button
                       type="button"
                       onClick={() => { setDescDraft(projectDescription); setEditingDesc(true); }}
-                      title="Edit description"
+                      title={t('chatpage.header.editDescription')}
                       className="group flex items-center gap-1.5 text-left"
                     >
                       <p className={`text-sm truncate ${projectDescription ? 'text-gray-500 dark:text-gray-400' : 'text-gray-400 dark:text-gray-600 italic'}`}>
@@ -3293,6 +3481,7 @@ const persistProjectPreferences = useCallback(
                   projectId={projectId}
                   serverBusy={hasActiveRequests}
                   onReverted={() => { setTimeout(() => refreshPreview(), 400); }}
+                  canRevert={permissions?.fullEdit !== false}
                   onAddUserMessage={(handlers) => {
                     messageHandlersRef.current = handlers;
 
@@ -3318,8 +3507,8 @@ const persistProjectPreferences = useCallback(
             <div className="p-4 rounded-bl-2xl">
               {queuedMessages.length > 0 && (
                 <div className="mb-2 flex items-center justify-between gap-2 px-3 py-1.5 rounded-lg bg-gray-100 dark:bg-white/6 text-xs text-gray-600 dark:text-gray-300">
-                  <span>{queuedMessages.length} message{queuedMessages.length > 1 ? 's' : ''} queued — will send after the current turn.</span>
-                  <button onClick={() => setQueuedMessages([])} className="text-gray-400 hover:text-red-500">Clear</button>
+                  <span role="status">{queuedMessages.length === 1 ? t('chatpage.queue.one') : t('chatpage.queue.many', { count: queuedMessages.length })}</span>
+                  <button type="button" onClick={() => setQueuedMessages([])} className="text-gray-400 hover:text-red-500">{t('chatpage.queue.clear')}</button>
                 </div>
               )}
               <CreditsMeter projectId={projectId} refreshKey={agentStatus?.updatedAt} />
@@ -3428,7 +3617,8 @@ const persistProjectPreferences = useCallback(
             onMouseDown={startChatResize}
             role="separator"
             aria-orientation="vertical"
-            title="Drag to resize"
+            title={t('chatpage.layout.dragToResize')}
+            aria-label={t('chatpage.layout.dragToResize')}
             className="group relative z-30 h-full w-px shrink-0 cursor-col-resize bg-gray-200 dark:bg-white/6 hover:bg-brand-500 transition-colors"
           >
             {/* wider invisible hit area for easier grabbing */}
@@ -3459,8 +3649,8 @@ const persistProjectPreferences = useCallback(
                           : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 '
                       }`}
                       onClick={() => { setDesignMode(false); setShowPreview(true); }}
-                      title="Preview"
-                      aria-label="Preview"
+                      title={t('chatpage.view.preview')}
+                      aria-label={t('chatpage.view.preview')}
                       aria-pressed={showPreview && !designMode}
                     >
                       <span className="w-4 h-4 flex items-center justify-center"><FaDesktop size={16} /></span>
@@ -3472,8 +3662,8 @@ const persistProjectPreferences = useCallback(
                           : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 '
                       }`}
                       onClick={() => { setDesignMode(false); setShowPreview(false); }}
-                      title="Code"
-                      aria-label="Code"
+                      title={t('chatpage.view.code')}
+                      aria-label={t('chatpage.view.code')}
                       aria-pressed={!showPreview && !designMode}
                     >
                       <span className="w-4 h-4 flex items-center justify-center"><FaCode size={16} /></span>
@@ -3484,9 +3674,9 @@ const persistProjectPreferences = useCallback(
                           ? 'bg-white dark:bg-white/12 text-gray-900 dark:text-gray-50 '
                           : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 '
                       }`}
-                      onClick={() => { setDesignMode(true); setEditMode(false); setCommentMode(false); }}
-                      title="Design"
-                      aria-label="Design"
+                      onClick={() => exitEditMode(() => { setDesignMode(true); setCommentMode(false); })}
+                      title={t('chatpage.view.design')}
+                      aria-label={t('chatpage.view.design')}
                       aria-pressed={designMode}
                     >
                       <span className="w-4 h-4 flex items-center justify-center">
@@ -3499,32 +3689,41 @@ const persistProjectPreferences = useCallback(
                   {showPreview && !designMode && !editMode && !commentMode && previewUrl && (
                     <div className="flex items-center gap-3">
                       {/* Route Navigation */}
-                      <div className="h-9 flex items-center bg-gray-100 dark:bg-white/6 rounded-lg px-3 border border-gray-200 dark:border-white/8 ">
-                        <span className="text-gray-400 dark:text-gray-500 mr-2">
+                      <form
+                        className="h-9 flex items-center bg-gray-100 dark:bg-white/6 rounded-lg px-3 border border-gray-200 dark:border-white/8 "
+                        onSubmit={(e) => {
+                          e.preventDefault();
+                          const draft = routeDraft.trim().replace(/^\/+/u, '');
+                          navigateToRoute(`/${draft}`);
+                        }}
+                      >
+                        <span className="text-gray-400 dark:text-gray-500 mr-2" aria-hidden="true">
                           <FaHome size={12} />
                         </span>
-                        <span className="text-sm text-gray-500 dark:text-gray-400 mr-1">/</span>
+                        <span className="text-sm text-gray-500 dark:text-gray-400 mr-1" aria-hidden="true">/</span>
                         <input
                           type="text"
-                          value={currentRoute.startsWith('/') ? currentRoute.slice(1) : currentRoute}
-                          onChange={(e) => {
-                            const value = e.target.value;
-                            setCurrentRoute(value ? `/${value}` : '/');
-                          }}
+                          value={routeDraft}
+                          onChange={(e) => setRouteDraft(e.target.value)}
                           onKeyDown={(e) => {
-                            if (e.key === 'Enter') {
-                              navigateToRoute(currentRoute);
+                            if (e.key === 'Escape') {
+                              e.preventDefault();
+                              setRouteDraft(currentRoute.startsWith('/') ? currentRoute.slice(1) : currentRoute);
                             }
                           }}
+                          aria-label={t('chatpage.route.inputLabel')}
+                          placeholder={t('chatpage.route.placeholder')}
                           className="bg-transparent text-sm text-gray-700 dark:text-gray-200 outline-hidden w-40"
                         />
                         <button
-                          onClick={() => navigateToRoute(currentRoute)}
+                          type="submit"
+                          aria-label={t('chatpage.route.go')}
+                          title={t('chatpage.route.go')}
                           className="ml-2 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 "
                         >
                           <FaArrowRight size={12} />
                         </button>
-                      </div>
+                      </form>
                       
                       {/* Action Buttons Group */}
                       <div className="flex items-center gap-1.5">
@@ -3533,8 +3732,8 @@ const persistProjectPreferences = useCallback(
                           // refreshPreview keeps the CURRENT route (`iframe.src = iframe.src`
                           // reloaded the last parent-set URL, losing in-app navigation).
                           onClick={refreshPreview}
-                          title="Refresh preview"
-                          aria-label="Refresh preview"
+                          title={t('chatpage.toolbar.refresh')}
+                          aria-label={t('chatpage.toolbar.refresh')}
                         >
                           <FaRedo size={14} />
                         </button>
@@ -3547,8 +3746,8 @@ const persistProjectPreferences = useCallback(
                             const suffix = currentRoute && currentRoute !== '/' ? currentRoute : '';
                             window.open(`${previewUrl}${suffix}`, '_blank', 'noopener');
                           }}
-                          title="Open preview in new tab"
-                          aria-label="Open preview in new tab"
+                          title={t('chatpage.toolbar.openInTab')}
+                          aria-label={t('chatpage.toolbar.openInTab')}
                         >
                           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
                             <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
@@ -3563,16 +3762,19 @@ const persistProjectPreferences = useCallback(
                             <button
                               onClick={() => setDeviceMenuOpen((v) => !v)}
                               className="h-full flex items-center gap-1 px-2.5 text-sm text-gray-700 dark:text-gray-200 hover:text-gray-900 dark:hover:text-gray-100 rounded-l-lg"
-                              title={`Device: ${currentDevice.name}`}
+                              title={t('chatpage.toolbar.device', { name: currentDevice.name })}
+                              aria-label={t('chatpage.toolbar.device', { name: currentDevice.name })}
+                              aria-haspopup="menu"
+                              aria-expanded={deviceMenuOpen}
                             >
                               {currentDevice.desktop ? <FaDesktop size={14} /> : <FaMobileAlt size={14} />}
                               <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9" /></svg>
                             </button>
                             {!currentDevice.desktop && (
                               <button
-                                aria-label="Rotate orientation"
+                                aria-label={t('chatpage.toolbar.rotate')}
                                 onClick={() => setOrientation((o) => (o === 'portrait' ? 'landscape' : 'portrait'))}
-                                title={orientation === 'portrait' ? 'Rotate to landscape' : 'Rotate to portrait'}
+                                title={orientation === 'portrait' ? t('chatpage.toolbar.rotateLandscape') : t('chatpage.toolbar.rotatePortrait')}
                                 className="h-7 w-7 mr-0.5 flex items-center justify-center rounded-sm text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-white transition-colors border-l border-gray-200 dark:border-white/8"
                               >
                                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2 12a10 10 0 0 1 10-10c2.76 0 5.26 1.12 7.07 2.93M22 12a10 10 0 0 1-10 10c-2.76 0-5.26-1.12-7.07-2.93" /><polyline points="19 2 19 5 16 5" /><polyline points="5 22 5 19 8 19" /></svg>
@@ -3582,10 +3784,12 @@ const persistProjectPreferences = useCallback(
                           {deviceMenuOpen && (
                             <>
                               <div className="fixed inset-0 z-40" onClick={() => setDeviceMenuOpen(false)} />
-                              <div className="absolute left-0 top-full mt-1 z-50 w-56 max-h-80 overflow-y-auto bg-white dark:bg-[#181310] rounded-lg shadow-xl border border-gray-200 dark:border-white/8 py-1">
+                              <div role="menu" className="absolute left-0 top-full mt-1 z-50 w-56 max-h-80 overflow-y-auto bg-white dark:bg-[#181310] rounded-lg shadow-xl border border-gray-200 dark:border-white/8 py-1">
                                 {DEVICE_PRESETS.map((d) => (
                                   <button
                                     key={d.id}
+                                    role="menuitemradio"
+                                    aria-checked={d.id === deviceId}
                                     onClick={() => { setDeviceId(d.id); setDeviceMenuOpen(false); }}
                                     className={`w-full flex items-center justify-between gap-2 px-3 py-1.5 text-sm text-left hover:bg-gray-50 dark:hover:bg-white/6 ${d.id === deviceId ? 'text-brand-500 font-medium' : 'text-gray-700 dark:text-gray-200'}`}
                                   >
@@ -3647,12 +3851,12 @@ const persistProjectPreferences = useCallback(
                     )}
                   </div>
                   {/* Settings — kept visible (common action); not for a customer in a customer project */}
-                  {!customerViewer && (
+                  {!customerViewer && canConfigure && (
                   <button
                     onClick={() => { setSettingsInitialTab('general'); setShowGlobalSettings(true); }}
                     className="h-9 w-9 flex items-center justify-center bg-gray-100 dark:bg-white/6 text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-200 dark:hover:bg-white/6 rounded-lg transition-colors"
-                    title="Settings"
-                    aria-label="Settings"
+                    title={t('chatpage.toolbar.settings')}
+                    aria-label={t('chatpage.toolbar.settings')}
                   >
                     <FaCog size={16} />
                   </button>
@@ -3667,8 +3871,8 @@ const persistProjectPreferences = useCallback(
                           ? 'bg-gray-200 dark:bg-white/10 text-gray-900 dark:text-gray-100 border-gray-300 dark:border-white/15'
                           : 'bg-gray-100 dark:bg-white/6 text-gray-600 dark:text-gray-300 border-transparent hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-200 dark:hover:bg-white/6'
                       }`}
-                      title="More tools"
-                      aria-label="More tools"
+                      title={t('chatpage.menu.moreTools')}
+                      aria-label={t('chatpage.menu.moreTools')}
                       aria-haspopup="menu"
                       aria-expanded={overflowMenuOpen}
                     >
@@ -3679,16 +3883,20 @@ const persistProjectPreferences = useCallback(
                         <div className="fixed inset-0 z-40" onClick={() => setOverflowMenuOpen(false)} />
                         <div role="menu" className="absolute right-0 top-full mt-1 z-50 w-60 max-h-[70vh] overflow-y-auto bg-white dark:bg-[#181310] rounded-lg shadow-xl border border-gray-200 dark:border-white/8 py-1">
                           {/* Edit elements (visual editor) */}
-                          {previewUrl && (
+                          {previewUrl && canWrite && (
                             <button
                               role="menuitem"
-                              onClick={() => { setDesignMode(false); setShowPreview(true); setEditMode((v) => !v); setOverflowMenuOpen(false); }}
+                              onClick={() => {
+                                setOverflowMenuOpen(false);
+                                if (editMode) { exitEditMode(); return; }
+                                setDesignMode(false); setShowPreview(true); setEditMode(true);
+                              }}
                               disabled={bridgeAbsent}
-                              title={bridgeAbsent ? 'Visual editing needs the preview bridge (currently Nuxt only)' : undefined}
+                              title={bridgeAbsent ? t('chatpage.menu.editNeedsBridge') : undefined}
                               className={`w-full flex items-center gap-2.5 px-3 py-1.5 text-sm text-left transition-colors disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-50 dark:hover:bg-white/6 ${editMode ? 'text-brand-500 font-medium' : 'text-gray-700 dark:text-gray-200'}`}
                             >
                               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0"><path d="M12 20h9" /><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" /></svg>
-                              <span>Edit elements</span>
+                              <span>{t('chatpage.menu.editElements')}</span>
                             </button>
                           )}
 
@@ -3696,13 +3904,16 @@ const persistProjectPreferences = useCallback(
                           {previewUrl && (
                             <button
                               role="menuitem"
-                              onClick={() => { setDesignMode(false); setShowPreview(true); setCommentMode((v) => !v); setOverflowMenuOpen(false); }}
+                              onClick={() => {
+                                setOverflowMenuOpen(false);
+                                exitEditMode(() => { setDesignMode(false); setShowPreview(true); setCommentMode((v) => !v); });
+                              }}
                               disabled={bridgeAbsent}
-                              title={bridgeAbsent ? 'Comments need the preview bridge (currently Nuxt only)' : undefined}
+                              title={bridgeAbsent ? t('chatpage.menu.commentsNeedBridge') : undefined}
                               className={`w-full flex items-center gap-2.5 px-3 py-1.5 text-sm text-left transition-colors disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-50 dark:hover:bg-white/6 ${commentMode ? 'text-brand-500 font-medium' : 'text-gray-700 dark:text-gray-200'}`}
                             >
                               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2Z" /></svg>
-                              <span>Comments{comments.length > 0 ? ` (${comments.length})` : ''}</span>
+                              <span>{comments.length > 0 ? t('chatpage.menu.commentsCount', { count: comments.length }) : t('chatpage.menu.comments')}</span>
                             </button>
                           )}
 
@@ -3714,19 +3925,19 @@ const persistProjectPreferences = useCallback(
                               className={`w-full flex items-center gap-2.5 px-3 py-1.5 text-sm text-left transition-colors hover:bg-gray-50 dark:hover:bg-white/6 ${showCommentsList ? 'text-brand-500 font-medium' : 'text-gray-700 dark:text-gray-200'}`}
                             >
                               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0"><line x1="8" y1="6" x2="21" y2="6" /><line x1="8" y1="12" x2="21" y2="12" /><line x1="8" y1="18" x2="21" y2="18" /><line x1="3" y1="6" x2="3.01" y2="6" /><line x1="3" y1="12" x2="3.01" y2="12" /><line x1="3" y1="18" x2="3.01" y2="18" /></svg>
-                              <span>Comments list</span>
+                              <span>{t('chatpage.menu.commentsList')}</span>
                             </button>
                           )}
 
                           {/* Clear all comments */}
-                          {commentMode && previewUrl && (
+                          {commentMode && previewUrl && canManage && (
                             <button
                               role="menuitem"
                               onClick={() => { clearAllComments(); setOverflowMenuOpen(false); }}
                               className="w-full flex items-center gap-2.5 px-3 py-1.5 text-sm text-left text-gray-700 dark:text-gray-200 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40 transition-colors"
                             >
                               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0"><polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /><line x1="10" y1="11" x2="10" y2="17" /><line x1="14" y1="11" x2="14" y2="17" /></svg>
-                              <span>Clear comments</span>
+                              <span>{t('chatpage.menu.clearComments')}</span>
                             </button>
                           )}
 
@@ -3737,7 +3948,7 @@ const persistProjectPreferences = useCallback(
                             className="w-full flex items-center gap-2.5 px-3 py-1.5 text-sm text-left text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-white/6 transition-colors"
                           >
                             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0"><circle cx="12" cy="12" r="10" /><line x1="12" y1="16" x2="12" y2="12" /><line x1="12" y1="8" x2="12.01" y2="8" /></svg>
-                            <span>Project architecture</span>
+                            <span>{t('chatpage.menu.architecture')}</span>
                           </button>
 
                           {/* Skills */}
@@ -3747,34 +3958,32 @@ const persistProjectPreferences = useCallback(
                             className="w-full flex items-center gap-2.5 px-3 py-1.5 text-sm text-left text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-white/6 transition-colors"
                           >
                             <span className="shrink-0 w-[15px] flex items-center justify-center"><FaPuzzlePiece size={14} /></span>
-                            <span>Skills</span>
+                            <span>{t('chatpage.menu.skills')}</span>
                           </button>
 
                           {/* Export the current preview page as PDF (headless Chromium print) */}
                           {previewUrl && (
                             <button
                               role="menuitem"
-                              onClick={() => {
-                                const route = currentRouteRef.current || '/';
-                                window.open(`${API_BASE}/api/projects/${projectId}/export-pdf?path=${encodeURIComponent(route)}`, '_blank');
-                                setOverflowMenuOpen(false);
-                              }}
+                              onClick={() => { setOverflowMenuOpen(false); void exportPdf(); }}
                               className="w-full flex items-center gap-2.5 px-3 py-1.5 text-sm text-left text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-white/6 transition-colors"
                             >
                               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" /><line x1="12" y1="18" x2="12" y2="12" /><polyline points="9 15 12 18 15 15" /></svg>
-                              <span>Export PDF</span>
+                              <span>{t('chatpage.menu.exportPdf')}</span>
                             </button>
                           )}
 
-                          {/* Import from Claude Design */}
+                          {/* Import from Claude Design (applies via an agent turn → needs write) */}
+                          {canWrite && (
                           <button
                             role="menuitem"
                             onClick={() => { setShowDesignImport(true); setOverflowMenuOpen(false); }}
                             className="w-full flex items-center gap-2.5 px-3 py-1.5 text-sm text-left text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-white/6 transition-colors"
                           >
                             <span className="shrink-0 w-[15px] flex items-center justify-center"><FaFileImport size={14} /></span>
-                            <span>Import design</span>
+                            <span>{t('chatpage.menu.importDesign')}</span>
                           </button>
+                          )}
 
                           {/* Stop preview — destructive, bottom with divider */}
                           {showPreview && previewUrl && (
@@ -3786,7 +3995,7 @@ const persistProjectPreferences = useCallback(
                                 className="w-full flex items-center gap-2.5 px-3 py-1.5 text-sm text-left text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40 transition-colors"
                               >
                                 <span className="shrink-0 w-[15px] flex items-center justify-center"><FaStop size={12} /></span>
-                                <span>Stop preview server</span>
+                                <span>{t('chatpage.menu.stopPreview')}</span>
                               </button>
                             </>
                           )}
@@ -3799,7 +4008,8 @@ const persistProjectPreferences = useCallback(
                   {showPreview && previewUrl && (
                     <button
                       onClick={shareReviewLink}
-                      title={shareCopied ? 'Review link copied to clipboard' : 'Get a public link for stakeholders to review + comment'}
+                      title={shareCopied ? t('chatpage.share.copied') : t('chatpage.share.title')}
+                      aria-label={shareCopied ? t('chatpage.share.copied') : t('chatpage.share.title')}
                       className={`h-9 w-9 flex items-center justify-center rounded-lg border transition-colors ${
                         shareCopied ? 'bg-emerald-50 text-emerald-600 border-emerald-200' : 'border-gray-200 dark:border-white/8 bg-white dark:bg-white/3 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-white/6'
                       }`}
@@ -3894,7 +4104,7 @@ const persistProjectPreferences = useCallback(
                       if (isRunning || hasActiveRequests) {
                         setQueuedMessages(prev => [...prev, { message: prompt, images: [] }]);
                       } else {
-                        runAct(prompt);
+                        runAct(prompt, undefined, 'act');
                       }
                       setDesignMode(false);
                       setShowPreview(true);
@@ -3957,10 +4167,10 @@ const persistProjectPreferences = useCallback(
                       <div className="text-center max-w-md mx-auto p-6">
                         <div className="text-4xl mb-4">🔄</div>
                         <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-100 mb-2">
-                          Connection Issue
+                          {t('chatpage.preview.connectionTitle')}
                         </h3>
                         <p className="text-gray-600 dark:text-gray-300 mb-4">
-                          The preview couldn&apos;t load properly. Try clicking the refresh button to reload the page.
+                          {t('chatpage.preview.connectionBody')}
                         </p>
                         <button
                           className="flex items-center gap-2 mx-auto px-4 py-2 bg-brand-500 hover:bg-brand-600 text-white rounded-lg transition-colors"
@@ -3974,7 +4184,7 @@ const persistProjectPreferences = useCallback(
                             <path d="M1 4v6h6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                             <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                           </svg>
-                          Refresh Now
+                          {t('chatpage.preview.refreshNow')}
                         </button>
                       </div>
                     </div>
@@ -3985,14 +4195,14 @@ const persistProjectPreferences = useCallback(
                         building state; the retry loop reloads until the app renders,
                         then previewLoaded latches and this clears automatically. */}
                     {showColdStart && !previewLoaded && (
-                      <div className="absolute inset-0 z-20 bg-gray-50/95 dark:bg-[#0c0a09]/95 flex items-center justify-center">
+                      <div role="status" aria-live="polite" className="absolute inset-0 z-20 bg-gray-50/95 dark:bg-[#0c0a09]/95 flex items-center justify-center">
                         <div className="text-center max-w-sm mx-auto p-6">
-                          <div className="w-8 h-8 mx-auto mb-4 border-2 border-brand-500 border-t-transparent rounded-full animate-spin" />
+                          <div className="w-8 h-8 mx-auto mb-4 border-2 border-brand-500 border-t-transparent rounded-full animate-spin" aria-hidden="true" />
                           <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-100 mb-1">
-                            Building your app
+                            {t('chatpage.preview.coldStartTitle')}
                           </h3>
                           <p className="text-sm text-gray-500 dark:text-gray-400">
-                            Setting up the preview — the first load of a new app can take a moment. This view opens automatically when it&apos;s ready.
+                            {t('chatpage.preview.coldStartBody')}
                           </p>
                           {previewLogs.length > 0 && (
                             <p className="mt-3 text-xs font-mono text-gray-400 dark:text-gray-500 truncate" title={previewLogs[previewLogs.length - 1]}>
@@ -4008,14 +4218,14 @@ const persistProjectPreferences = useCallback(
                         cleared + auto-reloaded by the reachability poll. (The
                         first-ever load is handled by the cold-start overlay above.) */}
                     {previewDown && previewLoaded && (
-                      <div className="absolute inset-0 z-20 bg-gray-50/95 dark:bg-[#0c0a09]/95 flex items-center justify-center">
+                      <div role="status" aria-live="polite" className="absolute inset-0 z-20 bg-gray-50/95 dark:bg-[#0c0a09]/95 flex items-center justify-center">
                         <div className="text-center max-w-sm mx-auto p-6">
-                          <div className="w-8 h-8 mx-auto mb-4 border-2 border-brand-500 border-t-transparent rounded-full animate-spin" />
+                          <div className="w-8 h-8 mx-auto mb-4 border-2 border-brand-500 border-t-transparent rounded-full animate-spin" aria-hidden="true" />
                           <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-100 mb-1">
-                            Preview is restarting
+                            {t('chatpage.preview.restartingTitle')}
                           </h3>
                           <p className="text-sm text-gray-500 dark:text-gray-400">
-                            The development server is coming back up — this view reconnects automatically.
+                            {t('chatpage.preview.restartingBody')}
                           </p>
                         </div>
                       </div>
@@ -4046,10 +4256,12 @@ const persistProjectPreferences = useCallback(
                         <div className="flex items-center gap-3 bg-red-600 text-white rounded-xl shadow-xl pl-3 pr-2 py-2">
                           <span className="shrink-0">⚠️</span>
                           <span className="text-sm truncate" title={previewErrors[previewErrors.length - 1]?.message}>
-                            {previewErrors.length} runtime error{previewErrors.length > 1 ? 's' : ''} — {previewErrors[previewErrors.length - 1]?.message}
+                            {previewErrors.length === 1 ? t('chatpage.errors.one') : t('chatpage.errors.many', { count: previewErrors.length })} — {previewErrors[previewErrors.length - 1]?.message}
                           </span>
-                          <button onClick={fixPreviewErrors} className="shrink-0 text-xs font-semibold bg-white dark:bg-white/10 text-red-600 rounded-lg px-3 py-1.5 hover:bg-red-50">Fix with AI</button>
-                          <button onClick={() => setPreviewErrors([])} className="shrink-0 text-white/80 hover:text-white text-sm px-1" aria-label="Dismiss">✕</button>
+                          {canWrite && (
+                            <button type="button" onClick={fixPreviewErrors} className="shrink-0 text-xs font-semibold bg-white dark:bg-white/10 text-red-600 rounded-lg px-3 py-1.5 hover:bg-red-50">{t('chatpage.errors.fix')}</button>
+                          )}
+                          <button type="button" onClick={() => setPreviewErrors([])} className="shrink-0 text-white/80 hover:text-white text-sm px-1" aria-label={t('chatpage.errors.dismiss')}>✕</button>
                         </div>
                       </div>
                     )}
@@ -4117,11 +4329,11 @@ const persistProjectPreferences = useCallback(
                         
                         {/* Content */}
                         <h3 className="text-xl font-semibold text-gray-900 dark:text-gray-50 mb-3">
-                          {isStartingPreview ? 'Starting Preview Server' : 'Loading project…'}
+                          {isStartingPreview ? t('chatpage.preview.startingTitle') : t('chatpage.preview.loadingProject')}
                         </h3>
                         
-                        <div className="flex items-center justify-center gap-1 text-gray-600 dark:text-gray-300 ">
-                          <span>{previewInitializationMessage}</span>
+                        <div className="flex items-center justify-center gap-1 text-gray-600 dark:text-gray-300 " role="status" aria-live="polite">
+                          <span>{previewInitializationMessage || t('chatpage.preview.startingServer')}</span>
                           <MotionDiv
                             className="flex gap-1 ml-2"
                             initial={{ opacity: 0 }}
@@ -4198,7 +4410,7 @@ const persistProjectPreferences = useCallback(
                                   animation: 'shimmerText 5s linear infinite'
                                 }}
                               >
-                                Building...
+                                {t('chatpage.preview.building')}
                               </span>
                               <style>{`
                                 @keyframes shimmerText {
@@ -4214,9 +4426,12 @@ const persistProjectPreferences = useCallback(
                           </>
                         ) : (
                           <>
-                            <div
-                              onClick={!isRunning && !isStartingPreview ? () => { previewStartFailedRef.current = false; start(); } : undefined}
-                              className={`w-40 h-40 mx-auto mb-6 relative ${!isRunning && !isStartingPreview ? 'cursor-pointer group' : ''}`}
+                            <button
+                              type="button"
+                              onClick={retryPreviewStart}
+                              disabled={isRunning || isStartingPreview}
+                              aria-label={t('chatpage.preview.startAria')}
+                              className={`block w-40 h-40 mx-auto mb-6 relative rounded-full focus:outline-hidden focus-visible:ring-4 focus-visible:ring-brand-500/40 ${!isRunning && !isStartingPreview ? 'cursor-pointer group' : 'cursor-default'}`}
                             >
                               {/* Claudable Symbol with rotating animation when starting */}
                               <MotionDiv
@@ -4259,15 +4474,36 @@ const persistProjectPreferences = useCallback(
                                   </MotionDiv>
                                 )}
                               </div>
-                            </div>
+                            </button>
                             
-                            <h3 className="text-2xl font-bold text-gray-900 dark:text-gray-50 mb-3">
-                              Preview Not Running
-                            </h3>
-                            
-                            <p className="text-gray-600 dark:text-gray-300 max-w-lg mx-auto">
-                              Start your development server to see live changes
-                            </p>
+                            {previewStartError ? (
+                              <div role="alert" className="max-w-lg mx-auto">
+                                <h3 className="text-2xl font-bold text-gray-900 dark:text-gray-50 mb-3">
+                                  {t('chatpage.preview.startFailedTitle')}
+                                </h3>
+                                <p className="text-sm text-red-600 dark:text-red-400 whitespace-pre-wrap break-words mb-4">
+                                  {previewStartError}
+                                </p>
+                                <button
+                                  type="button"
+                                  onClick={retryPreviewStart}
+                                  disabled={isRunning || isStartingPreview}
+                                  className="inline-flex items-center gap-2 px-4 py-2 bg-brand-500 hover:bg-brand-600 text-white rounded-lg transition-colors disabled:opacity-50"
+                                >
+                                  <FaRedo size={12} />
+                                  {t('common.retry')}
+                                </button>
+                              </div>
+                            ) : (
+                              <>
+                                <h3 className="text-2xl font-bold text-gray-900 dark:text-gray-50 mb-3">
+                                  {t('chatpage.preview.notRunningTitle')}
+                                </h3>
+                                <p className="text-gray-600 dark:text-gray-300 max-w-lg mx-auto">
+                                  {t('chatpage.preview.notRunningBody')}
+                                </p>
+                              </>
+                            )}
                           </>
                         )}
                       </MotionDiv>
@@ -4299,13 +4535,14 @@ const persistProjectPreferences = useCallback(
                   if (hasUnsavedChanges) {
                     const confirmClose =
                       typeof window !== 'undefined'
-                        ? window.confirm('You have unsaved changes. Close without saving?')
+                        ? window.confirm(t('chatpage.code.discardAndClose'))
                         : true;
                     if (!confirmClose) {
                       return;
                     }
                   }
                   setSelectedFile('');
+                  setFileLock(null);
                   setContent('');
                   setEditedContent('');
                   editedContentRef.current = '';
@@ -4348,7 +4585,7 @@ const persistProjectPreferences = useCallback(
             if (isRunning || hasActiveRequests) {
               setQueuedMessages(prev => [...prev, { message: prompt, images: [] }]);
             } else {
-              runAct(prompt);
+              runAct(prompt, undefined, 'act');
             }
           }}
         />
@@ -4390,7 +4627,7 @@ const persistProjectPreferences = useCallback(
       )}
 
       {/* Project Settings Modal */}
-      {showGlobalSettings && !customerViewer && (
+      {showGlobalSettings && !customerViewer && canConfigure && (
         <ProjectSettings
           isOpen={showGlobalSettings}
           onClose={() => setShowGlobalSettings(false)}
@@ -4413,12 +4650,29 @@ const persistProjectPreferences = useCallback(
       )}
       <ConfirmDialog
         open={showClearCommentsConfirm}
-        title="Delete all comments?"
-        message="This removes every comment in this project, across all routes. This cannot be undone."
-        confirmLabel="Delete all"
+        title={t('chatpage.comments.clearTitle')}
+        message={t('chatpage.comments.clearBody')}
+        confirmLabel={t('chatpage.comments.clearConfirm')}
         destructive
         onConfirm={confirmClearAllComments}
         onCancel={() => setShowClearCommentsConfirm(false)}
+      />
+      <ConfirmDialog
+        open={discardEditsAction !== null}
+        title={t('chatpage.visual.discardTitle')}
+        message={t('chatpage.visual.discardBody', { count: pendingEditCount })}
+        confirmLabel={t('chatpage.visual.discardConfirm')}
+        destructive
+        onConfirm={() => {
+          const action = discardEditsAction;
+          setDiscardEditsAction(null);
+          setPendingEdits({});
+          action?.();
+          // The bridge has no per-style undo: reload the preview so the
+          // discarded preview-only changes disappear.
+          refreshPreview();
+        }}
+        onCancel={() => setDiscardEditsAction(null)}
       />
     </>
   );

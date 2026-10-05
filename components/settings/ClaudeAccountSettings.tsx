@@ -22,6 +22,7 @@ interface Props {
 const CLAUDE_CODE_DOCS = 'https://docs.claude.com/en/docs/claude-code/setup';
 
 function Cmd({ children }: { children: string }) {
+  const { t } = useI18n();
   const [copied, setCopied] = useState(false);
   const copy = async () => {
     try {
@@ -38,8 +39,8 @@ function Cmd({ children }: { children: string }) {
       <button
         onClick={copy}
         type="button"
-        title={copied ? 'Copied' : 'Copy'}
-        aria-label={`Copy "${children}"`}
+        title={copied ? t('common.copied') : t('common.copy')}
+        aria-label={t('settings.claudeAccount.copyCommand', { command: children })}
         className="absolute right-1.5 top-1/2 -translate-y-1/2 p-1.5 rounded-md text-gray-400 hover:text-white hover:bg-white/10 transition-colors"
       >
         {copied ? (
@@ -95,12 +96,12 @@ export default function ClaudeAccountSettings({ onToast }: Props) {
         body: JSON.stringify({ label: label.trim(), token: token.trim(), shareable }),
       });
       const json = await res.json();
-      if (!res.ok || !json.success) throw new Error(apiErrorMessage(json, 'Failed to save'));
+      if (!res.ok || !json.success) throw new Error(apiErrorMessage(json, t('settings.claudeAccount.saveFailed')));
       setLabel(''); setToken(''); setShareable(false);
-      onToast('Claude account connected', 'success');
+      onToast(t('settings.claudeAccount.connected'), 'success');
       await load();
     } catch (e) {
-      onToast(e instanceof Error ? e.message : 'Failed to save', 'error');
+      onToast(e instanceof Error ? e.message : t('settings.claudeAccount.saveFailed'), 'error');
     } finally {
       setBusy(false);
     }
@@ -114,35 +115,37 @@ export default function ClaudeAccountSettings({ onToast }: Props) {
         body: JSON.stringify({ shareable: !c.shareable }),
       });
       if (!res.ok) throw new Error();
+      onToast(t(c.shareable ? 'settings.claudeAccount.nowPrivate' : 'settings.claudeAccount.nowShared', { label: c.label }), 'success');
       await load();
     } catch {
-      onToast('Failed to update sharing', 'error');
+      onToast(t('settings.claudeAccount.shareFailed'), 'error');
     }
   };
 
   const remove = async (c: Credential) => {
+    if (!window.confirm(t('settings.claudeAccount.confirmRemove', { label: c.label }))) return;
     try {
       const res = await fetch(`${API_BASE}/api/claude-credentials/${c.id}`, { method: 'DELETE' });
       if (!res.ok) throw new Error();
-      onToast(`Removed ${c.label}`, 'success');
+      onToast(t('settings.claudeAccount.removed', { label: c.label }), 'success');
       await load();
     } catch {
-      onToast('Failed to remove', 'error');
+      onToast(t('settings.claudeAccount.removeFailed'), 'error');
     }
   };
 
   if (denied) {
     return (
       <div className="space-y-2">
-        <h3 className="text-lg font-medium text-gray-900 dark:text-gray-50">Claude account</h3>
-        <p className="text-sm text-gray-500 dark:text-gray-400">Sign in to connect your own Claude account.</p>
+        <h3 className="text-lg font-medium text-gray-900 dark:text-gray-50">{t('settings.claudeAccount.title')}</h3>
+        <p className="text-sm text-gray-500 dark:text-gray-400">{t('settings.claudeAccount.signInFirst')}</p>
       </div>
     );
   }
 
   return (
     <div className="space-y-5">
-      <h3 className="text-lg font-medium text-gray-900 dark:text-gray-50">Claude account</h3>
+      <h3 className="text-lg font-medium text-gray-900 dark:text-gray-50">{t('settings.claudeAccount.title')}</h3>
 
       {/* Add form */}
       <div className="p-4 bg-gray-50 dark:bg-white/3 rounded-xl border border-gray-200 dark:border-white/8 space-y-3">
@@ -150,28 +153,30 @@ export default function ClaudeAccountSettings({ onToast }: Props) {
           <input
             value={label}
             onChange={(e) => setLabel(e.target.value)}
-            placeholder="Label (e.g. My Claude Max)"
+            placeholder={t('settings.claudeAccount.labelPlaceholder')}
+            aria-label={t('common.label')}
             className="flex-1 px-3 py-2 rounded-lg border border-gray-200 dark:border-white/8 bg-white dark:bg-white/6 text-sm focus:outline-hidden focus:ring-2 focus:ring-gray-200"
           />
           <input
             value={token}
             onChange={(e) => setToken(e.target.value)}
             type="password"
-            placeholder="Paste token from `claude setup-token`"
+            placeholder={t('settings.claudeAccount.tokenPlaceholder')}
+            aria-label={t('settings.claudeAccount.tokenLabel')}
             className="flex-2 px-3 py-2 rounded-lg border border-gray-200 dark:border-white/8 bg-white dark:bg-white/6 text-sm font-mono focus:outline-hidden focus:ring-2 focus:ring-gray-200"
           />
         </div>
         <div className="flex items-center justify-between">
           <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-200">
             <input type="checkbox" checked={shareable} onChange={(e) => setShareable(e.target.checked)} />
-            Let others in my org use this Claude
+            {t('settings.claudeAccount.shareCheckbox')}
           </label>
           <button
             onClick={add}
             disabled={busy || !token.trim()}
             className="px-4 py-2 text-sm font-medium bg-brand-500 hover:bg-brand-600 text-white rounded-lg disabled:opacity-50"
           >
-            {busy ? 'Connecting…' : 'Connect'}
+            {busy ? t('settings.claudeAccount.connecting') : t('settings.claudeAccount.connect')}
           </button>
         </div>
       </div>
@@ -250,9 +255,9 @@ export default function ClaudeAccountSettings({ onToast }: Props) {
       {/* List */}
       <div className="rounded-xl border border-gray-200 dark:border-white/8 overflow-hidden">
         {loading ? (
-          <div className="p-5 text-center text-sm text-gray-500 dark:text-gray-400">Loading…</div>
+          <div className="p-5 text-center text-sm text-gray-500 dark:text-gray-400">{t('common.loading')}</div>
         ) : creds.length === 0 ? (
-          <div className="p-5 text-center text-sm text-gray-400 dark:text-gray-500">No Claude account connected yet.</div>
+          <div className="p-5 text-center text-sm text-gray-400 dark:text-gray-500">{t('settings.claudeAccount.none')}</div>
         ) : (
           <ul className="divide-y divide-gray-100 dark:divide-white/6">
             {creds.map((c) => (
@@ -267,7 +272,7 @@ export default function ClaudeAccountSettings({ onToast }: Props) {
                     )}
                   </div>
                   <p className="text-xs text-gray-500 dark:text-gray-400">
-                    {c.lastUsedAt ? `Last used ${new Date(c.lastUsedAt).toLocaleDateString()}` : 'Never used'}
+                    {c.lastUsedAt ? t('settings.claudeAccount.lastUsed', { date: new Date(c.lastUsedAt).toLocaleDateString() }) : t('settings.claudeAccount.neverUsed')}
                   </p>
                 </div>
                 {c.isMine ? (
@@ -277,15 +282,15 @@ export default function ClaudeAccountSettings({ onToast }: Props) {
                       className={`px-2.5 py-1.5 text-xs font-medium rounded-full border ${
                         c.shareable ? 'border-green-300 text-green-700 bg-green-50' : 'border-gray-200 dark:border-white/8 text-gray-600 dark:text-gray-300 bg-white dark:bg-white/3 hover:bg-gray-50 dark:hover:bg-white/6'
                       }`}
-                      title="Toggle sharing"
+                      title={t('settings.claudeAccount.toggleSharing')}
                     >
-                      {c.shareable ? 'Shared' : 'Private'}
+                      {c.shareable ? t('settings.claudeAccount.shared') : t('settings.claudeAccount.private')}
                     </button>
                     <button
                       onClick={() => remove(c)}
                       className="px-2.5 py-1.5 text-xs font-medium border border-red-200 rounded-full bg-white dark:bg-white/3 text-red-600 hover:bg-red-50"
                     >
-                      Remove
+                      {t('common.remove')}
                     </button>
                   </>
                 ) : (
@@ -295,7 +300,7 @@ export default function ClaudeAccountSettings({ onToast }: Props) {
                       c.shareable ? 'border-green-300 text-green-700 bg-green-50' : 'border-gray-200 dark:border-white/8 text-gray-500 dark:text-gray-400'
                     }`}
                   >
-                    {c.shareable ? 'Shared' : 'Private'}
+                    {c.shareable ? t('settings.claudeAccount.shared') : t('settings.claudeAccount.private')}
                   </span>
                 )}
               </li>

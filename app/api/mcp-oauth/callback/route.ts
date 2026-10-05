@@ -4,17 +4,48 @@
  * We match the single-use `state` to the pending MCP server, exchange the code
  * for tokens, then bounce back to the project. No session gate — the unguessable,
  * single-use `state` is the CSRF protection (standard OAuth callback pattern).
+ *
+ * Failures (provider error / user denied / unknown or expired state / token
+ * exchange) also go back to the ORIGINATING project chat when the pending state
+ * identifies it, with ?mcp_auth=error&mcp_auth_msg=… for the chat to show.
  */
 import { NextRequest, NextResponse } from 'next/server';
 import { completeOAuth } from '@/lib/services/mcp-oauth';
+import { prisma } from '@/lib/db/client';
 
-function backTo(projectId: string | null, result: 'success' | 'error', msg?: string): NextResponse {
-  const base = (process.env.NEXT_PUBLIC_APP_URL || process.env.AUTH_URL || '').trim().replace(/\/+$/, '');
+const MAX_MSG_LENGTH = 300;
+
+function backTo(origin: string, projectId: string | null, result: 'success' | 'error', msg?: string): NextResponse {
+  // NextResponse.redirect needs an absolute URL: fall back to the request origin.
+  const base = (process.env.NEXT_PUBLIC_APP_URL || process.env.AUTH_URL || origin).trim().replace(/\/+$/, '');
   const dest = projectId
     ? `${base}/${projectId}/chat?mcp_auth=${result}${msg ? `&mcp_auth_msg=${encodeURIComponent(msg)}` : ''}`
-    : `${base}/?mcp_auth=${result}`;
+    : `${base}/?mcp_auth=${result}${msg ? `&mcp_auth_msg=${encodeURIComponent(msg)}` : ''}`;
   return NextResponse.redirect(dest);
 }
+
+/** The project that started the flow, from its pending single-use state (null if unknown). */
+async function projectForState(state: string | null): Promise<string | null> {
+  if (!state) return null;
+  try {
+    const server = await prisma.projectMcpServer.findFirst({ where: { oauthState: state }, select: { projectId: true } });
+    return server?.projectId ?? null;
+  } catch (error) {
+    console.error('[mcp-oauth] state lookup failed:', error);
+    return null;
+  }
+}
+
+/** A denied/failed flow must not leave a reusable pending state behind. */
+async function clearPendingState(state: string): Promise<void> {
+  try {
+    await prisma.projectMcpServer.updateMany({ where: { oauthState: state }, data: { oauthState: null, oauthPkceEnc: null } });
+  } catch (error) {
+    console.error('[mcp-oauth] clearing pending state failed:', error);
+  }
+}
+
+const shorten = (msg: string): string => (msg.length > MAX_MSG_LENGTH ? `${msg.slice(0, MAX_MSG_LENGTH)}…` : msg);
 
 export async function GET(request: NextRequest) {
   const url = new URL(request.url);
@@ -22,15 +53,24 @@ export async function GET(request: NextRequest) {
   const state = url.searchParams.get('state');
   const providerError = url.searchParams.get('error');
 
-  if (providerError) return backTo(null, 'error', url.searchParams.get('error_description') || providerError);
-  if (!code || !state) return backTo(null, 'error', 'Missing code or state');
+  // Resolve the originating project BEFORE completing/clearing the state.
+  const projectId = await projectForState(state);
+
+  if (providerError) {
+    if (state) await clearPendingState(state);
+    const msg = providerError === 'access_denied'
+      ? 'Authorization was denied.'
+      : url.searchParams.get('error_description') || providerError;
+    return backTo(url.origin, projectId, 'error', shorten(msg));
+  }
+  if (!code || !state) return backTo(url.origin, projectId, 'error', 'Missing code or state');
 
   try {
-    const { projectId } = await completeOAuth(state, code);
-    return backTo(projectId, 'success');
+    const done = await completeOAuth(state, code);
+    return backTo(url.origin, done.projectId, 'success');
   } catch (error) {
     console.error('[mcp-oauth] callback failed:', error);
-    return backTo(null, 'error', error instanceof Error ? error.message : 'Authentication failed');
+    return backTo(url.origin, projectId, 'error', shorten(error instanceof Error ? error.message : 'Authentication failed'));
   }
 }
 

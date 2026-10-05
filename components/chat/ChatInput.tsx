@@ -60,7 +60,7 @@ interface ChatInputProps {
 export default function ChatInput({
   onSendMessage,
   disabled = false,
-  placeholder = "Ask Claudable...",
+  placeholder,
   mode = 'act',
   onModeChange,
   projectId,
@@ -93,14 +93,9 @@ export default function ChatInput({
 
   // --- Skill autocomplete: typing "/" surfaces built-in commands + skills ---
   interface SkillOption { name: string; description: string; scope: string }
-  const builtinCommands: SkillOption[] = useMemo(() => [
-    { name: 'clear', description: 'Start a fresh conversation context (chat history is kept)', scope: 'command' },
-    { name: 'compact', description: 'Summarize the conversation to free up context space', scope: 'command' },
-    { name: 'usage', description: 'Show context usage, token spend and rate limits', scope: 'command' },
-    { name: 'mcp', description: 'List MCP servers and their authentication status', scope: 'command' },
-    { name: 'plugin', description: 'Manage plugins (marketplaces + which are enabled)', scope: 'command' },
-    { name: 'help', description: 'List the available commands', scope: 'command' },
-  ], []);
+  const builtinCommands: SkillOption[] = useMemo(() => (
+    ['clear', 'compact', 'usage', 'mcp', 'plugin', 'help'] as const
+  ).map((name) => ({ name, description: t(`chat.input.cmd.${name}`), scope: 'command' })), [t]);
   const [skills, setSkills] = useState<SkillOption[]>([]);
   // Plugin-contributed commands (/<plugin>:<command>). Prefill on select so the
   // user can add arguments; the agent expands them (the plugin is loaded via
@@ -226,12 +221,12 @@ export default function ChatInput({
   // ~10MB; see lib/client/upload.ts.
   const uploadWithProgress = useCallback(
     (file: File): Promise<UploadResult> => {
-      if (!projectId) return Promise.reject(new Error('No project to upload to'));
+      if (!projectId) return Promise.reject(new Error(t('chat.input.noUploadTarget')));
       return uploadFileChunked(projectId, file, {
         onProgress: (pct) => setUploadProgress({ name: file.name, pct }),
       });
     },
-    [projectId],
+    [projectId, t],
   );
 
 
@@ -292,7 +287,7 @@ export default function ChatInput({
     if (skillMenuOpen) {
       if (e.key === 'ArrowDown') { e.preventDefault(); setSkillActiveIdx((i) => (i + 1) % skillMatches.length); return; }
       if (e.key === 'ArrowUp') { e.preventDefault(); setSkillActiveIdx((i) => (i - 1 + skillMatches.length) % skillMatches.length); return; }
-      if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); const s = skillMatches[skillActiveIdx]; if (s) chooseSkill(s); return; }
+      if ((e.key === 'Enter' && !e.nativeEvent.isComposing && e.keyCode !== 229) || e.key === 'Tab') { e.preventDefault(); const s = skillMatches[skillActiveIdx]; if (s) chooseSkill(s); return; }
       if (e.key === 'Escape') { e.preventDefault(); setDismissedQuery(skillQuery); return; }
     }
     // CLI parity: Esc interrupts the running turn.
@@ -302,6 +297,10 @@ export default function ChatInput({
       return;
     }
     if (e.key === 'Enter' && !e.shiftKey) {
+      // IME composition (CJK input etc.): Enter confirms the candidate, it must
+      // not send. keyCode 229 covers browsers that fire keydown mid-composition
+      // without setting isComposing.
+      if (e.nativeEvent.isComposing || e.keyCode === 229) return;
       e.preventDefault();
       // Check locks before submitting (isRunning is fine — the parent queues it).
       if (!isSubmitting && !disabled && !isUploading && !submissionLockRef.current && (message.trim() || uploadedImages.length > 0)) {
@@ -350,7 +349,7 @@ export default function ChatInput({
   const handleFiles = useCallback(async (files: FileList) => {
     if (!projectId) {
       console.error('❌ No project ID available for image upload');
-      toast.error('No project selected. Please choose a project first.');
+      toast.error(t('chat.input.noProject'));
       return;
     }
 
@@ -371,7 +370,7 @@ export default function ChatInput({
         // instead of uploading for minutes and then being rejected by the server.
         if (file.size > maxUploadMb * 1024 * 1024) {
           const limitLabel = maxUploadMb >= 1024 ? `${(maxUploadMb / 1024).toFixed(0)}GB` : `${maxUploadMb}MB`;
-          setUploadError(`"${file.name}" is ${(file.size / 1024 / 1024).toFixed(0)}MB — over the ${limitLabel} limit.`);
+          setUploadError(t('chat.input.tooLarge', { name: file.name, size: (file.size / 1024 / 1024).toFixed(0), limit: limitLabel }));
           continue;
         }
 
@@ -389,7 +388,7 @@ export default function ChatInput({
         // Images require an image-capable CLI.
         if (!supportsImageUpload) {
           console.warn(`⚠️ Skipping image (CLI ${preferredCli} can't view images): ${file.name}`);
-          setUploadError(`${preferredCli} can't view images — switch to Claude CLI for image input.`);
+          setUploadError(t('chat.input.noImageSupport', { cli: preferredCli }));
           continue;
         }
 
@@ -414,7 +413,7 @@ export default function ChatInput({
     } catch (error) {
       console.error('❌ Upload failed:', error);
       // Inline, non-blocking error (alert() freezes the browser tab).
-      setUploadError(`Upload failed: ${error instanceof Error ? error.message : 'please try again'}`);
+      setUploadError(t('chat.input.uploadFailed', { error: error instanceof Error ? error.message : t('chat.input.tryAgain') }));
     } finally {
       setIsUploading(false);
       setUploadProgress(null);
@@ -422,7 +421,7 @@ export default function ChatInput({
         fileInputRef.current.value = '';
       }
     }
-  }, [projectId, supportsImageUpload, preferredCli, maxUploadMb, uploadWithProgress, toast]);
+  }, [projectId, supportsImageUpload, preferredCli, maxUploadMb, uploadWithProgress, toast, t]);
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
 
@@ -544,8 +543,8 @@ export default function ChatInput({
         {/* Drag & Drop Overlay */}
         {isDragOver && (
           <div className="absolute inset-0 flex flex-col items-center justify-center bg-blue-50 bg-opacity-95 rounded-2xl z-10 pointer-events-none">
-            <div className="text-blue-600 text-lg font-medium mb-2">Drop file here</div>
-            <div className="text-blue-500 text-sm">Images, zips, docs — the agent reads them from the project</div>
+            <div className="text-blue-600 text-lg font-medium mb-2">{t('chat.input.dropFile')}</div>
+            <div className="text-blue-500 text-sm">{t('chat.input.dropFileHint')}</div>
             <div className="mt-4">
               <svg className="w-12 h-12 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
@@ -558,7 +557,7 @@ export default function ChatInput({
         {uploadProgress && (
           <div className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2">
             <div className="flex items-center justify-between text-xs text-blue-700 mb-1">
-              <span className="truncate pr-2">Uploading {uploadProgress.name}</span>
+              <span className="truncate pr-2">{t('chat.input.uploading', { name: uploadProgress.name })}</span>
               <span className="tabular-nums">{uploadProgress.pct}%</span>
             </div>
             <div className="h-1.5 w-full rounded-full bg-blue-100 overflow-hidden">
@@ -569,7 +568,7 @@ export default function ChatInput({
         {uploadError && (
           <div className="flex items-start justify-between gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
             <span>{uploadError}</span>
-            <button type="button" onClick={() => setUploadError(null)} className="shrink-0 text-red-500 hover:text-red-700" aria-label="Dismiss">✕</button>
+            <button type="button" onClick={() => setUploadError(null)} className="shrink-0 text-red-500 hover:text-red-700" aria-label={t('chat.input.dismiss')}>✕</button>
           </div>
         )}
 
@@ -581,10 +580,10 @@ export default function ChatInput({
                   className="flex items-center justify-center w-8 h-8 text-gray-300 cursor-not-allowed opacity-50 rounded-full"
                   title={
                     preferredCli === 'qwen'
-                      ? 'Qwen Coder does not support image input. Please use Claude CLI.'
+                      ? t('chat.input.noImageQwen')
                       : preferredCli === 'cursor'
-                      ? 'Cursor CLI does not support image input. Please use Claude CLI.'
-                      : 'GLM CLI supports text only. Please use Claude CLI.'
+                      ? t('chat.input.noImageCursor')
+                      : t('chat.input.noImageGlm')
                   }
                 >
                   <ImageIcon className="h-4 w-4" />
@@ -592,9 +591,9 @@ export default function ChatInput({
               ) : (
                 <button
                   type="button"
-                  aria-label="Upload files"
+                  aria-label={t('chat.input.uploadFiles')}
                   className="flex items-center justify-center w-8 h-8 text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-                  title="Upload images or files"
+                  title={t('chat.input.uploadFilesTitle')}
                   onClick={() => {
                     fileInputRef.current?.click();
                   }}
@@ -615,7 +614,7 @@ export default function ChatInput({
 
           <div className="flex flex-wrap items-center gap-3">
             <div className="flex flex-col text-[11px] text-gray-500 dark:text-gray-400 ">
-              <span>Assistant</span>
+              <span>{t('chat.assistant')}</span>
               <select
                 value={preferredCli}
                 onChange={(e) => {
@@ -628,13 +627,13 @@ export default function ChatInput({
                 {cliOptions.length === 0 && <option value={preferredCli}>{preferredCli}</option>}
                 {cliOptions.map(option => (
                   <option key={option.id} value={option.id} disabled={!option.available}>
-                    {option.name}{!option.available ? ' (Unavailable)' : ''}
+                    {option.name}{!option.available ? ` (${t('chat.input.unavailable')})` : ''}
                   </option>
                 ))}
               </select>
             </div>
             <div className="flex flex-col text-[11px] text-gray-500 dark:text-gray-400 ">
-              <span>Model</span>
+              <span>{t('chat.model')}</span>
               <select
                 value={selectedModelValue}
                 onChange={(e) => {
@@ -647,20 +646,20 @@ export default function ChatInput({
                 disabled={modelChangeDisabled || !onModelChange || modelOptionsForCli.length === 0}
                 className="mt-1 w-40 rounded-md border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-200 text-xs py-1 px-2 focus:outline-hidden focus:ring-2 focus:ring-gray-300 disabled:opacity-60"
               >
-                {modelOptionsForCli.length === 0 && <option value="">No models available</option>}
+                {modelOptionsForCli.length === 0 && <option value="">{t('chat.input.noModels')}</option>}
                 {modelOptionsForCli.length > 0 && selectedModelValue === '' && (
-                  <option value="" disabled>Select model</option>
+                  <option value="" disabled>{t('chat.input.selectModel')}</option>
                 )}
                 {modelOptionsForCli.map(option => (
                   <option key={option.id} value={option.id} disabled={!option.available}>
-                    {option.name}{!option.available ? ' (Unavailable)' : ''}
+                    {option.name}{!option.available ? ` (${t('chat.input.unavailable')})` : ''}
                   </option>
                 ))}
               </select>
             </div>
             {preferredCli === 'claude' && (
               <div className="flex flex-col text-[11px] text-gray-500 dark:text-gray-400 ">
-                <span>Thinking</span>
+                <span>{t('chat.thinking')}</span>
                 <select
                   value={thinkingMode}
                   onChange={(e) => {
@@ -668,12 +667,12 @@ export default function ChatInput({
                     requestAnimationFrame(() => textareaRef.current?.focus());
                   }}
                   disabled={!onThinkingModeChange}
-                  title="Extended thinking: Auto lets Claude decide, Deep forces maximum reasoning, Off is fastest."
+                  title={t('chat.input.thinkingTitle')}
                   className="mt-1 w-28 rounded-md border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-200 text-xs py-1 px-2 focus:outline-hidden focus:ring-2 focus:ring-gray-300 disabled:opacity-60"
                 >
-                  <option value="auto">Auto</option>
-                  <option value="forced">Deep</option>
-                  <option value="off">Off</option>
+                  <option value="auto">{t('chat.input.thinkingAuto')}</option>
+                  <option value="forced">{t('chat.input.thinkingDeep')}</option>
+                  <option value="off">{t('chat.input.thinkingOff')}</option>
                 </select>
               </div>
             )}
@@ -683,7 +682,7 @@ export default function ChatInput({
         <div className="relative">
           {skillMenuOpen && (
             <div style={menuStyle} className="z-200 overflow-y-auto rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-2xl py-1">
-              <div className="px-3 py-1.5 text-[11px] font-medium text-gray-400 dark:text-gray-500 border-b border-gray-100 dark:border-gray-800">Commands & skills · ↑↓ to navigate · ↵ to insert</div>
+              <div className="px-3 py-1.5 text-[11px] font-medium text-gray-400 dark:text-gray-500 border-b border-gray-100 dark:border-gray-800">{t('chat.input.menuHeader')}</div>
               {skillMatches.map((s, i) => (
                 <button
                   type="button"
@@ -709,7 +708,8 @@ export default function ChatInput({
             onKeyDown={handleKeyDown}
             className="w-full ring-offset-background placeholder:text-gray-500 disabled:cursor-not-allowed disabled:opacity-50 resize-none text-[16px] leading-snug md:text-base bg-transparent focus:bg-transparent rounded-md p-2 text-gray-900 dark:text-gray-50 border border-gray-200 dark:border-gray-700 "
             id="chatinput"
-            placeholder={placeholder}
+            placeholder={placeholder ?? t('chat.placeholder')}
+            aria-label={t('chat.input.ariaLabel')}
             disabled={disabled || isSubmitting}
             style={{ minHeight: '60px' }}
           />
@@ -718,10 +718,10 @@ export default function ChatInput({
               <div className="text-center">
                 <div className="text-2xl mb-2">📸</div>
                 <div className="text-sm font-medium text-blue-600 ">
-                  Drop images here
+                  {t('chat.input.dropImages')}
                 </div>
                 <div className="text-xs text-blue-500 mt-1">
-                  Supports: JPG, PNG, GIF, WEBP
+                  {t('chat.input.supportedFormats')}
                 </div>
               </div>
             </div>
@@ -738,7 +738,8 @@ export default function ChatInput({
                   ? 'bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-50 shadow-xs'
                   : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 '
               }`}
-              title="Act Mode: AI can modify code and create/delete files"
+              title={t('chat.input.actTitle')}
+              aria-pressed={mode === 'act'}
             >
               <Wrench className="h-3.5 w-3.5" />
               <span>{t('chat.act')}</span>
@@ -751,7 +752,8 @@ export default function ChatInput({
                   ? 'bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-50 shadow-xs'
                   : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 '
               }`}
-              title="Chat Mode: AI provides answers without modifying code"
+              title={t('chat.input.chatTitle')}
+              aria-pressed={mode === 'chat'}
             >
               <MessageSquare className="h-3.5 w-3.5" />
               <span>{t('chat.chat')}</span>
@@ -763,8 +765,8 @@ export default function ChatInput({
               <button
                 type="button"
                 onClick={onStop}
-                title="Stop the current turn (Esc)"
-                aria-label="Stop the current turn"
+                title={t('chat.input.stopTitle')}
+                aria-label={t('chat.input.stopLabel')}
                 className="flex size-8 items-center justify-center rounded-full border border-red-500/40 bg-red-500/10 text-red-500 transition-all duration-150 ease-out hover:bg-red-500 hover:text-white"
               >
                 <Square className="h-3 w-3 fill-current" />
@@ -773,6 +775,7 @@ export default function ChatInput({
             <button
               id="chatinput-send-message-button"
               type="submit"
+              aria-label={t('chat.send')}
               className="flex size-8 items-center justify-center rounded-full bg-brand-500 text-white transition-all duration-150 ease-out disabled:cursor-not-allowed disabled:opacity-50 hover:bg-brand-600 hover:scale-110 disabled:hover:scale-100 disabled:hover:bg-brand-500"
               disabled={disabled || isSubmitting || isUploading || (!message.trim() && uploadedImages.length === 0)}
             >
@@ -800,7 +803,8 @@ export default function ChatInput({
                   type="button"
                   onClick={() => removeImage(image.id)}
                   className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
-                  title="Remove image"
+                  title={t('chat.input.removeImage')}
+                  aria-label={t('chat.input.removeImage')}
                 >
                   <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -813,7 +817,7 @@ export default function ChatInput({
             ))}
           </div>
           <div className="mt-2 text-xs text-gray-500 dark:text-gray-400">
-            {uploadedImages.length} image{uploadedImages.length > 1 ? 's' : ''} uploaded • Ready to send
+            {uploadedImages.length > 1 ? t('chat.input.imagesReady.other', { count: uploadedImages.length }) : t('chat.input.imagesReady.one')}
           </div>
         </div>
       )}

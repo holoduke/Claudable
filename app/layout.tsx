@@ -9,6 +9,7 @@ import { AuthProvider } from '@/contexts/AuthContext'
 import I18nProvider from '@/contexts/I18nContext'
 import AppShell from '@/components/layout/AppShell'
 import { ToastProvider } from '@/components/ui/Toast'
+import SessionGuardProvider from '@/components/providers/SessionGuardProvider'
 import { Metadata } from 'next'
 
 export const metadata: Metadata = {
@@ -35,6 +36,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         />
       </head>
       <body className="bg-gray-50 dark:bg-gray-950 text-gray-900 dark:text-gray-50 min-h-screen">
+        {/* Expired session → back to /login (with callbackUrl) instead of "Failed …" toasts. */}
+        <SessionGuardProvider />
         <I18nProvider>
           <AuthProvider>
             <GlobalSettingsProvider>

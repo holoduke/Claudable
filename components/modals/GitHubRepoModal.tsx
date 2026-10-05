@@ -1,6 +1,7 @@
 "use client";
 import { useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useT } from '@/contexts/I18nContext';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? '';
 
@@ -19,6 +20,7 @@ export default function GitHubRepoModal({
   projectName,
   onSuccess 
 }: GitHubRepoModalProps) {
+  const t = useT();
   // What the user typed; empty means "use the default derived from the project".
   const [repoNameInput, setRepoNameInput] = useState('');
   const [description, setDescription] = useState('');
@@ -52,30 +54,30 @@ export default function GitHubRepoModal({
 
   const validateRepoName = (name: string): string => {
     if (!name.trim()) {
-      return 'Repository name is required';
+      return t('settings.modal.github.errRequired');
     }
 
     // GitHub repository name constraints
     if (name.length > 100) {
-      return 'Repository name must be 100 characters or less';
+      return t('settings.modal.github.errTooLong');
     }
 
     if (name.startsWith('.') || name.startsWith('-') || name.endsWith('.') || name.endsWith('-')) {
-      return 'Repository name cannot start or end with a period or hyphen';
+      return t('settings.modal.github.errEdges');
     }
 
     if (!/^[a-zA-Z0-9._-]+$/.test(name)) {
-      return 'Repository name can only contain alphanumeric characters, periods, hyphens, and underscores';
+      return t('settings.modal.github.errChars');
     }
 
     if (name.includes('..')) {
-      return 'Repository name cannot contain consecutive periods';
+      return t('settings.modal.github.errDots');
     }
 
     // Reserved names
     const reservedNames = ['con', 'prn', 'aux', 'nul', 'com1', 'com2', 'com3', 'com4', 'com5', 'com6', 'com7', 'com8', 'com9', 'lpt1', 'lpt2', 'lpt3', 'lpt4', 'lpt5', 'lpt6', 'lpt7', 'lpt8', 'lpt9'];
     if (reservedNames.includes(name.toLowerCase())) {
-      return 'Repository name cannot be a reserved name';
+      return t('settings.modal.github.errReserved');
     }
 
     return '';
@@ -91,13 +93,13 @@ export default function GitHubRepoModal({
       });
       
       if (response.status === 409) {
-        return `Repository name "${name}" already exists`;
+        return t('settings.modal.github.errExists', { name });
       } else if (response.status === 404) {
         // API endpoint not implemented yet, skip availability check
         console.warn('GitHub check-repo API not implemented yet');
         return '';
       } else if (response.status === 401) {
-        return 'GitHub token not configured. Please add your token in Global Settings.';
+        return t('settings.modal.github.errNoToken');
       } else if (!response.ok) {
         // If we can't check availability, don't block the user
         console.warn('Could not check repository availability:', response.status);
@@ -158,9 +160,9 @@ export default function GitHubRepoModal({
         onSuccess();
         onClose();
         // Show success message with repository URL
-        alert(`Repository created successfully!\n${result.repo_url}`);
+        alert(t('settings.modal.github.created', { url: result.repo_url }));
       } else {
-        let errorMessage = 'Unknown error occurred';
+        let errorMessage = t('settings.modal.github.errUnknown');
         
         try {
           const errorData = await response.json();
@@ -174,18 +176,18 @@ export default function GitHubRepoModal({
         }
 
         if (response.status === 404) {
-          errorMessage = 'API endpoint not found. Please ensure the backend service is running and the GitHub integration is properly configured.';
+          errorMessage = t('settings.modal.github.err404');
         } else if (response.status === 401) {
-          errorMessage = 'Git authentication failed. Please check your Git token in Global Settings.';
+          errorMessage = t('settings.modal.github.err401');
         } else if (response.status === 403) {
-          errorMessage = 'Git access denied. Please ensure your token has the required permissions to create repositories.';
+          errorMessage = t('settings.modal.github.err403');
         }
 
-        alert(`Failed to create repository:\n${errorMessage}`);
+        alert(t('settings.modal.github.createFailed', { error: errorMessage }));
       }
     } catch (error) {
       console.error('GitHub repository creation error:', error);
-      alert('Failed to create repository. Please try again.');
+      alert(t('settings.modal.github.createFailedRetry'));
     } finally {
       setIsLoading(false);
     }
@@ -205,7 +207,7 @@ export default function GitHubRepoModal({
           </motion.div>
         </div>
         
-        <div className="relative bg-white dark:bg-gray-900 rounded-xl shadow-2xl w-full max-w-2xl overflow-hidden border border-gray-200 dark:border-gray-700 ">
+        <div role="dialog" aria-modal="true" aria-labelledby="github-repo-modal-title" className="relative bg-white dark:bg-gray-900 rounded-xl shadow-2xl w-full max-w-2xl max-h-[90dvh] overflow-y-auto border border-gray-200 dark:border-gray-700 ">
           <motion.div 
             initial={{ opacity: 0, scale: 0.95, y: 20 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
@@ -223,13 +225,14 @@ export default function GitHubRepoModal({
                   </svg>
                 </div>
                 <div>
-                  <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-50 ">Create a new repository</h2>
-                  <p className="text-sm text-gray-600 dark:text-gray-300 ">A repository contains all project files, including revision history.</p>
+                  <h2 id="github-repo-modal-title" className="text-xl font-semibold text-gray-900 dark:text-gray-50 ">{t('settings.modal.github.title')}</h2>
+                  <p className="text-sm text-gray-600 dark:text-gray-300 ">{t('settings.modal.github.subtitle')}</p>
                 </div>
               </div>
               <button
                 onClick={onClose}
                 className="text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 p-1"
+                aria-label={t('settings.modal.close')}
                 disabled={isLoading}
               >
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -244,11 +247,12 @@ export default function GitHubRepoModal({
             <div className="space-y-6">
               {/* Repository Name */}
               <div>
-                <label className="block text-sm font-medium text-gray-900 dark:text-gray-50 mb-2">
-                  Repository name <span className="text-red-500">*</span>
+                <label htmlFor="github-repo-name" className="block text-sm font-medium text-gray-900 dark:text-gray-50 mb-2">
+                  {t('settings.modal.github.repoName')} <span className="text-red-500">*</span>
                 </label>
                 <div className="relative">
                   <input
+                    id="github-repo-name"
                     type="text"
                     value={repoName}
                     onChange={(e) => handleRepoNameChange(e.target.value)}
@@ -280,7 +284,7 @@ export default function GitHubRepoModal({
                 )}
                 {!nameError && !isCheckingAvailability && (
                   <p className="mt-1 text-xs text-gray-500 dark:text-gray-400 ">
-                    Great repository names are short and memorable. Need inspiration? How about <button type="button" className="text-gray-900 dark:text-gray-50 hover:underline" onClick={() => {
+                    {t('settings.modal.github.inspiration')} <button type="button" className="text-gray-900 dark:text-gray-50 hover:underline" onClick={() => {
                       handleRepoNameChange(suggestedRepoName);
                     }}>
                       {suggestedRepoName}
@@ -289,22 +293,23 @@ export default function GitHubRepoModal({
                 )}
                 {isCheckingAvailability && (
                   <p className="mt-1 text-xs text-blue-600 ">
-                    Checking availability...
+                    {t('settings.modal.github.checking')}
                   </p>
                 )}
               </div>
 
               {/* Description */}
               <div>
-                <label className="block text-sm font-medium text-gray-900 dark:text-gray-50 mb-2">
-                  Description <span className="text-gray-500 dark:text-gray-400">(optional)</span>
+                <label htmlFor="github-repo-description" className="block text-sm font-medium text-gray-900 dark:text-gray-50 mb-2">
+                  {t('settings.modal.github.description')} <span className="text-gray-500 dark:text-gray-400">{t('settings.modal.optional')}</span>
                 </label>
                 <input
+                  id="github-repo-description"
                   type="text"
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
                   className="w-full px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-md bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-50 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder="A short description of your repository"
+                  placeholder={t('settings.modal.github.descriptionPlaceholder')}
                   disabled={isLoading}
                 />
               </div>
@@ -312,7 +317,7 @@ export default function GitHubRepoModal({
               {/* Repository Visibility */}
               <div>
                 <label className="block text-sm font-medium text-gray-900 dark:text-gray-50 mb-3">
-                  Repository visibility
+                  {t('settings.modal.github.visibility')}
                 </label>
                 <div className="space-y-3">
                   <label className="flex items-start gap-3 p-3 border border-gray-200 dark:border-gray-700 rounded-md cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800 ">
@@ -330,10 +335,10 @@ export default function GitHubRepoModal({
                           <path d="M3 7v10a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2z" stroke="currentColor" strokeWidth="2"/>
                           <path d="M7 7V5a5 5 0 0 1 10 0v2" stroke="currentColor" strokeWidth="2"/>
                         </svg>
-                        <span className="font-medium text-gray-900 dark:text-gray-50 ">Public</span>
+                        <span className="font-medium text-gray-900 dark:text-gray-50 ">{t('settings.modal.github.public')}</span>
                       </div>
                       <p className="text-sm text-gray-600 dark:text-gray-300 mt-1">
-                        Anyone on the internet can see this repository. You choose who can commit.
+                        {t('settings.modal.github.publicDesc')}
                       </p>
                     </div>
                   </label>
@@ -352,10 +357,10 @@ export default function GitHubRepoModal({
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                           <path d="M19 11H5m14 0a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-6a2 2 0 0 1 2-2m14 0V9a7 7 0 0 0-14 0v2" stroke="currentColor" strokeWidth="2"/>
                         </svg>
-                        <span className="font-medium text-gray-900 dark:text-gray-50 ">Private</span>
+                        <span className="font-medium text-gray-900 dark:text-gray-50 ">{t('settings.modal.github.private')}</span>
                       </div>
                       <p className="text-sm text-gray-600 dark:text-gray-300 mt-1">
-                        You choose who can see and commit to this repository.
+                        {t('settings.modal.github.privateDesc')}
                       </p>
                     </div>
                   </label>
@@ -372,7 +377,7 @@ export default function GitHubRepoModal({
                 className="px-4 py-2 text-gray-700 dark:text-gray-200 border border-gray-300 dark:border-gray-700 rounded-md hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
                 disabled={isLoading}
               >
-                Cancel
+                {t('settings.modal.cancel')}
               </button>
               <button
                 type="submit"
@@ -382,7 +387,7 @@ export default function GitHubRepoModal({
                 {isLoading && (
                   <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
                 )}
-                {isLoading ? 'Creating repository...' : 'Create repository'}
+                {isLoading ? t('settings.modal.github.creating') : t('settings.modal.github.create')}
               </button>
             </div>
           </form>

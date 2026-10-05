@@ -5,6 +5,7 @@ import { FaCode, FaCog, FaFolder, FaFolderOpen, FaFile, FaFileCode, FaCss3Alt, F
 import { SiTypescript, SiGo, SiRuby, SiSvelte, SiYaml, SiCplusplus } from 'react-icons/si';
 import { VscJson } from 'react-icons/vsc';
 import { getFileLanguage } from '@/lib/utils/format';
+import { useI18n } from '@/contexts/I18nContext';
 
 export type Entry = { path: string; type: 'file'|'dir'; size?: number };
 
@@ -257,6 +258,7 @@ export default function CodeExplorer({
   highlightRef,
   lineNumberRef,
 }: CodeExplorerProps) {
+  const { t } = useI18n();
   return (
     <MotionDiv
       key="code"
@@ -271,7 +273,7 @@ export default function CodeExplorer({
         <div className="flex-1 overflow-y-auto bg-gray-50 dark:bg-white/3 custom-scrollbar">
           {!tree || tree.length === 0 ? (
             <div className="px-3 py-8 text-center text-[11px] text-gray-600 dark:text-gray-300 select-none">
-              No files found
+              {t('chat.code.noFiles')}
             </div>
           ) : (
             <TreeView
@@ -307,25 +309,25 @@ export default function CodeExplorer({
                 </div>
                 {hasUnsavedChanges && (
                   <span className="text-[11px] text-amber-600 ">
-                    • Unsaved changes
+                    • {t('chat.code.unsaved')}
                   </span>
                 )}
                 {!hasUnsavedChanges && saveFeedback === 'success' && (
                   <span className="text-[11px] text-green-600 ">
-                    Saved
+                    {t('chat.code.saved')}
                   </span>
                 )}
                 {saveFeedback === 'error' && (
                   <span
                     className="text-[11px] text-red-600 truncate max-w-[160px]"
-                    title={saveError ?? 'Failed to save file'}
+                    title={saveError ?? t('chat.code.saveFailed')}
                   >
-                    Save error
+                    {t('chat.code.saveError')}
                   </span>
                 )}
                 {!hasUnsavedChanges && saveFeedback !== 'success' && isFileUpdating && (
                   <span className="text-[11px] text-green-600 ">
-                    Updated
+                    {t('chat.code.updated')}
                   </span>
                 )}
                 <div className="ml-auto flex items-center gap-2">
@@ -333,15 +335,17 @@ export default function CodeExplorer({
                     className="px-3 py-1 text-xs font-medium rounded-sm bg-brand-500 text-white hover:bg-brand-600 disabled:bg-gray-300 disabled:text-gray-600 disabled:cursor-not-allowed "
                     onClick={onSaveFile}
                     disabled={!hasUnsavedChanges || isSavingFile}
-                    title="Save (Ctrl+S)"
+                    title={t('chat.code.saveTitle')}
                   >
-                    {isSavingFile ? 'Saving…' : 'Save'}
+                    {isSavingFile ? t('common.saving') : t('common.save')}
                   </button>
                   <button
                     className="text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-white/6 px-1 rounded-sm"
                     onClick={onCloseFile}
+                    aria-label={t('chat.code.closeFile')}
+                    title={t('chat.code.closeFile')}
                   >
-                    ×
+                    <span aria-hidden="true">×</span>
                   </button>
                 </div>
               </div>
@@ -391,7 +395,7 @@ export default function CodeExplorer({
                     autoCapitalize="none"
                     autoComplete="off"
                     wrap="off"
-                    aria-label="Code editor"
+                    aria-label={t('chat.code.editorLabel')}
                     className="absolute inset-0 w-full h-full resize-none bg-transparent text-transparent caret-gray-800 outline-hidden font-mono text-[13px] leading-[19px] p-4 whitespace-pre overflow-auto custom-scrollbar"
                     style={{ fontFamily: "'Fira Code', 'Consolas', 'Monaco', monospace" }}
                   />
@@ -405,10 +409,10 @@ export default function CodeExplorer({
             <div className="text-center">
               <span className="w-16 h-16 mb-4 opacity-10 text-gray-400 dark:text-gray-500 mx-auto flex items-center justify-center"><FaCode size={64} /></span>
               <h3 className="text-lg font-medium text-gray-700 dark:text-gray-200 mb-2">
-                Welcome to Code Editor
+                {t('chat.code.welcomeTitle')}
               </h3>
               <p className="text-sm text-gray-500 dark:text-gray-400 ">
-                Select a file from the explorer to start viewing code
+                {t('chat.code.welcomeHint')}
               </p>
             </div>
           </div>

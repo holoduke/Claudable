@@ -13,6 +13,9 @@
  */
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import type { AgentRateLimitWindow, AgentUsageSnapshot } from '@/types/agent-usage';
+import { useI18n } from '@/contexts/I18nContext';
+
+type TFunc = ReturnType<typeof useI18n>['t'];
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE || '';
 
@@ -35,29 +38,31 @@ const formatTokens = (n?: number): string => {
 const formatCost = (n?: number): string =>
   n === undefined || !Number.isFinite(n) ? '–' : `$${n.toFixed(n >= 1 ? 2 : 3)}`;
 
-const formatReset = (iso?: string): string | null => {
+const formatReset = (t: TFunc, iso?: string): string | null => {
   if (!iso) return null;
   const target = new Date(iso).getTime();
   if (!Number.isFinite(target)) return null;
   const diffMin = Math.round((target - Date.now()) / 60_000);
-  if (diffMin <= 0) return 'resets soon';
-  if (diffMin < 60) return `resets in ${diffMin}m`;
+  if (diffMin <= 0) return t('chat.status.resetsSoon');
+  if (diffMin < 60) return t('chat.status.resetsInMinutes', { minutes: diffMin });
   const hours = Math.floor(diffMin / 60);
-  if (hours < 48) return `resets in ${hours}h ${diffMin % 60}m`;
-  return `resets in ${Math.round(hours / 24)}d`;
+  if (hours < 48) return t('chat.status.resetsInHours', { hours, minutes: diffMin % 60 });
+  return t('chat.status.resetsInDays', { days: Math.round(hours / 24) });
 };
 
-const windowTitle = (label: string, pct: number | undefined, resetsAt?: string): string => {
-  const reset = resetsAt && Date.parse(resetsAt) > Date.now() ? ` · ${formatReset(resetsAt)}` : '';
-  return pct === undefined ? `${label}: not known yet (refreshes on the next agent turn)` : `${label}: ${pct}% used${reset}`;
+const windowTitle = (t: TFunc, label: string, pct: number | undefined, resetsAt?: string): string => {
+  const reset = resetsAt && Date.parse(resetsAt) > Date.now() ? ` · ${formatReset(t, resetsAt)}` : '';
+  return pct === undefined
+    ? t('chat.status.windowUnknown', { label })
+    : `${t('chat.status.windowUsed', { label, pct })}${reset}`;
 };
 
-const formatAgo = (iso: string): string => {
+const formatAgo = (t: TFunc, iso: string): string => {
   const min = Math.round((Date.now() - Date.parse(iso)) / 60_000);
-  if (!Number.isFinite(min) || min < 1) return 'just now';
-  if (min < 60) return `${min} min ago`;
+  if (!Number.isFinite(min) || min < 1) return t('chat.status.justNow');
+  if (min < 60) return t('chat.status.minutesAgo', { count: min });
   const h = Math.floor(min / 60);
-  return h < 48 ? `${h}h ago` : `${Math.round(h / 24)}d ago`;
+  return h < 48 ? t('chat.status.hoursAgo', { count: h }) : t('chat.status.daysAgo', { count: Math.round(h / 24) });
 };
 
 const pctOfWindow = (w?: AgentRateLimitWindow): number | undefined => {
@@ -96,6 +101,7 @@ function Meter({
   /** Window status when no percentage is available (rate-limit meters only). */
   status?: string;
 }) {
+  const { t } = useI18n();
   // No percentage → fall back to the reported status so the meter still says
   // something useful ('no data yet' only when nothing was reported at all).
   const rejected = status === 'rejected';
@@ -104,10 +110,10 @@ function Meter({
     pct !== undefined
       ? `${pct}%`
       : rejected
-      ? 'limit reached'
+      ? t('chat.status.limitReached')
       : status
-      ? 'OK'
-      : 'no data yet';
+      ? t('chat.status.ok')
+      : t('chat.status.noData');
   const valueColor =
     pct !== undefined
       ? textColor(pct)
@@ -134,6 +140,7 @@ function Meter({
 }
 
 export default function AgentStatusBar({ projectId, liveStatus, open, onOpenChange }: AgentStatusBarProps) {
+  const { t } = useI18n();
   const [fetched, setFetched] = useState<AgentUsageSnapshot | null>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   const hasFetchedRef = useRef(false);
@@ -188,16 +195,16 @@ export default function AgentStatusBar({ projectId, liveStatus, open, onOpenChan
 
   const chips = useMemo(() => {
     const parts: { key: string; label: string; pct?: number; title?: string }[] = [
-      { key: 'ctx', label: 'Context', pct: contextPct },
+      { key: 'ctx', label: t('chat.status.chipContext'), pct: contextPct },
     ];
     // The plan windows are always shown for projects on the platform account
     // ("–" until the first agent turn reports them).
     if (limitsApplicable) {
-      parts.push({ key: '5h', label: '5h', pct: fiveHourPct, title: windowTitle('5-hour limit', fiveHourPct, status?.rateLimits?.fiveHour?.resetsAt) });
-      parts.push({ key: 'wk', label: 'Week', pct: weekPct, title: windowTitle('Weekly limit', weekPct, status?.rateLimits?.sevenDay?.resetsAt) });
+      parts.push({ key: '5h', label: t('chat.status.chipFiveHour'), pct: fiveHourPct, title: windowTitle(t, t('chat.status.fiveHourLimit'), fiveHourPct, status?.rateLimits?.fiveHour?.resetsAt) });
+      parts.push({ key: 'wk', label: t('chat.status.chipWeek'), pct: weekPct, title: windowTitle(t, t('chat.status.weeklyLimit'), weekPct, status?.rateLimits?.sevenDay?.resetsAt) });
     }
     return parts;
-  }, [contextPct, fiveHourPct, weekPct, limitsApplicable, status?.rateLimits]);
+  }, [contextPct, fiveHourPct, weekPct, limitsApplicable, status?.rateLimits, t]);
 
   const hasData = !!status && (status.contextUsedTokens !== undefined || !!status.totals?.turns || !!status.rateLimits);
 
@@ -208,10 +215,10 @@ export default function AgentStatusBar({ projectId, liveStatus, open, onOpenChan
     if (!open) return null;
     return (
       <div className="relative flex justify-end mb-1.5" ref={panelRef}>
-        <div className="absolute bottom-full right-0 mb-2 w-80 z-120 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-2xl p-4 text-left">
-          <div className="text-sm font-semibold text-gray-900 dark:text-gray-50 mb-1">Agent status</div>
+        <div role="dialog" aria-label={t('chat.status.title')} className="absolute bottom-full right-0 mb-2 w-80 z-120 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-2xl p-4 text-left">
+          <div className="text-sm font-semibold text-gray-900 dark:text-gray-50 mb-1">{t('chat.status.title')}</div>
           <p className="text-sm text-gray-500 dark:text-gray-400">
-            No usage recorded yet — run the agent once and context, token spend and rate limits appear here.
+            {t('chat.status.noUsage')}
           </p>
         </div>
       </div>
@@ -223,7 +230,9 @@ export default function AgentStatusBar({ projectId, liveStatus, open, onOpenChan
       <button
         type="button"
         onClick={() => onOpenChange(!open)}
-        title="Agent status — context & usage limits (/usage)"
+        title={t('chat.status.buttonTitle')}
+        aria-label={t('chat.status.buttonTitle')}
+        aria-expanded={open}
         className="flex items-center gap-2 px-2 py-1 rounded-md text-[11px] text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-white/6 transition-colors"
       >
         {chips.map((c) => (
@@ -236,9 +245,9 @@ export default function AgentStatusBar({ projectId, liveStatus, open, onOpenChan
       </button>
 
       {open && status && (
-        <div className="absolute bottom-full right-0 mb-2 w-80 z-120 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-2xl p-4 space-y-4 text-left">
+        <div role="dialog" aria-label={t('chat.status.title')} className="absolute bottom-full right-0 mb-2 w-80 z-120 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-2xl p-4 space-y-4 text-left">
           <div className="flex items-center justify-between">
-            <span className="text-sm font-semibold text-gray-900 dark:text-gray-50">Agent status</span>
+            <span className="text-sm font-semibold text-gray-900 dark:text-gray-50">{t('chat.status.title')}</span>
             {status.model && (
               <span className="text-[10px] uppercase tracking-wide text-gray-400 dark:text-gray-500 bg-gray-100 dark:bg-gray-800 px-1.5 py-0.5 rounded-sm">
                 {status.model.replace(/^claude-/, '')}
@@ -247,44 +256,47 @@ export default function AgentStatusBar({ projectId, liveStatus, open, onOpenChan
           </div>
 
           <Meter
-            label="Context window"
+            label={t('chat.status.contextWindow')}
             pct={contextPct}
             sub={
               status.contextUsedTokens !== undefined
-                ? `${formatTokens(status.contextUsedTokens)} of ${formatTokens(status.contextWindow)} tokens — /compact frees space, /clear starts fresh`
+                ? t('chat.status.contextSub', { used: formatTokens(status.contextUsedTokens), total: formatTokens(status.contextWindow) })
                 : null
             }
           />
           <Meter
-            label="5-hour limit"
+            label={t('chat.status.fiveHourLimit')}
             pct={fiveHourPct}
             status={status.rateLimits?.fiveHour?.status}
-            sub={formatReset(status.rateLimits?.fiveHour?.resetsAt)}
+            sub={formatReset(t, status.rateLimits?.fiveHour?.resetsAt)}
           />
           <Meter
-            label="Weekly limit"
+            label={t('chat.status.weeklyLimit')}
             pct={weekPct}
             status={status.rateLimits?.sevenDay?.status}
-            sub={formatReset(status.rateLimits?.sevenDay?.resetsAt)}
+            sub={formatReset(t, status.rateLimits?.sevenDay?.resetsAt)}
           />
           {limitsApplicable && (
             <p className="-mt-2 text-[10px] text-gray-400 dark:text-gray-500">
               {status.rateLimits?.updatedAt
-                ? `Claude subscription (whole team) · updated ${formatAgo(status.rateLimits.updatedAt)} · refreshes after every agent turn`
-                : 'Claude subscription (whole team) · appears after the first agent turn'}
+                ? t('chat.status.subscriptionUpdated', { ago: formatAgo(t, status.rateLimits.updatedAt) })
+                : t('chat.status.subscriptionPending')}
             </p>
           )}
 
           {status.lastTurn && (
             <div className="text-xs text-gray-600 dark:text-gray-300 space-y-1">
-              <div className="font-medium text-gray-700 dark:text-gray-200">Last turn</div>
+              <div className="font-medium text-gray-700 dark:text-gray-200">{t('chat.status.lastTurn')}</div>
               <div className="flex justify-between text-gray-500 dark:text-gray-400">
                 <span>
-                  ↑ {formatTokens(
-                    status.lastTurn.inputTokens +
-                    status.lastTurn.cacheReadInputTokens +
-                    status.lastTurn.cacheCreationInputTokens,
-                  )} in · ↓ {formatTokens(status.lastTurn.outputTokens)} out
+                  {t('chat.status.tokensInOut', {
+                    input: formatTokens(
+                      status.lastTurn.inputTokens +
+                      status.lastTurn.cacheReadInputTokens +
+                      status.lastTurn.cacheCreationInputTokens,
+                    ),
+                    output: formatTokens(status.lastTurn.outputTokens),
+                  })}
                 </span>
                 <span>{formatCost(status.lastTurn.costUsd)}</span>
               </div>
@@ -294,11 +306,16 @@ export default function AgentStatusBar({ projectId, liveStatus, open, onOpenChan
           {status.totals && status.totals.turns > 0 && (
             <div className="text-xs text-gray-600 dark:text-gray-300 space-y-1">
               <div className="font-medium text-gray-700 dark:text-gray-200">
-                This project · {status.totals.turns} turn{status.totals.turns === 1 ? '' : 's'}
+                {status.totals.turns === 1
+                  ? t('chat.status.projectTurnsOne')
+                  : t('chat.status.projectTurnsOther', { count: status.totals.turns })}
               </div>
               <div className="flex justify-between text-gray-500 dark:text-gray-400">
                 <span>
-                  ↑ {formatTokens(status.totals.totalInputTokens)} in · ↓ {formatTokens(status.totals.totalOutputTokens)} out
+                  {t('chat.status.tokensInOut', {
+                    input: formatTokens(status.totals.totalInputTokens),
+                    output: formatTokens(status.totals.totalOutputTokens),
+                  })}
                 </span>
                 <span>{formatCost(status.totals.totalCostUsd)}</span>
               </div>
@@ -306,7 +323,7 @@ export default function AgentStatusBar({ projectId, liveStatus, open, onOpenChan
           )}
 
           <div className="pt-2 border-t border-gray-100 dark:border-gray-800 text-[10px] text-gray-400 dark:text-gray-500">
-            Type / in the chat for commands: /clear · /compact · /usage · /help
+            {t('chat.status.commandsHint')}
           </div>
         </div>
       )}

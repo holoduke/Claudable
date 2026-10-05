@@ -2,6 +2,7 @@
 
 import React, { useCallback, useEffect, useState } from 'react';
 import { apiErrorMessage, responseErrorMessage } from '@/lib/client/api-error';
+import { useT } from '@/contexts/I18nContext';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? '';
 
@@ -37,6 +38,7 @@ const EMPTY_FORM = {
  * credential (a static auth header), not per-user OAuth.
  */
 export default function SharedMcpSettings() {
+  const t = useT();
   const [servers, setServers] = useState<SharedMcpView[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -50,13 +52,13 @@ export default function SharedMcpSettings() {
       const res = await fetch(`${API_BASE}/api/shared-mcp-servers`);
       const json = await res.json();
       if (res.ok && json?.success) setServers(Array.isArray(json.data) ? json.data : []);
-      else setError(apiErrorMessage(json, 'Failed to load shared MCP servers'));
+      else setError(apiErrorMessage(json, t('settings.sharedMcp.loadFailed')));
     } catch {
-      setError('Failed to load shared MCP servers');
+      setError(t('settings.sharedMcp.loadFailed'));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => { void load(); }, [load]);
 
@@ -84,12 +86,12 @@ export default function SharedMcpSettings() {
         body: JSON.stringify(body),
       });
       const json = await res.json();
-      if (!res.ok || !json?.success) throw new Error(apiErrorMessage(json, 'Failed to add server'));
+      if (!res.ok || !json?.success) throw new Error(apiErrorMessage(json, t('settings.sharedMcp.addFailed')));
       setForm({ ...EMPTY_FORM });
       setAdding(false);
       await load();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to add server');
+      setError(e instanceof Error ? e.message : t('settings.sharedMcp.addFailed'));
     } finally {
       setSaving(false);
     }
@@ -102,7 +104,7 @@ export default function SharedMcpSettings() {
       const res = await fetch(url, init);
       if (!res.ok) setError(await responseErrorMessage(res, fallback));
     } catch {
-      setError(`${fallback} (network error).`);
+      setError(t('settings.sharedMcp.networkError', { action: fallback }));
     }
     await load();
   };
@@ -115,20 +117,19 @@ export default function SharedMcpSettings() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ enabled: !s.enabled }),
       },
-      `Could not ${s.enabled ? 'disable' : 'enable'} ${s.label}`,
+      t(s.enabled ? 'settings.sharedMcp.disableFailed' : 'settings.sharedMcp.enableFailed', { label: s.label }),
     );
 
   const remove = async (s: SharedMcpView) => {
-    if (!window.confirm(`Remove the shared MCP server "${s.label}" for every project?`)) return;
-    await mutate(`${API_BASE}/api/shared-mcp-servers/${s.id}`, { method: 'DELETE' }, `Could not remove ${s.label}`);
+    if (!window.confirm(t('settings.sharedMcp.confirmRemove', { label: s.label }))) return;
+    await mutate(`${API_BASE}/api/shared-mcp-servers/${s.id}`, { method: 'DELETE' }, t('settings.sharedMcp.removeFailed', { label: s.label }));
   };
 
   return (
     <div>
-      <h3 className="text-lg font-medium text-gray-900 dark:text-gray-50">Shared MCP servers</h3>
+      <h3 className="text-lg font-medium text-gray-900 dark:text-gray-50">{t('settings.sharedMcp.title')}</h3>
       <p className="text-sm text-gray-500 dark:text-gray-400 mt-1 mb-5">
-        Company MCP servers added here are attached to <span className="font-medium">every project&apos;s agent</span> automatically —
-        no per-project setup. They use one shared credential (a static auth header), so the whole team uses the same account.
+        {t('settings.sharedMcp.intro')}
       </p>
 
       {error && (
@@ -138,11 +139,11 @@ export default function SharedMcpSettings() {
       )}
 
       {loading ? (
-        <p className="text-sm text-gray-400">Loading…</p>
+        <p className="text-sm text-gray-400">{t('common.loading')}</p>
       ) : (
         <div className="space-y-2 mb-5">
           {servers.length === 0 && (
-            <p className="text-sm text-gray-400 dark:text-gray-500">No shared MCP servers yet.</p>
+            <p className="text-sm text-gray-400 dark:text-gray-500">{t('settings.sharedMcp.empty')}</p>
           )}
           {servers.map((s) => (
             <div key={s.id} className="flex items-center gap-3 rounded-lg border border-gray-200 dark:border-white/8 px-3 py-2.5">
@@ -151,19 +152,20 @@ export default function SharedMcpSettings() {
                   <span className="text-sm font-medium text-gray-900 dark:text-gray-50 truncate">{s.label}</span>
                   <span className="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded-sm bg-gray-100 dark:bg-white/6 text-gray-500 dark:text-gray-400">{s.transport}</span>
                   {(s.hasHeaders || s.hasEnv) && (
-                    <span className="text-[10px] px-1.5 py-0.5 rounded-sm bg-amber-100 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300">secret</span>
+                    <span className="text-[10px] px-1.5 py-0.5 rounded-sm bg-amber-100 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300">{t('settings.sharedMcp.secret')}</span>
                   )}
                 </div>
                 <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{s.url || `${s.command ?? ''} ${s.args.join(' ')}`.trim()}</p>
               </div>
               <button
                 onClick={() => toggle(s)}
+                aria-pressed={s.enabled}
                 className={`text-xs px-2 py-1 rounded-md border transition-colors ${s.enabled ? 'border-emerald-300 text-emerald-700 dark:text-emerald-300 dark:border-emerald-800' : 'border-gray-200 dark:border-white/8 text-gray-400'}`}
               >
-                {s.enabled ? 'Enabled' : 'Disabled'}
+                {s.enabled ? t('common.enabled') : t('common.disabled')}
               </button>
               <button onClick={() => remove(s)} className="text-xs px-2 py-1 rounded-md text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40">
-                Remove
+                {t('common.remove')}
               </button>
             </div>
           ))}
@@ -172,52 +174,52 @@ export default function SharedMcpSettings() {
 
       {!adding ? (
         <button onClick={() => { setForm({ ...EMPTY_FORM }); setAdding(true); }} className="text-sm px-3 py-2 rounded-lg bg-brand-500 text-white hover:bg-brand-600 transition-colors">
-          Add shared MCP server
+          {t('settings.sharedMcp.add')}
         </button>
       ) : (
         <div className="rounded-xl border border-gray-200 dark:border-white/8 p-4 space-y-3">
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <label className="text-xs text-gray-500 dark:text-gray-400">
-              Name (key)
+              {t('settings.sharedMcp.nameKey')}
               <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="company-docs" className="mt-1 w-full px-2.5 py-2 rounded-md border border-gray-200 dark:border-white/8 bg-transparent text-sm text-gray-900 dark:text-gray-50" />
             </label>
             <label className="text-xs text-gray-500 dark:text-gray-400">
-              Label
+              {t('common.label')}
               <input value={form.label} onChange={(e) => setForm({ ...form, label: e.target.value })} placeholder="Company Docs" className="mt-1 w-full px-2.5 py-2 rounded-md border border-gray-200 dark:border-white/8 bg-transparent text-sm text-gray-900 dark:text-gray-50" />
             </label>
           </div>
           <label className="block text-xs text-gray-500 dark:text-gray-400">
-            Transport
+            {t('settings.sharedMcp.transport')}
             <select value={form.transport} onChange={(e) => setForm({ ...form, transport: e.target.value as Transport })} className="mt-1 w-full px-2.5 py-2 rounded-md border border-gray-200 dark:border-white/8 bg-transparent text-sm text-gray-900 dark:text-gray-50">
-              <option value="http">Remote (HTTP)</option>
-              <option value="sse">Remote (SSE)</option>
-              <option value="stdio">Command (stdio)</option>
+              <option value="http">{t('settings.sharedMcp.remoteHttp')}</option>
+              <option value="sse">{t('settings.sharedMcp.remoteSse')}</option>
+              <option value="stdio">{t('settings.sharedMcp.commandStdio')}</option>
             </select>
           </label>
           {form.transport === 'stdio' ? (
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <label className="text-xs text-gray-500 dark:text-gray-400">
-                Command
+                {t('settings.sharedMcp.command')}
                 <input value={form.command} onChange={(e) => setForm({ ...form, command: e.target.value })} placeholder="npx" className="mt-1 w-full px-2.5 py-2 rounded-md border border-gray-200 dark:border-white/8 bg-transparent text-sm text-gray-900 dark:text-gray-50" />
               </label>
               <label className="text-xs text-gray-500 dark:text-gray-400">
-                Args (space-separated)
+                {t('settings.sharedMcp.args')}
                 <input value={form.argsText} onChange={(e) => setForm({ ...form, argsText: e.target.value })} placeholder="-y some-mcp-package" className="mt-1 w-full px-2.5 py-2 rounded-md border border-gray-200 dark:border-white/8 bg-transparent text-sm text-gray-900 dark:text-gray-50" />
               </label>
             </div>
           ) : (
             <>
               <label className="block text-xs text-gray-500 dark:text-gray-400">
-                URL (https)
+                {t('settings.sharedMcp.url')}
                 <input value={form.url} onChange={(e) => setForm({ ...form, url: e.target.value })} placeholder="https://mcp.example.com/mcp" className="mt-1 w-full px-2.5 py-2 rounded-md border border-gray-200 dark:border-white/8 bg-transparent text-sm text-gray-900 dark:text-gray-50" />
               </label>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <label className="text-xs text-gray-500 dark:text-gray-400">
-                  Auth header (optional)
+                  {t('settings.sharedMcp.authHeader')}
                   <input value={form.headerKey} onChange={(e) => setForm({ ...form, headerKey: e.target.value })} className="mt-1 w-full px-2.5 py-2 rounded-md border border-gray-200 dark:border-white/8 bg-transparent text-sm text-gray-900 dark:text-gray-50" />
                 </label>
                 <label className="text-xs text-gray-500 dark:text-gray-400">
-                  Value (stored encrypted)
+                  {t('settings.sharedMcp.headerValue')}
                   <input value={form.headerValue} onChange={(e) => setForm({ ...form, headerValue: e.target.value })} placeholder="Bearer …" className="mt-1 w-full px-2.5 py-2 rounded-md border border-gray-200 dark:border-white/8 bg-transparent text-sm text-gray-900 dark:text-gray-50" />
                 </label>
               </div>
@@ -225,10 +227,10 @@ export default function SharedMcpSettings() {
           )}
           <div className="flex gap-2 pt-1">
             <button disabled={saving} onClick={submit} className="text-sm px-3 py-2 rounded-lg bg-brand-500 text-white hover:bg-brand-600 disabled:opacity-50 transition-colors">
-              {saving ? 'Adding…' : 'Add server'}
+              {saving ? t('settings.sharedMcp.adding') : t('settings.sharedMcp.addServer')}
             </button>
             <button onClick={() => { setAdding(false); setForm({ ...EMPTY_FORM }); }} className="text-sm px-3 py-2 rounded-lg border border-gray-200 dark:border-white/8 text-gray-600 dark:text-gray-300">
-              Cancel
+              {t('common.cancel')}
             </button>
           </div>
         </div>

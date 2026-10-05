@@ -29,6 +29,18 @@ export interface BudgetStatus {
   resetsAt: string; // ISO — the next period start
 }
 
+/**
+ * Below this remaining amount a run cannot do meaningful work, so the budget
+ * counts as used up: the run is refused (agent-billing) and the chat meter shows
+ * the "used up" banner. ONE threshold for both, so they can never disagree.
+ */
+export const MIN_RUN_BUDGET_CENTS = 5;
+
+/** The shared "budget used up" rule (null = no limit, never exhausted). */
+export function isBudgetExhausted(remainingCents: number | null): boolean {
+  return remainingCents !== null && remainingCents < MIN_RUN_BUDGET_CENTS;
+}
+
 export function periodBounds(now = new Date(), monthOffset = 0): { start: Date; end: Date } {
   const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + monthOffset, 1));
   const end = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + monthOffset + 1, 1));
@@ -59,7 +71,7 @@ export async function getBudgetStatus(orgId: string, now = new Date()): Promise<
     budgetCents,
     spentCents,
     remainingCents,
-    exhausted: remainingCents !== null && remainingCents <= 0,
+    exhausted: isBudgetExhausted(remainingCents),
     periodStart: start.toISOString(),
     resetsAt: end.toISOString(),
   };

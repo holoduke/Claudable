@@ -2,6 +2,7 @@
 import { use, useCallback, useEffect, useRef, useState, useSyncExternalStore, useLayoutEffect } from 'react';
 import CommentsLayer, { type CommentPin, type ComposeAnchor } from '@/components/chat/CommentsLayer';
 import { normalizePreviewRoute } from '@/lib/utils/preview-route';
+import { useT } from '@/contexts/I18nContext';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? '';
 
@@ -18,10 +19,16 @@ const noSavedGuestNameOnServer = (): string | null => null;
 // Readiness poll: every 2.5s for up to ~3 minutes (a cold start incl. install).
 const READY_POLL_MS = 2500;
 const READY_POLL_MAX_TRIES = 72;
+// Stacks without the injected preview plugin (Next, Angular, …) never send the
+// claudable-preview handshake. If it hasn't arrived this long after the iframe
+// loaded, commenting can't work there — say so instead of an armed comment mode
+// that silently does nothing.
+const BRIDGE_HANDSHAKE_TIMEOUT_MS = 8000;
 
 /** Public stakeholder-review page: live preview + leave pinned comments as a guest. */
 export default function SharePage({ params }: { params: Promise<{ token: string }> }) {
   const { token } = use(params);
+  const t = useT();
   const [info, setInfo] = useState<ShareInfo | null>(null);
   const [error, setError] = useState<string | null>(null);
   // A previously entered guest name (restored from localStorage after hydration)
@@ -48,6 +55,12 @@ export default function SharePage({ params }: { params: Promise<{ token: string 
   // the site normally (links/buttons work). Existing comment pins stay visible
   // and clickable in both modes.
   const [commentMode, setCommentMode] = useState(true);
+  // null = unknown yet; true = handshake seen; false = no bridge (timed out).
+  const [bridgeAvailable, setBridgeAvailable] = useState<boolean | null>(null);
+  const bridgeSeenRef = useRef(false);
+  const bridgeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (bridgeTimerRef.current) clearTimeout(bridgeTimerRef.current); }, []);
+  const commentingOff = bridgeAvailable === false;
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const paneRef = useRef<HTMLDivElement>(null);
   const routeRef = useRef('/');
@@ -66,11 +79,11 @@ export default function SharePage({ params }: { params: Promise<{ token: string 
       .then((r) => r.json())
       .then((j) => {
         if (controller.signal.aborted) return;
-        if (j.success) setInfo(j.data); else setError(j.message || 'Invalid or revoked link');
+        if (j.success) setInfo(j.data); else setError(t('home.share.invalid'));
       })
-      .catch(() => { if (!controller.signal.aborted) setError('Could not load this share link'); });
+      .catch(() => { if (!controller.signal.aborted) setError(t('home.share.loadFailed')); });
     return () => { controller.abort(); };
-  }, [token]);
+  }, [token, t]);
 
   const post = useCallback((msg: Record<string, unknown>) => {
     const url = info?.previewUrl;
@@ -114,6 +127,8 @@ export default function SharePage({ params }: { params: Promise<{ token: string 
         // handshake. Re-arm comment mode + re-draw pins now that its listener
         // exists; the single enter() on mount races the iframe load and is lost.
         setPreviewLoaded(true); // hides the "starting…" overlay + stops retrying
+        bridgeSeenRef.current = true;
+        setBridgeAvailable(true);
         post({ type: commentModeRef.current ? 'enter' : 'exit' }); // respect the toggle
         post({ type: 'renderPins', activeId: activeIdRef.current, pins: commentsRef.current.map((c) => ({ id: c.id, index: c.index, anchorSelector: c.anchorSelector, relX: c.relX, relY: c.relY, resolved: c.resolved })) });
         setRoute(normalizePreviewRoute(d.path)); // pathname only (older plugins send the query)
@@ -147,7 +162,7 @@ export default function SharePage({ params }: { params: Promise<{ token: string 
         const res = await fetch(`${API_BASE}/api/share/${token}/ready`, { cache: 'no-store' });
         const j = await res.json().catch(() => null);
         if (cancelled) return;
-        if (res.status === 404) { setError(j?.message || 'Invalid or revoked link'); return; }
+        if (res.status === 404) { setError(t('home.share.invalid')); return; }
         if (j?.success && j.data?.ready === true) { setServerReady(true); return; }
       } catch { /* network blip — keep polling */ }
       if (cancelled) return;
@@ -156,7 +171,7 @@ export default function SharePage({ params }: { params: Promise<{ token: string 
     };
     void poll();
     return () => { cancelled = true; if (timer) clearTimeout(timer); };
-  }, [info?.previewUrl, serverReady, token]);
+  }, [info?.previewUrl, serverReady, token, t]);
   // Once the server is up, reload the iframe every few seconds until the plugin
   // reports ready (or the onLoad fallback fires), then stop.
   useEffect(() => {
@@ -206,7 +221,7 @@ export default function SharePage({ params }: { params: Promise<{ token: string 
   if (!info) return (
     <div className="h-screen flex flex-col items-center justify-center gap-3 text-gray-400 dark:text-gray-500">
       <svg className="animate-spin text-brand-500" width="26" height="26" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" className="opacity-20" /><path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" strokeWidth="4" strokeLinecap="round" /></svg>
-      <p className="text-sm">Starting the preview… this can take up to a minute on first open.</p>
+      <p className="text-sm">{t('home.share.starting')}</p>
     </div>
   );
 
@@ -214,18 +229,18 @@ export default function SharePage({ params }: { params: Promise<{ token: string 
     return (
       <div className="h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
         <div className="bg-white dark:bg-gray-900 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 p-6 w-80">
-          <h1 className="text-lg font-semibold text-gray-900 dark:text-gray-50 mb-1">Review “{info.projectName}”</h1>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">Enter your name so your comments are attributed.</p>
+          <h1 className="text-lg font-semibold text-gray-900 dark:text-gray-50 mb-1">{t('home.share.reviewTitle', { name: info.projectName })}</h1>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">{t('home.share.namePrompt')}</p>
           <input
             autoFocus value={guestName} onChange={(e) => setTypedName(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter' && guestName.trim()) { try { localStorage.setItem(GUEST_NAME_KEY, guestName.trim()); } catch {} setTypedConfirmed(true); } }}
-            placeholder="Your name" className="w-full border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 text-sm mb-3 focus:outline-hidden focus:ring-2 focus:ring-brand-500/30"
+            placeholder={t('home.share.namePlaceholder')} aria-label={t('home.share.namePlaceholder')} className="w-full border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 text-sm mb-3 focus:outline-hidden focus:ring-2 focus:ring-brand-500/30"
           />
           <button
             onClick={() => { if (guestName.trim()) { try { localStorage.setItem(GUEST_NAME_KEY, guestName.trim()); } catch {} setTypedConfirmed(true); } }}
             disabled={!guestName.trim()}
             className="w-full h-9 rounded-lg bg-brand-500 text-white text-sm font-medium hover:bg-brand-600 disabled:opacity-40"
-          >Start reviewing</button>
+          >{t('home.share.start')}</button>
         </div>
       </div>
     );
@@ -236,23 +251,31 @@ export default function SharePage({ params }: { params: Promise<{ token: string 
       <div className="h-12 shrink-0 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 flex items-center px-4 gap-3">
         <span className="w-2 h-2 rounded-full bg-brand-500" />
         <span className="font-semibold text-gray-900 dark:text-gray-50 text-sm">{info.projectName}</span>
+        {commentingOff ? (
+          <span role="status" title={t('home.share.commentsUnavailableHint')} className="text-xs text-gray-500 dark:text-gray-400">
+            {t('home.share.commentsUnavailable')} · {route}
+          </span>
+        ) : (<>
         <button
+          type="button"
+          aria-pressed={commentMode}
           onClick={() => {
             const next = !commentMode;
             setCommentMode(next);
             // Browsing mode closes any open composer/thread.
             if (!next) { setCompose(null); setActiveId(null); }
           }}
-          title={commentMode ? 'Commenting on — click the page to leave a comment. Click to browse instead.' : 'Browsing — links work. Click to leave comments.'}
+          title={commentMode ? t('home.share.commentOnTitle') : t('home.share.browseTitle')}
           className={`h-8 flex items-center gap-1.5 px-2.5 rounded-lg text-xs font-medium border transition-colors ${
             commentMode ? 'bg-brand-500 text-white border-brand-500' : 'bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-200 border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800'
           }`}
         >
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2Z" /></svg>
-          {commentMode ? 'Commenting' : 'Comment'}
+          <svg aria-hidden width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2Z" /></svg>
+          {commentMode ? t('home.share.commenting') : t('home.share.comment')}
         </button>
-        <span className="text-xs text-gray-400 dark:text-gray-500 hidden sm:inline">{commentMode ? 'click the page to comment' : 'browsing — links work'} · {route}</span>
-        <span className="ml-auto text-xs text-gray-500 dark:text-gray-400">You: {guestName}</span>
+        <span className="text-xs text-gray-400 dark:text-gray-500 hidden sm:inline">{commentMode ? t('home.share.hintComment') : t('home.share.hintBrowse')} · {route}</span>
+        </>)}
+        <span className="ml-auto text-xs text-gray-500 dark:text-gray-400 truncate">{t('home.share.you', { name: guestName })}</span>
       </div>
       <div ref={paneRef} className="relative flex-1 min-h-0">
         {info.previewUrl && serverReady ? (
@@ -269,19 +292,31 @@ export default function SharePage({ params }: { params: Promise<{ token: string 
               // iframe only mounts once the readiness probe saw the server up,
               // so this load is the app, not the proxy's 502 page.
               setTimeout(() => setPreviewLoaded(true), 1500);
+              // No handshake within the timeout → this stack has no comment
+              // bridge: turn comment mode off and say commenting is unavailable.
+              if (!bridgeSeenRef.current) {
+                if (bridgeTimerRef.current) clearTimeout(bridgeTimerRef.current);
+                bridgeTimerRef.current = setTimeout(() => {
+                  if (bridgeSeenRef.current) return;
+                  setBridgeAvailable(false);
+                  setCommentMode(false);
+                  setCompose(null);
+                  setActiveId(null);
+                }, BRIDGE_HANDSHAKE_TIMEOUT_MS);
+              }
             }}
           />
         ) : !info.previewUrl ? (
-          <div className="h-full flex items-center justify-center text-gray-400 dark:text-gray-500">Preview is starting… refresh in a moment.</div>
+          <div className="h-full flex items-center justify-center text-gray-400 dark:text-gray-500">{t('home.share.startingRefresh')}</div>
         ) : null}
         {info.previewUrl && !previewLoaded && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-gray-50 dark:bg-gray-900/95 text-gray-500 dark:text-gray-400 z-40 pointer-events-none">
             {readyTimedOut ? (
-              <p className="text-sm">The preview didn’t start. Refresh this page to try again.</p>
+              <p className="text-sm">{t('home.share.didNotStart')}</p>
             ) : (
               <>
                 <svg className="animate-spin text-brand-500" width="26" height="26" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" className="opacity-20" /><path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" strokeWidth="4" strokeLinecap="round" /></svg>
-                <p className="text-sm">Starting the preview… this can take up to a minute on first open.</p>
+                <p className="text-sm">{t('home.share.starting')}</p>
               </>
             )}
           </div>

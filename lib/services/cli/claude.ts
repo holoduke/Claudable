@@ -7,8 +7,9 @@
 import { SQLITE_DIR, SQLITE_FILE, databasePromptNote, ensureSqliteDir, projectUsesSqlite, sqliteEnv } from '@/lib/services/sqlite-db';
 import {
   builtinProfile, editProfilePromptNote, guardHookSettings, isRestricted, profileEnvValue, resolveEditProfile,
-  RESTRICTED_DISALLOWED_TOOLS, RESTRICTED_TOOLS, type EditProfile,
+  type EditProfile,
 } from '@/lib/services/edit-profiles';
+import { chatModePromptNote, selectTurnTools, type TurnMode } from './turn-tools';
 import guardModule from '@/lib/edit-guard/guard.cjs';
 import { toAgentContainerPaths } from './container-paths';
 import { query } from '@anthropic-ai/claude-agent-sdk';
@@ -335,11 +336,13 @@ async function buildAgentSystemPrompt(
   modelLabel: string,
   resolvedModel: string,
   requesterUserId?: string,
+  mode: TurnMode = 'act',
 ): Promise<{ systemPrompt: string; imagesOn: boolean; editProfile: EditProfile }> {
   // Pick the system prompt for the project's tech stack (Nuxt | Next.js | Angular).
   const stackProject = await getProjectById(projectId).catch(() => null);
   // Image generation available when the project (or Claudable) has an xAI key.
-  const imagesOn = await imagesEnabledFor(projectId).catch(() => false);
+  // Never in a read-only chat turn: generate_image writes into the project.
+  const imagesOn = mode !== 'chat' && (await imagesEnabledFor(projectId).catch(() => false));
   let systemPrompt = selectSystemPrompt(stackProject?.templateType);
 
   // Tell the agent which model it's running as — otherwise it guesses its own
@@ -379,6 +382,7 @@ async function buildAgentSystemPrompt(
       return builtinProfile('content');
     });
   systemPrompt += editProfilePromptNote(editProfile);
+  if (mode === 'chat') systemPrompt += chatModePromptNote();
 
   return { systemPrompt, imagesOn, editProfile };
 }
@@ -405,6 +409,8 @@ async function runContainerizedTurn(args: {
   itopsEnabled: boolean;
   /** Who triggered the run — gates private-credential use (see resolveProjectClaudeToken). */
   requesterUserId?: string;
+  /** 'chat' = read-only turn (no write/shell tools); default 'act'. */
+  mode?: TurnMode;
   suppressUserError: boolean;
   publishStatus: (status: string, message?: string) => void;
   safeMarkRunning: () => Promise<void>;
@@ -426,8 +432,12 @@ async function runContainerizedTurn(args: {
       throw new Error(`Project not found: ${projectId}. Cannot create messages for non-existent project.`);
     }
 
-    const { systemPrompt, imagesOn, editProfile } = await buildAgentSystemPrompt(projectId, modelLabel, resolvedModel, args.requesterUserId);
+    const mode: TurnMode = args.mode ?? 'act';
+    const readOnly = mode === 'chat';
+    const { systemPrompt, imagesOn, editProfile } = await buildAgentSystemPrompt(projectId, modelLabel, resolvedModel, args.requesterUserId, mode);
     const restricted = isRestricted(editProfile);
+    // Edit profile x turn mode → the built-in tool allowlist (never wider than either).
+    const toolPolicy = selectTurnTools({ mode, restrictedProfile: restricted });
 
     // Credential + budget: internal projects use the project/personal/org chain
     // with the platform token as fallback; customer projects ONLY their org's key,
@@ -510,7 +520,8 @@ async function runContainerizedTurn(args: {
       projectPath: absoluteProjectPath,
       imagesOn,
       // it-ops tools are not project-scoped: never inside a customer project.
-      itopsEnabled: args.itopsEnabled && !run.billing,
+      // ...and never in a read-only chat turn (it can change infrastructure).
+      itopsEnabled: args.itopsEnabled && !run.billing && !readOnly,
       // Who's running — so their PRIVATE project MCP servers attach (shared ones
       // attach for everyone).
       requesterUserId: args.requesterUserId,
@@ -617,7 +628,8 @@ async function runContainerizedTurn(args: {
         // passthrough entirely.
         // A restricted edit profile never loads extra MCP servers (a project's
         // .mcp.json or account connectors could write files around the guard).
-        strictMcpConfig: restricted || (Boolean(mcp) && !connectorsOk),
+        // A read-only chat turn likewise: extra servers could write around the tool policy.
+        strictMcpConfig: restricted || readOnly || (Boolean(mcp) && !connectorsOk),
         homeHostPath,
         skillsHostPath,
         skillsContainerPath,
@@ -631,10 +643,10 @@ async function runContainerizedTurn(args: {
         env: restricted
           ? { ...agentEnv, CLAUDABLE_EDIT_PROFILE: profileEnvValue(editProfile), CLAUDABLE_EDIT_ROOT: '/work' }
           : agentEnv,
-        // Layer 2: the edit guard as a PreToolUse hook + no shell for restricted profiles.
-        ...(restricted
-          ? { settingsJson: guardHookSettings(), tools: RESTRICTED_TOOLS.join(' '), disallowedTools: RESTRICTED_DISALLOWED_TOOLS.join(' ') }
-          : {}),
+        // Layer 2: the edit guard as a PreToolUse hook for restricted profiles, and the
+        // tool policy (no shell for restricted profiles; read-only tools in chat mode).
+        ...(restricted ? { settingsJson: guardHookSettings() } : {}),
+        ...(toolPolicy ? { tools: toolPolicy.tools.join(' '), disallowedTools: toolPolicy.disallowedTools.join(' ') } : {}),
       },
       onEvent,
     );
@@ -759,7 +771,7 @@ export async function executeClaude(
   model: string = CLAUDE_DEFAULT_MODEL,
   sessionId?: string,
   requestId?: string,
-  options: { suppressUserError?: boolean; thinkingMode?: ThinkingMode; requesterItopsEnabled?: boolean; requesterUserId?: string } = {}
+  options: { suppressUserError?: boolean; thinkingMode?: ThinkingMode; requesterItopsEnabled?: boolean; requesterUserId?: string; mode?: TurnMode } = {}
 ): Promise<void> {
   console.log(`\n========================================`);
   console.log(`[ClaudeService] 🚀 Starting Claude Agent SDK`);
@@ -867,6 +879,7 @@ export async function executeClaude(
       thinkingMode: options.thinkingMode,
       itopsEnabled: options.requesterItopsEnabled === true,
       requesterUserId: options.requesterUserId,
+      mode: options.mode,
       suppressUserError: options.suppressUserError === true,
       publishStatus,
       safeMarkRunning,
@@ -948,13 +961,17 @@ export async function executeClaude(
       modelLabel,
       resolvedModel,
       options.requesterUserId,
+      options.mode,
     );
     const restrictedProfile = isRestricted(editProfile);
+    const readOnlyTurn = options.mode === 'chat';
+    const toolPolicy = selectTurnTools({ mode: options.mode ?? 'act', restrictedProfile });
 
     // it-ops follows the USER running the agent, NOT the project: attach the broker
     // only when the person who triggered this run has it-ops enabled. A different
     // user opening the same project gets no tools unless they too have it-ops.
-    const itopsEnabled = options.requesterItopsEnabled === true;
+    // Never in a read-only chat turn (the broker can change infrastructure).
+    const itopsEnabled = options.requesterItopsEnabled === true && !readOnlyTurn;
 
     // Resolve the Claude credential for this project (a user's connected token),
     // falling back to the global env token. Built here so it overrides the scrubbed
@@ -1051,7 +1068,7 @@ export async function executeClaude(
             ...(restrictedProfile ? [{ matcher: 'Write|Edit|MultiEdit|NotebookEdit', hooks: [buildEditProfileHook(absoluteProjectPath, editProfile)] }] : []),
           ],
         },
-        ...(restrictedProfile ? { tools: [...RESTRICTED_TOOLS], disallowedTools: [...RESTRICTED_DISALLOWED_TOOLS] } : {}),
+        ...(toolPolicy ? { tools: toolPolicy.tools, disallowedTools: toolPolicy.disallowedTools } : {}),
         // it-ops tools (in-process MCP broker). Attached when the project's OWNER
         // has it-ops enabled — the tools run in THIS process (creds never reach the
         // scrubbed agent env). See itops-mcp.ts + user-itops.ts.
@@ -1520,7 +1537,8 @@ export async function initializeNextJsProject(
   model: string = CLAUDE_DEFAULT_MODEL,
   requestId?: string,
   requesterItopsEnabled?: boolean,
-  requesterUserId?: string
+  requesterUserId?: string,
+  mode?: TurnMode
 ): Promise<void> {
   const proj = await getProjectById(projectId).catch(() => null);
   const kind = stackKind(proj?.templateType);
@@ -1528,7 +1546,7 @@ export async function initializeNextJsProject(
 
   const fullPrompt = buildInitialBuildPrompt(proj?.templateType, initialPrompt);
 
-  await executeClaude(projectId, projectPath, fullPrompt, model, undefined, requestId, { requesterItopsEnabled, requesterUserId });
+  await executeClaude(projectId, projectPath, fullPrompt, model, undefined, requestId, { requesterItopsEnabled, requesterUserId, mode });
 }
 
 /**
@@ -1556,7 +1574,8 @@ export async function applyChanges(
   requestId?: string,
   thinkingMode?: ThinkingMode,
   requesterItopsEnabled?: boolean,
-  requesterUserId?: string
+  requesterUserId?: string,
+  mode?: TurnMode
 ): Promise<void> {
   console.log(`[ClaudeService] Applying changes to project: ${projectId}`);
   try {
@@ -1567,6 +1586,7 @@ export async function applyChanges(
       thinkingMode,
       requesterItopsEnabled,
       requesterUserId,
+      mode,
     });
   } catch (error) {
     // Resuming a corrupt/incompatible session can fail immediately (exit code 1 /
@@ -1581,6 +1601,7 @@ export async function applyChanges(
         thinkingMode,
         requesterItopsEnabled,
         requesterUserId,
+        mode,
       });
     } else {
       throw error;

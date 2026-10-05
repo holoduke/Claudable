@@ -1,11 +1,7 @@
 import { NextResponse } from 'next/server';
 import { denyUnlessProjectAccess } from '@/lib/auth/gate';
 import { getActiveRequests } from '@/lib/services/user-requests';
-import { updateProject } from '@/lib/services/project';
-import { resetProjectUsage } from '@/lib/services/agent-usage';
-import { createMessage } from '@/lib/services/message';
-import { serializeMessage } from '@/lib/serializers/chat';
-import { streamManager } from '@/lib/services/stream';
+import { postChatNotice, resetAgentSession } from '@/lib/services/cli/agent-session';
 
 interface RouteContext {
   params: Promise<{ project_id: string }>;
@@ -33,21 +29,13 @@ export async function POST(_request: Request, { params }: RouteContext) {
       );
     }
 
-    await updateProject(project_id, { activeClaudeSessionId: null });
-    await resetProjectUsage(project_id);
+    await resetAgentSession(project_id);
 
     // Visible confirmation in the chat log (also reaches other open viewers via SSE).
-    const message = await createMessage({
-      projectId: project_id,
-      role: 'assistant',
-      messageType: 'chat',
-      content: '🧹 Context cleared — your next message starts a fresh conversation. Chat history above is kept for reference.',
-      cliSource: 'claude',
-    });
-    streamManager.publish(project_id, {
-      type: 'message',
-      data: serializeMessage(message),
-    });
+    await postChatNotice(
+      project_id,
+      '🧹 Context cleared — your next message starts a fresh conversation. Chat history above is kept for reference.',
+    );
 
     return NextResponse.json({ success: true });
   } catch (error) {

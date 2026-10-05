@@ -9,6 +9,14 @@ import { streamManager } from '@/lib/services/stream';
 import { prisma } from '@/lib/db/client';
 import { serializeMessage } from '@/lib/serializers/chat';
 
+/** Max messages replayed on reconnect. */
+const REPLAY_LIMIT = 200;
+
+/** The replay query selects the newest N (desc); the client integrates them ascending. */
+function newestFirstToReplayOrder<T>(newestFirst: T[]): T[] {
+  return [...newestFirst].reverse();
+}
+
 interface RouteContext {
   params: Promise<{ project_id: string }>;
 }
@@ -71,18 +79,19 @@ export async function GET(
       // Gap recovery: a reconnecting client passes ?since=<newest message ISO it
       // has>. Replay anything persisted after that so messages streamed during a
       // network blip or a backpressure drop aren't lost until a full reload. The
-      // client dedupes by message id, so an overlap is harmless. Bounded.
+      // client dedupes by message id, so an overlap is harmless. Bounded to the
+      // NEWEST messages (what the user is looking at), sent oldest-first.
       const since = request.nextUrl.searchParams.get('since');
       if (since) {
         const sinceDate = new Date(since);
         if (!Number.isNaN(sinceDate.getTime())) {
           (async () => {
             try {
-              const missed = await prisma.message.findMany({
+              const missed = newestFirstToReplayOrder(await prisma.message.findMany({
                 where: { projectId: project_id, createdAt: { gt: sinceDate } },
-                orderBy: { createdAt: 'asc' },
-                take: 200,
-              });
+                orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+                take: REPLAY_LIMIT,
+              }));
               for (const m of missed) {
                 if (!streamController) break; // client already gone
                 const forStream = { ...m, updatedAt: (m as { updatedAt?: Date }).updatedAt ?? m.createdAt } as unknown as Parameters<typeof serializeMessage>[0];

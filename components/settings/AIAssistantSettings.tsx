@@ -4,19 +4,21 @@
  */
 import React from 'react';
 import { useCLI } from '@/hooks/useCLI';
+import { useT } from '@/contexts/I18nContext';
 
 interface AIAssistantSettingsProps {
   projectId: string;
 }
 
 export function AIAssistantSettings({ projectId }: AIAssistantSettingsProps) {
+  const t = useT();
   const { cliOptions, preference } = useCLI({ projectId });
 
   const selectedCLIOption = cliOptions.find(opt => opt.id === preference?.preferredCli);
   
   // Get the actual model name from preference data
   const getModelDisplayName = () => {
-    if (!preference?.selectedModel) return 'Default Model';
+    if (!preference?.selectedModel) return t('settings.agent.defaultModel');
     
     // Find the model name from the CLI options
     const currentCLI = selectedCLIOption;
@@ -34,7 +36,7 @@ export function AIAssistantSettings({ projectId }: AIAssistantSettingsProps) {
     <div className="p-6 space-y-6">
       <div>
         <h3 className="text-lg font-medium text-gray-900 dark:text-gray-50 mb-4">
-          Current AI Assistant
+          {t('settings.agent.title')}
         </h3>
         
         <div className="space-y-4">
@@ -43,19 +45,19 @@ export function AIAssistantSettings({ projectId }: AIAssistantSettingsProps) {
             <div className="flex items-center justify-between">
               <div>
                 <h4 className="text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">
-                  CLI Agent
+                  {t('settings.agent.cli')}
                 </h4>
                 <div className="flex items-center gap-2">
                   <span className="text-lg font-semibold text-gray-900 dark:text-gray-50 ">
-                    {selectedCLIOption?.name || preference?.preferredCli || 'Not configured'}
+                    {selectedCLIOption?.name || preference?.preferredCli || t('settings.agent.notConfigured')}
                   </span>
                   {selectedCLIOption?.configured ? (
                     <span className="text-xs px-2 py-1 bg-green-100 text-green-700 rounded-sm">
-                      Configured
+                      {t('settings.agent.configured')}
                     </span>
                   ) : (
                     <span className="text-xs px-2 py-1 bg-yellow-100 text-yellow-700 rounded-sm">
-                      Not Configured
+                      {t('settings.agent.notConfiguredBadge')}
                     </span>
                   )}
                 </div>
@@ -66,7 +68,7 @@ export function AIAssistantSettings({ projectId }: AIAssistantSettingsProps) {
           {/* Current Model */}
           <div className="p-4 bg-gray-50 dark:bg-white/3 rounded-lg">
             <h4 className="text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">
-              Model
+              {t('settings.agent.model')}
             </h4>
             <span className="text-lg font-semibold text-gray-900 dark:text-gray-50 ">
               {modelDisplayName}

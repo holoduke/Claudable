@@ -1,4 +1,5 @@
 import React from 'react';
+import { useI18n } from '@/contexts/I18nContext';
 
 /**
  * Dependency-free colored diff renderer for tool-call expansions.
@@ -189,6 +190,7 @@ interface DiffViewProps {
 }
 
 const DiffView: React.FC<DiffViewProps> = ({ diff }) => {
+  const { t } = useI18n();
   // Diff lines are positional: the rendered line number is their identity.
   const allLines = buildLines(diff).map((line, no) => ({ ...line, no }));
   const truncated = allLines.length > MAX_RENDER_LINES;
@@ -214,7 +216,7 @@ const DiffView: React.FC<DiffViewProps> = ({ diff }) => {
       </div>
       {truncated && (
         <div className="px-2 py-1 text-[11px] text-gray-500 dark:text-gray-400 border-t border-gray-200 dark:border-white/8">
-          {'…'}{hidden} more line{hidden === 1 ? '' : 's'}
+          {hidden === 1 ? t('chat.diff.moreLines.one') : t('chat.diff.moreLines.other', { count: hidden })}
         </div>
       )}
     </div>

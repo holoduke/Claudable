@@ -4,6 +4,7 @@
  */
 import React, { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useT } from '@/contexts/I18nContext';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? '';
 
@@ -41,6 +42,7 @@ interface SupabaseApiKeys {
 }
 
 export default function SupabaseModal({ isOpen, onClose, projectId, projectName, onSuccess }: SupabaseModalProps) {
+  const t = useT();
   const [step, setStep] = useState<'token' | 'configure' | 'creating' | 'success'>('configure');
   const [organizations, setOrganizations] = useState<SupabaseOrganization[]>([]);
   const [selectedOrgId, setSelectedOrgId] = useState('');
@@ -78,12 +80,12 @@ export default function SupabaseModal({ isOpen, onClose, projectId, projectName,
       if (!response.ok) {
         if (response.status === 401) {
           setStep('token');
-          setError('Supabase token not configured. Please add your token in Global Settings → Service Integrations.');
+          setError(t('settings.modal.supabase.errNoToken'));
           setOrganizations([]);
           return;
         }
         const message = await response.text();
-        throw new Error(message || `Failed to fetch organizations: ${response.status} ${response.statusText}`);
+        throw new Error(message || t('settings.modal.supabase.errOrgsStatus', { status: `${response.status} ${response.statusText}` }));
       }
 
       const payload = await response.json();
@@ -94,16 +96,16 @@ export default function SupabaseModal({ isOpen, onClose, projectId, projectName,
         setSelectedOrgId(orgs[0].id);
         setStep('configure');
       } else {
-        setError('No organizations found. Please create an organization in Supabase first.');
+        setError(t('settings.modal.supabase.errNoOrgs'));
         setStep('token');
       }
     } catch (err: any) {
-      setError(err?.message || 'Failed to fetch organizations');
+      setError(err?.message || t('settings.modal.supabase.errOrgs'));
       setStep('token');
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [t]);
 
   // Reset the form when the modal opens (or the project name changes while
   // open) — adjusted during render instead of in an effect.
@@ -132,7 +134,7 @@ export default function SupabaseModal({ isOpen, onClose, projectId, projectName,
 
   const createSupabaseProject = async () => {
     if (!selectedOrgId || !supabaseProjectName.trim() || !dbPassword.trim()) {
-      setError('Please fill in all required fields');
+      setError(t('settings.modal.supabase.errRequired'));
       return;
     }
 
@@ -158,7 +160,7 @@ export default function SupabaseModal({ isOpen, onClose, projectId, projectName,
 
       if (!createResponse.ok) {
         const errorData = await createResponse.text();
-        throw new Error(`Failed to create project: ${createResponse.status} - ${errorData}`);
+        throw new Error(t('settings.modal.supabase.errCreateStatus', { status: createResponse.status, error: errorData }));
       }
 
       const payload = await createResponse.json();
@@ -191,7 +193,7 @@ export default function SupabaseModal({ isOpen, onClose, projectId, projectName,
       }, 2000);
 
     } catch (err: any) {
-      setError(err.message || 'Failed to create Supabase project');
+      setError(err.message || t('settings.modal.supabase.errCreate'));
       setStep('configure');
     } finally {
       setIsLoading(false);
@@ -222,7 +224,7 @@ export default function SupabaseModal({ isOpen, onClose, projectId, projectName,
       }
     }
 
-    throw new Error('Project took too long to become active');
+    throw new Error(t('settings.modal.supabase.errTimeout'));
   };
 
   const getProjectApiKeys = async (supabaseProjectId: string): Promise<SupabaseApiKeys> => {
@@ -230,7 +232,7 @@ export default function SupabaseModal({ isOpen, onClose, projectId, projectName,
 
     if (!response.ok) {
       const text = await response.text();
-      throw new Error(text || `Failed to get API keys: ${response.status}`);
+      throw new Error(text || t('settings.modal.supabase.errKeys', { status: response.status }));
     }
 
     const payload = await response.json();
@@ -304,7 +306,7 @@ export default function SupabaseModal({ isOpen, onClose, projectId, projectName,
 
     if (!response.ok) {
       const text = await response.text();
-      throw new Error(text || 'Failed to save service connection');
+      throw new Error(text || t('settings.modal.supabase.errConnection'));
     }
   };
 
@@ -314,7 +316,7 @@ export default function SupabaseModal({ isOpen, onClose, projectId, projectName,
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/50" onClick={onClose} />
       
-      <div className="relative bg-white dark:bg-gray-900 rounded-lg shadow-xl w-full max-w-md mx-4">
+      <div role="dialog" aria-modal="true" aria-labelledby="supabase-modal-title" className="relative bg-white dark:bg-gray-900 rounded-lg shadow-xl w-full max-w-md mx-4 max-h-[90dvh] overflow-y-auto">
         <motion.div
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
@@ -333,12 +335,13 @@ export default function SupabaseModal({ isOpen, onClose, projectId, projectName,
                 </linearGradient>
               </defs>
             </svg>
-            <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-50 ">
-              Connect Supabase
+            <h2 id="supabase-modal-title" className="text-lg font-semibold text-gray-900 dark:text-gray-50 ">
+              {t('settings.modal.supabase.title')}
             </h2>
           </div>
           <button
             onClick={onClose}
+            aria-label={t('settings.modal.close')}
             className="text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 "
           >
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -365,17 +368,17 @@ export default function SupabaseModal({ isOpen, onClose, projectId, projectName,
                   className="space-y-3"
                 >
                   <p className="text-sm text-gray-600 dark:text-gray-300 ">
-                    Supabase Personal Access Token is not configured. Open Global Settings → Service Integrations and add your Supabase token. After saving, click the button below to retry.
+                    {t('settings.modal.supabase.noTokenHelp')}
                   </p>
                   <div className="flex items-center justify-between text-xs text-gray-500 dark:text-gray-400 ">
-                    <span>Need a token?</span>
+                    <span>{t('settings.modal.supabase.needToken')}</span>
                     <a
                       href="https://supabase.com/dashboard/account/tokens"
                       target="_blank"
                       rel="noopener noreferrer"
                       className="text-blue-500 hover:underline"
                     >
-                      Open Supabase Dashboard
+                      {t('settings.modal.supabase.openDashboard')}
                     </a>
                   </div>
                   <button
@@ -383,7 +386,7 @@ export default function SupabaseModal({ isOpen, onClose, projectId, projectName,
                     disabled={isLoading}
                     className="w-full px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                   >
-                    {isLoading ? 'Checking...' : 'Retry Connection'}
+                    {isLoading ? t('settings.modal.supabase.checking') : t('settings.modal.supabase.retry')}
                   </button>
                 </motion.div>
               </div>
@@ -397,10 +400,11 @@ export default function SupabaseModal({ isOpen, onClose, projectId, projectName,
                   exit={{ opacity: 0, x: -20 }}
                 >
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">
-                    Organization
+                  <label htmlFor="supabase-org" className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">
+                    {t('settings.modal.supabase.organization')}
                   </label>
                   <select
+                    id="supabase-org"
                     value={selectedOrgId}
                     onChange={(e) => setSelectedOrgId(e.target.value)}
                     className="w-full px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-50 focus:outline-hidden focus:ring-2 focus:ring-blue-500"
@@ -414,23 +418,25 @@ export default function SupabaseModal({ isOpen, onClose, projectId, projectName,
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">
-                    Project Name
+                  <label htmlFor="supabase-project-name" className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">
+                    {t('settings.modal.supabase.projectName')}
                   </label>
                   <input
+                    id="supabase-project-name"
                     type="text"
                     value={supabaseProjectName}
                     onChange={(e) => setSupabaseProjectName(e.target.value)}
-                    placeholder="Enter project name"
+                    placeholder={t('settings.modal.supabase.projectNamePlaceholder')}
                     className="w-full px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-50 focus:outline-hidden focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">
-                    Region
+                  <label htmlFor="supabase-region" className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">
+                    {t('settings.modal.supabase.region')}
                   </label>
                   <select
+                    id="supabase-region"
                     value={selectedRegion}
                     onChange={(e) => setSelectedRegion(e.target.value)}
                     className="w-full px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-50 focus:outline-hidden focus:ring-2 focus:ring-blue-500"
@@ -444,14 +450,15 @@ export default function SupabaseModal({ isOpen, onClose, projectId, projectName,
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">
-                    Database Password
+                  <label htmlFor="supabase-db-password" className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">
+                    {t('settings.modal.supabase.dbPassword')}
                   </label>
                   <input
+                    id="supabase-db-password"
                     type="password"
                     value={dbPassword}
                     onChange={(e) => setDbPassword(e.target.value)}
-                    placeholder="Secure password for your database"
+                    placeholder={t('settings.modal.supabase.dbPasswordPlaceholder')}
                     className="w-full px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-50 focus:outline-hidden focus:ring-2 focus:ring-blue-500"
                   />
                   <button
@@ -459,7 +466,7 @@ export default function SupabaseModal({ isOpen, onClose, projectId, projectName,
                     onClick={() => setDbPassword(generateSecurePassword())}
                     className="text-xs text-blue-500 hover:underline mt-1"
                   >
-                    Generate secure password
+                    {t('settings.modal.supabase.generatePassword')}
                   </button>
                 </div>
 
@@ -468,14 +475,14 @@ export default function SupabaseModal({ isOpen, onClose, projectId, projectName,
                     onClick={() => setStep('token')}
                     className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
                   >
-                    Back
+                    {t('settings.modal.back')}
                   </button>
                   <button
                     onClick={createSupabaseProject}
                     disabled={isLoading}
                     className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                   >
-                    Create Project
+                    {t('settings.modal.supabase.create')}
                   </button>
                 </div>
                 </motion.div>
@@ -491,17 +498,17 @@ export default function SupabaseModal({ isOpen, onClose, projectId, projectName,
                 >
                 <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600 mx-auto mb-4"></div>
                 <h3 className="text-lg font-medium text-gray-900 dark:text-gray-50 mb-2">
-                  Creating Supabase Project
+                  {t('settings.modal.supabase.creatingTitle')}
                 </h3>
                 <p className="text-sm text-gray-500 dark:text-gray-400 ">
-                  This may take a few minutes...
+                  {t('settings.modal.supabase.creatingHint')}
                 </p>
                 {createdProject && (
                   <div className="mt-4 text-xs text-gray-600 dark:text-gray-300 ">
-                    <p>✅ Project created: {createdProject.name}</p>
-                    <p>⏳ Waiting for activation...</p>
-                    <p>🔑 Fetching API keys...</p>
-                    <p>💾 Setting up environment variables...</p>
+                    <p>✅ {t('settings.modal.supabase.stepCreated', { name: createdProject.name })}</p>
+                    <p>⏳ {t('settings.modal.supabase.stepActivating')}</p>
+                    <p>🔑 {t('settings.modal.supabase.stepKeys')}</p>
+                    <p>💾 {t('settings.modal.supabase.stepEnv')}</p>
                   </div>
                 )}
                 </motion.div>
@@ -521,10 +528,10 @@ export default function SupabaseModal({ isOpen, onClose, projectId, projectName,
                   </svg>
                 </div>
                 <h3 className="text-lg font-medium text-gray-900 dark:text-gray-50 mb-2">
-                  Supabase Connected!
+                  {t('settings.modal.supabase.successTitle')}
                 </h3>
                 <p className="text-sm text-gray-500 dark:text-gray-400 ">
-                  Your Supabase project has been created and configured successfully.
+                  {t('settings.modal.supabase.successText')}
                 </p>
                 </motion.div>
               </div>
