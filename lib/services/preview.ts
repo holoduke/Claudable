@@ -51,6 +51,7 @@ import {
 import { writeArchitectureSummary } from './preview/architecture';
 import { readPreviewConfig, resolvePreviewBounds, substVars } from './preview/config';
 import { adoptionNeedsBridgeRestart, bridgeEnabledFor } from './preview/bridge-assets';
+import { writeWakeRoute } from './preview/wake';
 import { enforcePreviewConfigPolicy } from './preview/config-policy';
 import { isCustomerProject, TenantPolicyError } from './tenant-policy';
 import {
@@ -164,6 +165,7 @@ class PreviewManager {
     });
     await clearAllPreviewState([...adopted.keys()]);
     await sweepPreviewRoutes();
+    await writeWakeRoute();
     for (const projectId of adopted.keys()) {
       const p = this.processes.get(projectId);
       if (p) await writePreviewRoute(projectId, p.port).catch(() => {});
