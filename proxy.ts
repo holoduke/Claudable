@@ -1,11 +1,22 @@
 import NextAuth from 'next-auth';
 import { authConfig } from '@/lib/auth/config';
+import { NextResponse } from 'next/server';
 import { bearerToken, hasValidSignature } from '@/lib/auth/api-token-signature';
+import { slugFromHost } from '@/lib/services/preview/wake-host';
 
 // Edge-safe instance (config has no Prisma) — used only to verify the session JWT.
 const { auth } = NextAuth(authConfig);
 
 export default auth(async (req) => {
+  // A preview-<slug> host only reaches Claudable through the wake catch-all
+  // route, i.e. while that preview is stopped: hand it to the wake handler,
+  // whatever the path, before the auth gate (the preview URL is public).
+  if (slugFromHost(req.headers.get('host'), process.env.PREVIEW_URL_TEMPLATE || '')) {
+    const headers = new Headers(req.headers);
+    headers.set('x-claudable-wake-path', req.nextUrl.pathname);
+    return NextResponse.rewrite(new URL('/api/preview-wake', req.url), { request: { headers } });
+  }
+
   // Safety valve: until AUTH_ENABLED=true the gate is off and the app behaves as
   // before, so a misconfigured login can never lock everyone out.
   if (process.env.AUTH_ENABLED !== 'true') return;
