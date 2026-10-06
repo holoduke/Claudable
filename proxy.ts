@@ -1,22 +1,13 @@
 import NextAuth from 'next-auth';
 import { authConfig } from '@/lib/auth/config';
-import { NextResponse } from 'next/server';
+import { NextResponse, type NextFetchEvent, type NextRequest } from 'next/server';
 import { bearerToken, hasValidSignature } from '@/lib/auth/api-token-signature';
 import { slugFromHost } from '@/lib/services/preview/wake-host';
 
 // Edge-safe instance (config has no Prisma) — used only to verify the session JWT.
 const { auth } = NextAuth(authConfig);
 
-export default auth(async (req) => {
-  // A preview-<slug> host only reaches Claudable through the wake catch-all
-  // route, i.e. while that preview is stopped: hand it to the wake handler,
-  // whatever the path, before the auth gate (the preview URL is public).
-  if (slugFromHost(req.headers.get('host'), process.env.PREVIEW_URL_TEMPLATE || '')) {
-    const headers = new Headers(req.headers);
-    headers.set('x-claudable-wake-path', req.nextUrl.pathname);
-    return NextResponse.rewrite(new URL('/api/preview-wake', req.url), { request: { headers } });
-  }
-
+const gate = auth(async (req) => {
   // Safety valve: until AUTH_ENABLED=true the gate is off and the app behaves as
   // before, so a misconfigured login can never lock everyone out.
   if (process.env.AUTH_ENABLED !== 'true') return;
@@ -68,6 +59,24 @@ export default auth(async (req) => {
   url.search = '';
   return Response.redirect(url);
 });
+
+export default function proxy(req: NextRequest, event: NextFetchEvent) {
+  // A preview-<slug> host only reaches Claudable through the wake catch-all
+  // route, i.e. while that preview is stopped: hand it to the wake handler,
+  // whatever the path, before the auth gate (the preview URL is public). Done
+  // outside auth() on purpose: next-auth rebases req.url/nextUrl on AUTH_URL,
+  // and a cross-origin rewrite target would make Next proxy it externally.
+  if (slugFromHost(req.headers.get('host'), process.env.PREVIEW_URL_TEMPLATE || '')) {
+    const headers = new Headers(req.headers);
+    headers.set('x-claudable-wake-path', req.nextUrl.pathname);
+    const target = req.nextUrl.clone();
+    target.pathname = '/api/preview-wake';
+    target.search = '';
+    return NextResponse.rewrite(target, { request: { headers } });
+  }
+  // auth() as middleware takes the (request, event) pair Next hands a proxy.
+  return (gate as unknown as (r: NextRequest, e: NextFetchEvent) => ReturnType<typeof gate>)(req, event);
+}
 
 export const config = {
   // Run on everything except Next internals. Static-asset skipping is handled
