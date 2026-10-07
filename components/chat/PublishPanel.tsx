@@ -122,6 +122,80 @@ function useAgentBusy(projectId: string): [boolean, (busy: boolean) => void] {
   return [busy, setBusy];
 }
 
+interface DeployLogData { found: boolean; runNumber?: number; job?: string; errors: string[]; tail: string; truncated: boolean }
+
+/**
+ * The failed run's build log, read through Claudable (no Gitea account needed):
+ * the error lines first, the tail behind a disclosure, plus "let the AI fix it".
+ */
+function DeployLogView({ projectId, onFix }: { projectId: string; onFix?: () => void }) {
+  const t = useT();
+  const [open, setOpen] = useState(false);
+  const [state, setState] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle');
+  const [log, setLog] = useState<DeployLogData | null>(null);
+
+  const toggle = async () => {
+    const next = !open;
+    setOpen(next);
+    if (!next || state === 'loading' || state === 'ready') return;
+    setState('loading');
+    try {
+      const res = await fetch(`${API_BASE}/api/projects/${projectId}/deploy/log`, { cache: 'no-store' });
+      const body = await res.json().catch(() => null);
+      if (!res.ok || !body?.success) throw new Error('log');
+      setLog(body as DeployLogData);
+      setState('ready');
+    } catch {
+      setState('error');
+    }
+  };
+
+  return (
+    <div className="mt-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          onClick={toggle}
+          aria-expanded={open}
+          className="px-3 py-1.5 text-xs rounded-lg border border-red-300/80 dark:border-red-800 text-red-700 dark:text-red-300 hover:bg-red-100 dark:hover:bg-red-900/40"
+        >
+          {open ? t('chat.publish.log.hide') : t('chat.publish.log.show')}
+        </button>
+        {onFix && (
+          <button
+            type="button"
+            onClick={onFix}
+            className="px-3 py-1.5 text-xs rounded-lg bg-red-600 text-white hover:bg-red-700 dark:bg-red-500 dark:hover:bg-red-600"
+          >
+            {t('chat.publish.log.fix')}
+          </button>
+        )}
+      </div>
+      {open && (
+        <div className="mt-3 space-y-2" aria-live="polite">
+          {state === 'loading' && <p className="text-xs text-red-700/80 dark:text-red-300/80">{t('chat.publish.log.loading')}</p>}
+          {state === 'error' && <p className="text-xs text-red-700 dark:text-red-300">{t('chat.publish.log.failed')}</p>}
+          {state === 'ready' && log && !log.found && <p className="text-xs text-red-700/80 dark:text-red-300/80">{t('chat.publish.log.none')}</p>}
+          {state === 'ready' && log?.found && (
+            <>
+              {log.errors.length > 0 && (
+                <div>
+                  <p className="text-xs font-medium text-red-800 dark:text-red-200 mb-1">{t('chat.publish.log.errors')}</p>
+                  <pre className="text-[11px] leading-relaxed whitespace-pre-wrap break-words max-h-48 overflow-auto rounded-lg bg-white/70 dark:bg-black/30 border border-red-200 dark:border-red-900 p-2 text-red-900 dark:text-red-100">{log.errors.join('\n')}</pre>
+                </div>
+              )}
+              <details>
+                <summary className="text-xs cursor-pointer text-red-700 dark:text-red-300">{t('chat.publish.log.tail')}{log.job ? ` · ${log.job}` : ''}</summary>
+                <pre className="mt-1 text-[11px] leading-relaxed whitespace-pre-wrap break-words max-h-72 overflow-auto rounded-lg bg-white/70 dark:bg-black/30 border border-red-200 dark:border-red-900 p-2 text-gray-800 dark:text-gray-200">{log.tail || '—'}</pre>
+              </details>
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 interface PublishPanelProps {
   projectId: string;
   isGitea: boolean;
@@ -149,6 +223,8 @@ interface PublishPanelProps {
   onMergeBranch?: () => Promise<void>;
   /** The parent already knows an agent turn is running (combined with the panel's own poll). */
   agentBusy?: boolean;
+  /** Ask the agent to read the failed deploy's build log and fix the cause. */
+  onFixDeploy?: () => void;
 }
 
 /**
@@ -180,6 +256,7 @@ export default function PublishPanel({
   baseBranch = null,
   onMergeBranch,
   agentBusy: agentBusyProp = false,
+  onFixDeploy,
 }: PublishPanelProps) {
   const toast = useToast();
   const t = useT();
@@ -344,10 +421,11 @@ export default function PublishPanel({
                   : t('chat.publish.errFailed')}
               </p>
               <DeployJobList jobs={deployRun?.jobs} tone="red" />
+              {isGitea && <DeployLogView projectId={projectId} onFix={onFixDeploy} />}
               {isGitea && deployRun?.url && (
-                <p className="text-xs text-red-600 dark:text-red-400 mt-1">
+                <p className="text-xs text-red-600 dark:text-red-400 mt-2">
                   <a href={deployRun.url} target="_blank" rel="noopener noreferrer" className="underline">
-                    {deployRun.runNumber ? t('chat.publish.viewFailedLogRun', { run: deployRun.runNumber }) : t('chat.publish.viewFailedLog')} →
+                    {t('chat.publish.log.gitea')} →
                   </a>
                 </p>
               )}

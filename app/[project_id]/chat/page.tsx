@@ -1658,6 +1658,16 @@ const persistProjectPreferences = useCallback(
     runActRef.current?.(instruction, [], 'act');
   }, [previewErrors]);
 
+  // Failed deploy: let the agent read the CI build log (check_deploy) and fix the cause.
+  const fixFailedDeploy = useCallback(() => {
+    setShowPublishPanel(false);
+    runActRef.current?.(
+      'The latest deploy (publish) failed. Call mcp__appdiag__check_deploy to read the build log from the CI server, find the cause in this project (a failing test, a build error, a missing dependency) and fix it with a minimal change. Then tell me it is ready to publish again.',
+      [],
+      'act',
+    );
+  }, []);
+
   // People picker for @-mentions in comments — the same org-scoped search that
   // powers project-access assignment (signed-in users only; empty on failure).
   const searchMentionUsers = useCallback(async (q: string) => {
@@ -4623,6 +4633,7 @@ const persistProjectPreferences = useCallback(
           branch={branchPublish?.current ?? null}
           baseBranch={branchPublish?.base ?? null}
           onMergeBranch={branchPublish ? mergeBranchAndDeploy : undefined}
+          onFixDeploy={fixFailedDeploy}
         />
       )}
 
