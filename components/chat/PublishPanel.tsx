@@ -260,6 +260,21 @@ export default function PublishPanel({
 }: PublishPanelProps) {
   const toast = useToast();
   const t = useT();
+  // Is there anything new to publish? (uncommitted edits or unpushed commits;
+  // see lib/services/git-sync-status.ts). Re-checked when a publish finishes.
+  const [pending, setPending] = useState<{ unpublished: boolean; count: number } | null>(null);
+  useEffect(() => {
+    if (!isGitea || deploymentStatus === 'deploying' || publishLoading) return;
+    const ctrl = new AbortController();
+    fetch(`${API_BASE}/api/projects/${projectId}/github/sync-status`, { cache: 'no-store', signal: ctrl.signal })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (!d?.success || !d.connected) return;
+        setPending({ unpublished: !!d.unpublished, count: (d.dirty_files || 0) + (d.ahead_by || 0) });
+      })
+      .catch(() => { /* aborted or offline: keep the plain "Update" label */ });
+    return () => ctrl.abort();
+  }, [projectId, isGitea, deploymentStatus, publishLoading]);
   const [polledAgentBusy, setPolledAgentBusy] = useAgentBusy(projectId);
   const agentBusy = agentBusyProp || polledAgentBusy;
   /** Show a push failure: the server's own message when it gave one. */
@@ -274,6 +289,9 @@ export default function PublishPanel({
   // On a non-base branch Publish only pushes the branch: nothing deploys until
   // the branch is merged into the base branch.
   const branchMode = !!branch && !!baseBranch && branch !== baseBranch;
+  // Already live and nothing new: "Update" would only re-run the same deploy.
+  const nothingNew = isGitea && !branchMode && !!publishedUrl && pending?.unpublished === false
+    && deploymentStatus !== 'deploying' && deploymentStatus !== 'error' && !publishLoading;
   const [branchPushed, setBranchPushed] = useState(false);
   const [merging, setMerging] = useState(false);
   const publishBranch = async () => {
@@ -392,7 +410,11 @@ export default function PublishPanel({
                   {deployRun.url ? <> · <a href={deployRun.url} target="_blank" rel="noopener noreferrer" className="underline">{t('chat.publish.log')}</a></> : null}
                 </p>
               )}
-              {!branchMode && <p className="text-xs text-gray-400 dark:text-gray-500 mt-2">{t('chat.publish.clickUpdate')}</p>}
+              {!branchMode && (
+                <p className="text-xs text-gray-400 dark:text-gray-500 mt-2">
+                  {pending && !pending.unpublished ? t('chat.publish.upToDate') : t('chat.publish.clickUpdate')}
+                </p>
+              )}
             </div>
           )}
 
@@ -455,7 +477,7 @@ export default function PublishPanel({
           )}
 
           <button
-            disabled={agentBusy || publishLoading || deploymentStatus === 'deploying' || !githubConnected || (!isGitea && !vercelConnected)}
+            disabled={nothingNew || agentBusy || publishLoading || deploymentStatus === 'deploying' || !githubConnected || (!isGitea && !vercelConnected)}
             onClick={async () => {
               if (branchMode) { await publishBranch(); return; }
               // Self-hosted Gitea flow: push to the Gitea repo; the Actions
@@ -568,12 +590,12 @@ export default function PublishPanel({
               }
             }}
             className={`w-full px-4 py-3 rounded-xl font-medium text-white transition ${
-              agentBusy || publishLoading || deploymentStatus === 'deploying' || !githubConnected || (!isGitea && !vercelConnected)
+              nothingNew || agentBusy || publishLoading || deploymentStatus === 'deploying' || !githubConnected || (!isGitea && !vercelConnected)
                 ? 'bg-gray-400 cursor-not-allowed'
                 : 'bg-brand-500 hover:bg-brand-600'
             }`}
           >
-            {publishLoading ? t('chat.publish.btnPublishing') : agentBusy && deploymentStatus !== 'deploying' ? t('chat.publish.btnAgentWorking') : deploymentStatus === 'deploying' ? t('chat.publish.btnDeploying') : (!githubConnected || (!isGitea && !vercelConnected)) ? t('chat.publish.btnConnectFirst') : branchMode ? t('publish.branchTitle', { branch: branch ?? '' }) : (publishedUrl ? t('chat.publish.btnUpdate') : t('chat.publish.btnPublish'))}
+            {publishLoading ? t('chat.publish.btnPublishing') : agentBusy && deploymentStatus !== 'deploying' ? t('chat.publish.btnAgentWorking') : deploymentStatus === 'deploying' ? t('chat.publish.btnDeploying') : (!githubConnected || (!isGitea && !vercelConnected)) ? t('chat.publish.btnConnectFirst') : branchMode ? t('publish.branchTitle', { branch: branch ?? '' }) : nothingNew ? t('chat.publish.btnUpToDate') : (publishedUrl ? (pending?.unpublished && pending.count > 0 ? t(pending.count === 1 ? 'chat.publish.btnUpdateOne' : 'chat.publish.btnUpdateCount', { count: pending.count }) : t('chat.publish.btnUpdate')) : t('chat.publish.btnPublish'))}
           </button>
         </div>
       </div>

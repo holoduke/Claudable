@@ -69,5 +69,9 @@ export const chatPanelsNl: Record<keyof typeof chatPanelsEn, string> = {
   'chat.publish.btnDeploying': 'Uitrollen…',
   'chat.publish.btnConnectFirst': 'Koppel eerst de services',
   'chat.publish.btnUpdate': 'Bijwerken',
+  'chat.publish.btnUpToDate': 'Alles is gepubliceerd',
+  'chat.publish.btnUpdateCount': 'Bijwerken ({count} wijzigingen)',
+  'chat.publish.btnUpdateOne': 'Bijwerken (1 wijziging)',
+  'chat.publish.upToDate': 'Geen nieuwe wijzigingen sinds de laatste publicatie.',
   'chat.publish.btnPublish': 'Publiceren',
 };

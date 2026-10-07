@@ -67,5 +67,9 @@ export const chatPanelsEn = {
   'chat.publish.btnDeploying': 'Deploying…',
   'chat.publish.btnConnectFirst': 'Connect Services First',
   'chat.publish.btnUpdate': 'Update',
+  'chat.publish.btnUpToDate': 'Everything is published',
+  'chat.publish.btnUpdateCount': 'Update ({count} changes)',
+  'chat.publish.btnUpdateOne': 'Update (1 change)',
+  'chat.publish.upToDate': 'No new changes since the last publish.',
   'chat.publish.btnPublish': 'Publish',
 } as const;

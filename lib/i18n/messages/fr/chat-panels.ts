@@ -69,5 +69,9 @@ export const chatPanelsFr: Record<keyof typeof chatPanelsEn, string> = {
   'chat.publish.btnDeploying': 'Déploiement…',
   'chat.publish.btnConnectFirst': 'Connectez d\'abord les services',
   'chat.publish.btnUpdate': 'Mettre à jour',
+  'chat.publish.btnUpToDate': 'Tout est publié',
+  'chat.publish.btnUpdateCount': 'Mettre à jour ({count} modifications)',
+  'chat.publish.btnUpdateOne': 'Mettre à jour (1 modification)',
+  'chat.publish.upToDate': 'Aucune nouvelle modification depuis la dernière publication.',
   'chat.publish.btnPublish': 'Publier',
 };
