@@ -414,15 +414,25 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
       legacyBody['is_initial_prompt'] === true ||
       legacyBody['is_initial_prompt'] === 'true';
 
+    // Who asked (shown as avatar + name under the bubble). A snapshot: renaming
+    // a user later doesn't rewrite old messages.
+    const author = requester
+      ? { id: requester.id, name: requester.name ?? null, email: requester.email, image: requester.image ?? null }
+      : undefined;
     const metadata =
-      processedImages.length > 0
+      processedImages.length > 0 || author
         ? {
-            attachments: processedImages.map((image) => ({
-              name: image.name,
-              url: image.url,
-              publicUrl: image.publicUrl,
-              path: image.path,
-            })),
+            ...(author ? { author } : {}),
+            ...(processedImages.length > 0
+              ? {
+                  attachments: processedImages.map((image) => ({
+                    name: image.name,
+                    url: image.url,
+                    publicUrl: image.publicUrl,
+                    path: image.path,
+                  })),
+                }
+              : {}),
           }
         : undefined;
 

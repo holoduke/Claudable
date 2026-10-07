@@ -1,5 +1,6 @@
 "use client";
 import React, { useEffect, useLayoutEffect, useState, useRef, ReactElement, useCallback } from 'react';
+import { AuthorAvatar, authorLabel, authorOf } from './MessageAuthor';
 import { motion, AnimatePresence } from 'framer-motion';
 import ReactMarkdown from 'react-markdown';
 import ToolResultItem from './ToolResultItem';
@@ -2891,8 +2892,8 @@ export default function ChatLog({ projectId, onSessionStatusChange, onProjectSta
           return (
             <div className="mb-4" key={reactKey}>
                 {message.role === 'user' ? (
-                  // User message - boxed on the right
-                  <div className="flex justify-end">
+                  // User message - boxed on the right, with the sender's avatar
+                  <div className="flex justify-end items-start gap-2">
                     <div className="max-w-[80%] bg-gray-100 dark:bg-white/6 rounded-lg px-4 py-3">
                       <div className="text-sm text-gray-900 dark:text-gray-50 wrap-break-word">
                         {(() => {
@@ -3050,6 +3051,10 @@ export default function ChatLog({ projectId, onSessionStatusChange, onProjectSta
                         })()}
                       </div>
                     </div>
+                    {(() => {
+                      const author = authorOf(message as { metadata?: unknown });
+                      return author ? <AuthorAvatar author={author} /> : null;
+                    })()}
                   </div>
                 ) : (
                   // Agent message - full width, no box
@@ -3114,8 +3119,11 @@ export default function ChatLog({ projectId, onSessionStatusChange, onProjectSta
 
                 {!isToolMessage && (message as any).createdAt && (() => {
                   const ts = formatMsgTime((message as any).createdAt);
+                  // User messages: "Name · time" under the bubble (aligned with the bubble, left of the avatar).
+                  const author = message.role === 'user' ? authorOf(message as { metadata?: unknown }) : null;
                   return ts ? (
-                    <div className={`mt-1 text-[10px] leading-none text-gray-400/90 dark:text-gray-500 ${message.role === 'user' ? 'text-right' : 'text-left'}`}>
+                    <div className={`mt-1 text-[10px] leading-none text-gray-400/90 dark:text-gray-500 ${message.role === 'user' ? `text-right${author ? ' pr-8' : ''}` : 'text-left'}`}>
+                      {author ? <><span className="font-medium text-gray-500 dark:text-gray-400">{authorLabel(author)}</span>{' · '}</> : null}
                       {ts}
                     </div>
                   ) : null;
