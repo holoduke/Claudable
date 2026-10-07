@@ -2,7 +2,17 @@
  * Chat-related types
  */
 
+/** Who sent a user message (snapshot at send time). */
+export interface MessageAuthor {
+  id: string;
+  name: string | null;
+  email: string;
+  image: string | null;
+}
+
 export interface MessageMetadata {
+  /** User messages: the person who sent it. */
+  author?: MessageAuthor;
   toolName?: string;
   summary?: string;
   description?: string;
