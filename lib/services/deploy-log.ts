@@ -10,8 +10,7 @@
  *  - error-ish lines extracted separately, plus the tail of the log.
  */
 import { getProjectService } from './project-services';
-import { getGitProviderConfig, getGitProviderConfigFor } from './git-provider';
-import { githubFetch, resolveGitToken, projectBaseBranch } from './github';
+import { githubFetch, resolveRepoAuth, projectBaseBranch } from './github';
 
 export interface DeployLog {
   found: boolean;
@@ -99,9 +98,9 @@ export async function getDeployRunLog(projectId: string): Promise<DeployLog> {
   const repo = data?.repo_name as string | undefined;
   if (!owner || !repo) return empty;
 
-  const cfg = data ? getGitProviderConfigFor(data) : getGitProviderConfig();
-  const token = await resolveGitToken(cfg).catch(() => null);
-  if (!token) return empty;
+  const auth = await resolveRepoAuth(data!).catch(() => null);
+  if (!auth) return empty;
+  const { cfg, token } = auth;
   const branch = projectBaseBranch(data);
 
   // Newest run on the deploy branch (Gitea ≥1.24 and GitHub share this shape).

@@ -856,7 +856,7 @@ export async function executeClaude(
     throw new TenantPolicyError('Customer projects run the agent only in an isolated container (enable PREVIEW_ISOLATION / AGENT_CONTAINERIZED).');
   }
   if (!containerize) {
-    const sensitive = ['AUTH_SECRET', 'ENCRYPTION_KEY', 'GIT_TOKEN', 'GITHUB_TOKEN', 'COOLIFY_API_TOKEN', 'GOOGLE_CLIENT_SECRET'];
+    const sensitive = ['AUTH_SECRET', 'ENCRYPTION_KEY', 'GIT_TOKEN', 'GITHUB_TOKEN', 'COOLIFY_API_TOKEN', 'GOOGLE_CLIENT_SECRET', 'GITHUB_APP_PRIVATE_KEY', 'GITHUB_APP_PRIVATE_KEY_FILE'];
     const present = sensitive.filter((k) => (process.env[k] ?? '').trim().length > 0);
     if (present.length > 0) {
       throw new Error(

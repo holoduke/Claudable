@@ -664,6 +664,22 @@ model ServiceToken {
   @@map("service_tokens")
 }
 
+/// The GitHub App Claudable pushes with (singleton row id "default"). The
+/// private key is encrypted at rest and never returned by any API; tokens are
+/// minted per repository from it on demand.
+model GithubApp {
+  id                  String   @id @default("default")
+  appId               String   @map("app_id")
+  slug                String
+  botUserId           String   @map("bot_user_id")
+  privateKeyEncrypted String   @map("private_key_encrypted")
+  updatedBy           String?  @map("updated_by")
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @updatedAt @map("updated_at")
+
+  @@map("github_app")
+}
+
 /// Design Explorer: a canvas of AI-generated design mockups for a project. A
 /// prompt fans out into several DesignFrames the user compares/refines/uses.
 model DesignCanvas {

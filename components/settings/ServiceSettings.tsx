@@ -4,6 +4,7 @@
  */
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import GitHubRepoModal from '@/components/modals/GitHubRepoModal';
+import GithubRepoLinkPanel from '@/components/settings/GithubRepoLinkPanel';
 import VercelProjectModal from '@/components/modals/VercelProjectModal';
 import SupabaseModal from '@/components/modals/SupabaseModal';
 import ServiceConnectionModal from '@/components/modals/ServiceConnectionModal';
@@ -567,6 +568,8 @@ export function ServiceSettings({ projectId, projectName, canManage = true, mana
           ))}
         </div>
       </div>
+
+      {canManageTokens && <GithubRepoLinkPanel projectId={projectId} onLinked={loadServiceConnections} />}
 
       {/* GitHub Repository Modal */}
       {gitHubModalOpen && (
