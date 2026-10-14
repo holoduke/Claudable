@@ -412,6 +412,10 @@ export function pushToRemote(
     if (!(error instanceof GitError)) {
       throw error;
     }
+    // Only a history conflict is worth a --force-with-lease retry; any other
+    // refusal (permissions, protected branch, size) gets its real reason.
+    const refused = pushRefusal(error.output ?? '');
+    if (refused) throw new GitError(refused, error.output);
     // Retry with --force-with-lease, NOT a blanket --force. A plain non-ff
     // reject (our local history rewrote the connect scaffold) still succeeds,
     // but if the remote branch moved because a teammate pushed, the lease
@@ -423,13 +427,37 @@ export function pushToRemote(
     } catch (leaseError) {
       if (leaseError instanceof GitError) {
         throw new GitError(
-          `Push rejected: the remote branch '${branch}' has commits your project doesn't have yet. Sync first, then push. (Refusing to force-overwrite remote history.)`,
+          pushRefusal(leaseError.output ?? '') ??
+            `Push rejected: the remote branch '${branch}' has commits your project doesn't have yet. Sync first, then push. (Refusing to force-overwrite remote history.)`,
           leaseError.output,
         );
       }
       throw leaseError;
     }
   }
+}
+
+/**
+ * A push the host refused for a reason other than diverged history, as a
+ * message for the user; null for a plain non-fast-forward (or unknown) reject.
+ */
+export function pushRefusal(output: string): string | null {
+  const text = output.toLowerCase();
+  if (/workflows?` permission|create or update workflow/u.test(text)) {
+    const file = /workflow `([^`]+)`/u.exec(output)?.[1];
+    return `Push rejected: GitHub does not let Claudable change workflow files${file ? ` (${file})` : ''}. ` +
+      'Changes under .github/workflows go through DevOps; undo them in this project, or ask DevOps to merge them first, then publish again.';
+  }
+  if (/protected branch|gh006|repository rule violations|gh013/u.test(text)) {
+    return 'Push rejected: a branch rule on the repository blocks this push (for example "pull requests only"). Ask an admin to set the project to publish via pull request.';
+  }
+  if (/permission to .* denied|403|write access to repository not granted|resource not accessible/u.test(text)) {
+    return 'Push rejected: Claudable has no write access to this repository. Check that the GitHub App is installed on it with Contents: write.';
+  }
+  if (/large files detected|exceeds github's file size limit|gh001/u.test(text)) {
+    return 'Push rejected: the project contains a file larger than GitHub allows (100 MB). Remove it from the project and publish again.';
+  }
+  return null;
 }
 
 export function ensureGitRepository(repoPath: string) {
