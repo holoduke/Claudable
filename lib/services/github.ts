@@ -10,6 +10,7 @@ import { protectedPathsIn } from '@/lib/services/publish-guard';
 import { getGitProviderConfig, getGitProviderConfigFor, getEnvGitToken, getEnvGitTokenFor } from '@/lib/services/git-provider';
 import type { GitProviderConfig } from '@/lib/services/git-provider';
 import { injectDeployScaffolding } from '@/lib/services/scaffold-deploy';
+import { GitHubAppError, GitHubAppNotInstalledError, getGitHubAppIdentity, getRepoInstallationToken, githubAppConfigured } from '@/lib/services/github-app';
 import { getDatabaseUrl } from '@/lib/services/database';
 import { stackKind } from '@/lib/config/stacks';
 import { isAgentRunActive } from '@/lib/services/cli/run-registry';
@@ -66,6 +67,78 @@ export async function resolveGitToken(cfg?: GitProviderConfig): Promise<string> 
     throw new GitHubError('Git provider token not configured', 401);
   }
   return dbToken;
+}
+
+/** How Claudable authenticates against one connected repository. */
+export interface RepoAuth {
+  cfg: GitProviderConfig;
+  token: string;
+  owner: string;
+  repo: string;
+  /** Basic-auth user for git over HTTPS. */
+  login: string;
+  author: { name: string; email: string };
+  via: 'github-app' | 'token';
+}
+
+/** The connection's repo URL with credentials for one git command (never stored). */
+export function authenticatedCloneUrl(cloneUrl: string, auth: Pick<RepoAuth, 'login' | 'token' | 'via' | 'owner' | 'repo'>): string {
+  const url = String(cloneUrl);
+  // An App token is only ever sent to the exact repository it was minted for.
+  if (auth.via === 'github-app' && !sameGithubRepo(url, auth.owner, auth.repo)) {
+    throw new GitHubError('The repository URL does not match the linked GitHub repository.', 400);
+  }
+  return url.replace('https://', `https://${encodeURIComponent(auth.login)}:${auth.token}@`);
+}
+
+function sameGithubRepo(url: string, owner: string, repo: string): boolean {
+  try {
+    const u = new URL(url);
+    const path = u.pathname.replace(/\.git$/u, '').toLowerCase();
+    return u.protocol === 'https:' && u.host === 'github.com' && !u.username && path === `/${owner}/${repo}`.toLowerCase();
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Credentials for a project's connected repository. On github.com the
+ * Claudable GitHub App is used when it is configured and installed on the
+ * repo: a token valid only for that repository, committing as the App's bot.
+ * Otherwise (Gitea, no App) the existing token flow is used unchanged. When the
+ * App can't serve the repo (not installed, rejected key, GitHub hiccup) and a
+ * GitHub token exists, that token takes over so publishing keeps working.
+ */
+export async function resolveRepoAuth(data: Record<string, any>): Promise<RepoAuth> {
+  const cfg = getGitProviderConfigFor(data);
+  const owner = String(data.owner ?? '');
+  const repo = String(data.repo_name ?? '');
+  if (cfg.provider === 'github' && owner && repo && (await githubAppConfigured())) {
+    try {
+      const { token } = await getRepoInstallationToken(owner, repo);
+      const identity = await getGitHubAppIdentity();
+      return { cfg, token, owner, repo, login: identity.login, author: { name: identity.name, email: identity.email }, via: 'github-app' };
+    } catch (error) {
+      const fallback = await resolveGitToken(cfg).catch(() => null);
+      if (!fallback) {
+        throw error instanceof GitHubAppError ? new GitHubError(error.message, error.status) : error;
+      }
+      if (!(error instanceof GitHubAppNotInstalledError)) {
+        console.warn(`[GitService] GitHub App unavailable for ${owner}/${repo}, using the GitHub token:`, error instanceof Error ? error.message : error);
+      }
+    }
+  }
+  const token = await resolveGitToken(cfg);
+  const user = await getGithubUser(cfg);
+  return {
+    cfg,
+    token,
+    owner,
+    repo,
+    login: user.login,
+    author: { name: user.name || user.login, email: user.email || `${user.login}@users.noreply.github.com` },
+    via: 'token',
+  };
 }
 
 /** Owner that repos are created/looked-up under: configured org, else the user. */
@@ -452,20 +525,18 @@ async function pullProjectFromGitHubImpl(projectId: string): Promise<SyncResult>
   if (!data?.clone_url || !data?.owner) {
     throw new GitHubError('Git repository not connected', 404);
   }
-  const cfg = getGitProviderConfigFor(data);
-  const token = await resolveGitToken(cfg);
+  const auth = await resolveRepoAuth(data);
 
   const repoPath = await ensureProjectRepository(projectId, project.repoPath);
   ensureGitRepository(repoPath);
-  const user = await getGithubUser(cfg);
-  ensureGitConfig(repoPath, user.name || user.login, user.email || `${user.login}@users.noreply.github.com`);
+  ensureGitConfig(repoPath, auth.author.name, auth.author.email);
 
   const branch = projectGitBranch(data);
   // Commit local edits first so the merge weaves remote changes into them
   // instead of refusing to run on a dirty tree.
   commitAll(repoPath, 'Local changes before sync');
 
-  const authenticatedUrl = String(data.clone_url).replace('https://', `https://${encodeURIComponent(user.login)}:${token}@`);
+  const authenticatedUrl = authenticatedCloneUrl(data.clone_url, auth);
   // A branch created here and not published yet has nothing to sync from.
   if (!fetchRemoteBranch(repoPath, branch, authenticatedUrl)) {
     return { updated: false, branch, dependenciesChanged: false, message: `Branch ${branch} is not published yet — nothing to sync` };
@@ -603,22 +674,23 @@ async function pushProjectToGitHubImpl(projectId: string): Promise<boolean> {
     if (!data?.clone_url || !data?.owner) {
       throw new GitHubError('Git repository not connected', 404);
     }
-    const cfg = getGitProviderConfigFor(data);
-    const token = await resolveGitToken(cfg);
+    const auth = await resolveRepoAuth(data);
+    const { cfg, token } = auth;
 
     const repoPath = await ensureProjectRepository(projectId, project.repoPath);
     ensureGitRepository(repoPath);
-    const user = await getGithubUser(cfg);
-    const userName = user.name || user.login;
-    const userEmail = user.email || `${user.login}@users.noreply.github.com`;
-    ensureGitConfig(repoPath, userName, userEmail);
+    ensureGitConfig(repoPath, auth.author.name, auth.author.email);
 
     // Keep deploy scaffolding present even if the agent edited the project.
     // Customer projects never get (re)generated deploy files: their CI/infra is
     // managed by New Story in the repository itself (see the publish guard).
+    // Neither does a repo on another host than this instance's own git server
+    // (provider override): its CI is the host's, and the scaffolding would
+    // replace its workflows with this instance's deploy flow.
     const repoName = (data.repo_name as string) || path.basename(repoPath);
     const customerProject = await isCustomerProject(projectId);
-    if (!customerProject) {
+    const ownHost = cfg.provider === getGitProviderConfig().provider;
+    if (!customerProject && ownHost) {
       const runtimeSecrets = await listRepoSecretNames(token, String(data.owner), repoName, cfg);
       await injectDeployScaffolding(repoPath, { repoName, templateType: project.templateType, runtimeSecrets });
     }
@@ -636,7 +708,7 @@ async function pushProjectToGitHubImpl(projectId: string): Promise<boolean> {
     // If a Postgres was provisioned, sync its DATABASE_URL as a repo Action secret
     // so the deploy workflow injects it into the deployed app's runtime env.
     try {
-      const dbUrl = await getDatabaseUrl(projectId);
+      const dbUrl = ownHost ? await getDatabaseUrl(projectId) : null;
       if (dbUrl) {
         await githubFetch(token, `/repos/${data.owner}/${repoName}/actions/secrets/DATABASE_URL`, {
           method: 'PUT',
@@ -649,7 +721,7 @@ async function pushProjectToGitHubImpl(projectId: string): Promise<boolean> {
 
     // Basic-auth the push with the token. The username must be the token-owning
     // user (not the org) for Gitea/GitHub basic auth to succeed.
-    const authenticatedUrl = String(data.clone_url).replace('https://', `https://${encodeURIComponent(user.login)}:${token}@`);
+    const authenticatedUrl = authenticatedCloneUrl(data.clone_url, auth);
     // The current branch is the publish target; the base branch ("main") is where
     // it eventually merges and what the host deploys.
     const targetBranch = projectGitBranch(data);
@@ -838,7 +910,7 @@ async function getGithubDeployRunStatus(
   let run: any;
   let jobRows: any[] = [];
   try {
-    const token = await resolveGitToken(cfg);
+    const { token } = await resolveRepoAuth(data);
     const branch = projectBaseBranch(data); // what the site deploys from
     const runsBody = await githubFetch(
       token,

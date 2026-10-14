@@ -8,7 +8,7 @@
 import { getProjectById } from './project';
 import { getProjectService } from './project-services';
 import { getGitProviderConfigFor } from './git-provider';
-import { GitHubError, resolveGitToken, githubFetch, projectGitBranch, resolveProjectRepoPath } from './github';
+import { GitHubError, resolveRepoAuth, githubFetch, projectGitBranch, resolveProjectRepoPath } from './github';
 import { getHeadCommit, historyContains, countDirtyFiles, countCommitsAhead } from './git';
 
 export interface RemoteSyncStatus {
@@ -90,8 +90,7 @@ export async function getProjectSyncStatus(projectId: string): Promise<RemoteSyn
   const data = service?.serviceData as Record<string, any> | undefined;
   if (!data?.clone_url || !data?.owner || !data?.repo_name) return NOT_CONNECTED;
 
-  const cfg = getGitProviderConfigFor(data);
-  const token = await resolveGitToken(cfg);
+  const { cfg, token } = await resolveRepoAuth(data);
   const branch = projectGitBranch(data);
 
   let branchInfo: unknown = null;

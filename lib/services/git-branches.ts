@@ -23,12 +23,11 @@ import {
   pathsChangedSinceMergeBase, switchLocalBranch, countDirtyFiles,
 } from '@/lib/services/git';
 import {
-  GitHubError, ensureProjectRepository, getGithubUser, githubFetch, mergePublishPr, projectBaseBranch, projectGitBranch,
-  pushProjectToGitHub, resolveGitToken, withGitLock,
+  GitHubError, authenticatedCloneUrl, ensureProjectRepository, githubFetch, mergePublishPr, projectBaseBranch, projectGitBranch,
+  pushProjectToGitHub, resolveRepoAuth, withGitLock,
 } from '@/lib/services/github';
 import { getProjectById } from '@/lib/services/project';
 import { getProjectService, updateProjectServiceData } from '@/lib/services/project-services';
-import { getGitProviderConfigFor } from '@/lib/services/git-provider';
 import type { GitProviderConfig } from '@/lib/services/git-provider';
 import { isAgentRunActive } from '@/lib/services/cli/run-registry';
 import { isCustomerProject } from '@/lib/services/tenant-policy';
@@ -118,12 +117,10 @@ async function loadCtx(projectId: string): Promise<Ctx> {
     ensureGitConfig(repoPath, LOCAL_AUTHOR.name, LOCAL_AUTHOR.email);
     return { repoPath, remote: null };
   }
-  const cfg = getGitProviderConfigFor(data);
-  const token = await resolveGitToken(cfg);
-  const user = await getGithubUser(cfg);
-  const author = { name: user.name || user.login, email: user.email || `${user.login}@users.noreply.github.com` };
+  const auth = await resolveRepoAuth(data);
+  const { cfg, token, author } = auth;
   ensureGitConfig(repoPath, author.name, author.email);
-  const authUrl = String(data.clone_url).replace('https://', `https://${encodeURIComponent(user.login)}:${token}@`);
+  const authUrl = authenticatedCloneUrl(data.clone_url, auth);
   return { repoPath, remote: { data, cfg, token, owner: String(data.owner), repo: String(data.repo_name), authUrl, author } };
 }
 

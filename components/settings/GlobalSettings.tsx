@@ -7,6 +7,7 @@ import UsersSettings from '@/components/settings/UsersSettings';
 import OrgsSettings from '@/components/settings/OrgsSettings';
 import MyOrgSettings, { type MyOrg } from './MyOrgSettings';
 import SystemOverviewSettings from '@/components/settings/SystemOverviewSettings';
+import GithubAppSettings from '@/components/settings/GithubAppSettings';
 import SharedMcpSettings from '@/components/settings/SharedMcpSettings';
 import PluginSettings from '@/components/settings/PluginSettings';
 import ClaudeAccountSettings from '@/components/settings/ClaudeAccountSettings';
@@ -692,7 +693,7 @@ export default function GlobalSettings({ isOpen, onClose, initialTab = 'account'
 
             {activeTab === 'shared-mcp' && canManageOrg && <SharedMcpSettings />}
             {activeTab === 'plugins' && canManageOrg && <PluginSettings />}
-            {activeTab === 'system' && isAdmin && <SystemOverviewSettings />}
+            {activeTab === 'system' && isAdmin && <><GithubAppSettings /><SystemOverviewSettings /></>}
             {activeTab === 'users' && isAdmin && currentUser && (
               <UsersSettings currentUserId={currentUser.id} onToast={showToast} />
             )}
