@@ -202,6 +202,8 @@ describe('identity and admin storage', () => {
   it('refuses credentials GitHub rejects', async () => {
     handler = githubApi({ 'GET /app': { status: 401, body: { message: 'bad credentials' } } });
     await expect(saveGitHubApp('123', PEM, null)).rejects.toThrow(/rejected/);
+    handler = githubApi({ 'GET /app': { status: 404, body: { message: 'Integration not found' } } });
+    await expect(saveGitHubApp('123', PEM, null)).rejects.toThrow(/rejected/);
     await expect(saveGitHubApp('abc', PEM, null)).rejects.toThrow(/must be a number/);
   });
 });

@@ -331,7 +331,8 @@ export async function getGitHubAppIdentity(): Promise<GitHubAppIdentity> {
 /** Ask GitHub who the App is (slug) and which bot user commits as it. */
 async function resolveAppIdentity(appId: string, key: crypto.KeyObject): Promise<{ slug: string; botUserId: string }> {
   const app = await appFetch('/app', createAppJwt(appId, key));
-  if (app.status === 401) throw new GitHubAppError('GitHub rejected the App credentials (check the App ID and private key).', 401);
+  // GitHub answers an unknown App ID with 404 and a key that doesn't match with 401.
+  if (app.status === 401 || app.status === 404) throw new GitHubAppError('GitHub rejected the App credentials (check the App ID and private key).', 401);
   if (app.status !== 200 || typeof app.body?.slug !== 'string') {
     throw new GitHubAppError(`Could not read the GitHub App (HTTP ${app.status}).`, 502);
   }
