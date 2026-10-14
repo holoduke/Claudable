@@ -78,6 +78,24 @@ export async function resolveOwner(): Promise<string> {
   return user.login;
 }
 
+/**
+ * Names of the repo's own Action secrets (values are never readable). Org-level
+ * secrets are not listed, which keeps deploy credentials out of app envs.
+ */
+export async function listRepoSecretNames(token: string, owner: string, repo: string, cfg?: GitProviderConfig): Promise<string[]> {
+  try {
+    const body = await githubFetch(token, `/repos/${owner}/${repo}/actions/secrets?limit=100`, undefined, cfg);
+    const list: unknown = Array.isArray(body) ? body : (body as { secrets?: unknown })?.secrets;
+    if (!Array.isArray(list)) return [];
+    return list
+      .map((item) => (item && typeof item === 'object' ? String((item as { name?: unknown }).name ?? '') : ''))
+      .filter(Boolean);
+  } catch (error) {
+    console.warn('[GitService] Could not list repo secrets:', error instanceof Error ? error.message : error);
+    return [];
+  }
+}
+
 export async function githubFetch(token: string, endpoint: string, init?: RequestInit, cfg?: GitProviderConfig) {
   const { apiBaseUrl, authScheme } = cfg ?? getGitProviderConfig();
   const response = await fetch(`${apiBaseUrl}${endpoint}`, {
@@ -601,7 +619,8 @@ async function pushProjectToGitHubImpl(projectId: string): Promise<boolean> {
     const repoName = (data.repo_name as string) || path.basename(repoPath);
     const customerProject = await isCustomerProject(projectId);
     if (!customerProject) {
-      await injectDeployScaffolding(repoPath, { repoName, templateType: project.templateType });
+      const runtimeSecrets = await listRepoSecretNames(token, String(data.owner), repoName, cfg);
+      await injectDeployScaffolding(repoPath, { repoName, templateType: project.templateType, runtimeSecrets });
     }
 
     const committed = commitAll(repoPath, 'Update from Claudable');
